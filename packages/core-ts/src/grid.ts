@@ -43,8 +43,11 @@ function syntheticIntensityForHour(date: Date, region: string): number {
   };
   const floor = regionFloor[region] ?? 380;
   const amplitude = 220;
-  // hour 0..23 local; peak ~17:00, trough ~03:00
-  const hour = date.getHours();
+  // We use UTC hours so the synthesized curve is deterministic across CI /
+  // developer machines and matches the UTC ISO timestamps we emit. Peak ~17:00
+  // UTC; trough ~03:00 UTC. (Real provider data is region-local in practice,
+  // but for a synthetic feed any deterministic phase is acceptable.)
+  const hour = date.getUTCHours();
   const phase = (hour - 17) * (Math.PI / 12);
   const value = floor + amplitude * Math.cos(phase);
   return Math.round(value);
@@ -110,7 +113,12 @@ export function electricityMapsFeed(apiKey?: string): GridFeed {
     async fetchForecast(region, hours) {
       try {
         const url = `https://api.electricitymap.org/v3/carbon-intensity/forecast?zone=${encodeURIComponent(region)}`;
-        const res = await fetch(url, { headers: { "auth-token": key } });
+        // Hard timeout — without one a degraded Electricity Maps edge can hang
+        // the scheduler indefinitely.
+        const res = await fetch(url, {
+          headers: { "auth-token": key },
+          signal: AbortSignal.timeout(5_000),
+        });
         if (!res.ok) {
           throw new Error(`Electricity Maps returned ${res.status}`);
         }

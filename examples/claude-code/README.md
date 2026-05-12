@@ -2,62 +2,77 @@
 
 Drop-in MCP integration that lets Claude Code defer expensive coding
 tasks to the cleanest grid window — long codebase analyses, large
-refactors, batch test generation, anything where the latency from now to
-"answer me at breakfast" is irrelevant.
+refactors, batch test generation, anything where the latency from now
+to "answer me at breakfast" is irrelevant.
 
 ## Install
 
-1. Build the server (from repo root):
+1. Build the server (from the repo root):
 
    ```bash
    pnpm install
    pnpm build
    ```
 
-2. Add `ebb-ai` to your Claude Code MCP config. Workspace-level
-   (`./.claude/mcp.json`) or user-level (`~/.claude/mcp.json`):
+2. Register the server with Claude Code's CLI:
 
-   ```json
-   {
-     "mcpServers": {
-       "ebb-ai": {
-         "command": "node",
-         "args": [
-           "/ABSOLUTE/PATH/TO/ebb-ai/packages/mcp-server/dist/server.js"
-         ],
-         "env": {
-           "EBB_ELECTRICITY_MAPS_API_KEY": "optional",
-           "EBB_DEFAULT_REGION": "US-CAL-CISO"
-         }
-       }
-     }
-   }
+   ```bash
+   claude mcp add ebb-ai -- node /ABSOLUTE/PATH/TO/ebb-ai/packages/mcp-server/dist/server.js
    ```
 
-3. Restart Claude Code (`/restart` or relaunch the session).
+   To pass environment variables (Electricity Maps API key, default
+   region):
 
-## Verify
+   ```bash
+   claude mcp add ebb-ai \
+     -e EBB_ELECTRICITY_MAPS_API_KEY=YOUR_KEY \
+     -e EBB_DEFAULT_REGION=US-CAL-CISO \
+     -- node /ABSOLUTE/PATH/TO/ebb-ai/packages/mcp-server/dist/server.js
+   ```
 
-In a fresh Claude Code session, try:
+   `claude mcp add` writes the entry into `~/.claude.json`'s
+   `mcpServers` map. See `mcp.json` in this folder for the resulting
+   shape if you prefer to edit by hand.
 
+3. Verify in a Claude Code session:
+
+   ```
+   /mcp
+   ```
+
+   You should see `ebb-ai` listed. Then:
+
+   ```
+   Use ebb-ai to tell me the cleanest hour in the next 12 hours for US-CAL-CISO.
+   ```
+
+   Claude Code should call `get_grid_forecast(region="US-CAL-CISO", hours=12)`
+   and report the lowest band.
+
+## Sample `~/.claude.json` snippet
+
+For reference, the result of `claude mcp add` looks like this in your
+`~/.claude.json`:
+
+```json
+{
+  "mcpServers": {
+    "ebb-ai": {
+      "command": "node",
+      "args": [
+        "/ABSOLUTE/PATH/TO/ebb-ai/packages/mcp-server/dist/server.js"
+      ],
+      "env": {
+        "EBB_DEFAULT_REGION": "US-CAL-CISO"
+      }
+    }
+  }
+}
 ```
-/tools list
-```
 
-You should see `mcp__ebb-ai__get_grid_forecast`,
-`mcp__ebb-ai__schedule_task`, and `mcp__ebb-ai__check_queue_status`
-among the registered tools.
+You can edit this file directly if you prefer.
 
-A quick sanity check:
-
-```
-Use ebb-ai to tell me the cleanest hour in the next 12 hours for US-CAL-CISO.
-```
-
-Claude Code should call `get_grid_forecast(region="US-CAL-CISO", hours=12)`
-and report the lowest band.
-
-## Suggested slash commands
+## Suggested slash command
 
 Save this as `~/.claude/commands/defer.md` for a one-stroke way to
 defer your current task:
@@ -65,13 +80,14 @@ defer your current task:
 ```markdown
 ---
 description: Defer this task to the cleanest grid window before the supplied deadline.
-arg: deadline (ISO-8601 or "tomorrow 8am" style)
+arg: deadline (ISO-8601 timestamp)
 ---
 
 Call `mcp__ebb-ai__schedule_task` with the current conversation's last
 non-trivial instruction as the `prompt`, the user-supplied `$ARGS` as
-the `deadline`, and `US-CAL-CISO` as the default region unless the user
-specified otherwise. Then briefly confirm the queued slot to the user.
+the `deadline` (validate it is ISO-8601 and in the future), and
+`US-CAL-CISO` as the default region unless the user specified
+otherwise. Then briefly confirm the queued slot to the user.
 ```
 
 Now `/defer 2026-05-13T08:00:00-04:00` schedules the current task and
@@ -79,8 +95,8 @@ goes back to work on something else.
 
 ## Suggested permissions
 
-If you frequently use ebb-ai, allow its tools without prompts. Add to
-`~/.claude/settings.json`:
+If you frequently use ebb-ai, allow its read-only tools without
+prompts. Add to `~/.claude/settings.json`:
 
 ```json
 {
@@ -112,6 +128,9 @@ If you frequently use ebb-ai, allow its tools without prompts. Add to
 - Does not yet auto-invoke the Anthropic / OpenAI Batch APIs. Schedules
   the dispatch *time*, but Claude Code still calls the model itself at
   that time. Direct Batch routing lands in v0.2.
-- Does not yet persist across Claude Code restarts.
+- Does not yet persist across Claude Code restarts. Pending task IDs
+  are lost on restart of the MCP server child process.
+- Receipts in v0.1 measure scheduling overhead, not the real LLM
+  execution — that lands with the Batch API adapters in v0.2.
 
-Both are tracked in `../../PLAN.md`.
+All three are tracked in `../../PLAN.md`.

@@ -92,7 +92,7 @@ const result = await defer(
   {
     deadline: "2026-05-13T08:00:00-04:00",
     carbonBudgetG: 5,
-    region: "us-east",
+    region: "US-CAL-CISO",
   },
 );
 ```

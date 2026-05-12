@@ -17,7 +17,13 @@
  *   - Carbon-receipt persistence
  */
 
-export { defer, pickBestWindow, Scheduler } from "./scheduler.js";
+export {
+  CarbonBudgetExceededError,
+  defer,
+  InvalidDeadlineError,
+  pickBestWindow,
+  Scheduler,
+} from "./scheduler.js";
 export { mockGridFeed, electricityMapsFeed } from "./grid.js";
 export type {
   DeferOptions,

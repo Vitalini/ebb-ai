@@ -10,15 +10,18 @@ export type TaskStatus =
   | "failed";
 
 export interface DeferOptions {
-  /** ISO-8601 deadline; defaults to 24h from now if omitted. */
+  /** ISO-8601 deadline; defaults to 24h from now if omitted. Must be in the future. */
   deadline?: string | Date;
-  /** Maximum carbon budget for this task in grams CO2-equivalent. */
+  /**
+   * Maximum carbon budget for this task in grams CO2-equivalent. If set, the
+   * scheduler will reject windows whose estimated grams exceed this value and
+   * will fail the task with a CarbonBudgetExceededError if no window inside
+   * the deadline meets the budget.
+   */
   carbonBudgetG?: number;
   /** Electricity Maps region code (e.g. "US-CAL-CISO"). */
   region?: string;
-  /** Region-locking for privacy ("us-only", "eu-only", etc.). */
-  privacy?: string;
-  /** Caller-supplied identifier for tracing. */
+  /** Caller-supplied identifier for tracing. Must be a non-empty string and unique within the scheduler. */
   taskId?: string;
 }
 
@@ -61,6 +64,11 @@ export interface TaskRecord<T = unknown> {
   result?: T;
   error?: string;
   receipt?: CarbonReceipt;
+  /** "scored" if the receipt was computed from the forecast entry the
+   *  scheduler used to choose the window; "current" if the task was
+   *  dispatched immediately and the receipt used a freshly-fetched intensity.
+   */
+  intensitySource?: "scored" | "current";
 }
 
 /** Function the user hands to `defer`. */

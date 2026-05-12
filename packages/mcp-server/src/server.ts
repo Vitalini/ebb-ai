@@ -50,8 +50,9 @@ const scheduleTaskInput = z.object({
     .describe("The prompt or instruction to dispatch when the window arrives."),
   deadline: z
     .string()
+    .datetime({ offset: true })
     .describe(
-      "ISO-8601 timestamp by which the task must have completed. Required.",
+      "ISO-8601 timestamp (e.g. '2026-05-13T08:00:00-04:00') by which the task must have completed. Must be in the future. Required.",
     ),
   model: z
     .string()
@@ -62,13 +63,15 @@ const scheduleTaskInput = z.object({
   region: z
     .string()
     .optional()
-    .describe("Grid region override. Defaults to the server's default."),
+    .describe(
+      "Grid region override (Electricity Maps zone code such as 'US-CAL-CISO'). Defaults to the server's default region.",
+    ),
   carbon_budget_g: z
     .number()
     .positive()
     .optional()
     .describe(
-      "Hard cap on estimated grams CO2-equivalent for this task. Optional.",
+      "Hard cap on estimated grams CO2-equivalent for this task. If set and no window inside the deadline meets the cap, the task fails rather than dispatching to a dirty window.",
     ),
 });
 
@@ -180,37 +183,50 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
 
     if (name === "schedule_task") {
       const parsed = scheduleTaskInput.parse(args);
-      const record = scheduler.enqueue(
-        // v0.1: the MCP server does not actually call the LLM itself —
-        // the agent calling this tool is expected to do that after the
-        // server informs it the window has opened. A future release will
-        // dispatch via Anthropic / OpenAI directly.
-        async () => ({
-          prompt: parsed.prompt,
-          model: parsed.model ?? null,
-          dispatched: true,
-        }),
-        {
-          deadline: parsed.deadline,
-          region: parsed.region,
-          carbonBudgetG: parsed.carbon_budget_g,
-        },
-      );
-      return {
-        content: [
+      try {
+        const record = scheduler.enqueue(
+          // v0.1: the MCP server does not actually call the LLM itself —
+          // the agent calling this tool is expected to do that after the
+          // server informs it the window has opened. A future release will
+          // dispatch via Anthropic / OpenAI directly.
+          async () => ({
+            prompt: parsed.prompt,
+            model: parsed.model ?? null,
+            dispatched: true,
+          }),
           {
-            type: "text",
-            text:
-              `Task queued.\n` +
-              `task_id: ${record.taskId}\n` +
-              `region: ${record.region}\n` +
-              `status: ${record.status}\n` +
-              `deadline: ${parsed.deadline}\n` +
-              `Note: in v0.1 the MCP server schedules the dispatch time but does not call the LLM itself. ` +
-              `Poll check_queue_status to see when the chosen window arrives, then execute the prompt yourself.`,
+            deadline: parsed.deadline,
+            region: parsed.region,
+            carbonBudgetG: parsed.carbon_budget_g,
           },
-        ],
-      };
+        );
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                `Task queued.\n` +
+                `task_id: ${record.taskId}\n` +
+                `region: ${record.region}\n` +
+                `status: ${record.status}\n` +
+                `deadline: ${parsed.deadline}\n` +
+                `Note: in v0.1 the MCP server schedules the dispatch time but does not call the LLM itself. ` +
+                `Poll check_queue_status to see when the chosen window arrives, then execute the prompt yourself.`,
+            },
+          ],
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `schedule_task rejected: ${msg}`,
+            },
+          ],
+          isError: true,
+        };
+      }
     }
 
     if (name === "check_queue_status") {

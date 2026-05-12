@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  CarbonBudgetExceededError,
+  InvalidDeadlineError,
   mockGridFeed,
   pickBestWindow,
   Scheduler,
@@ -29,6 +31,12 @@ describe("mockGridFeed", () => {
       if (e.carbonIntensityGCo2PerKwh < 100) expect(e.band).toBe("very_clean");
       if (e.carbonIntensityGCo2PerKwh >= 700) expect(e.band).toBe("very_dirty");
     }
+  });
+
+  it("supports 72-hour horizon", async () => {
+    const feed = mockGridFeed();
+    const forecast = await feed.fetchForecast("US-MIDA-PJM", 72);
+    expect(forecast.entries).toHaveLength(72);
   });
 });
 
@@ -79,15 +87,69 @@ describe("Scheduler.enqueue (synchronous accounting)", () => {
     expect(record.region).toBe("US-CAL-CISO");
     s.shutdown();
   });
+
+  it("assigns a UUID-shaped id when no taskId supplied", () => {
+    const s = new Scheduler({ feed: mockGridFeed() });
+    const r1 = s.enqueue(async () => "a");
+    const r2 = s.enqueue(async () => "b");
+    expect(r1.taskId).not.toBe(r2.taskId);
+    expect(r1.taskId).toMatch(/^t-[0-9a-f-]{36}$/);
+    s.shutdown();
+  });
+
+  it("rejects empty caller-supplied taskId", () => {
+    const s = new Scheduler({ feed: mockGridFeed() });
+    expect(() => s.enqueue(async () => "x", { taskId: "" })).toThrow();
+    s.shutdown();
+  });
+
+  it("rejects duplicate caller-supplied taskId", () => {
+    const s = new Scheduler({ feed: mockGridFeed() });
+    s.enqueue(async () => "a", { taskId: "user:foo" });
+    expect(() => s.enqueue(async () => "b", { taskId: "user:foo" })).toThrow();
+    s.shutdown();
+  });
+});
+
+describe("Deadline validation", () => {
+  it("rejects an unparseable deadline string", () => {
+    const s = new Scheduler({ feed: mockGridFeed() });
+    expect(() => s.enqueue(async () => "ok", { deadline: "not-a-date" })).toThrow(
+      InvalidDeadlineError,
+    );
+    s.shutdown();
+  });
+
+  it("rejects a deadline already in the past", () => {
+    const s = new Scheduler({ feed: mockGridFeed() });
+    expect(() => s.enqueue(async () => "ok", { deadline: "2020-01-01T00:00:00Z" })).toThrow(
+      InvalidDeadlineError,
+    );
+    s.shutdown();
+  });
+});
+
+describe("Carbon budget enforcement", () => {
+  it("rejects a task when no window meets the budget", async () => {
+    const s = new Scheduler({ feed: mockGridFeed() });
+    // Mock floor for US-MIDW-MISO is 460 → grams ~= 0.0015 * 460 = 0.69g
+    // Set an impossibly tight budget of 0.1g.
+    await expect(
+      s.defer(async () => "should never run", {
+        deadline: new Date(Date.now() + 200),
+        region: "US-MIDW-MISO",
+        carbonBudgetG: 0.1,
+      }),
+    ).rejects.toThrow(CarbonBudgetExceededError);
+    s.shutdown();
+  });
 });
 
 describe("Scheduler.defer (end-to-end with immediate deadline)", () => {
   it("dispatches and returns the task's result", async () => {
     const s = new Scheduler({ feed: mockGridFeed() });
-    // Deadline 100ms from now → next scheduled window will be in the past
-    // → scheduler dispatches immediately.
     const result = await s.defer(async () => 42, {
-      deadline: new Date(Date.now() + 100),
+      deadline: new Date(Date.now() + 200),
     });
     expect(result).toBe(42);
     const tasks = s.listTasks();
@@ -103,7 +165,7 @@ describe("Scheduler.defer (end-to-end with immediate deadline)", () => {
         async () => {
           throw new Error("boom");
         },
-        { deadline: new Date(Date.now() + 100) },
+        { deadline: new Date(Date.now() + 200) },
       ),
     ).rejects.toThrow("boom");
     s.shutdown();
