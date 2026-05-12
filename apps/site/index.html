@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ebb-ai — Carbon-aware scheduling for agentic AI workflows</title>
+    <meta
+      name="description"
+      content="ebb-ai defers non-urgent AI agent tasks to execution windows that are simultaneously cleaner on the grid, cheaper at the LLM provider, and friendlier to your hardware."
+    />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header class="nav">
+      <div class="brand">
+        <span class="logo">~</span>
+        <span class="brand-name">ebb-ai</span>
+      </div>
+      <nav>
+        <a href="#what">What</a>
+        <a href="#why">Why</a>
+        <a href="#how">How</a>
+        <a href="#install">Install</a>
+        <a href="https://github.com/Vitalini/ebb-ai" target="_blank" rel="noreferrer">GitHub →</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <p class="kicker">v0.1 · in development</p>
+        <h1>Carbon-aware scheduling<br />for agentic AI workflows.</h1>
+        <p class="lede">
+          Defer non-urgent AI tasks to execution windows that are cleaner on the
+          grid, cheaper at the provider, and easier on your hardware budget.
+          One MCP call. Three honest tools. Auditable carbon receipts.
+        </p>
+        <pre class="code"><code>// Same agent code, one wrapper.
+const result = await <span class="hi">defer</span>(
+  () =&gt; anthropic.messages.create({ /* ... */ }),
+  { deadline: <span class="str">"2026-05-13T08:00:00-04:00"</span>,
+    carbonBudgetG: 5,
+    region: <span class="str">"us-east"</span> },
+);</code></pre>
+      </section>
+
+      <section id="what" class="block">
+        <h2>What ebb-ai does</h2>
+        <p>
+          Most agent code calls LLM APIs synchronously the moment the call
+          happens. ebb-ai sits in front of that call and answers a single
+          question: <em>does it have to run right now?</em> If the agent
+          says <em>by tomorrow morning is fine</em>, ebb-ai picks the
+          cleanest hour inside that window — on the local electricity grid,
+          at the LLM provider's cheapest tier, on whichever route makes
+          most sense — and dispatches there. It returns the result with a
+          per-task carbon receipt you can audit.
+        </p>
+      </section>
+
+      <section id="why" class="block alt">
+        <h2>Why it matters</h2>
+        <ul class="reasons">
+          <li>
+            <strong>Carbon.</strong> US grid intensity varies 30–60% within a
+            single day. Inference at 2 p.m. on a hot day is materially
+            dirtier than the same call at 3 a.m.
+          </li>
+          <li>
+            <strong>Dollars.</strong> Anthropic and OpenAI both ship Batch
+            APIs at a flat 50% discount for tasks that can wait up to 24
+            hours. Almost no agent code uses them by default.
+          </li>
+          <li>
+            <strong>Latency.</strong> Off-peak execution is faster
+            end-to-end. Providers throttle at peak.
+          </li>
+        </ul>
+        <p>
+          The gap is at the agent/MCP layer. There are mature carbon-aware
+          tools upstream (Microsoft Carbon Aware SDK, Electricity Maps,
+          WattTime, GridStatus) and downstream (Batch APIs). Nothing
+          stitches them together for agents. ebb-ai does.
+        </p>
+      </section>
+
+      <section id="how" class="block">
+        <h2>How it ships</h2>
+        <div class="grid">
+          <div class="card">
+            <h3>@ebb-ai/core</h3>
+            <p>
+              TypeScript library with the scheduler, grid feeds, and the
+              <code>defer()</code> API. The thing you import in your
+              own agent code.
+            </p>
+          </div>
+          <div class="card">
+            <h3>@ebb-ai/mcp</h3>
+            <p>
+              Model Context Protocol server. Drop-in for Claude Desktop,
+              Claude Code, OpenClaw, Cursor, Codex, and anything else
+              that speaks MCP. Three tools, zero integration.
+            </p>
+          </div>
+          <div class="card">
+            <h3>ebb-ai (Python)</h3>
+            <p>
+              Same surface, PyPI package, drops into agent stacks built
+              on the Anthropic, OpenAI, and Google Python SDKs. v0.2.
+            </p>
+          </div>
+          <div class="card">
+            <h3>Spec proposals</h3>
+            <p>
+              Upstream PRs to the Model Context Protocol spec adding
+              <code>priority</code>, <code>deadline</code>, and
+              <code>carbon_budget</code> as first-class request fields.
+              v0.3.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="install" class="block alt">
+        <h2>Install (development)</h2>
+        <pre class="code"><code>git clone https://github.com/Vitalini/ebb-ai.git
+cd ebb-ai
+pnpm install
+pnpm build
+pnpm test    # 11/11</code></pre>
+        <p>
+          Then wire <code>@ebb-ai/mcp</code> into your MCP-aware client.
+          The repo ships ready-to-paste configs for
+          <a href="https://github.com/Vitalini/ebb-ai/tree/main/examples/claude-code">Claude Code</a>,
+          <a href="https://github.com/Vitalini/ebb-ai/tree/main/examples/openclaw-skill">OpenClaw</a>,
+          and
+          <a href="https://github.com/Vitalini/ebb-ai/tree/main/examples/codex">Codex CLI</a>.
+        </p>
+      </section>
+
+      <section class="block">
+        <h2>Where we are</h2>
+        <p>
+          v0.1 lands the scheduler, the MCP server, the grid feeds (with
+          a mock fallback for development without an API key), and
+          examples for Claude Code, OpenClaw, and Codex. v0.2 adds
+          provider adapters with Batch API support and a SQLite-backed
+          durable queue. v0.3 ships the spec PRs and a public carbon
+          dashboard. See
+          <a href="https://github.com/Vitalini/ebb-ai/blob/main/PLAN.md">PLAN.md</a>
+          for the 24-week roadmap.
+        </p>
+      </section>
+    </main>
+
+    <footer>
+      <p>
+        Apache-2.0 · Built by
+        <a href="https://github.com/Vitalini">Vitalii Borovyk</a> ·
+        <a href="https://github.com/Vitalini/ebb-ai">GitHub</a>
+      </p>
+    </footer>
+  </body>
+</html>

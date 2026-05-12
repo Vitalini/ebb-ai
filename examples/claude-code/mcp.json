@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "ebb-ai": {
+      "command": "node",
+      "args": [
+        "/ABSOLUTE/PATH/TO/ebb-ai/packages/mcp-server/dist/server.js"
+      ],
+      "env": {
+        "EBB_ELECTRICITY_MAPS_API_KEY": "",
+        "EBB_DEFAULT_REGION": "US-CAL-CISO"
+      }
+    }
+  }
+}

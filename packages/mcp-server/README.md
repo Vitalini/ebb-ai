@@ -1,0 +1,101 @@
+# @ebb-ai/mcp
+
+Model Context Protocol (MCP) server for **ebb-ai** — exposes carbon-aware
+task scheduling as MCP tools that any MCP-compatible agent can call.
+
+## Install (development, monorepo)
+
+```bash
+# from the repo root
+pnpm install
+pnpm --filter @ebb-ai/mcp build
+```
+
+## Run
+
+```bash
+node packages/mcp-server/dist/server.js
+```
+
+The server speaks MCP over stdio. To wire it into an agent client:
+
+### Claude Desktop
+
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json`
+on macOS (Linux/Windows have similar paths):
+
+```json
+{
+  "mcpServers": {
+    "ebb-ai": {
+      "command": "node",
+      "args": [
+        "/ABSOLUTE/PATH/TO/ebb-ai/packages/mcp-server/dist/server.js"
+      ],
+      "env": {
+        "EBB_ELECTRICITY_MAPS_API_KEY": "optional - mock data without it",
+        "EBB_DEFAULT_REGION": "US-CAL-CISO"
+      }
+    }
+  }
+}
+```
+
+Restart Claude Desktop after editing.
+
+### Claude Code
+
+Add `ebb-ai` to your `~/.claude/mcp.json` (or workspace `.claude/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "ebb-ai": {
+      "command": "node",
+      "args": ["/ABSOLUTE/PATH/TO/ebb-ai/packages/mcp-server/dist/server.js"]
+    }
+  }
+}
+```
+
+### OpenClaw
+
+Add to `~/.openclaw/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "ebb-ai": {
+      "command": "node",
+      "args": ["/ABSOLUTE/PATH/TO/ebb-ai/packages/mcp-server/dist/server.js"]
+    }
+  }
+}
+```
+
+## Tools exposed
+
+| Tool | Purpose |
+|---|---|
+| `get_grid_forecast(region, hours?)` | Hour-by-hour carbon intensity for a region; useful before deciding whether to defer. |
+| `schedule_task(prompt, deadline, model?, region?, carbon_budget_g?)` | Queue a task to run in the cleanest window inside the deadline. Returns a task_id. |
+| `check_queue_status(task_id?)` | Inspect the queue or one specific task; includes a carbon receipt once the task has completed. |
+
+## Environment variables
+
+| Var | Purpose |
+|---|---|
+| `EBB_ELECTRICITY_MAPS_API_KEY` | API key from [electricitymaps.com](https://www.electricitymaps.com/free-tier-api). If unset, the server falls back to deterministic mock data so you can still run the whole stack locally. |
+| `EBB_DEFAULT_REGION` | Electricity Maps zone code, default `US-CAL-CISO`. |
+
+## v0.1 limitations
+
+- The server schedules dispatch *time*, but does not yet call the
+  underlying LLM (the agent is expected to execute the prompt itself once
+  the window arrives). Provider adapters and Batch API integration land
+  in v0.2.
+- Queue is in-memory; restarts lose state. SQLite persistence lands in
+  v0.2.
+- Single-region grid feed. Multi-region routing lands in v0.3.
+
+See `../../PLAN.md` for the full roadmap.

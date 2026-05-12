@@ -1,0 +1,39 @@
+{
+  "name": "@ebb-ai/core",
+  "version": "0.1.0",
+  "description": "Carbon-aware scheduling for agentic AI workflows — core TypeScript library.",
+  "license": "Apache-2.0",
+  "author": "Vitalii Borovyk",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.5",
+    "@types/node": "^22.10.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Vitalini/ebb-ai.git",
+    "directory": "packages/core-ts"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

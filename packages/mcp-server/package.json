@@ -1,0 +1,40 @@
+{
+  "name": "@ebb-ai/mcp",
+  "version": "0.1.0",
+  "description": "Model Context Protocol server for ebb-ai — carbon-aware scheduling tools for any MCP-compatible agent.",
+  "license": "Apache-2.0",
+  "author": "Vitalii Borovyk",
+  "type": "module",
+  "main": "./dist/server.js",
+  "bin": {
+    "ebb-mcp": "./dist/server.js"
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "start": "node dist/server.js",
+    "dev": "node --loader tsx src/server.ts",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@ebb-ai/core": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.5",
+    "tsx": "^4.19.2",
+    "@types/node": "^22.10.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Vitalini/ebb-ai.git",
+    "directory": "packages/mcp-server"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

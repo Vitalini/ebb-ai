@@ -1,0 +1,33 @@
+{
+  "name": "ebb-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Carbon-aware scheduling for agentic AI workflows.",
+  "license": "Apache-2.0",
+  "author": "Vitalii Borovyk",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Vitalini/ebb-ai.git"
+  },
+  "homepage": "https://github.com/Vitalini/ebb-ai",
+  "bugs": {
+    "url": "https://github.com/Vitalini/ebb-ai/issues"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "build": "pnpm -r --filter=./packages/* build",
+    "test": "pnpm -r --filter=./packages/* test",
+    "lint": "pnpm -r --filter=./packages/* lint",
+    "typecheck": "pnpm -r --filter=./packages/* typecheck",
+    "clean": "pnpm -r --filter=./packages/* clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "@types/node": "^22.10.0",
+    "vitest": "^2.1.5"
+  }
+}
