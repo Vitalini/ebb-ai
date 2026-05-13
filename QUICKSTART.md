@@ -124,11 +124,47 @@ The agent will:
 
 ---
 
+## Step 5 — (optional, macOS) Make tasks survive a closed laptop
+
+Without this step, deferred tasks live only as long as the MCP host
+process. Close Claude Desktop, sleep your laptop, and a 3am task runs
+when you wake it — not at 3am.
+
+```bash
+pnpm --filter @ebb-ai/cli build
+node packages/cli/dist/index.js install --laptop
+```
+
+This writes:
+- `~/Library/LaunchAgents/com.ebb-ai.tick.plist` — runs `ebb tick`
+  every 5 minutes.
+- `~/.ebb/laptop-wake.sh` — pre-registers `pmset` wake events for
+  scheduled tasks. Requires a sudoers entry for `pmset schedule wake`
+  if you want it to run unattended.
+
+Then:
+
+```bash
+launchctl load ~/Library/LaunchAgents/com.ebb-ai.tick.plist
+tail -f ~/.ebb/tick.log    # see the cron in action
+```
+
+Server / always-on Linux box variant:
+
+```bash
+node packages/cli/dist/index.js install --server
+```
+
+Linux + Windows: `install` emits a systemd unit / `schtasks` command
+template — copy + adapt. Native daemonization for both lands in v0.5.
+
+---
+
 ## What lives where (when something breaks)
 
 | You want | Where to look |
 |---|---|
-| Live carbon dashboard | `pnpm --filter ebb-dashboard dev` → http://localhost:3000 |
+| Live carbon dashboard | `pnpm --filter @ebb-ai/dashboard dev` → http://localhost:3000 |
 | Queue ledger | `sqlite3 ~/.ebb/queue.sqlite` (or wherever you point `dbPath`) |
 | Carbon receipts | Same SQLite — `SELECT * FROM tasks WHERE status = 'completed';` |
 | Force a quick sanity run | `pnpm --filter @ebb-ai/core test` |

@@ -6,9 +6,9 @@ window inside your deadline. Per-task carbon receipts, Anthropic +
 OpenAI Batch API support, SQLite-backed durable queue.*
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-5eead4)](./LICENSE)
-[![v0.2.0](https://img.shields.io/badge/release-v0.2.0-fbbf24)](https://github.com/Vitalini/ebb-ai/releases/tag/v0.2.0)
-[![Tests](https://img.shields.io/badge/tests-73%20passing-22c55e)](#tests)
-[![MCP](https://img.shields.io/badge/MCP-compatible-5eead4)](https://modelcontextprotocol.io)
+[![v0.4.0](https://img.shields.io/badge/release-v0.4.0-fbbf24)](https://github.com/Vitalini/ebb-ai/releases/tag/v0.4.0)
+[![Tests](https://img.shields.io/badge/tests-125%20passing-22c55e)](#tests)
+[![MCP](https://img.shields.io/badge/MCP-10%20hosts-5eead4)](https://modelcontextprotocol.io)
 
 `ebb-ai` defers non-urgent AI agent tasks to execution windows that are
 simultaneously cleaner on the electricity grid and cheaper at the LLM
@@ -30,9 +30,11 @@ $ ebb-mcp tool call recommend_window \
 }
 ```
 
-> **Status:** v0.2 · 2026-05-12 · Anthropic + OpenAI Batch adapters,
-> durable SQLite queue, Python port, live dashboard.
-> See [QUICKSTART.md](./QUICKSTART.md) for the 4-step install.
+> **Status:** v0.4 · 2026-05-12 · Anthropic + OpenAI Batch adapters,
+> durable SQLite queue, Python port, live dashboard, `recommend_window`
+> planning endpoint, always-on `ebb tick` CLI with macOS launchd +
+> pmset wake. **125 tests passing**.
+> See [QUICKSTART.md](./QUICKSTART.md) for the 5-step install.
 
 ---
 
@@ -169,7 +171,7 @@ asyncio.run(defer(
 ### Dashboard
 
 ```bash
-pnpm --filter ebb-dashboard dev
+pnpm --filter @ebb-ai/dashboard dev
 # → http://localhost:3000
 ```
 

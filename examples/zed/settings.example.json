@@ -1,0 +1,14 @@
+{
+  "_comment": "Merge into ~/.config/zed/settings.json. Do not overwrite existing context_servers — merge.",
+  "context_servers": {
+    "ebb-ai": {
+      "command": {
+        "path": "node",
+        "args": ["/absolute/path/to/ebb-ai/packages/mcp-server/dist/server.js"]
+      },
+      "env": {
+        "EBB_ELECTRICITY_MAPS_API_KEY": "optional — falls back to deterministic mock data without one"
+      }
+    }
+  }
+}

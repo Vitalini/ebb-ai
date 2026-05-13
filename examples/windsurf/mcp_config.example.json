@@ -1,0 +1,12 @@
+{
+  "_comment": "Merge into ~/.codeium/windsurf/mcp_config.json. Do not overwrite existing mcpServers — merge.",
+  "mcpServers": {
+    "ebb-ai": {
+      "command": "node",
+      "args": ["/absolute/path/to/ebb-ai/packages/mcp-server/dist/server.js"],
+      "env": {
+        "EBB_ELECTRICITY_MAPS_API_KEY": "optional — falls back to deterministic mock data without one"
+      }
+    }
+  }
+}

@@ -69,6 +69,47 @@ export interface TaskRecord<T = unknown> {
    *  dispatched immediately and the receipt used a freshly-fetched intensity.
    */
   intensitySource?: "scored" | "current";
+  /**
+   * JSON-serializable task body. v0.4 introduces persistent provider-call
+   * task bodies so the cron-tick CLI can dispatch a queued task even after
+   * the enqueuing process has exited. Set on the record when the task was
+   * enqueued via `Scheduler.enqueueProviderCall`. Closure-based tasks
+   * (`Scheduler.defer` / `enqueue`) do not populate this field.
+   */
+  bodyJson?: string;
+}
+
+/**
+ * JSON-serializable provider-call body. Persisted in the SQLite ledger as
+ * `body_json`. The cron-tick CLI rehydrates this struct and dispatches it
+ * against the matching provider adapter, so a task survives the
+ * enqueuing process going away.
+ */
+export interface ProviderCallSpec {
+  type: "provider_call";
+  provider: "anthropic" | "openai";
+  model: string;
+  prompt: string;
+  systemPrompt?: string;
+  maxTokens?: number;
+  temperature?: number;
+  /** If true, route through Batch API when deadline > 24h out. Default true. */
+  preferBatch?: boolean;
+}
+
+/** Per-task outcome returned by `Scheduler.tick`. */
+export interface TickResultEntry {
+  taskId: string;
+  status: "completed" | "failed";
+  error?: string;
+}
+
+/** Aggregate result of one call to `Scheduler.tick`. */
+export interface TickResult {
+  inspected: number;
+  dispatched: number;
+  failed: number;
+  results: TickResultEntry[];
 }
 
 /** Function the user hands to `defer`. */

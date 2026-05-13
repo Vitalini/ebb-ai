@@ -1,0 +1,12 @@
+{
+  "_comment": "Open Cline's settings → MCP Servers → Edit MCP Settings, and merge this stanza in. Do not overwrite an existing mcpServers block — merge.",
+  "mcpServers": {
+    "ebb-ai": {
+      "command": "node",
+      "args": ["/absolute/path/to/ebb-ai/packages/mcp-server/dist/server.js"],
+      "env": {
+        "EBB_ELECTRICITY_MAPS_API_KEY": "optional — falls back to deterministic mock data without one"
+      }
+    }
+  }
+}

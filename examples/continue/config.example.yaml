@@ -1,0 +1,12 @@
+# Continue config — drop into ~/.continue/config.yaml (merge with
+# existing mcpServers block; do not overwrite).
+#
+# See https://docs.continue.dev/customize/model-context-protocol for
+# the canonical MCP integration docs.
+mcpServers:
+  - name: ebb-ai
+    command: node
+    args:
+      - /absolute/path/to/ebb-ai/packages/mcp-server/dist/server.js
+    env:
+      EBB_ELECTRICITY_MAPS_API_KEY: optional — falls back to deterministic mock data without one

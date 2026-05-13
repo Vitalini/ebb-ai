@@ -16,6 +16,7 @@
 
 import { randomUUID } from "node:crypto";
 import { mockGridFeed } from "./grid.js";
+import type { ProviderAdapter } from "./providers/base.js";
 import { TaskStore } from "./storage/sqlite.js";
 import type {
   CarbonReceipt,
@@ -23,7 +24,10 @@ import type {
   DeferrableTask,
   GridFeed,
   GridForecastEntry,
+  ProviderCallSpec,
   TaskRecord,
+  TickResult,
+  TickResultEntry,
 } from "./types.js";
 
 const DEFAULT_REGION = "US-CAL-CISO";
@@ -151,6 +155,120 @@ export class Scheduler {
     this.store?.upsert(record);
     void this.schedule(taskId, deadline);
     return record;
+  }
+
+  /**
+   * Enqueue a persistent provider-call task. The body is JSON-serialized
+   * into the SQLite ledger, so the task survives the enqueuing process
+   * exiting — `Scheduler.tick(adapters)`, typically invoked from
+   * `ebb tick` on a cron, can rehydrate the spec and dispatch it.
+   *
+   * Unlike `enqueue`, no in-process closure is registered; the scheduler
+   * does NOT call `dispatch` for these tasks at the chosen window. They
+   * are exclusively driven by `tick` so that any process (this one, or a
+   * later cron-tick) can pick them up.
+   */
+  async enqueueProviderCall(
+    spec: ProviderCallSpec,
+    opts: DeferOptions = {},
+  ): Promise<TaskRecord<unknown>> {
+    if (spec.type !== "provider_call") {
+      throw new Error(
+        `enqueueProviderCall: spec.type must be "provider_call", got ${JSON.stringify((spec as { type?: unknown }).type)}`,
+      );
+    }
+    if (spec.provider !== "anthropic" && spec.provider !== "openai") {
+      throw new Error(
+        `enqueueProviderCall: unsupported provider ${JSON.stringify(spec.provider)}`,
+      );
+    }
+    if (typeof spec.model !== "string" || spec.model.length === 0) {
+      throw new Error("enqueueProviderCall: spec.model must be a non-empty string");
+    }
+    if (typeof spec.prompt !== "string" || spec.prompt.length === 0) {
+      throw new Error("enqueueProviderCall: spec.prompt must be a non-empty string");
+    }
+    const deadline = normalizeDeadline(opts.deadline);
+    if (opts.taskId !== undefined) {
+      if (typeof opts.taskId !== "string" || opts.taskId.length === 0) {
+        throw new Error(`Invalid taskId: must be a non-empty string`);
+      }
+      if (this.tasks.has(opts.taskId)) {
+        throw new Error(`Task id "${opts.taskId}" is already in the queue`);
+      }
+    }
+    const taskId = opts.taskId ?? `t-${randomUUID()}`;
+    const region = opts.region ?? this.defaultRegion;
+    const record: TaskRecord<unknown> = {
+      taskId,
+      status: "queued",
+      enqueuedAt: new Date().toISOString(),
+      region,
+      carbonBudgetG: opts.carbonBudgetG,
+      bodyJson: JSON.stringify(spec),
+    };
+    this.tasks.set(taskId, record);
+    this.store?.upsert(record);
+    // Schedule a carbon window but DO NOT register an in-process timer that
+    // calls `dispatch` — provider-call tasks are driven exclusively by
+    // `Scheduler.tick`. We still write `scheduled` + `scheduledFor` so the
+    // ledger reflects the chosen window and so `tick` can compare against
+    // `Date.now()`.
+    await this.scheduleProviderCall(taskId, deadline);
+    return record;
+  }
+
+  /**
+   * Drain due provider-call tasks against the supplied adapters. Returns a
+   * `TickResult` summarising what happened. Closure-based tasks
+   * (`enqueue` / `defer`) are NOT touched by this method — only this
+   * process can run those.
+   */
+  async tick(adapters: {
+    anthropic?: ProviderAdapter;
+    openai?: ProviderAdapter;
+  }): Promise<TickResult> {
+    const now = Date.now();
+    // Source-of-truth is the in-memory map for this process, plus any
+    // persisted records (e.g. when a v0.4 `ebb tick` opens the SQLite file).
+    const seen = new Set<string>();
+    const candidates: TaskRecord<unknown>[] = [];
+    for (const record of this.tasks.values()) {
+      if (record.status !== "scheduled") continue;
+      if (!record.bodyJson) continue;
+      if (!record.scheduledFor) continue;
+      if (new Date(record.scheduledFor).getTime() > now) continue;
+      candidates.push(record);
+      seen.add(record.taskId);
+    }
+    if (this.store) {
+      for (const record of this.store.list({ status: "scheduled" })) {
+        if (seen.has(record.taskId)) continue;
+        if (!record.bodyJson) continue;
+        if (!record.scheduledFor) continue;
+        if (new Date(record.scheduledFor).getTime() > now) continue;
+        // Hydrate into the in-memory map so subsequent state writes stay
+        // consistent with the rest of the scheduler.
+        this.tasks.set(record.taskId, record);
+        candidates.push(record);
+      }
+    }
+
+    const results: TickResultEntry[] = [];
+    let dispatched = 0;
+    let failed = 0;
+    for (const record of candidates) {
+      const entry = await this.dispatchProviderCall(record, adapters);
+      results.push(entry);
+      if (entry.status === "completed") dispatched++;
+      else failed++;
+    }
+    return {
+      inspected: candidates.length,
+      dispatched,
+      failed,
+      results,
+    };
   }
 
   /** Snapshot the current state of one task. */
@@ -289,6 +407,133 @@ export class Scheduler {
       this.bodies.delete(taskId);
       this.resolvers.delete(taskId);
     }
+  }
+
+  private async scheduleProviderCall(taskId: string, deadline: Date): Promise<void> {
+    const record = this.tasks.get(taskId);
+    if (!record) return;
+    const horizonH = Math.max(
+      1,
+      Math.min(
+        MAX_HORIZON_HOURS,
+        Math.ceil((deadline.getTime() - Date.now()) / (60 * 60 * 1000)),
+      ),
+    );
+    const forecast = await this.feed.fetchForecast(record.region, horizonH);
+    const budgetG = record.carbonBudgetG;
+    const survivors =
+      budgetG !== undefined
+        ? forecast.entries.filter((e) => intensityToGrams(e.carbonIntensityGCo2PerKwh) <= budgetG)
+        : forecast.entries;
+    const candidate = pickBestWindow(survivors, deadline);
+    if (!candidate) {
+      if (budgetG !== undefined && forecast.entries.length > 0) {
+        const cheapest = forecast.entries.reduce((a, b) =>
+          a.carbonIntensityGCo2PerKwh <= b.carbonIntensityGCo2PerKwh ? a : b,
+        );
+        const cheapestG = intensityToGrams(cheapest.carbonIntensityGCo2PerKwh);
+        if (cheapestG > budgetG) {
+          this.failTask(taskId, new CarbonBudgetExceededError(cheapestG, budgetG));
+          return;
+        }
+      }
+      // No usable window — schedule for `now` so the very next `tick` runs
+      // the task immediately rather than miss the deadline.
+      record.status = "scheduled";
+      record.scheduledFor = new Date().toISOString();
+      this.store?.upsert(record);
+      return;
+    }
+    record.status = "scheduled";
+    record.scheduledFor = candidate.datetime;
+    this.store?.upsert(record);
+  }
+
+  private async dispatchProviderCall(
+    record: TaskRecord<unknown>,
+    adapters: { anthropic?: ProviderAdapter; openai?: ProviderAdapter },
+  ): Promise<TickResultEntry> {
+    let spec: ProviderCallSpec;
+    try {
+      spec = JSON.parse(record.bodyJson ?? "null") as ProviderCallSpec;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.failTask(record.taskId, new Error(`tick: corrupt body_json: ${msg}`));
+      return { taskId: record.taskId, status: "failed", error: msg };
+    }
+    if (!spec || spec.type !== "provider_call") {
+      const msg = `tick: body is not a provider_call spec`;
+      this.failTask(record.taskId, new Error(msg));
+      return { taskId: record.taskId, status: "failed", error: msg };
+    }
+    const adapter = adapters[spec.provider];
+    if (!adapter) {
+      const msg = `tick: no adapter configured for provider ${spec.provider}`;
+      this.failTask(record.taskId, new Error(msg));
+      return { taskId: record.taskId, status: "failed", error: msg };
+    }
+
+    record.status = "running";
+    this.store?.upsert(record);
+    const start = Date.now();
+    const ranAt = new Date();
+    try {
+      const preferBatch = spec.preferBatch !== false;
+      // We compare the task's scheduled_for to a 24h-from-now boundary to
+      // decide whether the Batch API is still worth it. (The deadline itself
+      // is not on the record after enqueuing — `scheduled_for` is the proxy.)
+      const scheduledForTs = record.scheduledFor
+        ? new Date(record.scheduledFor).getTime()
+        : Date.now();
+      const moreThan24h = scheduledForTs - Date.now() > 24 * 60 * 60 * 1000;
+      const useBatch = preferBatch && moreThan24h && typeof adapter.dispatchBatch === "function";
+      const result = useBatch
+        ? await adapter.dispatchBatch(spec.model, [spec.prompt], {
+            temperature: spec.temperature,
+            maxTokens: spec.maxTokens,
+            system: spec.systemPrompt,
+          })
+        : await adapter.dispatch(spec.model, spec.prompt, {
+            temperature: spec.temperature,
+            maxTokens: spec.maxTokens,
+            system: spec.systemPrompt,
+          });
+      const durationMs = Date.now() - start;
+      const intensityG = await this.intensityForReceipt(record.region, ranAt);
+      const source: "scored" | "current" = "scored";
+      const receipt: CarbonReceipt = {
+        taskId: record.taskId,
+        ranAt: ranAt.toISOString(),
+        region: record.region,
+        estimatedCarbonGCo2: Math.round(intensityToGrams(intensityG) * 10) / 10,
+        provider: spec.provider,
+        model: spec.model,
+        durationMs,
+      };
+      record.status = "completed";
+      record.completedAt = new Date().toISOString();
+      record.result = result;
+      record.receipt = receipt;
+      record.intensitySource = source;
+      this.store?.upsert(record);
+      return { taskId: record.taskId, status: "completed" };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      record.status = "failed";
+      record.completedAt = new Date().toISOString();
+      record.error = msg;
+      this.store?.upsert(record);
+      return { taskId: record.taskId, status: "failed", error: msg };
+    }
+  }
+
+  /**
+   * Look up an intensity figure for the receipt. We re-fetch the forecast
+   * and pick the entry that best aligns with the task's `scheduled_for`
+   * (or the moment we ran, if there is no scheduled_for).
+   */
+  private async intensityForReceipt(region: string, at: Date): Promise<number> {
+    return this.fetchCurrentIntensity(region, at);
   }
 
   private async fetchCurrentIntensity(region: string, at: Date): Promise<number> {

@@ -33,11 +33,14 @@ export type {
   GridForecast,
   GridForecastEntry,
   CarbonReceipt,
+  ProviderCallSpec,
   RecommendAlternative,
   RecommendOptions,
   RecommendResult,
   TaskRecord,
   TaskStatus,
+  TickResult,
+  TickResultEntry,
 } from "./types.js";
 export {
   AnthropicAdapter,

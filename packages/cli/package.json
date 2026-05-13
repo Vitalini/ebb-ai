@@ -1,27 +1,24 @@
 {
-  "name": "@ebb-ai/core",
+  "name": "@ebb-ai/cli",
   "version": "0.4.0",
-  "description": "Carbon-aware scheduling for agentic AI workflows — core TypeScript library.",
+  "description": "CLI for ebb-ai — cron-tick drain, launchd install, and sleep-prevention for the carbon-aware scheduler.",
   "license": "Apache-2.0",
   "author": "Vitalii Borovyk",
   "type": "module",
   "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
+  "bin": {
+    "ebb": "./dist/index.js"
   },
   "files": ["dist", "README.md", "LICENSE"],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && chmod +x dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "better-sqlite3": "^11.5.0"
+    "@ebb-ai/core": "workspace:*",
+    "commander": "^12.1.0"
   },
   "peerDependencies": {
     "@anthropic-ai/sdk": ">=0.32.0",
@@ -32,9 +29,6 @@
     "openai": { "optional": true }
   },
   "devDependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
-    "openai": "^4.77.0",
-    "@types/better-sqlite3": "^7.6.12",
     "typescript": "^5.6.3",
     "vitest": "^2.1.5",
     "@types/node": "^22.10.0"
@@ -42,7 +36,7 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/Vitalini/ebb-ai.git",
-    "directory": "packages/core-ts"
+    "directory": "packages/cli"
   },
   "publishConfig": {
     "access": "public"

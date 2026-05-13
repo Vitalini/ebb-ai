@@ -7,6 +7,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-05-12
+
+### Added
+- **`@ebb-ai/cli`** — new package shipping the `ebb` binary. Five
+  subcommands: `tick`, `install`, `queue list`, `receipts list`,
+  `register-wake`. Cross-platform shell entrypoint for the v0.4
+  always-on story.
+- **`ebb tick`** — one-shot or `--daemon` mode. Opens the SQLite
+  ledger, finds tasks whose `scheduled_for` has elapsed, dispatches
+  via Anthropic/OpenAI adapters, writes the receipt. This closes the
+  v0.3 gap where deferred tasks died with the MCP host process.
+- **`ebb install --laptop | --server`** — macOS launchd plist
+  generator. `--laptop` additionally drops a `laptop-wake.sh` helper
+  that registers `pmset schedule wake` events 30s before each
+  scheduled task. `--server` skips the wake step.
+- **`ebb register-wake <task-id>`** — schedules a macOS wake event
+  via `pmset` for a specific task. `--dry-run` prints the exact
+  command without running it. Sudoers entry required for non-root
+  invocation; the command shape is printed every time so it can be
+  pre-authorized.
+- **`@ebb-ai/core` v0.4:**
+  - New `Scheduler.enqueueProviderCall(spec, opts)` method — persists
+    a JSON-serializable provider-call task body. Closures still work
+    via `defer()` but are still in-process-only; provider-calls
+    survive restart.
+  - New `Scheduler.tick(adapters)` method — drains due tasks
+    persistently. Returns `{ inspected, dispatched, failed }`.
+  - New types `ProviderCallSpec`, `TickResult`, `TickResultEntry`.
+  - SQLite schema migration: added `body_json` column via idempotent
+    `ALTER TABLE` so v0.3 DB files are picked up without manual
+    intervention.
+- **Platform abstractions** — `packages/cli/src/platform/macos.ts`
+  ships `caffeinateWhilePending`, `pmsetScheduleWake`,
+  `pmsetCommand`, `formatPmsetDate`, `launchdPlist`. `linux.ts` and
+  `windows.ts` ship template generators (systemd / schtasks) as
+  stubs; full Linux + Windows runtimes land in v0.5.
+- **Five new example folders** — `examples/cline/`,
+  `examples/continue/`, `examples/zed/`, `examples/windsurf/`,
+  `examples/pi/`. Each ships a README + the host's native MCP-config
+  shape (`mcp_settings.json` / `config.yaml` / native
+  `context_servers` block / `mcp_config.json` / AGENTS.md skill
+  stanza). Brings supported MCP-host count from 5 → 10.
+
+### Fixed
+- TypeScript SQLite store crashed at runtime with
+  `ERR_AMBIGUOUS_MODULE_SYNTAX` because the `better-sqlite3` loader
+  used CJS-style `require()` inside an ESM emit. Replaced with
+  `import { createRequire } from "node:module"; const requireFn =
+  createRequire(import.meta.url);`. Vitest tests passed (vite
+  polyfills `require`); the production `dist/` binary did not until
+  this fix.
+- Wrong dashboard pnpm filter in `README.md` and `QUICKSTART.md`:
+  `pnpm --filter ebb-dashboard dev` corrected to `pnpm --filter
+  @ebb-ai/dashboard dev`.
+
+### Changed
+- `@ebb-ai/core` 0.3.0 → **0.4.0**.
+- `@ebb-ai/mcp` 0.3.0 → **0.4.0**.
+- `@ebb-ai/cli` initial release at **0.4.0**.
+- Python `ebb_ai` stays at 0.3.0 in this drop; Python parity for the
+  CLI and `tick()` method lands in v0.5 (see roadmap).
+
+### Tests
+- TypeScript core: **48 passed** (was 41; +7 for the tick / persisted
+  provider-call path).
+- MCP server: **8 passed** (unchanged from v0.3).
+- CLI: **13 passed** (new package: 8 platform-macos snapshots, 4
+  install dry-run / template, 1 tick env handling).
+- Python: **56 passed** (unchanged in v0.4 per scope; v0.5 brings
+  Python `tick` parity).
+- Total across the project: **125 passing**.
+
+### Known limitations (planned for v0.5)
+- Linux + Windows install paths only emit a template; no live
+  daemonization. Use the printed systemd unit / schtasks command
+  as a starting point.
+- `pmset schedule wake` requires sudo per call. Users must add a
+  sudoers entry for the `ebb` binary or run `ebb register-wake`
+  manually.
+- Closure-based `defer()` tasks are still in-process only. v0.4
+  intentionally only persists `provider_call` task bodies.
+- Python port does not yet have a `tick()` method or a `pyebb` CLI.
+
 ## [0.3.0] — 2026-05-12
 
 ### Added
@@ -136,7 +219,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Batches APIs. Direct Batch routing lands in v0.2.
 - Python port (`ebb-ai` PyPI) is a placeholder. v0.2.
 
-[Unreleased]: https://github.com/Vitalini/ebb-ai/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/Vitalini/ebb-ai/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Vitalini/ebb-ai/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Vitalini/ebb-ai/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Vitalini/ebb-ai/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Vitalini/ebb-ai/releases/tag/v0.1.0

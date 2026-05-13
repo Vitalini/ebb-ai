@@ -27,7 +27,10 @@
  * trails survive odd values without crashing the store.
  */
 
+import { createRequire } from "node:module";
 import type { CarbonReceipt, TaskRecord, TaskStatus } from "../types.js";
+
+const requireFn = createRequire(import.meta.url);
 
 interface SqliteDatabase {
   exec(sql: string): void;
@@ -53,11 +56,29 @@ CREATE TABLE IF NOT EXISTS tasks (
   result_json       TEXT,
   error             TEXT,
   receipt_json      TEXT,
-  intensity_source  TEXT
+  intensity_source  TEXT,
+  body_json         TEXT
 );
 CREATE INDEX IF NOT EXISTS tasks_status_idx ON tasks(status);
 CREATE INDEX IF NOT EXISTS tasks_enqueued_idx ON tasks(enqueued_at);
 `;
+
+/**
+ * v0.4 idempotent migration: `body_json` column added for persistent
+ * provider-call task bodies. SQLite allows `ADD COLUMN` on a non-empty
+ * table because the new column is nullable. We check
+ * `pragma_table_info` first so re-running on an already-migrated DB
+ * (including a freshly created v0.4 DB) is a no-op.
+ */
+function ensureBodyJsonColumn(db: SqliteDatabase): void {
+  const rows = db
+    .prepare(`SELECT name FROM pragma_table_info('tasks')`)
+    .all() as Array<{ name: string }>;
+  const hasBodyJson = rows.some((r) => r.name === "body_json");
+  if (!hasBodyJson) {
+    db.exec(`ALTER TABLE tasks ADD COLUMN body_json TEXT`);
+  }
+}
 
 function safeStringify(value: unknown): string | null {
   if (value === undefined) return null;
@@ -94,16 +115,17 @@ export class TaskStore {
       this.db = openSqliteSync(opts.dbPath);
     }
     this.db.exec(SCHEMA);
+    ensureBodyJsonColumn(this.db);
   }
 
   upsert(record: TaskRecord<unknown>): void {
     const stmt = this.db.prepare(`
       INSERT INTO tasks (
         task_id, status, enqueued_at, scheduled_for, completed_at,
-        region, carbon_budget_g, result_json, error, receipt_json, intensity_source
+        region, carbon_budget_g, result_json, error, receipt_json, intensity_source, body_json
       ) VALUES (
         @task_id, @status, @enqueued_at, @scheduled_for, @completed_at,
-        @region, @carbon_budget_g, @result_json, @error, @receipt_json, @intensity_source
+        @region, @carbon_budget_g, @result_json, @error, @receipt_json, @intensity_source, @body_json
       )
       ON CONFLICT(task_id) DO UPDATE SET
         status            = excluded.status,
@@ -114,7 +136,8 @@ export class TaskStore {
         result_json       = excluded.result_json,
         error             = excluded.error,
         receipt_json      = excluded.receipt_json,
-        intensity_source  = excluded.intensity_source
+        intensity_source  = excluded.intensity_source,
+        body_json         = excluded.body_json
     `);
     stmt.run({
       task_id: record.taskId,
@@ -128,6 +151,7 @@ export class TaskStore {
       error: record.error ?? null,
       receipt_json: safeStringify(record.receipt),
       intensity_source: record.intensitySource ?? null,
+      body_json: record.bodyJson ?? null,
     });
   }
 
@@ -177,14 +201,14 @@ function rowToRecord(row: Record<string, unknown>): TaskRecord<unknown> {
         | "scored"
         | "current"
         | null) ?? undefined,
+    bodyJson: (row.body_json as string | null) ?? undefined,
   };
 }
 
 function openSqliteSync(path: string): SqliteDatabase {
-  // better-sqlite3 is a CommonJS module; use createRequire so this works
-  // under tsc + ESM emit without bundler interference.
-  const { createRequire } = require("node:module") as typeof import("node:module");
-  const requireFn = createRequire(import.meta.url);
+  // better-sqlite3 is a CommonJS module. The top-of-file
+  // createRequire(import.meta.url) gives us a working `require` from
+  // within ESM emit, without bundler interference.
   type Ctor = new (path: string) => SqliteDatabase;
   let Database: Ctor;
   try {
