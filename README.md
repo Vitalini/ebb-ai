@@ -17,19 +17,33 @@ provider. The same agent code that would have run a synchronous LLM
 call now calls `ebb-ai`, which picks the right time and the right route
 — and writes a per-task carbon receipt you can audit.
 
-```text
-$ ebb-mcp tool call recommend_window \
-    '{"deadline":"+12h","region":"US-CAL-CISO"}'
-{
-  "scheduled_for": "2026-05-13T07:00:00Z",
-  "intensity_g_co2_per_kwh": 96,
-  "band": "very_clean",
-  "estimated_carbon_g_co2": 0.14,
-  "estimated_savings_vs_now_pct": 67,
-  "batch_eligible": false,
-  "reasoning": "cleanest in-deadline window is 07:00 UTC; ~67% cleaner than dispatching now"
-}
+```typescript
+import { recommendWindow } from "@ebb-ai/core";
+
+const plan = await recommendWindow({
+  deadline: "2026-05-14T08:00:00-04:00",
+  region: "US-CAL-CISO",
+});
+
+// {
+//   scheduledFor:                "2026-05-14T05:00:00.000Z",
+//   intensityGCo2PerKwh:         60,
+//   band:                        "very_clean",
+//   estimatedCarbonGCo2:         0.1,
+//   estimatedSavingsVsNowPct:    73,
+//   batchEligible:               true,
+//   reasoning:
+//     "cleanest in-deadline window is 05:00 UTC (very clean mix); " +
+//     "~73% cleaner than dispatching now; Batch API saves an " +
+//     "additional 50% on cost (24h SLA)"
+// }
 ```
+
+Same call surfaces as an **MCP tool** to any compatible agent host
+(Claude Desktop, Claude Code, Cursor, Cline, Continue, Zed,
+Windsurf, OpenClaw, OpenAI Codex CLI, Pi). The agent asks
+`recommend_window`, sees the plan, then commits via `schedule_task`
+— or doesn't.
 
 > **Status:** v0.5 · 2026-05-13 · Anthropic + OpenAI Batch adapters,
 > durable SQLite queue, Python port at parity, live dashboard,
@@ -40,6 +54,17 @@ $ ebb-mcp tool call recommend_window \
 > retry-with-backoff. **169 tests passing across 4 packages and
 > 2 languages.**
 > See [QUICKSTART.md](./QUICKSTART.md).
+
+### Live demo
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FVitalini%2Febb-ai&root-directory=apps%2Fdashboard&project-name=ebb-ai-dashboard&repository-name=ebb-ai-dashboard)
+
+Or visit the maintainer-hosted dashboard at
+**[ebb-ai.vercel.app](https://ebb-ai.vercel.app)** (or
+[ebb-ai.com](https://ebb-ai.com) once DNS propagates) to see live
+carbon-intensity forecasts across CAISO, ERCOT, ISO-NE, PJM, France,
+and Germany — and to try the carbon-window planner without
+installing anything.
 
 ---
 

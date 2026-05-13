@@ -160,6 +160,83 @@ template — copy + adapt. Native daemonization for both lands in v0.5.
 
 ---
 
+## Troubleshooting
+
+### `pnpm install` fails with `node-gyp` / `better-sqlite3` errors
+
+`@ebb-ai/core` depends on **better-sqlite3**, which has a tiny native
+binding. On macOS you need the **Xcode Command Line Tools** (one-time):
+
+```bash
+xcode-select --install
+```
+
+On Linux, you need `python3`, `make`, and `g++`:
+
+```bash
+sudo apt-get install build-essential python3
+# or, on RHEL/Fedora:
+sudo dnf groupinstall "Development Tools" && sudo dnf install python3
+```
+
+If `pnpm install` still fails, rebuild explicitly:
+
+```bash
+pnpm rebuild better-sqlite3
+```
+
+### `pnpm` not found
+
+```bash
+npm install -g pnpm@9
+```
+
+### `Node version mismatch`
+
+ebb-ai targets Node 20+. Check with `node --version`. Use
+[`fnm`](https://github.com/Schniz/fnm) or [`nvm`](https://github.com/nvm-sh/nvm)
+to manage versions:
+
+```bash
+fnm install 22 && fnm use 22
+```
+
+### MCP server starts but Claude Desktop doesn't see the tools
+
+Check `~/Library/Logs/Claude/mcp-server-ebb-ai.log` (macOS). Most
+common causes: wrong absolute path to `node`, wrong path to
+`server.js`, or Claude Desktop not restarted after editing
+`claude_desktop_config.json`.
+
+Use absolute paths in the config — Claude Desktop launches MCP
+servers in a minimal `PATH`.
+
+### `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` warnings on `ebb tick`
+
+This is expected when no provider keys are set. `ebb tick` exits with
+status 0 and a warning; tasks that need a provider remain in the
+`scheduled` state until a key is configured. Set the env var either
+in the MCP host config block (for in-process dispatch) or in the
+launchd plist's `EnvironmentVariables` (for `ebb tick`).
+
+### Python `pytest` finds no tests
+
+Activate the venv first:
+
+```bash
+cd packages/core-py
+. .venv/bin/activate
+pytest -q
+```
+
+If `.venv` doesn't exist:
+
+```bash
+python3 -m venv .venv && . .venv/bin/activate && pip install -e ".[dev,anthropic,openai]"
+```
+
+---
+
 ## What lives where (when something breaks)
 
 | You want | Where to look |
