@@ -21,13 +21,28 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { electricityMapsFeed, recommendWindow, Scheduler } from "@ebb-ai/core";
+import {
+  AnthropicAdapter,
+  electricityMapsFeed,
+  OpenAIAdapter,
+  recommendWindow,
+  Scheduler,
+  type ProviderAdapter,
+  type ProviderCallSpec,
+} from "@ebb-ai/core";
 import { z } from "zod";
 
 const DEFAULT_REGION = process.env.EBB_DEFAULT_REGION ?? "US-CAL-CISO";
 
 const feed = electricityMapsFeed();
 const scheduler = new Scheduler({ feed, defaultRegion: DEFAULT_REGION });
+
+function buildAdapters(): { anthropic?: ProviderAdapter; openai?: ProviderAdapter } {
+  const out: { anthropic?: ProviderAdapter; openai?: ProviderAdapter } = {};
+  if (process.env.ANTHROPIC_API_KEY) out.anthropic = new AnthropicAdapter();
+  if (process.env.OPENAI_API_KEY) out.openai = new OpenAIAdapter();
+  return out;
+}
 
 const getGridForecastInput = z.object({
   region: z
@@ -59,7 +74,7 @@ const scheduleTaskInput = z.object({
     .string()
     .optional()
     .describe(
-      "Model name to dispatch with (e.g. 'claude-sonnet-4-6'). Optional in v0.1.",
+      "Model name to dispatch with (e.g. 'claude-sonnet-4-6'). Required when dispatch=true.",
     ),
   region: z
     .string()
@@ -74,6 +89,46 @@ const scheduleTaskInput = z.object({
     .describe(
       "Hard cap on estimated grams CO2-equivalent for this task. If set and no window inside the deadline meets the cap, the task fails rather than dispatching to a dirty window.",
     ),
+  dry_run: z
+    .boolean()
+    .optional()
+    .describe(
+      "If true, return the planned dispatch (recommended window + carbon estimate) WITHOUT persisting anything. Useful for confirmation flows.",
+    ),
+  dispatch: z
+    .boolean()
+    .optional()
+    .describe(
+      "If true, persist a provider_call task body that `ebb tick` (CLI) or scheduler.tick (library) can dispatch via the configured provider. Default false — task stores the prompt only.",
+    ),
+  provider: z
+    .enum(["anthropic", "openai"])
+    .optional()
+    .describe("Provider to dispatch through when dispatch=true. Defaults to 'anthropic'."),
+  output_path: z
+    .string()
+    .optional()
+    .describe(
+      "Optional absolute file path. When the task completes, ebb-ai writes { taskId, result, receipt } as JSON to this path.",
+    ),
+  redact_in_receipt: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Optional regex patterns to strip from the prompt before storing on the receipt. Default behavior (omit field) redacts API-key-looking strings.",
+    ),
+});
+
+const taskIdOnlyInput = z.object({
+  task_id: z.string().min(1).describe("Task identifier returned by schedule_task."),
+});
+
+const updateDeadlineInput = z.object({
+  task_id: z.string().min(1).describe("Task identifier returned by schedule_task."),
+  deadline: z
+    .string()
+    .datetime({ offset: true })
+    .describe("New ISO-8601 deadline. Must be in the future."),
 });
 
 const checkQueueStatusInput = z.object({
@@ -114,7 +169,7 @@ const recommendWindowInput = z.object({
 });
 
 const server = new Server(
-  { name: "ebb-mcp", version: "0.1.0" },
+  { name: "ebb-mcp", version: "0.5.0" },
   { capabilities: { tools: {} } },
 );
 
@@ -219,6 +274,55 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         },
       },
     },
+    {
+      name: "cancel_task",
+      description:
+        "Cancel a queued/scheduled task. Idempotent — if the task is already completed/failed/cancelled this returns the existing status without error. Throws only if task_id is unknown.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          task_id: { type: "string", description: "Task identifier returned by schedule_task." },
+        },
+        required: ["task_id"],
+      },
+    },
+    {
+      name: "expedite_task",
+      description:
+        "Dispatch a queued/scheduled provider-call task immediately, bypassing the scheduler's chosen carbon window. The resulting receipt records intensitySource='expedited'. Only valid for tasks that were created with dispatch=true.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          task_id: { type: "string", description: "Task identifier returned by schedule_task." },
+        },
+        required: ["task_id"],
+      },
+    },
+    {
+      name: "update_deadline",
+      description:
+        "Re-score and reschedule a queued/scheduled task against a new deadline. Throws if the task is already running or terminal, or if the new deadline is invalid/in the past.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          task_id: { type: "string", description: "Task identifier returned by schedule_task." },
+          deadline: { type: "string", description: "New ISO-8601 deadline. Must be in the future." },
+        },
+        required: ["task_id", "deadline"],
+      },
+    },
+    {
+      name: "retry_task",
+      description:
+        "Re-dispatch a failed provider-call task. Only valid when the task's current status is 'failed'. New receipt overwrites the old.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          task_id: { type: "string", description: "Task identifier returned by schedule_task." },
+        },
+        required: ["task_id"],
+      },
+    },
   ],
 }));
 
@@ -272,11 +376,71 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     if (name === "schedule_task") {
       const parsed = scheduleTaskInput.parse(args);
       try {
+        // dry_run: return the planned dispatch without persisting.
+        if (parsed.dry_run) {
+          const spec: ProviderCallSpec = {
+            type: "provider_call",
+            provider: parsed.provider ?? "anthropic",
+            model: parsed.model ?? "claude-sonnet-4-5",
+            prompt: parsed.prompt,
+            outputPath: parsed.output_path,
+            redactInReceipt: parsed.redact_in_receipt,
+          };
+          const plan = await scheduler.previewProviderCall(spec, {
+            deadline: parsed.deadline,
+            region: parsed.region,
+            carbonBudgetG: parsed.carbon_budget_g,
+          });
+          return {
+            content: [
+              {
+                type: "text",
+                text:
+                  `dry_run plan (nothing persisted):\n` +
+                  `region: ${plan.region}\n` +
+                  `scheduled_for: ${plan.scheduledFor}\n` +
+                  `intensity_g_co2_per_kwh: ${plan.intensityGCo2PerKwh}\n` +
+                  `band: ${plan.band}\n` +
+                  `estimated_carbon_g_co2: ${plan.estimatedCarbonGCo2}\n` +
+                  `batch_eligible: ${plan.batchEligible}`,
+              },
+            ],
+          };
+        }
+        // Persistent provider_call (v0.4+) — dispatchable by `ebb tick`.
+        if (parsed.dispatch) {
+          const spec: ProviderCallSpec = {
+            type: "provider_call",
+            provider: parsed.provider ?? "anthropic",
+            model: parsed.model ?? "claude-sonnet-4-5",
+            prompt: parsed.prompt,
+            outputPath: parsed.output_path,
+            redactInReceipt: parsed.redact_in_receipt,
+          };
+          const record = await scheduler.enqueueProviderCall(spec, {
+            deadline: parsed.deadline,
+            region: parsed.region,
+            carbonBudgetG: parsed.carbon_budget_g,
+          });
+          return {
+            content: [
+              {
+                type: "text",
+                text:
+                  `Task queued (provider_call, dispatchable by \`ebb tick\`).\n` +
+                  `task_id: ${record.taskId}\n` +
+                  `provider: ${spec.provider}\n` +
+                  `model: ${spec.model}\n` +
+                  `region: ${record.region}\n` +
+                  `status: ${record.status}\n` +
+                  `scheduled_for: ${record.scheduledFor ?? "(immediate)"}\n` +
+                  `deadline: ${parsed.deadline}`,
+              },
+            ],
+          };
+        }
+        // Default v0.1 behavior: closure-based; agent dispatches LLM itself.
         const record = scheduler.enqueue(
-          // v0.1: the MCP server does not actually call the LLM itself —
-          // the agent calling this tool is expected to do that after the
-          // server informs it the window has opened. A future release will
-          // dispatch via Anthropic / OpenAI directly.
           async () => ({
             prompt: parsed.prompt,
             model: parsed.model ?? null,
@@ -293,13 +457,13 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
             {
               type: "text",
               text:
-                `Task queued.\n` +
+                `Task queued (closure-based, in-process only).\n` +
                 `task_id: ${record.taskId}\n` +
                 `region: ${record.region}\n` +
                 `status: ${record.status}\n` +
                 `deadline: ${parsed.deadline}\n` +
-                `Note: in v0.1 the MCP server schedules the dispatch time but does not call the LLM itself. ` +
-                `Poll check_queue_status to see when the chosen window arrives, then execute the prompt yourself.`,
+                `Note: This task type does NOT survive process restart. ` +
+                `Pass dispatch=true to persist a provider_call body that survives via ebb tick.`,
             },
           ],
         };
@@ -339,6 +503,117 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
           { type: "text", text: formatQueueSummary(all) },
         ],
       };
+    }
+
+    if (name === "cancel_task") {
+      const parsed = taskIdOnlyInput.parse(args);
+      try {
+        const rec = scheduler.cancelTask(parsed.task_id);
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                `Task ${parsed.task_id} status: ${rec.status}\n` +
+                (rec.completedAt ? `terminated_at: ${rec.completedAt}\n` : ``),
+            },
+          ],
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { content: [{ type: "text", text: `cancel_task rejected: ${msg}` }], isError: true };
+      }
+    }
+
+    if (name === "expedite_task") {
+      const parsed = taskIdOnlyInput.parse(args);
+      try {
+        const adapters = buildAdapters();
+        if (!adapters.anthropic && !adapters.openai) {
+          return {
+            content: [
+              {
+                type: "text",
+                text:
+                  `expedite_task rejected: no provider API key set (ANTHROPIC_API_KEY / OPENAI_API_KEY). ` +
+                  `Set one in the MCP server env block, restart, and retry.`,
+              },
+            ],
+            isError: true,
+          };
+        }
+        const entry = await scheduler.expediteTask(parsed.task_id, adapters);
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                `Task ${parsed.task_id} expedited.\n` +
+                `status: ${entry.status}\n` +
+                (entry.error ? `error: ${entry.error}\n` : ``),
+            },
+          ],
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { content: [{ type: "text", text: `expedite_task rejected: ${msg}` }], isError: true };
+      }
+    }
+
+    if (name === "update_deadline") {
+      const parsed = updateDeadlineInput.parse(args);
+      try {
+        const rec = await scheduler.updateDeadline(parsed.task_id, parsed.deadline);
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                `Task ${parsed.task_id} updated.\n` +
+                `status: ${rec.status}\n` +
+                `scheduled_for: ${rec.scheduledFor ?? "(immediate)"}\n` +
+                `new_deadline: ${parsed.deadline}`,
+            },
+          ],
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { content: [{ type: "text", text: `update_deadline rejected: ${msg}` }], isError: true };
+      }
+    }
+
+    if (name === "retry_task") {
+      const parsed = taskIdOnlyInput.parse(args);
+      try {
+        const adapters = buildAdapters();
+        if (!adapters.anthropic && !adapters.openai) {
+          return {
+            content: [
+              {
+                type: "text",
+                text:
+                  `retry_task rejected: no provider API key set (ANTHROPIC_API_KEY / OPENAI_API_KEY).`,
+              },
+            ],
+            isError: true,
+          };
+        }
+        const entry = await scheduler.retryTask(parsed.task_id, adapters);
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                `Task ${parsed.task_id} retried.\n` +
+                `status: ${entry.status}\n` +
+                (entry.error ? `error: ${entry.error}\n` : ``),
+            },
+          ],
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { content: [{ type: "text", text: `retry_task rejected: ${msg}` }], isError: true };
+      }
     }
 
     return {

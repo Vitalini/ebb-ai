@@ -7,6 +7,128 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-05-13
+
+**Theme:** "Control and reliability." Answers the four product
+questions raised in review: how to make sure the user gives a clear
+request, what form the result takes, what to do if the user changes
+their mind, and how to mitigate the operational failure modes
+(rate-limits, concurrent ticks, secrets in receipts).
+
+### Added — control surface
+
+- **`cancel_task` (MCP) + `Scheduler.cancelTask` (TS) + `Scheduler.cancel_task` (Python).**
+  Idempotent cancellation. If the task is queued/scheduled, status
+  transitions to `cancelled`. Already-terminal tasks return
+  unchanged. Throws only on unknown task id.
+- **`expedite_task` (MCP) + `Scheduler.expediteTask` + `Scheduler.expedite_task` (Python).**
+  Dispatch a queued provider-call task immediately, bypassing its
+  carbon window. Receipt records `intensitySource: "expedited"` to
+  preserve the audit trail's honesty.
+- **`update_deadline` (MCP) + `Scheduler.updateDeadline` + `Scheduler.update_deadline` (Python).**
+  Re-score and reschedule a queued task against a new deadline.
+  Throws if the task is already running or in a terminal state.
+- **`retry_task` (MCP) + `Scheduler.retryTask` + `Scheduler.retry_task` (Python).**
+  Re-dispatch a `failed` task. Receipt overwrites the previous.
+
+### Added — task-clarity layer
+
+- **`schedule_task` `dry_run: true` (MCP) + `Scheduler.previewProviderCall` (TS).**
+  Returns the planned dispatch — chosen window, estimated carbon,
+  band, batch eligibility — **without** persisting anything. Useful
+  for confirmation flows before the agent commits to schedule a
+  task.
+- **Prompt validation.** `schedule_task` rejects empty / whitespace
+  prompts at the boundary instead of dispatching garbage hours later.
+
+### Added — result delivery
+
+- **`output_path` field on `ProviderCallSpec`.** When set, the
+  dispatcher writes `{ taskId, result, receipt }` as JSON to that
+  path on success. Useful for inbox patterns and file-watchers.
+- **`prompt` on `CarbonReceipt`.** The receipt now retains the
+  prompt (redacted by default — see below) so the audit ledger is
+  complete.
+- **`totalTokens` on `CarbonReceipt`.** Total token count reported
+  by the provider, when available.
+
+### Added — failure-mode mitigation
+
+- **Retry with exponential backoff.** Provider-adapter dispatches
+  retry 3 times at 1 s / 4 s / 16 s on transient errors (429
+  rate-limit, 5xx, network errors). Non-retryable errors (4xx
+  other than 429) fail fast.
+- **Row-level claim in `tick`.** Two concurrent `ebb tick` processes
+  pointing at the same SQLite file no longer race-dispatch the same
+  task — only the process whose `UPDATE tasks SET status='running'
+  WHERE task_id=? AND status='scheduled'` changed exactly one row
+  owns the dispatch. Concurrency test verified deterministic at
+  10/10 reruns.
+- **Receipt redaction.** `redactInReceipt` field on
+  `ProviderCallSpec` controls regex redaction of secrets in the
+  stored prompt. Omitted = default patterns (API-key shapes,
+  bearer tokens). `[]` = no redaction. The dispatched call uses the
+  original prompt; only the receipt is redacted.
+
+### Added — Linux daemonization (was templates-only in v0.4)
+
+- **Real systemd `.service` + `.timer` generation** in
+  `@ebb-ai/cli` (`platform/linux.ts`). `ebb install --laptop`
+  writes `~/.config/systemd/user/ebb-tick.service` and
+  `ebb-tick.timer` plus the laptop-wake helper script; emits the
+  exact `systemctl --user daemon-reload && systemctl --user enable
+  --now ebb-tick.timer` next-step line.
+- **`rtcwake` wake-event support** on Linux mirroring the macOS
+  `pmset schedule wake` path. `ebb register-wake <task-id>` is
+  now cross-platform.
+
+### Added — Python parity
+
+- **`Scheduler.tick(adapters)`** Python — drains due provider-call
+  tasks via the matching adapter, identical semantics to TS.
+- **`Scheduler.cancel_task / expedite_task / update_deadline / retry_task`** Python.
+- **`ProviderCallSpec`, `TickResult`, `TickResultEntry`** dataclasses
+  in `ebb_ai.types`.
+- **Row-level claim** in the Python `_TaskStore` matches TS.
+- **`body_json` column migration** in the Python SQLite store
+  matches TS.
+
+### Changed
+
+- `@ebb-ai/core` 0.4.0 → **0.5.0**.
+- `@ebb-ai/mcp` 0.4.0 → **0.5.0**.
+- `@ebb-ai/cli` 0.4.0 → **0.5.0**.
+- `ebb-ai` (Python) 0.3.0 → **0.5.0** (skips 0.4 to align).
+- MCP server now exposes **8 tools** (was 4): the four v0.3
+  tools plus `cancel_task`, `expedite_task`, `update_deadline`,
+  `retry_task`.
+- `TaskStatus` union gains `"cancelled"`. `IntensitySource` gains
+  `"expedited"`.
+
+### Tests
+
+- TS core: **65 passed** (was 48; +17 for v0.5 — preview,
+  redact, output_path, retry/backoff, cancel/expedite/update/retry,
+  row-level claim).
+- MCP server: **8 passed** (unchanged at the protocol-stub level;
+  the new tools' wire shape is covered by the underlying scheduler
+  tests).
+- `@ebb-ai/cli`: **21 passed** (was 13; +8 for Linux platform).
+- Python: **75 passed** (was 56; +19 for v0.5 tick / cancel /
+  expedite / update / retry / concurrency).
+- **Total across the project: 169 passing.**
+
+### Known limitations (planned for v0.6)
+
+- Single-writer SQLite holds. WAL multi-writer is queued.
+- Lenient deadline parser ("tomorrow 8am") not yet shipped; only
+  ISO-8601 datetimes with timezone offset are accepted.
+- Stuck-running detection is documented but not yet auto-recoverable;
+  tasks stuck in `running > 1h` are reported but not auto-failed.
+- Webhook delivery (`output: { webhook: "..." }`) deferred — file
+  output and pull-by-id remain the v0.5 delivery modes.
+- Python `pyebb` CLI deferred — operators use the TS `ebb` CLI.
+
 ## [0.4.0] — 2026-05-12
 
 ### Added
@@ -219,7 +341,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Batches APIs. Direct Batch routing lands in v0.2.
 - Python port (`ebb-ai` PyPI) is a placeholder. v0.2.
 
-[Unreleased]: https://github.com/Vitalini/ebb-ai/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/Vitalini/ebb-ai/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Vitalini/ebb-ai/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Vitalini/ebb-ai/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Vitalini/ebb-ai/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Vitalini/ebb-ai/compare/v0.1.0...v0.2.0

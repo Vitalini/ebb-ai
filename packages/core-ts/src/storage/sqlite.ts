@@ -175,6 +175,25 @@ export class TaskStore {
       .map(rowToRecord);
   }
 
+  /**
+   * Atomic row-level claim used by `Scheduler.tick` to prevent two
+   * concurrent ticks from dispatching the same task. Returns true if
+   * the row was claimed (status changed from "scheduled" to "running"
+   * in this call); false if the row had already moved on.
+   *
+   * v0.5 keeps the single-writer assumption (SQLite WAL multi-writer
+   * is queued for v0.6), but this row-level claim still protects
+   * against two processes pointing at the same DB file (e.g. an
+   * interactive `ebb tick` racing the launchd cron).
+   */
+  claimScheduled(taskId: string): boolean {
+    const stmt = this.db.prepare(
+      `UPDATE tasks SET status = 'running' WHERE task_id = ? AND status = 'scheduled'`,
+    );
+    const res = stmt.run(taskId);
+    return res.changes === 1;
+  }
+
   close(): void {
     this.db.close();
   }

@@ -257,14 +257,24 @@ export class Scheduler {
     const results: TickResultEntry[] = [];
     let dispatched = 0;
     let failed = 0;
+    let inspected = 0;
     for (const record of candidates) {
+      // Row-level claim: only one tick gets to dispatch this task. If
+      // the store is configured, the claim is also visible to other
+      // processes pointing at the same SQLite file (e.g. an
+      // interactive `ebb tick` racing the launchd cron).
+      if (this.store) {
+        const claimed = this.store.claimScheduled(record.taskId);
+        if (!claimed) continue;
+      }
+      inspected++;
       const entry = await this.dispatchProviderCall(record, adapters);
       results.push(entry);
       if (entry.status === "completed") dispatched++;
       else failed++;
     }
     return {
-      inspected: candidates.length,
+      inspected,
       dispatched,
       failed,
       results,
@@ -274,6 +284,217 @@ export class Scheduler {
   /** Snapshot the current state of one task. */
   getTask<T>(taskId: string): TaskRecord<T> | undefined {
     return this.tasks.get(taskId) as TaskRecord<T> | undefined;
+  }
+
+  /**
+   * Cancel a task. Idempotent — if the task is already in a terminal
+   * state, this is a no-op and returns the existing record. Throws
+   * only if the task does not exist on this scheduler.
+   *
+   * Calling cancel on a `running` task is best-effort: we set status
+   * to `cancelled` and clear the timer, but a provider call already
+   * in flight will still complete on the wire (the result is dropped
+   * locally and not written to the ledger).
+   */
+  cancelTask(taskId: string): TaskRecord<unknown> {
+    const record = this.tasks.get(taskId);
+    if (!record) {
+      throw new Error(`cancelTask: task ${JSON.stringify(taskId)} not found`);
+    }
+    if (
+      record.status === "completed" ||
+      record.status === "failed" ||
+      record.status === "cancelled"
+    ) {
+      return record;
+    }
+    const timer = this.pendingTimers.get(taskId);
+    if (timer) {
+      clearTimeout(timer);
+      this.pendingTimers.delete(taskId);
+    }
+    record.status = "cancelled";
+    record.completedAt = new Date().toISOString();
+    this.store?.upsert(record);
+    const resolver = this.resolvers.get(taskId);
+    resolver?.reject(new Error(`task ${taskId} cancelled`));
+    this.bodies.delete(taskId);
+    this.resolvers.delete(taskId);
+    return record;
+  }
+
+  /**
+   * Dispatch a queued/scheduled provider-call task immediately,
+   * bypassing the scheduler's chosen window. Receipt records
+   * `intensitySource: "expedited"`. Closure-based tasks (from
+   * `defer`) are not expediteable; we throw a clear error.
+   */
+  async expediteTask(
+    taskId: string,
+    adapters: { anthropic?: ProviderAdapter; openai?: ProviderAdapter },
+  ): Promise<TickResultEntry> {
+    const record = this.tasks.get(taskId);
+    if (!record) {
+      throw new Error(`expediteTask: task ${JSON.stringify(taskId)} not found`);
+    }
+    if (record.status === "running") {
+      throw new Error(`expediteTask: task ${taskId} is already running`);
+    }
+    if (
+      record.status === "completed" ||
+      record.status === "failed" ||
+      record.status === "cancelled"
+    ) {
+      throw new Error(`expediteTask: task ${taskId} is already ${record.status}`);
+    }
+    if (!record.bodyJson) {
+      throw new Error(
+        `expediteTask: task ${taskId} is a closure-based task; only provider-call tasks can be expedited`,
+      );
+    }
+    const timer = this.pendingTimers.get(taskId);
+    if (timer) {
+      clearTimeout(timer);
+      this.pendingTimers.delete(taskId);
+    }
+    record.scheduledFor = new Date().toISOString();
+    record.status = "scheduled";
+    this.store?.upsert(record);
+    const entry = await this.dispatchProviderCall(record, adapters);
+    if (entry.status === "completed" && record.receipt) {
+      record.intensitySource = "expedited";
+      this.store?.upsert(record);
+    }
+    return entry;
+  }
+
+  /**
+   * Re-score and reschedule a queued/scheduled task against a new
+   * deadline. Throws if the task is already running or terminal, or
+   * if the new deadline is invalid.
+   */
+  async updateDeadline(
+    taskId: string,
+    newDeadline: string | Date,
+  ): Promise<TaskRecord<unknown>> {
+    const record = this.tasks.get(taskId);
+    if (!record) {
+      throw new Error(`updateDeadline: task ${JSON.stringify(taskId)} not found`);
+    }
+    if (
+      record.status === "running" ||
+      record.status === "completed" ||
+      record.status === "failed" ||
+      record.status === "cancelled"
+    ) {
+      throw new Error(
+        `updateDeadline: task ${taskId} is ${record.status}; can only update queued/scheduled tasks`,
+      );
+    }
+    const parsedDeadline = normalizeDeadline(newDeadline);
+    const existingTimer = this.pendingTimers.get(taskId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+      this.pendingTimers.delete(taskId);
+    }
+    if (record.bodyJson) {
+      await this.scheduleProviderCall(taskId, parsedDeadline);
+    } else if (this.bodies.has(taskId)) {
+      await this.schedule(taskId, parsedDeadline);
+    }
+    return record;
+  }
+
+  /**
+   * Re-dispatch a failed task. Useful when the original failure was a
+   * transient provider error (rate-limit, 5xx) and the underlying
+   * spec is still valid. Only `failed` tasks are eligible; throws
+   * otherwise.
+   */
+  async retryTask(
+    taskId: string,
+    adapters: { anthropic?: ProviderAdapter; openai?: ProviderAdapter },
+  ): Promise<TickResultEntry> {
+    const record = this.tasks.get(taskId);
+    if (!record) {
+      throw new Error(`retryTask: task ${JSON.stringify(taskId)} not found`);
+    }
+    if (record.status !== "failed") {
+      throw new Error(
+        `retryTask: task ${taskId} has status ${record.status}; retry is only valid on failed tasks`,
+      );
+    }
+    if (!record.bodyJson) {
+      throw new Error(
+        `retryTask: task ${taskId} is closure-based; only provider-call tasks can be retried`,
+      );
+    }
+    record.status = "scheduled";
+    record.scheduledFor = new Date().toISOString();
+    record.completedAt = undefined;
+    record.error = undefined;
+    this.store?.upsert(record);
+    return await this.dispatchProviderCall(record, adapters);
+  }
+
+  /**
+   * Pure read-only planning helper: compute the scheduled window and
+   * carbon receipt that the same call to `enqueueProviderCall` would
+   * produce, without persisting anything. Useful for `schedule_task`
+   * with `dry_run: true`.
+   */
+  async previewProviderCall(
+    spec: ProviderCallSpec,
+    opts: DeferOptions = {},
+  ): Promise<{
+    scheduledFor: string;
+    estimatedCarbonGCo2: number;
+    intensityGCo2PerKwh: number;
+    band: GridForecastEntry["band"];
+    batchEligible: boolean;
+    region: string;
+  }> {
+    const deadline = normalizeDeadline(opts.deadline);
+    const region = opts.region ?? this.defaultRegion;
+    const horizonH = Math.max(
+      1,
+      Math.min(
+        MAX_HORIZON_HOURS,
+        Math.ceil((deadline.getTime() - Date.now()) / (60 * 60 * 1000)),
+      ),
+    );
+    const forecast = await this.feed.fetchForecast(region, horizonH);
+    const budgetG = opts.carbonBudgetG;
+    const survivors =
+      budgetG !== undefined
+        ? forecast.entries.filter((e) => intensityToGrams(e.carbonIntensityGCo2PerKwh) <= budgetG)
+        : forecast.entries;
+    const candidate = pickBestWindow(survivors, deadline);
+    if (!candidate) {
+      if (budgetG !== undefined && forecast.entries.length > 0) {
+        const cheapest = forecast.entries.reduce((a, b) =>
+          a.carbonIntensityGCo2PerKwh <= b.carbonIntensityGCo2PerKwh ? a : b,
+        );
+        const cheapestG = intensityToGrams(cheapest.carbonIntensityGCo2PerKwh);
+        if (cheapestG > budgetG) {
+          throw new CarbonBudgetExceededError(cheapestG, budgetG);
+        }
+      }
+      throw new Error("previewProviderCall: no usable window inside the deadline");
+    }
+    // batchEligible reflects whether the *deadline* is far enough out
+    // that Batch API (24h SLA) is still a viable route, not whether the
+    // chosen window itself is more than 24h away.
+    const batchEligible = deadline.getTime() - Date.now() > 24 * 60 * 60 * 1000;
+    void spec;
+    return {
+      scheduledFor: candidate.datetime,
+      estimatedCarbonGCo2: Math.round(intensityToGrams(candidate.carbonIntensityGCo2PerKwh) * 10) / 10,
+      intensityGCo2PerKwh: candidate.carbonIntensityGCo2PerKwh,
+      band: candidate.band,
+      batchEligible,
+      region,
+    };
   }
 
   /** Snapshot the queue (immutable copy). */
@@ -488,19 +709,23 @@ export class Scheduler {
       const moreThan24h = scheduledForTs - Date.now() > 24 * 60 * 60 * 1000;
       const useBatch = preferBatch && moreThan24h && typeof adapter.dispatchBatch === "function";
       const result = useBatch
-        ? await adapter.dispatchBatch(spec.model, [spec.prompt], {
+        ? await retryWithBackoff(() => adapter.dispatchBatch(spec.model, [spec.prompt], {
             temperature: spec.temperature,
             maxTokens: spec.maxTokens,
             system: spec.systemPrompt,
-          })
-        : await adapter.dispatch(spec.model, spec.prompt, {
+          }))
+        : await retryWithBackoff(() => adapter.dispatch(spec.model, spec.prompt, {
             temperature: spec.temperature,
             maxTokens: spec.maxTokens,
             system: spec.systemPrompt,
-          });
+          }));
       const durationMs = Date.now() - start;
       const intensityG = await this.intensityForReceipt(record.region, ranAt);
       const source: "scored" | "current" = "scored";
+      const totalTokens =
+        typeof (result as { usage?: { totalTokens?: number } }).usage?.totalTokens === "number"
+          ? (result as { usage: { totalTokens: number } }).usage.totalTokens
+          : undefined;
       const receipt: CarbonReceipt = {
         taskId: record.taskId,
         ranAt: ranAt.toISOString(),
@@ -509,6 +734,8 @@ export class Scheduler {
         provider: spec.provider,
         model: spec.model,
         durationMs,
+        prompt: redactPrompt(spec.prompt, spec.redactInReceipt),
+        totalTokens,
       };
       record.status = "completed";
       record.completedAt = new Date().toISOString();
@@ -516,6 +743,9 @@ export class Scheduler {
       record.receipt = receipt;
       record.intensitySource = source;
       this.store?.upsert(record);
+      if (spec.outputPath) {
+        await writeOutputFile(spec.outputPath, record.taskId, result, receipt);
+      }
       return { taskId: record.taskId, status: "completed" };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -607,4 +837,126 @@ export function pickBestWindow(
     }
   }
   return best;
+}
+
+/**
+ * Retry an async function with exponential backoff: up to 3 attempts
+ * at 1s, 4s, 16s wait. Retries only on transient errors (429
+ * rate-limit, 5xx, network errors). Non-retryable errors (4xx other
+ * than 429) bubble up on the first call. v0.5 fix for the
+ * provider-flake problem.
+ */
+async function retryWithBackoff<T>(fn: () => Promise<T>): Promise<T> {
+  const waits = [1_000, 4_000, 16_000];
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= waits.length; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (!isRetryable(err) || attempt === waits.length) {
+        throw err;
+      }
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[ebb-ai/scheduler] dispatch attempt ${attempt + 1} failed (${describeErr(err)}); retrying in ${waits[attempt]! / 1000}s`,
+      );
+      await new Promise((r) => setTimeout(r, waits[attempt]!));
+    }
+  }
+  throw lastErr;
+}
+
+function isRetryable(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as { status?: number; statusCode?: number; code?: string; message?: string };
+  const status = e.status ?? e.statusCode;
+  if (typeof status === "number") {
+    if (status === 429) return true;
+    if (status >= 500 && status < 600) return true;
+    return false;
+  }
+  const code = e.code;
+  if (typeof code === "string") {
+    // Node fetch / undici-style transient codes.
+    if (["ECONNRESET", "ETIMEDOUT", "ECONNREFUSED", "EAI_AGAIN", "UND_ERR_SOCKET"].includes(code)) {
+      return true;
+    }
+  }
+  // Anthropic / OpenAI SDKs typically surface their HTTP status on the
+  // error; if absent, assume non-retryable.
+  return false;
+}
+
+function describeErr(err: unknown): string {
+  if (!err) return "unknown error";
+  if (typeof err === "object") {
+    const e = err as { status?: number; code?: string; message?: string };
+    const parts: string[] = [];
+    if (e.status) parts.push(`status=${e.status}`);
+    if (e.code) parts.push(`code=${e.code}`);
+    if (e.message) parts.push(e.message);
+    return parts.join(" · ") || JSON.stringify(err);
+  }
+  return String(err);
+}
+
+/**
+ * Default redaction patterns — applied unless the spec passes its
+ * own `redactInReceipt` array. Catches API keys for the major
+ * vendors plus generic bearer tokens.
+ */
+const DEFAULT_REDACTION_PATTERNS: ReadonlyArray<RegExp> = [
+  /sk-(?:ant-)?[A-Za-z0-9_\-]{20,}/g,
+  /sk-proj-[A-Za-z0-9_\-]{20,}/g,
+  /\b[A-Z]{2,3}_[A-Z0-9]{6,}\b/g,                  // generic FOO_BAR keys
+  /\bBearer\s+[A-Za-z0-9_\-.]{20,}/gi,
+];
+
+/**
+ * Apply the spec's redaction patterns (or the default set) to the
+ * prompt before storing it on the receipt. Original prompt is left
+ * untouched on the live dispatch.
+ */
+function redactPrompt(prompt: string, patterns: string[] | undefined): string {
+  let out = prompt;
+  const apply = (p: RegExp) => {
+    out = out.replace(p, "[REDACTED]");
+  };
+  if (patterns === undefined) {
+    for (const p of DEFAULT_REDACTION_PATTERNS) apply(p);
+  } else if (patterns.length > 0) {
+    for (const raw of patterns) {
+      try {
+        apply(new RegExp(raw, "g"));
+      } catch {
+        // ignore malformed user regexes
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Write { taskId, result, receipt } as JSON to the spec's
+ * `outputPath`. Failures are logged but do not fail the task — the
+ * SQLite ledger is the source of truth, the file is a convenience.
+ */
+async function writeOutputFile(
+  path: string,
+  taskId: string,
+  result: unknown,
+  receipt: CarbonReceipt,
+): Promise<void> {
+  try {
+    const { mkdir, writeFile } = await import("node:fs/promises");
+    const { dirname } = await import("node:path");
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, JSON.stringify({ taskId, result, receipt }, null, 2));
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[ebb-ai/scheduler] failed to write output_path=${path}: ${describeErr(err)}; result is still in the SQLite ledger`,
+    );
+  }
 }

@@ -55,11 +55,15 @@ from .types import (
     GridForecastEntry,
     GridSource,
     IntensitySource,
+    Provider,
+    ProviderCallSpec,
     TaskRecord,
     TaskStatus,
+    TickResult,
+    TickResultEntry,
 )
 
-__version__ = "0.2.0"
+__version__ = "0.5.0"
 
 __all__ = [
     "DEFAULT_REGION",
@@ -76,11 +80,15 @@ __all__ = [
     "GridSource",
     "IntensitySource",
     "InvalidDeadlineError",
+    "Provider",
+    "ProviderCallSpec",
     "RecommendAlternative",
     "RecommendResult",
     "Scheduler",
     "TaskRecord",
     "TaskStatus",
+    "TickResult",
+    "TickResultEntry",
     "__version__",
     "defer",
     "electricity_maps_feed",

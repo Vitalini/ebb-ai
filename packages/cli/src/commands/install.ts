@@ -1,6 +1,6 @@
 /**
- * `ebb install` — write a launchd plist (macOS) or emit a systemd /
- * schtasks template (Linux / Windows).
+ * `ebb install` — write a launchd plist (macOS) or systemd user
+ * units (Linux). Windows is still a template-only stub.
  *
  * In --laptop mode we additionally drop a tiny helper script and
  * print the wake-event story; --server skips the wake step.
@@ -14,7 +14,7 @@ import {
   type PlatformName,
 } from "../platform/index.js";
 import { launchdPlist } from "../platform/macos.js";
-import { systemdServiceTemplate } from "../platform/linux.js";
+import { systemdService, systemdTimer } from "../platform/linux.js";
 import { schtasksTemplate } from "../platform/windows.js";
 import { defaultDbPath } from "./tick.js";
 
@@ -40,9 +40,17 @@ export interface InstallArtifacts {
   plistPath: string;
   /** The rendered plist XML, or "" for non-macOS. */
   plistContent: string;
-  /** Path for the laptop-wake helper script, or "" if --server or non-macOS. */
+  /** Path for the systemd `.service` unit, or "" for non-linux. */
+  servicePath: string;
+  /** The rendered `.service` unit content, or "" for non-linux. */
+  serviceContent: string;
+  /** Path for the systemd `.timer` unit, or "" for non-linux. */
+  timerPath: string;
+  /** The rendered `.timer` unit content, or "" for non-linux. */
+  timerContent: string;
+  /** Path for the laptop-wake helper script, or "" if --server or unsupported. */
   helperPath: string;
-  /** Rendered helper script content, or "" if --server or non-macOS. */
+  /** Rendered helper script content, or "" if --server or unsupported. */
   helperContent: string;
   /** Human-facing next-steps message. */
   nextSteps: string;
@@ -129,6 +137,10 @@ export async function runInstall(opts: InstallOptions): Promise<InstallArtifacts
       platform,
       plistPath,
       plistContent,
+      servicePath: "",
+      serviceContent: "",
+      timerPath: "",
+      timerContent: "",
       helperPath,
       helperContent,
       nextSteps,
@@ -136,18 +148,65 @@ export async function runInstall(opts: InstallOptions): Promise<InstallArtifacts
   }
 
   if (platform === "linux") {
-    const template = systemdServiceTemplate({
+    const serviceContent = systemdService({
       ebbBinaryPath: binary,
       dbPath,
+    });
+    const timerContent = systemdTimer({
       tickIntervalSec: tickInterval,
     });
+    const systemdDir = join(homedir(), ".config", "systemd", "user");
+    const servicePath = join(systemdDir, "ebb-tick.service");
+    const timerPath = join(systemdDir, "ebb-tick.timer");
+    const helperContent =
+      opts.mode === "laptop"
+        ? helperScript({ ebbBinaryPath: binary, dbPath })
+        : "";
+    const helperPath =
+      opts.mode === "laptop"
+        ? join(homedir(), ".ebb", "laptop-wake.sh")
+        : "";
+
+    if (!opts.dryRun) {
+      mkdirSync(systemdDir, { recursive: true });
+      writeFileSync(servicePath, serviceContent, "utf8");
+      writeFileSync(timerPath, timerContent, "utf8");
+      mkdirSync(dirname(dbPath), { recursive: true });
+      if (helperPath) {
+        mkdirSync(dirname(helperPath), { recursive: true });
+        writeFileSync(helperPath, helperContent, {
+          encoding: "utf8",
+          mode: 0o755,
+        });
+      }
+    }
+
+    const wakeNote =
+      opts.mode === "laptop"
+        ? `\n3. Pre-register wake events as tasks are scheduled:\n` +
+          `     ${helperPath}\n` +
+          `   (Requires sudo / CAP_SYS_TIME for \`rtcwake\`.)`
+        : "";
+    const nextSteps =
+      `Wrote ${servicePath}\n` +
+      `Wrote ${timerPath}\n\n` +
+      `Next steps:\n` +
+      `1. Reload systemd and enable the timer:\n` +
+      `     systemctl --user daemon-reload && systemctl --user enable --now ebb-tick.timer\n` +
+      `2. (optional) Tail the log:\n` +
+      `     tail -f ~/.ebb/tick.log${wakeNote}\n`;
+
     return {
       platform,
       plistPath: "",
       plistContent: "",
-      helperPath: "",
-      helperContent: "",
-      nextSteps: template,
+      servicePath,
+      serviceContent,
+      timerPath,
+      timerContent,
+      helperPath,
+      helperContent,
+      nextSteps,
     };
   }
 
@@ -161,6 +220,10 @@ export async function runInstall(opts: InstallOptions): Promise<InstallArtifacts
     platform,
     plistPath: "",
     plistContent: "",
+    servicePath: "",
+    serviceContent: "",
+    timerPath: "",
+    timerContent: "",
     helperPath: "",
     helperContent: "",
     nextSteps: template,

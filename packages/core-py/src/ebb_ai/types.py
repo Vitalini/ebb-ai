@@ -12,8 +12,14 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
 # Public type aliases — kept narrow to match the TS literal unions.
-TaskStatus = Literal["queued", "scheduled", "running", "completed", "failed"]
-"""Lifecycle of a deferred task."""
+TaskStatus = Literal[
+    "queued", "scheduled", "running", "completed", "failed", "cancelled"
+]
+"""Lifecycle of a deferred task.
+
+v0.5 adds ``cancelled``: a task explicitly stopped by the caller via
+:meth:`Scheduler.cancel_task` before it ran.
+"""
 
 Band = Literal["very_clean", "clean", "average", "dirty", "very_dirty"]
 """Classifier for grid carbon intensity, matching the TS implementation."""
@@ -21,13 +27,18 @@ Band = Literal["very_clean", "clean", "average", "dirty", "very_dirty"]
 GridSource = Literal["electricityMaps", "wattTime", "mock"]
 """Source of the carbon-intensity forecast."""
 
-IntensitySource = Literal["scored", "current"]
+IntensitySource = Literal["scored", "current", "expedited"]
 """Where the receipt's intensity number came from.
 
 ``scored`` means the receipt used the same forecast entry the scheduler
 scored the window against; ``current`` means we dispatched immediately
-(no scored window) and looked up a fresh intensity at dispatch time.
+(no scored window) and looked up a fresh intensity at dispatch time;
+``expedited`` means the caller invoked :meth:`Scheduler.expedite_task`
+and the scheduler used the current-hour intensity from a fresh forecast.
 """
+
+Provider = Literal["anthropic", "openai"]
+"""Provider identifier for :class:`ProviderCallSpec`."""
 
 
 @dataclass(slots=True)
@@ -148,6 +159,17 @@ class TaskRecord:
     error: str | None = None
     receipt: CarbonReceipt | None = None
     intensity_source: IntensitySource | None = None
+    body_json: str | None = None
+    """JSON-serializable task body (v0.5).
+
+    Populated when the task was enqueued via
+    :meth:`Scheduler.enqueue_provider_call`. The cron-style :meth:`Scheduler.tick`
+    rehydrates this string into a :class:`ProviderCallSpec` and dispatches it
+    against the matching adapter, so the task survives the enqueuing
+    process going away. Closure-based tasks
+    (:meth:`Scheduler.defer` / :meth:`Scheduler.enqueue`) leave this
+    field as ``None``.
+    """
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -162,6 +184,91 @@ class TaskRecord:
             "error": self.error,
             "receipt": self.receipt.to_dict() if self.receipt else None,
             "intensity_source": self.intensity_source,
+            "body_json": self.body_json,
+        }
+
+
+@dataclass(slots=True)
+class ProviderCallSpec:
+    """JSON-serializable provider-call body (v0.5).
+
+    Mirrors :class:`ProviderCallSpec` in
+    ``packages/core-ts/src/types.ts`` field-for-field; snake_case here,
+    camelCase on the wire when shipped to TS callers.
+
+    Persisted in the SQLite ledger as ``body_json`` so a later
+    :meth:`Scheduler.tick` — typically invoked from a cron — can
+    rehydrate this struct and dispatch it against the matching provider
+    adapter even after the enqueuing process has exited.
+    """
+
+    type: Literal["provider_call"] = "provider_call"
+    provider: Provider = "anthropic"
+    model: str = ""
+    prompt: str = ""
+    system_prompt: str | None = None
+    max_tokens: int | None = None
+    temperature: float | None = None
+    prefer_batch: bool = True
+    """If True (default), route through the provider's Batch API when the
+    task's scheduled window is more than 24 hours out.
+    """
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ProviderCallSpec:
+        """Build a spec from a snake_case dict.
+
+        Tolerates the camelCase keys ``systemPrompt`` / ``maxTokens`` /
+        ``preferBatch`` so a record persisted by the TS port can also be
+        rehydrated by the Python port.
+        """
+        if not isinstance(data, dict):
+            raise ValueError(f"ProviderCallSpec.from_dict: expected dict, got {type(data)!r}")
+        return cls(
+            type=data.get("type", "provider_call"),
+            provider=data.get("provider", "anthropic"),
+            model=data.get("model", ""),
+            prompt=data.get("prompt", ""),
+            system_prompt=data.get("system_prompt", data.get("systemPrompt")),
+            max_tokens=data.get("max_tokens", data.get("maxTokens")),
+            temperature=data.get("temperature"),
+            prefer_batch=data.get("prefer_batch", data.get("preferBatch", True)),
+        )
+
+
+@dataclass(slots=True)
+class TickResultEntry:
+    """Per-task outcome returned by :meth:`Scheduler.tick`."""
+
+    task_id: str
+    status: Literal["completed", "failed"]
+    error: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {"task_id": self.task_id, "status": self.status}
+        if self.error is not None:
+            d["error"] = self.error
+        return d
+
+
+@dataclass(slots=True)
+class TickResult:
+    """Aggregate result of one call to :meth:`Scheduler.tick`."""
+
+    inspected: int = 0
+    dispatched: int = 0
+    failed: int = 0
+    results: list[TickResultEntry] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "inspected": self.inspected,
+            "dispatched": self.dispatched,
+            "failed": self.failed,
+            "results": [r.to_dict() for r in self.results],
         }
 
 
@@ -173,6 +280,10 @@ __all__ = [
     "GridForecastEntry",
     "GridSource",
     "IntensitySource",
+    "Provider",
+    "ProviderCallSpec",
     "TaskRecord",
     "TaskStatus",
+    "TickResult",
+    "TickResultEntry",
 ]

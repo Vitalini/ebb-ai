@@ -33,19 +33,45 @@ describe("ebb install (macOS, dry-run)", () => {
   });
 });
 
-describe("ebb install (linux + windows = template only)", () => {
-  it("returns a systemd template for linux", async () => {
+describe("ebb install (linux, dry-run)", () => {
+  it("produces a service + timer + helper for --laptop", async () => {
     const r = await runInstall({
       mode: "laptop",
       platform: "linux",
       ebbBinaryPath: "/usr/local/bin/ebb",
       dbPath: "/var/lib/ebb/queue.sqlite",
+      tickIntervalSec: 300,
       dryRun: true,
     });
+    expect(r.platform).toBe("linux");
     expect(r.plistContent).toBe("");
-    expect(r.nextSteps.toLowerCase()).toContain("systemd");
+    expect(r.servicePath).toContain(".config/systemd/user/ebb-tick.service");
+    expect(r.timerPath).toContain(".config/systemd/user/ebb-tick.timer");
+    expect(r.serviceContent).toContain("ExecStart=/usr/local/bin/ebb tick");
+    expect(r.timerContent).toContain("OnUnitActiveSec=300s");
+    expect(r.helperPath).toContain(".ebb/laptop-wake.sh");
+    expect(r.helperContent).toContain("ebb register-wake");
+    expect(r.nextSteps).toContain(
+      "systemctl --user daemon-reload && systemctl --user enable --now ebb-tick.timer",
+    );
   });
 
+  it("omits the wake helper for --server", async () => {
+    const r = await runInstall({
+      mode: "server",
+      platform: "linux",
+      ebbBinaryPath: "/usr/local/bin/ebb",
+      dbPath: "/srv/.ebb/queue.sqlite",
+      dryRun: true,
+    });
+    expect(r.helperPath).toBe("");
+    expect(r.helperContent).toBe("");
+    expect(r.nextSteps).not.toContain("register-wake");
+    expect(r.serviceContent).toContain("ExecStart=");
+  });
+});
+
+describe("ebb install (windows = template only)", () => {
   it("returns a schtasks template for windows", async () => {
     const r = await runInstall({
       mode: "server",

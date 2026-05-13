@@ -7,7 +7,8 @@ export type TaskStatus =
   | "scheduled"
   | "running"
   | "completed"
-  | "failed";
+  | "failed"
+  | "cancelled";
 
 export interface DeferOptions {
   /** ISO-8601 deadline; defaults to 24h from now if omitted. Must be in the future. */
@@ -51,6 +52,10 @@ export interface CarbonReceipt {
   model?: string;
   /** Wall-clock duration of the dispatched call, in milliseconds. */
   durationMs?: number;
+  /** The prompt as stored on the receipt — redacted per ProviderCallSpec.redactInReceipt. */
+  prompt?: string;
+  /** Total tokens (input + output) reported by the provider, if any. */
+  totalTokens?: number;
 }
 
 export interface TaskRecord<T = unknown> {
@@ -66,9 +71,11 @@ export interface TaskRecord<T = unknown> {
   receipt?: CarbonReceipt;
   /** "scored" if the receipt was computed from the forecast entry the
    *  scheduler used to choose the window; "current" if the task was
-   *  dispatched immediately and the receipt used a freshly-fetched intensity.
+   *  dispatched immediately and the receipt used a freshly-fetched
+   *  intensity; "expedited" if the caller explicitly asked the
+   *  scheduler to skip its chosen window (via `expediteTask`).
    */
-  intensitySource?: "scored" | "current";
+  intensitySource?: "scored" | "current" | "expedited";
   /**
    * JSON-serializable task body. v0.4 introduces persistent provider-call
    * task bodies so the cron-tick CLI can dispatch a queued task even after
@@ -95,6 +102,24 @@ export interface ProviderCallSpec {
   temperature?: number;
   /** If true, route through Batch API when deadline > 24h out. Default true. */
   preferBatch?: boolean;
+  /**
+   * Optional file path. When set, the dispatcher writes
+   * `{ taskId, result, receipt }` as JSON to this path after a
+   * successful dispatch. Useful when the caller wants to drop the
+   * result into an inbox or trigger a file-watcher rather than poll
+   * `check_queue_status`.
+   */
+  outputPath?: string;
+  /**
+   * Optional list of regex patterns that the dispatcher redacts from
+   * the prompt before storing it on the receipt. Default behavior
+   * (when this field is omitted) redacts strings that look like API
+   * keys (`sk-...`, `ak_...`, OAuth bearer tokens). Pass `[]` to
+   * disable redaction entirely. The receipt's `prompt` field is
+   * always the redacted version; the dispatched call uses the
+   * original.
+   */
+  redactInReceipt?: string[];
 }
 
 /** Per-task outcome returned by `Scheduler.tick`. */
