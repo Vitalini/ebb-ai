@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-05-12
+
+### Added
+- **`recommend_window` — planning endpoint.** New MCP tool +
+  `recommendWindow()` (TS) / `recommend_window()` (Python) library
+  functions. Returns the optimal execution time for a task **without**
+  committing to schedule it. Output includes the chosen window's
+  intensity, carbon estimate, percent savings vs. running now, batch
+  eligibility, three alternative windows, and a one-line
+  human-readable reasoning string. Pure read-only — does not touch
+  the queue.
+- **Cursor example.** `examples/cursor/` with `mcp.json` stanza and
+  install README. Cursor ≥ 0.45 speaks MCP natively.
+- **Claude Desktop example.** `examples/claude-desktop/` with config
+  template and troubleshooting guide.
+- **`QUICKSTART.md`** — four steps, five minutes. Linked from README.
+- **Copy buttons** on every code block on the marketing site
+  (`apps/site/copy-buttons.js`).
+- **Launch hero** in `README.md`: a single-glance `recommend_window`
+  example showing the canonical JSON output.
+
+### Changed
+- `@ebb-ai/core` 0.2.0 → **0.3.0**, `@ebb-ai/mcp` 0.2.0 → **0.3.0**,
+  `ebb-ai` (Python) 0.2.0 → **0.3.0**.
+- MCP server now exposes **4 tools** (was 3): `get_grid_forecast`,
+  `recommend_window`, `schedule_task`, `check_queue_status`.
+- Site `architecture.html` system diagram: text overflow fix on
+  SCHEDULER CORE and MCP SERVER boxes; updated tool count.
+- Site `index.html` "Why it matters" section: corrected Batch API
+  framing. **Batch is not faster** — it trades latency (24h SLA) for
+  the 50% discount. Carbon and dollars are the primary pitch; latency
+  is a third-tier side effect. Same correction applied in `README.md`
+  and `packages/core-py/README.md`.
+- Inline `<code>` now wraps long file-paths via `word-break:
+  break-all` (was overflowing `.int-card` content).
+
+### Tests
+- TypeScript core: **41 passed** (was 26; +15 for `recommend`).
+- MCP server: **8 passed** (was 6; +2 for `recommend_window` over the
+  real MCP protocol).
+- Python: **56 passed** (was 41; +15 for `recommend`).
+- Total across the project: **105 passing**.
+
 ## [0.2.0] — 2026-05-12
 
 ### Added
@@ -93,6 +136,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Batches APIs. Direct Batch routing lands in v0.2.
 - Python port (`ebb-ai` PyPI) is a placeholder. v0.2.
 
-[Unreleased]: https://github.com/Vitalini/ebb-ai/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Vitalini/ebb-ai/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/Vitalini/ebb-ai/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Vitalini/ebb-ai/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Vitalini/ebb-ai/releases/tag/v0.1.0

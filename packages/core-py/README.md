@@ -30,8 +30,10 @@ Modern AI agents call LLM APIs synchronously by default. Three costs follow:
   50% discount for tasks that can wait up to 24 hours. Almost no agent
   code uses them by default because it requires rewriting the call
   site.
-- **Latency.** Off-peak execution is faster end-to-end. Providers
-  throttle and queue at peak.
+- **Latency, honestly.** Off-peak *sync* execution is sometimes
+  faster because providers throttle and queue at peak. **Batch API
+  is *not* faster** — it trades latency (up to 24h SLA) for the
+  50% discount.
 
 `ebb-ai` fixes all three for any task that is not "answer me right now."
 

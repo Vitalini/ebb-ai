@@ -2,10 +2,11 @@
 /**
  * ebb-mcp — Model Context Protocol server for carbon-aware AI task scheduling.
  *
- * Exposes three tools to any MCP-compatible agent (Claude Desktop,
+ * Exposes four tools to any MCP-compatible agent (Claude Desktop,
  * Claude Code, OpenClaw, Cursor, custom MCP clients):
  *
  *   - get_grid_forecast(region, hours?) → forecasted carbon intensity
+ *   - recommend_window(deadline, region, ...) → planning-only window pick
  *   - schedule_task(prompt, deadline, model?, carbon_budget_g?) → enqueue
  *   - check_queue_status(task_id?) → status / receipts
  *
@@ -20,7 +21,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { electricityMapsFeed, Scheduler } from "@ebb-ai/core";
+import { electricityMapsFeed, recommendWindow, Scheduler } from "@ebb-ai/core";
 import { z } from "zod";
 
 const DEFAULT_REGION = process.env.EBB_DEFAULT_REGION ?? "US-CAL-CISO";
@@ -84,6 +85,34 @@ const checkQueueStatusInput = z.object({
     ),
 });
 
+const recommendWindowInput = z.object({
+  deadline: z
+    .string()
+    .datetime({ offset: true })
+    .describe(
+      "ISO-8601 timestamp (e.g. '2026-05-13T08:00:00-04:00') by which the task must have completed. Must be in the future. Required.",
+    ),
+  region: z
+    .string()
+    .min(1)
+    .describe(
+      "Electricity Maps zone code (e.g. 'US-CAL-CISO', 'FR'). Required — recommend_window is intentionally explicit about which grid it reasons over.",
+    ),
+  carbon_budget_g: z
+    .number()
+    .positive()
+    .optional()
+    .describe(
+      "Optional grams CO2-equivalent cap. Windows above the budget are dropped before the cheapest is chosen.",
+    ),
+  model: z
+    .string()
+    .optional()
+    .describe(
+      "Optional vendor model name (e.g. 'claude-sonnet-4-5'). Affects the reasoning string only.",
+    ),
+});
+
 const server = new Server(
   { name: "ebb-mcp", version: "0.1.0" },
   { capabilities: { tools: {} } },
@@ -109,6 +138,37 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
         },
         required: ["region"],
+      },
+    },
+    {
+      name: "recommend_window",
+      description:
+        "Return the optimal carbon-aware execution window for a task WITHOUT scheduling it. Use this for non-committal planning — when you want to see *when* the cleanest grid moment falls inside the deadline (and what the savings vs running now would be) before deciding whether to commit via schedule_task. Returns the chosen window, top 3 alternatives, batch_eligible flag, and a one-line reasoning string.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          deadline: {
+            type: "string",
+            description:
+              "ISO-8601 timestamp by which the task must complete. Required.",
+          },
+          region: {
+            type: "string",
+            description:
+              "Electricity Maps zone code, e.g. 'US-CAL-CISO'. Required.",
+          },
+          carbon_budget_g: {
+            type: "number",
+            description:
+              "Optional grams CO2-equivalent cap; entries above the budget are dropped before selection.",
+          },
+          model: {
+            type: "string",
+            description:
+              "Optional vendor model name (e.g. 'claude-sonnet-4-5').",
+          },
+        },
+        required: ["deadline", "region"],
       },
     },
     {
@@ -179,6 +239,34 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
           },
         ],
       };
+    }
+
+    if (name === "recommend_window") {
+      const parsed = recommendWindowInput.parse(args);
+      try {
+        const result = await recommendWindow(
+          {
+            deadline: parsed.deadline,
+            region: parsed.region,
+            carbonBudgetG: parsed.carbon_budget_g,
+            model: parsed.model,
+          },
+          { feed },
+        );
+        return {
+          content: [
+            { type: "text", text: formatRecommendation(result) },
+          ],
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          content: [
+            { type: "text", text: `recommend_window rejected: ${msg}` },
+          ],
+          isError: true,
+        };
+      }
     }
 
     if (name === "schedule_task") {
@@ -291,6 +379,31 @@ function formatForecast(forecast: Awaited<ReturnType<typeof feed.fetchForecast>>
   lines.push(`Cleanest hour: ${min.datetime} (${min.carbonIntensityGCo2PerKwh} gCO2/kWh, ${min.band})`);
   lines.push(`Dirtiest hour: ${max.datetime} (${max.carbonIntensityGCo2PerKwh} gCO2/kWh, ${max.band})`);
   return lines.join("\n");
+}
+
+function formatRecommendation(
+  r: Awaited<ReturnType<typeof recommendWindow>>,
+): string {
+  // Emit canonical snake_case JSON so an LLM caller can parse the result
+  // directly. The fields mirror the Python `RecommendResult.to_dict()`
+  // 1:1 — keep this in lockstep when either side adds a field.
+  const payload = {
+    scheduled_for: r.scheduledFor,
+    intensity_g_co2_per_kwh: r.intensityGCo2PerKwh,
+    band: r.band,
+    estimated_carbon_g_co2: r.estimatedCarbonGCo2,
+    estimated_savings_vs_now_pct: r.estimatedSavingsVsNowPct,
+    batch_eligible: r.batchEligible,
+    alternatives: r.alternatives.map((a) => ({
+      scheduled_for: a.scheduledFor,
+      intensity_g_co2_per_kwh: a.intensityGCo2PerKwh,
+      band: a.band,
+      estimated_carbon_g_co2: a.estimatedCarbonGCo2,
+      estimated_savings_vs_now_pct: a.estimatedSavingsVsNowPct,
+    })),
+    reasoning: r.reasoning,
+  };
+  return JSON.stringify(payload, null, 2);
 }
 
 function formatTask(task: ReturnType<Scheduler["getTask"]>): string {

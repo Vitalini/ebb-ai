@@ -189,6 +189,32 @@ main {
   border: 1px solid var(--rule);
   overflow-x: auto;
   margin: 0 0 16px 0;
+  position: relative;
+}
+
+/* ─── copy buttons (injected by copy-buttons.js) ─────────── */
+
+.copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: var(--bg);
+  color: var(--fg-muted);
+  border: 1px solid var(--rule);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0.35;
+  transition: opacity 0.15s, color 0.15s, border-color 0.15s;
+  z-index: 2;
+}
+.code:hover .copy-btn { opacity: 1; }
+.copy-btn:hover { color: var(--accent); border-color: var(--accent); }
+.copy-btn.copied { color: var(--accent); border-color: var(--accent); opacity: 1; }
+@media (max-width: 640px) {
+  .copy-btn { opacity: 0.6; }
 }
 
 .code code { background: transparent; padding: 0; }
@@ -205,6 +231,8 @@ p code, li code {
   border-radius: 3px;
   color: var(--accent);
   border: 1px solid var(--rule);
+  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 
 /* ─── blocks ─────────────────────────────────────────────── */
@@ -376,6 +404,8 @@ p code, li code {
 @media (min-width: 880px) {
   .install-paths { grid-template-columns: 1fr 1fr 1fr; }
 }
+.install-paths > *,
+.integrations > * { min-width: 0; }  /* fix flex/grid overflow from monospace code blocks */
 
 .install-path {
   padding: 22px 24px;

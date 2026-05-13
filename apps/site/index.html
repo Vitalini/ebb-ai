@@ -106,8 +106,12 @@ const result = await <span class="hi">defer</span>(
             to 24 hours. Almost no agent code uses them by default.
           </li>
           <li>
-            <strong>Latency.</strong> Off-peak execution is faster
-            end-to-end. Providers throttle and queue at peak.
+            <strong>Latency, honestly.</strong> Off-peak <em>sync</em>
+            execution is sometimes faster because providers throttle and
+            queue at peak. The Batch API is <em>not</em> faster — it
+            trades latency (up to 24h SLA) for the 50% discount. Carbon
+            and dollars are the pitch; latency is a third-tier side
+            effect.
           </li>
         </ul>
         <p>
@@ -135,7 +139,7 @@ const result = await <span class="hi">defer</span>(
           <a class="card" href="https://github.com/Vitalini/ebb-ai/tree/main/packages/mcp-server" target="_blank" rel="noreferrer">
             <div class="card-tag">npm</div>
             <h3>@ebb-ai/mcp</h3>
-            <p class="card-line">Model Context Protocol server. Three tools: <code>get_grid_forecast</code>, <code>schedule_task</code>, <code>check_queue_status</code>. Stdio transport.</p>
+            <p class="card-line">Model Context Protocol server. Four tools: <code>get_grid_forecast</code>, <code>recommend_window</code>, <code>schedule_task</code>, <code>check_queue_status</code>. Stdio transport.</p>
             <div class="card-cta">View source ↗</div>
           </a>
           <a class="card" href="https://github.com/Vitalini/ebb-ai/tree/main/packages/core-py" target="_blank" rel="noreferrer">
@@ -459,5 +463,6 @@ result = await <span class="hi">defer</span>(
         </div>
       </div>
     </footer>
+    <script src="./copy-buttons.js" defer></script>
   </body>
 </html>

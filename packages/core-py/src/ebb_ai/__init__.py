@@ -32,6 +32,11 @@ from __future__ import annotations
 
 from .errors import CarbonBudgetExceededError, InvalidDeadlineError
 from .grid import GridFeed, electricity_maps_feed, mock_grid_feed
+from .recommend import (
+    RecommendAlternative,
+    RecommendResult,
+    recommend_window,
+)
 from .scheduler import (
     DEFAULT_REGION,
     ENERGY_KWH_PER_TASK,
@@ -71,6 +76,8 @@ __all__ = [
     "GridSource",
     "IntensitySource",
     "InvalidDeadlineError",
+    "RecommendAlternative",
+    "RecommendResult",
     "Scheduler",
     "TaskRecord",
     "TaskStatus",
@@ -80,4 +87,5 @@ __all__ = [
     "mock_grid_feed",
     "normalize_deadline",
     "pick_best_window",
+    "recommend_window",
 ]

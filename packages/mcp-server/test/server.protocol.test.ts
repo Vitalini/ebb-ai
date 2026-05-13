@@ -20,7 +20,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { mockGridFeed, Scheduler } from "@ebb-ai/core";
+import { mockGridFeed, recommendWindow, Scheduler } from "@ebb-ai/core";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
@@ -64,6 +64,20 @@ function buildServer() {
         description: "Test stub",
         inputSchema: { type: "object", properties: {} },
       },
+      {
+        name: "recommend_window",
+        description: "Test stub",
+        inputSchema: {
+          type: "object",
+          properties: {
+            deadline: { type: "string" },
+            region: { type: "string" },
+            carbon_budget_g: { type: "number" },
+            model: { type: "string" },
+          },
+          required: ["deadline", "region"],
+        },
+      },
     ],
   }));
 
@@ -103,6 +117,38 @@ function buildServer() {
         ],
       };
     }
+    if (req.params.name === "recommend_window") {
+      const args = z
+        .object({
+          deadline: z.string().datetime({ offset: true }),
+          region: z.string().min(1),
+          carbon_budget_g: z.number().positive().optional(),
+          model: z.string().optional(),
+        })
+        .parse(req.params.arguments ?? {});
+      try {
+        const result = await recommendWindow(
+          {
+            deadline: args.deadline,
+            region: args.region,
+            carbonBudgetG: args.carbon_budget_g,
+            model: args.model,
+          },
+          { feed },
+        );
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(result) },
+          ],
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: "text", text: `recommend_window rejected: ${msg}` }],
+          isError: true,
+        };
+      }
+    }
     return {
       content: [{ type: "text", text: `unknown:${req.params.name}` }],
       isError: true,
@@ -117,7 +163,7 @@ async function buildClient() {
 }
 
 describe("ebb-mcp protocol", () => {
-  it("connects and lists three tools", async () => {
+  it("connects and lists four tools", async () => {
     const { server, scheduler } = buildServer();
     const client = await buildClient();
     const [serverTransport, clientTransport] =
@@ -131,6 +177,7 @@ describe("ebb-mcp protocol", () => {
     expect(tools.tools.map((t) => t.name).sort()).toEqual([
       "check_queue_status",
       "get_grid_forecast",
+      "recommend_window",
       "schedule_task",
     ]);
 
@@ -183,6 +230,64 @@ describe("ebb-mcp protocol", () => {
     expect((status as { content: { text: string }[] }).content[0]!.text).toMatch(
       /tasks:1/,
     );
+
+    await client.close();
+    await server.close();
+    scheduler.shutdown();
+  });
+
+  it("calls recommend_window and returns a JSON recommendation", async () => {
+    const { server, scheduler } = buildServer();
+    const client = await buildClient();
+    const [s, c] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(s), client.connect(c)]);
+
+    const future = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString();
+    const result = await client.callTool({
+      name: "recommend_window",
+      arguments: { deadline: future, region: "US-CAL-CISO" },
+    });
+    expect(result.isError).toBeFalsy();
+    const content = (result as { content: { text: string }[] }).content;
+    expect(content).toHaveLength(1);
+    const payload = JSON.parse(content[0]!.text) as {
+      scheduledFor: string;
+      intensityGCo2PerKwh: number;
+      band: string;
+      batchEligible: boolean;
+      alternatives: unknown[];
+      reasoning: string;
+    };
+    expect(typeof payload.scheduledFor).toBe("string");
+    expect(payload.intensityGCo2PerKwh).toBeGreaterThan(0);
+    expect(["very_clean", "clean", "average", "dirty", "very_dirty"]).toContain(
+      payload.band,
+    );
+    expect(typeof payload.batchEligible).toBe("boolean");
+    expect(Array.isArray(payload.alternatives)).toBe(true);
+    expect(payload.reasoning.length).toBeGreaterThan(0);
+    // recommend_window does NOT touch the scheduler queue — proof:
+    expect(scheduler.listTasks()).toHaveLength(0);
+
+    await client.close();
+    await server.close();
+    scheduler.shutdown();
+  });
+
+  it("recommend_window propagates InvalidDeadlineError as isError: true", async () => {
+    const { server, scheduler } = buildServer();
+    const client = await buildClient();
+    const [s, c] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(s), client.connect(c)]);
+
+    // Past deadline. The zod schema accepts it (datetime+offset is fine),
+    // but recommendWindow rejects it at runtime.
+    const past = "2020-01-01T00:00:00Z";
+    const result = await client.callTool({
+      name: "recommend_window",
+      arguments: { deadline: past, region: "US-CAL-CISO" },
+    });
+    expect(result.isError).toBe(true);
 
     await client.close();
     await server.close();

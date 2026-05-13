@@ -85,23 +85,24 @@
 
             <!-- MCP server -->
             <g>
-              <rect x="260" y="160" width="400" height="70" rx="10" fill="#5eead4" opacity="0.1" stroke="#5eead4"/>
-              <text x="460" y="185" text-anchor="middle" fill="#5eead4" font-family="ui-monospace,monospace" font-size="11" letter-spacing="2">MCP SERVER (stdio)</text>
-              <text x="460" y="207" text-anchor="middle" fill="#e6e8ee" font-family="ui-sans-serif,system-ui" font-size="14" font-weight="600">@ebb-ai/mcp</text>
-              <text x="460" y="222" text-anchor="middle" fill="#8a93a6" font-family="ui-monospace,monospace" font-size="10">get_grid_forecast · schedule_task · check_queue_status</text>
+              <rect x="220" y="160" width="480" height="76" rx="10" fill="#5eead4" opacity="0.1" stroke="#5eead4"/>
+              <text x="460" y="184" text-anchor="middle" fill="#5eead4" font-family="ui-monospace,monospace" font-size="11" letter-spacing="2">MCP SERVER (stdio)</text>
+              <text x="460" y="205" text-anchor="middle" fill="#e6e8ee" font-family="ui-sans-serif,system-ui" font-size="14" font-weight="600">@ebb-ai/mcp</text>
+              <text x="460" y="224" text-anchor="middle" fill="#8a93a6" font-family="ui-monospace,monospace" font-size="10">4 tools — forecast · recommend · schedule · status</text>
             </g>
 
             <!-- middle: scheduler core -->
             <g>
-              <rect x="160" y="260" width="600" height="100" rx="10" fill="#161c25" stroke="#2c3441"/>
-              <text x="460" y="284" text-anchor="middle" fill="#fbbf24" font-family="ui-monospace,monospace" font-size="11" letter-spacing="2">SCHEDULER CORE  (@ebb-ai/core · ebb-ai py)</text>
-              <text x="460" y="307" text-anchor="middle" fill="#e6e8ee" font-family="ui-sans-serif,system-ui" font-size="14" font-weight="600">Queue · Scorer · Dispatcher · Tracer</text>
-              <text x="460" y="328" text-anchor="middle" fill="#8a93a6" font-family="ui-monospace,monospace" font-size="11">picks the cleanest window inside the deadline · enforces carbon budget · writes per-task receipts</text>
-              <text x="460" y="346" text-anchor="middle" fill="#6b7280" font-family="ui-monospace,monospace" font-size="10">persistence: SQLite (durable) — restart-safe queue</text>
+              <rect x="140" y="266" width="640" height="116" rx="10" fill="#161c25" stroke="#2c3441"/>
+              <text x="460" y="288" text-anchor="middle" fill="#fbbf24" font-family="ui-monospace,monospace" font-size="11" letter-spacing="2">SCHEDULER CORE</text>
+              <text x="460" y="304" text-anchor="middle" fill="#8a93a6" font-family="ui-monospace,monospace" font-size="10">@ebb-ai/core · ebb_ai (py)</text>
+              <text x="460" y="325" text-anchor="middle" fill="#e6e8ee" font-family="ui-sans-serif,system-ui" font-size="14" font-weight="600">Queue · Scorer · Dispatcher · Tracer</text>
+              <text x="460" y="346" text-anchor="middle" fill="#8a93a6" font-family="ui-monospace,monospace" font-size="10">cleanest in-deadline window · carbon-budget guard</text>
+              <text x="460" y="362" text-anchor="middle" fill="#6b7280" font-family="ui-monospace,monospace" font-size="10">SQLite durable queue · per-task receipts</text>
             </g>
 
             <!-- arrows from MCP to scheduler -->
-            <line x1="460" y1="230" x2="460" y2="260" stroke="#5eead4" stroke-width="1.5" marker-end="url(#arrow)"/>
+            <line x1="460" y1="236" x2="460" y2="266" stroke="#5eead4" stroke-width="1.5" marker-end="url(#arrow)"/>
 
             <!-- bottom row: grid feeds + provider adapters -->
             <g>
@@ -129,9 +130,9 @@
 
             <!-- arrows from scheduler down -->
             <g stroke="#6b7280" stroke-width="1.5" fill="none">
-              <line x1="290" y1="360" x2="200" y2="400" marker-end="url(#arrowMuted)"/>
-              <line x1="460" y1="360" x2="460" y2="400" marker-end="url(#arrowMuted)"/>
-              <line x1="630" y1="360" x2="720" y2="400" marker-end="url(#arrowMuted)"/>
+              <line x1="290" y1="382" x2="200" y2="400" marker-end="url(#arrowMuted)"/>
+              <line x1="460" y1="382" x2="460" y2="400" marker-end="url(#arrowMuted)"/>
+              <line x1="630" y1="382" x2="720" y2="400" marker-end="url(#arrowMuted)"/>
             </g>
           </svg>
         </div>
@@ -148,7 +149,7 @@
       <section class="block alt">
         <h2>Data flow, end to end</h2>
         <ol class="steps">
-          <li><strong>Ingest.</strong> A task arrives via <code>defer(task, deadline)</code> (library) or <code>schedule_task(prompt, deadline)</code> (MCP). The task body is captured (closure, JSON-serialized request, or a provider-adapter call descriptor) and persisted to SQLite with a UUID task_id.</li>
+          <li><strong>Ingest.</strong> A task arrives via <code>defer(task, deadline)</code> (library) or <code>schedule_task(prompt, deadline)</code> (MCP). The task body is captured (closure, JSON-serialized request, or a provider-adapter call descriptor) and persisted to SQLite with a UUID task_id. For <em>non-committal</em> planning — when the agent wants to see <em>when</em> the cleanest window falls before deciding whether to commit — there's <code>recommend_window(deadline, region)</code>, which returns the recommended window, top-3 alternatives, and a savings-vs-now number without ever touching the queue.</li>
           <li><strong>Validate.</strong> Deadline must parse as ISO-8601 and be in the future. If not, the call fails fast with <code>InvalidDeadlineError</code>. A taskId, if caller-supplied, must be unique.</li>
           <li><strong>Forecast.</strong> The scheduler asks the configured grid feed for the next N hours of carbon intensity for the task's region. With an Electricity Maps API key, this hits the live API (5-second timeout). Without one, the feed falls back to a deterministic UTC-based sinusoidal mock so the whole stack still runs end-to-end.</li>
           <li><strong>Score.</strong> Each hour inside the deadline window is scored. The cheapest-carbon window wins. If a <code>carbonBudgetG</code> was supplied, windows that exceed the budget are dropped first; if no window survives, the task fails with <code>CarbonBudgetExceededError</code>.</li>
@@ -173,6 +174,8 @@
         <a class="btn ghost" href="./roadmap.html">Continue to roadmap →</a>
       </p>
     </main>
+
+    <script src="./copy-buttons.js" defer></script>
 
     <footer>
       <div class="footer-grid">

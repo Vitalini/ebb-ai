@@ -1,17 +1,38 @@
 # ebb-ai
 
 **Carbon-aware scheduling for agentic AI workflows.**
+*An MCP server that defers non-urgent AI tasks to the cleanest grid
+window inside your deadline. Per-task carbon receipts, Anthropic +
+OpenAI Batch API support, SQLite-backed durable queue.*
+
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-5eead4)](./LICENSE)
+[![v0.2.0](https://img.shields.io/badge/release-v0.2.0-fbbf24)](https://github.com/Vitalini/ebb-ai/releases/tag/v0.2.0)
+[![Tests](https://img.shields.io/badge/tests-73%20passing-22c55e)](#tests)
+[![MCP](https://img.shields.io/badge/MCP-compatible-5eead4)](https://modelcontextprotocol.io)
 
 `ebb-ai` defers non-urgent AI agent tasks to execution windows that are
-simultaneously cleaner on the electricity grid, cheaper at the LLM
-provider, and friendlier to your hardware budget. The same agent code
-that would have run a synchronous LLM call now calls `ebb-ai`, which
-figures out the right time, the right provider, and the right route —
-and writes a per-task carbon receipt you can audit.
+simultaneously cleaner on the electricity grid and cheaper at the LLM
+provider. The same agent code that would have run a synchronous LLM
+call now calls `ebb-ai`, which picks the right time and the right route
+— and writes a per-task carbon receipt you can audit.
 
-> Status: v0.2 · 2026-05-12 · Anthropic + OpenAI Batch adapters,
-> durable SQLite queue, Python port, live dashboard. Repo public-style
-> but not yet on registries.
+```text
+$ ebb-mcp tool call recommend_window \
+    '{"deadline":"+12h","region":"US-CAL-CISO"}'
+{
+  "scheduled_for": "2026-05-13T07:00:00Z",
+  "intensity_g_co2_per_kwh": 96,
+  "band": "very_clean",
+  "estimated_carbon_g_co2": 0.14,
+  "estimated_savings_vs_now_pct": 67,
+  "batch_eligible": false,
+  "reasoning": "cleanest in-deadline window is 07:00 UTC; ~67% cleaner than dispatching now"
+}
+```
+
+> **Status:** v0.2 · 2026-05-12 · Anthropic + OpenAI Batch adapters,
+> durable SQLite queue, Python port, live dashboard.
+> See [QUICKSTART.md](./QUICKSTART.md) for the 4-step install.
 
 ---
 
@@ -27,8 +48,11 @@ follow:
   percent discount for tasks that can wait up to 24 hours. Almost no
   agent code uses them by default, because it requires rewriting the
   call site.
-- **Latency.** Off-peak execution is faster end-to-end. Providers
-  throttle and queue at peak.
+- **Latency, honestly.** Off-peak *sync* execution is sometimes
+  faster because providers throttle and queue at peak. **Batch API
+  is *not* faster** — it trades latency (up to 24h SLA) for the
+  50% discount. We pitch carbon + cost first; latency is a third-tier
+  side effect.
 
 `ebb-ai` fixes all three for any task that is not "answer me right now."
 
@@ -48,6 +72,8 @@ follow:
 ---
 
 ## Quick start
+
+**See [QUICKSTART.md](./QUICKSTART.md) — four steps, five minutes.**
 
 ### As an MCP server (recommended path)
 
