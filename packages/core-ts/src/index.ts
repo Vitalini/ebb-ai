@@ -1,20 +1,21 @@
 /**
  * @ebb-ai/core — carbon-aware scheduling for agentic AI workflows.
  *
- * Public surface:
+ * Public surface (v0.2):
  *
  *   import { defer, Scheduler } from "@ebb-ai/core";
+ *   import { AnthropicAdapter, OpenAIAdapter } from "@ebb-ai/core/providers";
+ *   import { TaskStore } from "@ebb-ai/core/storage";
  *
- * v0.1 scope:
- *   - defer(task, opts) — queue a task; resolve with its result when ebb-ai
- *     selects an execution window inside the deadline.
- *   - Scheduler — the in-process orchestrator (queue + grid feed + dispatcher).
+ * v0.2 additions over v0.1:
+ *   - Anthropic + OpenAI provider adapters with sync + Batch API paths.
+ *   - SQLite-backed durable queue (opt-in via `new Scheduler({ dbPath })`).
+ *   - Carbon-receipt audit trail survives process restart.
  *
- * Out of scope for v0.1 (tracked in PLAN.md):
- *   - Cross-provider routing
- *   - Anthropic/OpenAI Batch API integration
- *   - SQLite-backed durable queue (currently in-memory)
- *   - Carbon-receipt persistence
+ * Out of scope for v0.2 (tracked in PLAN.md):
+ *   - Cross-provider routing.
+ *   - WattTime marginal-emissions feed.
+ *   - Gemini / local-Ollama adapters.
  */
 
 export {
@@ -24,6 +25,7 @@ export {
   pickBestWindow,
   Scheduler,
 } from "./scheduler.js";
+export type { SchedulerOptions } from "./scheduler.js";
 export { mockGridFeed, electricityMapsFeed } from "./grid.js";
 export type {
   DeferOptions,
@@ -33,3 +35,15 @@ export type {
   TaskRecord,
   TaskStatus,
 } from "./types.js";
+export {
+  AnthropicAdapter,
+  OpenAIAdapter,
+} from "./providers/index.js";
+export type {
+  BatchHandle,
+  DispatchOptions,
+  DispatchResult,
+  ProviderAdapter,
+} from "./providers/index.js";
+export { TaskStore } from "./storage/sqlite.js";
+export type { TaskStoreOptions } from "./storage/sqlite.js";

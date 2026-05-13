@@ -7,11 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-05-12
+
 ### Added
+- **Provider adapters.** `AnthropicAdapter` and `OpenAIAdapter` in
+  `@ebb-ai/core/providers`. Each adapter exposes `dispatch()` for
+  sync calls and `dispatchBatch()` for the vendor Batch API (50%
+  discount, 24h SLA). SDKs are peer dependencies and imported lazily,
+  so missing-SDK callers still get a clear error rather than a
+  module-load crash.
+- **SQLite-backed durable queue.** Opt-in via `new Scheduler({ dbPath })`.
+  Every state transition writes through to an on-disk audit ledger;
+  records survive process restart and can be reloaded with
+  `Scheduler.listPersistedTasks()` / `Scheduler.loadPersistedTask()`.
+- **Python port.** `packages/core-py/` ships a complete Python 3.11+
+  package (`ebb_ai`) with `asyncio` scheduler, `aiosqlite` persistence
+  from day one, and `AnthropicAdapter` + `OpenAIAdapter` mirrors. 41/41
+  pytest cases passing.
+- **Dashboard MVP.** `apps/dashboard/` is a Next.js 15 app router
+  application with four pages (Home, Forecast, Plan, Queue), 6 grid
+  regions, recharts visualizations, and live `/api/grid/[region]` +
+  `/api/queue` endpoints. Mock fallback when no Electricity Maps key
+  is set.
+- **Site expansion.** `apps/site/` now ships `architecture.html` (SVG
+  diagram + 8-step data flow), `roadmap.html` (v0.1 → v1.0 with
+  versioned status pills), and `docs.html` (categorized GitHub-linked
+  index).
 - Real MCP-protocol smoke test using `InMemoryTransport`.
 - `CHANGELOG.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `CODEOWNERS`.
 - `docs/spec/01-priority-and-deadline-fields.md` — draft proposal for
   upstream MCP spec engagement.
+
+### Changed
+- `@ebb-ai/core` bumped to **0.2.0**, `@ebb-ai/mcp` bumped to **0.2.0**.
+- Public surface expanded with `AnthropicAdapter`, `OpenAIAdapter`,
+  `TaskStore`, and the supporting types `BatchHandle`,
+  `DispatchOptions`, `DispatchResult`, `ProviderAdapter`,
+  `TaskStoreOptions`.
+
+### Known limitations (planned for v0.3)
+- Scheduler does not yet auto-route between sync and Batch paths based
+  on deadline distance — adapters expose both, but the v0.2 scheduler
+  still treats the task body as opaque. Wiring the routing decision
+  into the scheduler is the lead v0.3 item.
+- WattTime marginal-emissions feed is still pending.
+- Multi-writer (multiple schedulers pointed at one DB) requires WAL
+  mode; v0.2 SQLite store assumes single writer.
 
 ## [0.1.0] — 2026-05-12
 
@@ -52,5 +93,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Batches APIs. Direct Batch routing lands in v0.2.
 - Python port (`ebb-ai` PyPI) is a placeholder. v0.2.
 
-[Unreleased]: https://github.com/Vitalini/ebb-ai/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Vitalini/ebb-ai/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Vitalini/ebb-ai/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Vitalini/ebb-ai/releases/tag/v0.1.0

@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+/**
+ * Theme tokens. Tailwind 4 generates utilities from these automatically:
+ *   --color-bg          → bg-bg / text-bg / border-bg
+ *   --color-accent      → bg-accent / text-accent / etc.
+ *
+ * The palette extends the marketing site (`apps/site/style.css`) with a
+ * darker "instrument panel" base and explicit carbon-band colors used by
+ * the band badge and forecast chart.
+ */
+@theme {
+  --color-bg: #07090c;
+  --color-bg-elev: #0d1218;
+  --color-bg-alt: #131820;
+  --color-fg: #e6e8ee;
+  --color-fg-muted: #8a93a6;
+  --color-fg-dim: #5b6577;
+  --color-rule: #1f2632;
+  --color-rule-hi: #2c3543;
+  --color-accent: #5eead4;
+  --color-accent-dim: #2dd4bf;
+  --color-accent-deep: #115e59;
+  --color-warn: #fbbf24;
+  --color-danger: #f87171;
+  --color-str: #f472b6;
+
+  /* Carbon bands — green (clean) to red (dirty). */
+  --color-band-very-clean: #34d399;
+  --color-band-clean: #a3e635;
+  --color-band-average: #fbbf24;
+  --color-band-dirty: #fb923c;
+  --color-band-very-dirty: #f87171;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+/* Subtle grid backdrop, like an instrument panel. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(94, 234, 212, 0.025) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(94, 234, 212, 0.025) 1px, transparent 1px);
+  background-size: 48px 48px;
+  z-index: 0;
+}
+
+/* Recharts inside dark UI: keep tooltips readable. */
+.recharts-tooltip-wrapper {
+  outline: none !important;
+}
+
+.recharts-default-tooltip {
+  background: var(--color-bg-elev) !important;
+  border: 1px solid var(--color-rule-hi) !important;
+  border-radius: 6px !important;
+  color: var(--color-fg) !important;
+}
+
+.recharts-cartesian-axis-tick-value {
+  fill: var(--color-fg-muted);
+  font-size: 11px;
+}
+
+/* Focus ring */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}

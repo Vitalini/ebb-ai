@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Documentation — ebb-ai</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header class="nav">
+      <div class="brand">
+        <span class="logo">~</span>
+        <span class="brand-name">ebb-ai</span>
+        <span class="brand-version">v0.2</span>
+      </div>
+      <nav>
+        <a href="./index.html">Home</a>
+        <a href="./index.html#components">Components</a>
+        <a href="./index.html#install">Install</a>
+        <a href="./architecture.html">Architecture</a>
+        <a href="./roadmap.html">Roadmap</a>
+        <a class="ext" href="./docs.html">Docs</a>
+        <a class="ext" href="https://github.com/Vitalini/ebb-ai" target="_blank" rel="noreferrer">GitHub ↗</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero" style="padding: 64px 0 40px;">
+        <p class="kicker">documentation</p>
+        <h1 style="font-size: clamp(32px, 5vw, 48px);">Everything that exists.</h1>
+        <p class="lede">
+          Categorized index of project documentation. Every link below
+          resolves to the canonical source inside the GitHub repository.
+        </p>
+      </section>
+
+      <section class="block">
+        <h2>Project-level</h2>
+        <div class="docs-grid">
+          <a class="doc-link" href="https://github.com/Vitalini/ebb-ai/blob/main/README.md" target="_blank" rel="noreferrer">
+            <div class="doc-name">README.md</div>
+            <div class="doc-desc">One-page overview, quick start, components table.</div>
+          </a>
+          <a class="doc-link" href="https://github.com/Vitalini/ebb-ai/blob/main/PLAN.md" target="_blank" rel="noreferrer">
+            <div class="doc-name">PLAN.md</div>
+            <div class="doc-desc">24-week execution plan, architecture, success metrics, first-week checklist.</div>
+          </a>
+          <a class="doc-link" href="https://github.com/Vitalini/ebb-ai/blob/main/STATUS.md" target="_blank" rel="noreferrer">
+            <div class="doc-name">STATUS.md</div>
+            <div class="doc-desc">Live snapshot of session progress and outstanding decisions.</div>
+          </a>
+          <a class="doc-link" href="https://github.com/Vitalini/ebb-ai/blob/main/CHANGELOG.md" target="_blank" rel="noreferrer">
+            <div class="doc-name">CHANGELOG.md</div>
+            <div class="doc-desc">Keep a Changelog format. Versions, additions, fixes, known limitations.</div>
+          </a>
+          <a class="doc-link" href="https://github.com/Vitalini/ebb-ai/blob/main/CONTRIBUTING.md" target="_blank" rel="noreferrer">
+            <div class="doc-name">CONTRIBUTING.md</div>
+            <div class="doc-desc">How to send patches; workflow; tests; code style.</div>
+          </a>
+          <a class="doc-link" href="https://github.com/Vitalini/ebb-ai/blob/main/CODE_OF_CONDUCT.md" target="_blank" rel="noreferrer">
+            <div class="doc-name">CODE_OF_CONDUCT.md</div>
+            <div class="doc-desc">Contributor Covenant 2.1.</div>
+          </a>
+          <a class="doc-link" href="https://github.com/Vitalini/ebb-ai/blob/main/LICENSE" target="_blank" rel="noreferrer">
+            <div class="doc-name">LICENSE</div>
+            <div class="doc-desc">Apache License 2.0 — patent grant included.</div>
+          </a>
+          <a class="doc-link" href="https://github.com/Vitalini/ebb-ai/blob/main/.github/CODEOWNERS" target="_blank" rel="noreferrer">
+            <div class="doc-name">CODEOWNERS</div>
+            <div class="doc-desc">Routing for PR reviews.</div>
+          </a>
+        </div>
+      </section>
+
+      <section class="block alt">
+        <h2>Packages</h2>
+        <div class="docs-grid">
+          <a class="doc-link" href="https://github.com/Vitalini/ebb-ai/tree/main/packages/core-ts" target="_blank" rel="noreferrer">
+            <div class="doc-name">@ebb-ai/core (TypeScript)</div>
+            <div class="doc-desc">Source for the core scheduler, grid feeds, and provider adapters.</div>
+          </a>
+          <a class="doc-link" href="https://github.com/Vitalini/ebb-ai/tree/main/packages/mcp-server" target="_blank" rel="noreferrer">
+            <div class="doc-name">@ebb-ai/mcp</div>
+            <div class="doc-desc">Model Context Protocol server. README covers install for every supported host.</div>
+          </a>
+          <a class="doc-link" href="https://github.com/Vitalini/ebb-ai/tree/main/packages/core-py" target="_blank" rel="noreferrer">
+            <div class="doc-name">ebb-ai (Python)</div>
+            <div class="doc-desc">Python package mirror. <code>pip install ebb-ai[anthropic,openai]</code>.</div>
+          </a>
+          <a class="doc-link" href="https://github.com/Vitalini/ebb-ai/tree/main/apps/dashboard" target="_blank" rel="noreferrer">
+            <div class="doc-name">apps/dashboard</div>
+            <div class="doc-desc">Next.js dashboard for live grid intensity, planning, and queue visibility.</div>
+          </a>
+          <a class="doc-link" href="https://github.com/Vitalini/ebb-ai/tree/main/apps/site" target="_blank" rel="noreferrer">
+            <div class="doc-name">apps/site</div>
+            <div class="doc-desc">This marketing site, static HTML/CSS, deployable to anything.</div>
+          </a>
+        </div>
+      </section>
+
+      <section class="block">
+        <h2>Integrations</h2>
+        <div class="docs-grid">
+          <a class="doc-link" href="https://github.com/Vitalini/ebb-ai/blob/main/packages/mcp-server/README.md#claude-desktop" target="_blank" rel="noreferrer">
+            <div class="doc-name">Claude Desktop</div>
+            <div class="doc-desc">macOS / Linux / Windows config path + sample <code>mcpServers</code> snippet.</div>
+          </a>
+          <a class="doc-link" href="https://github.com/Vitalini/ebb-ai/tree/main/examples/claude-code" target="_blank" rel="noreferrer">
+            <div class="doc-name">Claude Code</div>
+            <div class="doc-desc">CLI: <code>claude mcp add</code>. Sample <code>~/.claude.json</code>. Slash-command and permissions notes.</div>
+          </a>
+          <a class="doc-link" href="https://github.com/Vitalini/ebb-ai/tree/main/examples/openclaw-skill" target="_blank" rel="noreferrer">
+            <div class="doc-name">OpenClaw skill</div>
+            <div class="doc-desc">SKILL.md with trigger phrases, workflow patterns, and an <code>install.sh</code> script.</div>
+          </a>
+          <a class="doc-link" href="https://github.com/Vitalini/ebb-ai/tree/main/examples/codex" target="_blank" rel="noreferrer">
+            <div class="doc-name">OpenAI Codex CLI</div>
+            <div class="doc-desc">TOML stanza for <code>~/.codex/config.toml</code> plus same-shape configuration.</div>
+          </a>
+        </div>
+      </section>
+
+      <section class="block alt">
+        <h2>Standards work</h2>
+        <div class="docs-grid">
+          <a class="doc-link" href="https://github.com/Vitalini/ebb-ai/blob/main/docs/spec/01-priority-and-deadline-fields.md" target="_blank" rel="noreferrer">
+            <div class="doc-name">Proposal 01: priority / deadline / carbon_budget</div>
+            <div class="doc-desc">Optional fields on MCP <code>tools/call</code> envelopes. Drafted for upstream engagement.</div>
+          </a>
+          <a class="doc-link" href="https://github.com/modelcontextprotocol/specification" target="_blank" rel="noreferrer">
+            <div class="doc-name">Upstream MCP specification</div>
+            <div class="doc-desc">The repository where the proposal will be opened as an issue and, once shaped, as a PR.</div>
+          </a>
+        </div>
+      </section>
+
+      <section class="block">
+        <h2>Review history</h2>
+        <div class="docs-grid">
+          <a class="doc-link" href="https://github.com/Vitalini/ebb-ai/blob/main/REVIEW-engineering.md" target="_blank" rel="noreferrer">
+            <div class="doc-name">REVIEW-engineering.md</div>
+            <div class="doc-desc">External senior-engineer review of v0.1. All five critical and seven important items applied in <code>c2a6a82</code>.</div>
+          </a>
+        </div>
+      </section>
+
+      <section class="block alt">
+        <h2>Other useful pages</h2>
+        <div class="docs-grid">
+          <a class="doc-link" href="./index.html">
+            <div class="doc-name">Home</div>
+            <div class="doc-desc">What ebb-ai does and how to install it.</div>
+          </a>
+          <a class="doc-link" href="./architecture.html">
+            <div class="doc-name">Architecture</div>
+            <div class="doc-desc">System diagram and the full ingest → dispatch → receipt data flow.</div>
+          </a>
+          <a class="doc-link" href="./roadmap.html">
+            <div class="doc-name">Roadmap</div>
+            <div class="doc-desc">v0.1 (done) · v0.2 (current) · v0.3 (planned) · v1.0 (stable surface).</div>
+          </a>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="footer-grid">
+        <div>
+          <div class="brand small"><span class="logo">~</span><span class="brand-name">ebb-ai</span></div>
+          <p>Carbon-aware scheduling for agentic AI workflows.</p>
+          <p class="muted">Apache-2.0 · Built by <a href="https://github.com/Vitalini">Vitalii Borovyk</a>.</p>
+        </div>
+        <div>
+          <div class="foot-h">Project</div>
+          <ul>
+            <li><a href="https://github.com/Vitalini/ebb-ai">GitHub</a></li>
+            <li><a href="https://github.com/Vitalini/ebb-ai/issues">Issues</a></li>
+            <li><a href="https://github.com/Vitalini/ebb-ai/blob/main/CHANGELOG.md">Changelog</a></li>
+          </ul>
+        </div>
+        <div>
+          <div class="foot-h">Pages</div>
+          <ul>
+            <li><a href="./index.html">Home</a></li>
+            <li><a href="./architecture.html">Architecture</a></li>
+            <li><a href="./roadmap.html">Roadmap</a></li>
+          </ul>
+        </div>
+        <div></div>
+      </div>
+    </footer>
+  </body>
+</html>

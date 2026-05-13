@@ -1,0 +1,285 @@
+"""Provider adapter tests.
+
+No live API calls — every test injects a hand-rolled fake or a
+``unittest.mock`` ``AsyncMock`` for the vendor SDK client. The point is
+to verify that our adapter shapes (request kwargs, response parsing)
+match what the official SDKs expose, not to test the SDKs themselves.
+"""
+
+from __future__ import annotations
+
+from types import SimpleNamespace
+from typing import Any
+from unittest.mock import AsyncMock
+
+import pytest
+
+from ebb_ai.providers import (
+    AnthropicAdapter,
+    DispatchOptions,
+    OpenAIAdapter,
+    ProviderAdapter,
+)
+from ebb_ai.providers.anthropic import _extract_text as _extract_anth
+from ebb_ai.providers.openai import _extract_text as _extract_oai
+
+# --------------------------------------------------------------------- #
+# Anthropic
+
+
+def _fake_anthropic_message() -> Any:
+    return SimpleNamespace(
+        id="msg_01abc",
+        model="claude-sonnet-4-5",
+        content=[SimpleNamespace(type="text", text="hello, world")],
+        usage=SimpleNamespace(input_tokens=12, output_tokens=4),
+    )
+
+
+def _fake_anthropic_batch() -> Any:
+    return SimpleNamespace(id="msgbatch_01xyz", processing_status="in_progress")
+
+
+def _make_anthropic_client(*, messages_create: Any = None, batches_create: Any = None) -> Any:
+    client = SimpleNamespace()
+    client.messages = SimpleNamespace(
+        create=messages_create or AsyncMock(return_value=_fake_anthropic_message()),
+        batches=SimpleNamespace(
+            create=batches_create or AsyncMock(return_value=_fake_anthropic_batch()),
+        ),
+    )
+    return client
+
+
+@pytest.mark.asyncio
+async def test_anthropic_dispatch_returns_flattened_text() -> None:
+    client = _make_anthropic_client()
+    adapter = AnthropicAdapter(client=client)
+    result = await adapter.dispatch("claude-sonnet-4-5", "hi")
+    assert result.text == "hello, world"
+    assert result.model == "claude-sonnet-4-5"
+    assert result.provider == "anthropic"
+    assert result.input_tokens == 12
+    assert result.output_tokens == 4
+    client.messages.create.assert_awaited_once()
+    kwargs = client.messages.create.await_args.kwargs
+    assert kwargs["model"] == "claude-sonnet-4-5"
+    assert kwargs["messages"] == [{"role": "user", "content": "hi"}]
+    assert kwargs["max_tokens"] == 1024
+
+
+@pytest.mark.asyncio
+async def test_anthropic_dispatch_passes_system_and_extra() -> None:
+    client = _make_anthropic_client()
+    adapter = AnthropicAdapter(client=client)
+    await adapter.dispatch(
+        "claude-sonnet-4-5",
+        "hi",
+        DispatchOptions(
+            max_tokens=256,
+            system="You are terse.",
+            extra={"temperature": 0.1},
+        ),
+    )
+    kwargs = client.messages.create.await_args.kwargs
+    assert kwargs["system"] == "You are terse."
+    assert kwargs["temperature"] == 0.1
+    assert kwargs["max_tokens"] == 256
+
+
+@pytest.mark.asyncio
+async def test_anthropic_dispatch_batch_builds_requests() -> None:
+    client = _make_anthropic_client()
+    adapter = AnthropicAdapter(client=client)
+    handle = await adapter.dispatch_batch(
+        "claude-sonnet-4-5",
+        ["one", "two", "three"],
+    )
+    assert handle.batch_id == "msgbatch_01xyz"
+    assert handle.provider == "anthropic"
+    assert handle.prompt_count == 3
+    client.messages.batches.create.assert_awaited_once()
+    kwargs = client.messages.batches.create.await_args.kwargs
+    assert len(kwargs["requests"]) == 3
+    assert kwargs["requests"][0]["custom_id"] == "req-0"
+    assert kwargs["requests"][2]["params"]["messages"] == [
+        {"role": "user", "content": "three"}
+    ]
+
+
+def test_anthropic_extract_text_handles_dict_blocks() -> None:
+    resp = SimpleNamespace(
+        content=[
+            {"type": "text", "text": "alpha"},
+            {"type": "tool_use", "id": "x"},
+            {"type": "text", "text": " beta"},
+        ]
+    )
+    assert _extract_anth(resp) == "alpha beta"
+
+
+def test_anthropic_adapter_is_provider() -> None:
+    client = _make_anthropic_client()
+    assert isinstance(AnthropicAdapter(client=client), ProviderAdapter)
+    assert AnthropicAdapter.name == "anthropic"
+
+
+# --------------------------------------------------------------------- #
+# OpenAI
+
+
+def _fake_openai_response() -> Any:
+    return SimpleNamespace(
+        id="chatcmpl_01abc",
+        model="gpt-4.1-mini",
+        choices=[
+            SimpleNamespace(
+                index=0,
+                message=SimpleNamespace(role="assistant", content="hi from oai"),
+                finish_reason="stop",
+            )
+        ],
+        usage=SimpleNamespace(prompt_tokens=10, completion_tokens=3, total_tokens=13),
+    )
+
+
+def _make_openai_client(*, completions_create: Any = None, batches_create: Any = None, files_create: Any = None) -> Any:
+    client = SimpleNamespace()
+    client.chat = SimpleNamespace(
+        completions=SimpleNamespace(
+            create=completions_create or AsyncMock(return_value=_fake_openai_response()),
+        )
+    )
+    client.batches = SimpleNamespace(
+        create=batches_create
+        or AsyncMock(return_value=SimpleNamespace(id="batch_01xyz", status="validating")),
+    )
+    client.files = SimpleNamespace(
+        create=files_create
+        or AsyncMock(return_value=SimpleNamespace(id="file_01abc", purpose="batch")),
+    )
+    return client
+
+
+@pytest.mark.asyncio
+async def test_openai_dispatch_returns_flattened_text() -> None:
+    client = _make_openai_client()
+    adapter = OpenAIAdapter(client=client)
+    result = await adapter.dispatch("gpt-4.1-mini", "hi")
+    assert result.text == "hi from oai"
+    assert result.model == "gpt-4.1-mini"
+    assert result.provider == "openai"
+    assert result.input_tokens == 10
+    assert result.output_tokens == 3
+    kwargs = client.chat.completions.create.await_args.kwargs
+    assert kwargs["model"] == "gpt-4.1-mini"
+    assert kwargs["messages"] == [{"role": "user", "content": "hi"}]
+
+
+@pytest.mark.asyncio
+async def test_openai_dispatch_includes_system_message() -> None:
+    client = _make_openai_client()
+    adapter = OpenAIAdapter(client=client)
+    await adapter.dispatch(
+        "gpt-4.1-mini",
+        "hi",
+        DispatchOptions(system="be concise"),
+    )
+    kwargs = client.chat.completions.create.await_args.kwargs
+    assert kwargs["messages"][0] == {"role": "system", "content": "be concise"}
+    assert kwargs["messages"][1] == {"role": "user", "content": "hi"}
+
+
+@pytest.mark.asyncio
+async def test_openai_dispatch_batch_uploads_jsonl() -> None:
+    files_create = AsyncMock(
+        return_value=SimpleNamespace(id="file_uploaded", purpose="batch")
+    )
+    batches_create = AsyncMock(
+        return_value=SimpleNamespace(id="batch_01xyz", status="validating")
+    )
+    client = _make_openai_client(
+        files_create=files_create,
+        batches_create=batches_create,
+    )
+    adapter = OpenAIAdapter(client=client)
+    handle = await adapter.dispatch_batch(
+        "gpt-4.1-mini",
+        ["one", "two"],
+    )
+    assert handle.batch_id == "batch_01xyz"
+    assert handle.prompt_count == 2
+
+    files_create.assert_awaited_once()
+    file_kwargs = files_create.await_args.kwargs
+    assert file_kwargs["purpose"] == "batch"
+    # The file argument is a (name, bytes, mime) tuple — verify the
+    # JSONL body has one line per prompt.
+    file_arg = file_kwargs["file"]
+    body = file_arg[1].read().decode("utf-8")
+    lines = [ln for ln in body.splitlines() if ln.strip()]
+    assert len(lines) == 2
+    import json
+
+    first = json.loads(lines[0])
+    assert first["custom_id"] == "req-0"
+    assert first["method"] == "POST"
+    assert first["url"] == "/v1/chat/completions"
+    assert first["body"]["messages"] == [{"role": "user", "content": "one"}]
+
+    batches_create.assert_awaited_once()
+    batch_kwargs = batches_create.await_args.kwargs
+    assert batch_kwargs["input_file_id"] == "file_uploaded"
+    assert batch_kwargs["endpoint"] == "/v1/chat/completions"
+    assert batch_kwargs["completion_window"] == "24h"
+
+
+def test_openai_extract_text_handles_dict_message() -> None:
+    resp = SimpleNamespace(
+        choices=[{"message": {"role": "assistant", "content": "from-dict"}}]
+    )
+    assert _extract_oai(resp) == "from-dict"
+
+
+def test_openai_adapter_is_provider() -> None:
+    client = _make_openai_client()
+    assert isinstance(OpenAIAdapter(client=client), ProviderAdapter)
+    assert OpenAIAdapter.name == "openai"
+
+
+# --------------------------------------------------------------------- #
+# Integration with the scheduler
+
+
+@pytest.mark.asyncio
+async def test_provider_runs_under_scheduler() -> None:
+    """Smoke: a provider call wrapped in defer() round-trips through the
+    scheduler and produces a receipt with the right provider stamped on
+    it (once the v0.3 enrichment lands; for now we at least verify the
+    call body returns the dispatch result).
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from ebb_ai import DeferOptions, Scheduler, mock_grid_feed
+
+    client = _make_anthropic_client()
+    adapter = AnthropicAdapter(client=client)
+
+    async def call() -> str:
+        result = await adapter.dispatch("claude-sonnet-4-5", "ping")
+        return result.text
+
+    s = Scheduler(feed=mock_grid_feed())
+    try:
+        text = await s.defer(
+            call,
+            DeferOptions(
+                deadline=(datetime.now(UTC) + timedelta(milliseconds=300)).isoformat()
+            ),
+        )
+        assert text == "hello, world"
+        rec = s.list_tasks()[0]
+        assert rec.status == "completed"
+        assert rec.receipt is not None
+    finally:
+        await s.shutdown()

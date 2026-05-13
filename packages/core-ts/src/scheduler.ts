@@ -16,6 +16,7 @@
 
 import { randomUUID } from "node:crypto";
 import { mockGridFeed } from "./grid.js";
+import { TaskStore } from "./storage/sqlite.js";
 import type {
   CarbonReceipt,
   DeferOptions,
@@ -60,6 +61,16 @@ export interface SchedulerOptions {
   defaultRegion?: string;
   /** If true (default), background loop ticks immediately on `defer`. */
   eager?: boolean;
+  /**
+   * Absolute path to a SQLite file for durable persistence. When set,
+   * every state transition writes through to the on-disk audit ledger
+   * and persisted records can be reloaded after restart via
+   * `Scheduler.listPersistedTasks()` / `Scheduler.loadPersistedTask()`.
+   * Omit for v0.1-style in-memory operation.
+   */
+  dbPath?: string;
+  /** Inject a pre-built TaskStore. Mostly for tests. */
+  store?: TaskStore;
 }
 
 export class Scheduler {
@@ -72,11 +83,27 @@ export class Scheduler {
     { resolve: (v: unknown) => void; reject: (e: unknown) => void }
   >();
   private readonly bodies = new Map<string, DeferrableTask<unknown>>();
+  private readonly store: TaskStore | undefined;
   private nextSerial = 1;
 
   constructor(opts: SchedulerOptions = {}) {
     this.feed = opts.feed ?? mockGridFeed();
     this.defaultRegion = opts.defaultRegion ?? DEFAULT_REGION;
+    if (opts.store) {
+      this.store = opts.store;
+    } else if (opts.dbPath) {
+      this.store = new TaskStore({ dbPath: opts.dbPath });
+    }
+  }
+
+  /** Reload a previously-persisted task by id. */
+  loadPersistedTask<T>(taskId: string): TaskRecord<T> | undefined {
+    return this.store?.get(taskId) as TaskRecord<T> | undefined;
+  }
+
+  /** Snapshot every task ever persisted (queued, running, completed, failed). */
+  listPersistedTasks(): TaskRecord<unknown>[] {
+    return this.store?.list() ?? [];
   }
 
   /**
@@ -121,6 +148,7 @@ export class Scheduler {
     };
     this.tasks.set(taskId, record);
     this.bodies.set(taskId, task as DeferrableTask<unknown>);
+    this.store?.upsert(record);
     void this.schedule(taskId, deadline);
     return record;
   }
@@ -141,6 +169,7 @@ export class Scheduler {
       clearTimeout(timer);
     }
     this.pendingTimers.clear();
+    this.store?.close();
   }
 
   private async schedule(taskId: string, deadline: Date): Promise<void> {
@@ -181,6 +210,7 @@ export class Scheduler {
     }
     record.status = "scheduled";
     record.scheduledFor = candidate.datetime;
+    this.store?.upsert(record);
     const wait = Math.max(0, new Date(candidate.datetime).getTime() - Date.now());
     // Node's setTimeout overflows the signed-32-bit ms range (~24.85 days).
     // Cap to one day before the actual fire time and re-schedule.
@@ -202,6 +232,7 @@ export class Scheduler {
     record.status = "failed";
     record.completedAt = new Date().toISOString();
     record.error = err.message;
+    this.store?.upsert(record);
     const resolver = this.resolvers.get(taskId);
     resolver?.reject(err);
     this.bodies.delete(taskId);
@@ -218,6 +249,7 @@ export class Scheduler {
     const resolver = this.resolvers.get(taskId);
     if (!record || !body) return;
     record.status = "running";
+    this.store?.upsert(record);
     const start = Date.now();
     try {
       const result = await body();
@@ -245,11 +277,13 @@ export class Scheduler {
       record.result = result;
       record.receipt = receipt;
       record.intensitySource = source;
+      this.store?.upsert(record);
       resolver?.resolve(result);
     } catch (err) {
       record.status = "failed";
       record.completedAt = new Date().toISOString();
       record.error = err instanceof Error ? err.message : String(err);
+      this.store?.upsert(record);
       resolver?.reject(err);
     } finally {
       this.bodies.delete(taskId);

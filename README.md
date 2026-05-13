@@ -9,8 +9,9 @@ that would have run a synchronous LLM call now calls `ebb-ai`, which
 figures out the right time, the right provider, and the right route —
 and writes a per-task carbon receipt you can audit.
 
-> Status: early development · v0.1 · 2026-05 · local-only, no
-> public release yet.
+> Status: v0.2 · 2026-05-12 · Anthropic + OpenAI Batch adapters,
+> durable SQLite queue, Python port, live dashboard. Repo public-style
+> but not yet on registries.
 
 ---
 
@@ -37,11 +38,12 @@ follow:
 
 | Package | Purpose |
 |---|---|
-| `@ebb-ai/core` | TypeScript core library. `defer(task, opts)` API. |
-| `@ebb-ai/mcp` | Model Context Protocol server. Drop-in for Claude Desktop, OpenClaw, Cursor, Claude Code. |
-| `ebb-ai` (PyPI) | Python port of the core library. |
-| `apps/dashboard` | (planned) Public live map of AI compute carbon intensity. |
-| `docs/spec` | (planned) Upstream MCP spec proposals for `priority`, `deadline`, `carbon_budget`. |
+| `@ebb-ai/core` | TypeScript core library (v0.2). `defer()` API, `AnthropicAdapter`, `OpenAIAdapter`, opt-in SQLite-backed durable queue. |
+| `@ebb-ai/mcp` | Model Context Protocol server (v0.2). Drop-in for Claude Desktop, Claude Code, OpenClaw, Cursor. |
+| `ebb-ai` (Python) | Python 3.11+ port. `asyncio` scheduler, `aiosqlite` persistence, Anthropic + OpenAI adapters. |
+| `apps/dashboard` | Next.js 15 dashboard. Live carbon-intensity map, 72-hour forecast, planner, queue viewer. |
+| `apps/site` | Static landing site: hero, components, integrations, install paths, architecture, roadmap, docs. |
+| `docs/spec` | Upstream MCP spec proposal for `priority`, `deadline`, `carbon_budget` fields. |
 
 ---
 
@@ -96,6 +98,57 @@ const result = await defer(
   },
 );
 ```
+
+### With a provider adapter and the Batch API (v0.2)
+
+```typescript
+import { Scheduler, AnthropicAdapter } from "@ebb-ai/core";
+
+const scheduler = new Scheduler({ dbPath: "/var/lib/ebb/queue.sqlite" });
+const adapter = new AnthropicAdapter();
+
+await scheduler.defer(
+  () => adapter.dispatch("claude-sonnet-4-5", "Summarize today's git commits."),
+  { deadline: "2026-05-13T08:00:00-04:00", region: "US-CAL-CISO" },
+);
+
+// or — submit 100 prompts via Anthropic Message Batches for a 50% discount:
+const handle = await adapter.dispatchBatch("claude-sonnet-4-5", prompts);
+console.log(handle.batchId);
+```
+
+The SQLite-backed queue is opt-in via `dbPath`; without it the
+scheduler runs in-memory as in v0.1. The Anthropic and OpenAI SDKs are
+peer dependencies — install them only if you use the corresponding
+adapter.
+
+### Python
+
+```bash
+pip install -e "packages/core-py[anthropic,openai]"
+```
+
+```python
+import asyncio
+from ebb_ai import defer
+
+asyncio.run(defer(
+    lambda: do_work(),
+    deadline="2026-05-13T08:00:00-04:00",
+    carbon_budget_g=5,
+    region="US-CAL-CISO",
+))
+```
+
+### Dashboard
+
+```bash
+pnpm --filter ebb-dashboard dev
+# → http://localhost:3000
+```
+
+Pages: live carbon-intensity map (6 regions), 72-hour forecast charts,
+best-window planner, queue viewer.
 
 ---
 
