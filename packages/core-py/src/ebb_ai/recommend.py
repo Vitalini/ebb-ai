@@ -189,7 +189,7 @@ async def recommend_window(
     deadline: str | datetime,
     region: str,
     carbon_budget_g: float | None = None,
-    model: str | None = None,  # noqa: ARG001 — held for parity w/ TS; affects reasoning only
+    model: str | None = None,  # held for parity with TS surface; affects reasoning only
     feed: GridFeed | None = None,
     now: Callable[[], datetime] | None = None,
 ) -> RecommendResult:
