@@ -8,7 +8,7 @@
  * but synthetic snapshot, generated deterministically per UTC day so
  * screenshots stay reproducible.
  *
- * Wiring plan (v0.3, see PLAN.md §4.4):
+ * Wiring plan (v0.3, see ROADMAP.md §4.4):
  *   - `@ebb-ai/scheduler` will run as a long-lived process and expose
  *     `GET /tasks` returning `TaskRecord[]`.
  *   - This route will proxy that endpoint, with auth.

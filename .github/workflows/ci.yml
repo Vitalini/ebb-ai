@@ -16,13 +16,40 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
+        # pnpm version comes from package.json packageManager (v9.15.0).
+        # Do not also set `version:` here — pnpm/action-setup@v4 errors
+        # with ERR_PNPM_BAD_PM_VERSION on duplicates.
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
           cache: "pnpm"
       - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      - run: pnpm build
-      - run: pnpm test
+      - run: pnpm --filter "@ebb-ai/core" build
+      - run: pnpm --filter "@ebb-ai/mcp" build
+      - run: pnpm --filter "@ebb-ai/cli" build
+      - run: pnpm --filter "@ebb-ai/core" test
+      - run: pnpm --filter "@ebb-ai/mcp" test
+      - run: pnpm --filter "@ebb-ai/cli" test
+
+  python:
+    name: python (3.11 + 3.12)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: install ebb_ai
+        working-directory: packages/core-py
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,anthropic,openai]"
+      - name: pytest
+        working-directory: packages/core-py
+        run: pytest -q
+      - name: ruff
+        working-directory: packages/core-py
+        run: ruff check .

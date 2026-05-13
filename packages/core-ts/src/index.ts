@@ -12,7 +12,7 @@
  *   - SQLite-backed durable queue (opt-in via `new Scheduler({ dbPath })`).
  *   - Carbon-receipt audit trail survives process restart.
  *
- * Out of scope for v0.2 (tracked in PLAN.md):
+ * Out of scope for v0.2 (tracked in ROADMAP.md):
  *   - Cross-provider routing.
  *   - WattTime marginal-emissions feed.
  *   - Gemini / local-Ollama adapters.

@@ -25,7 +25,7 @@ Ship after must-fix.
 ## Strengths
 
 - **Tasteful scope and honest deferrals.** Every README, the MCP
-  server README, the Claude Code example, the SKILL.md, and PLAN.md
+  server README, the Claude Code example, the SKILL.md, and ROADMAP.md
   all explicitly call out what's *not* in v0.1 (Batch API dispatch,
   SQLite persistence, cross-provider routing, Python port). That kind
   of honesty is the difference between an OSS project that gets
@@ -50,7 +50,7 @@ Ship after must-fix.
   in `tsconfig.base.json`. That's the right baseline for a public
   library.
 - **Apache-2.0 (with the patent grant) is the right license** for a
-  project that plans to push MCP spec PRs. Called out in PLAN.md.
+  project that plans to push MCP spec PRs. Called out in ROADMAP.md.
 - **Landing site is restrained and on-brand.** Single page, no JS, no
   framework, deployable to anything. The hero copy ("One MCP call.
   Three honest tools. Auditable carbon receipts.") is good.
@@ -262,12 +262,12 @@ Ship after must-fix.
 - **Severity:** Important
 - **Issue:** The "region-locking for privacy (us-only / eu-only)"
   field is exported in `DeferOptions` and documented as part of the
-  public API in PLAN.md, but nothing reads it. Either it does
+  public API in ROADMAP.md, but nothing reads it. Either it does
   something or it doesn't; shipping a public field that silently
   ignores its input is exactly the kind of thing OSS reviewers cite as
   "broken contracts" in v0.1.
 - **Fix:** Remove from `DeferOptions` for v0.1; re-add when the
-  feature actually exists. Mention as "planned" in PLAN.md only.
+  feature actually exists. Mention as "planned" in ROADMAP.md only.
 
 ### 15. `zod` is a runtime dep of `@ebb-ai/core` but unused
 - **File:** `packages/core-ts/package.json:24`,
@@ -326,7 +326,7 @@ Ship after must-fix.
   `cache: "pnpm"` is fine, but you can additionally cache
   `~/.local/share/pnpm/store` for faster CI on PRs with no lockfile
   change.
-- **README "Roadmap" anchor.** PLAN.md is long; surface a 5-line
+- **README "Roadmap" anchor.** ROADMAP.md is long; surface a 5-line
   "What v0.1 actually does today" / "What v0.2 adds" callout in
   README so a drive-by reader gets the picture without opening PLAN.
 - **`apps/site` has no link to itself.** No published URL anywhere
@@ -416,7 +416,7 @@ path. But several risk-weighted tests are missing:
   scheduling overhead, not the real LLM execution; real
   carbon-accounting lands in v0.2 alongside the Batch API adapters".
   Right now, advertising "auditable carbon receipts" overstates v0.1.
-- **PLAN.md says `core-py/` ships in week 2 month 2** (v0.2). Root
+- **ROADMAP.md says `core-py/` ships in week 2 month 2** (v0.2). Root
   README lists it in the Components table without a "(planned)" tag.
   Reconcile.
 - **README "Quick start"** prefaces the MCP install with "from this

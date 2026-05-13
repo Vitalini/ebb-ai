@@ -13,7 +13,7 @@ This package is the Python port of [`@ebb-ai/core`](../core-ts/). The
 two stay in lock-step on every public name; the only deliberate
 asymmetry is that the Python port ships **SQLite-backed durable
 persistence** from day one, while the TypeScript port is still
-in-memory at v0.1. See [`PLAN.md`](../../PLAN.md) section 4.1.
+in-memory at v0.1. See [`ROADMAP.md`](../../ROADMAP.md) section 4.1.
 
 > Status: v0.2 · 2026-05 · pre-PyPI, install from source.
 
@@ -345,7 +345,7 @@ The test suite covers:
 - **v0.4** — Gemini adapter; local-Ollama route; MCP spec PRs for
   `priority` / `deadline` / `carbon_budget` fields.
 
-See [`PLAN.md`](../../PLAN.md) for the full 24-week plan.
+See [`ROADMAP.md`](../../ROADMAP.md) for the full 24-week plan.
 
 ---
 

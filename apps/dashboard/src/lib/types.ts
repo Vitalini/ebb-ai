@@ -7,7 +7,7 @@
  * still under heavy iteration).
  *
  * If/when the dashboard starts calling the MCP server or core-ts directly
- * (planned for v0.3 per `PLAN.md` §4.4), replace these with an import
+ * (planned for v0.3 per `ROADMAP.md` §4.4), replace these with an import
  * from `@ebb-ai/core` and delete this file.
  */
 

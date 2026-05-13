@@ -22,4 +22,4 @@ This is meant to be deployable to GitHub Pages, Vercel, Netlify, or any
 static host with zero config. There is no framework, no JS, no
 build. The dashboard component (live grid map, queue status) lands in
 a separate `apps/dashboard/` package once the public API stabilizes —
-see `../../PLAN.md` section 7 Month 4.
+see `../../ROADMAP.md` section 7 Month 4.

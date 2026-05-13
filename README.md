@@ -226,7 +226,7 @@ package.
 
 ## Documentation
 
-- [`PLAN.md`](./PLAN.md) — 24-week execution plan, architecture,
+- [`ROADMAP.md`](./ROADMAP.md) — 24-week execution plan, architecture,
   roadmap, success metrics.
 - [`docs/`](./docs/) — design docs, MCP spec proposals (forthcoming).
 - [`examples/`](./examples/) — OpenClaw demo skill, Claude Code config.
@@ -242,7 +242,7 @@ package.
 ## Contributing
 
 This project is in active early development. Issues and PRs welcome;
-see the `PLAN.md` roadmap for current scope. Major new features should
+see the `ROADMAP.md` roadmap for current scope. Major new features should
 be discussed in an issue first to avoid duplicate effort.
 
 ---

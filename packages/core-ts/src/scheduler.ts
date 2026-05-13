@@ -7,7 +7,7 @@
  *   - Sleep until the chosen window, then dispatch the task.
  *   - Record a carbon receipt on the resulting TaskRecord.
  *
- * Out of scope for v0.1 (see PLAN.md sections 7 and 9):
+ * Out of scope for v0.1 (see ROADMAP.md sections 7 and 9):
  *   - Durable persistence (everything is in-memory).
  *   - Cross-provider routing.
  *   - Anthropic / OpenAI Batch API integration.

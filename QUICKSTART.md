@@ -268,7 +268,7 @@ python3 -m venv .venv && . .venv/bin/activate && pip install -e ".[dev,anthropic
 
 - [Architecture](./apps/site/architecture.html) — system diagram + data flow
 - [Roadmap](./apps/site/roadmap.html) — v0.1 → v1.0
-- [PLAN.md](./PLAN.md) — full 24-week execution plan
+- [ROADMAP.md](./ROADMAP.md) — full 24-week execution plan
 - [CHANGELOG.md](./CHANGELOG.md) — what shipped in v0.2
 
 Bugs and feature ideas: [Issues](https://github.com/Vitalini/ebb-ai/issues).

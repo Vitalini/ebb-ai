@@ -321,7 +321,7 @@ their mind, and how to mitigate the operational failure modes
 - Reference integrations for Claude Desktop, Claude Code, OpenClaw,
   and OpenAI Codex CLI in `examples/`.
 - Static landing site under `apps/site/` (no JS, no framework).
-- 24-week project plan in `PLAN.md`.
+- 24-week project plan in `ROADMAP.md`.
 
 ### Fixed
 - (Pre-v0.1.0 engineering review.) Carbon budget was previously

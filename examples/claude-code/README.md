@@ -133,4 +133,4 @@ prompts. Add to `~/.claude/settings.json`:
 - Receipts in v0.1 measure scheduling overhead, not the real LLM
   execution — that lands with the Batch API adapters in v0.2.
 
-All three are tracked in `../../PLAN.md`.
+All three are tracked in `../../ROADMAP.md`.

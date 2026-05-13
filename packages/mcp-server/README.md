@@ -98,4 +98,4 @@ Add to `~/.openclaw/mcp.json`:
   v0.2.
 - Single-region grid feed. Multi-region routing lands in v0.3.
 
-See `../../PLAN.md` for the full roadmap.
+See `../../ROADMAP.md` for the full roadmap.

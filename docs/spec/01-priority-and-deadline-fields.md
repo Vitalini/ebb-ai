@@ -161,6 +161,6 @@ Happy to draft the PR once we've converged on placement.
    private-extension semantics and document the workaround in the
    project README.
 
-In all three cases the engagement itself is **Category C evidence**
-(peer review / standards engagement) for the internal-planning review,
+In all three cases the engagement itself is valuable — substantive
+peer review of an MCP-protocol question pushes the spec forward
 regardless of merge outcome.

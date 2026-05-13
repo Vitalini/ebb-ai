@@ -14,7 +14,7 @@ send the PR.
 If your change is larger (new feature, API change, new provider
 adapter, anything in the spec proposal layer) please **open an issue
 first**. We want to discuss the shape before you invest time. The
-24-week roadmap is in [`PLAN.md`](./PLAN.md); the success metrics in
+24-week roadmap is in [`ROADMAP.md`](./ROADMAP.md); the success metrics in
 section 8 reflect what we're aiming for in the v0.x line. Anything
 outside that scope is welcome to discuss but may be deferred.
 
