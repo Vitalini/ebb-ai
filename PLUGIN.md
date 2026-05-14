@@ -19,12 +19,18 @@ claude plugin marketplace add Vitalini/ebb-ai
 claude plugin install ebb-ai
 ```
 
-That's it. Restart `claude` and the plugin is live:
+That's it. Restart `claude` and the plugin is live. Full command surface:
 
-- `/ebb-ai:defer "<task>" --by 24h` — schedule a deferrable LLM task for the
-  cleanest grid-energy window inside the deadline.
-- `/ebb-ai:check [<task_id>]` — check status of one task or list all pending.
-- `/ebb-ai:grid [<zone>]` — current and 24-hour carbon intensity for a region.
+| Command | Purpose |
+|---|---|
+| `/ebb-ai:defer <task> --by <when>` | Queue a deferrable LLM task |
+| `/ebb-ai:plan <task> --by <when>` | Preview the chosen window, no commit |
+| `/ebb-ai:check [<id>\|--all]` | List or detail of queued tasks |
+| `/ebb-ai:cancel <id> \| --all` | Remove a task (or all queued/scheduled) |
+| `/ebb-ai:expedite <id>` | Run now, bypass the carbon window |
+| `/ebb-ai:reschedule <id> --by <new>` | Change the deadline, re-score |
+| `/ebb-ai:retry <id>` | Re-dispatch a failed task |
+| `/ebb-ai:grid <zone>` | Just look at the grid, no task involved |
 
 Plus a skill, `carbon-aware-coding`, which teaches Claude when to reach for
 `/ebb-ai:defer` automatically — for example when you say *"do this later"* or
@@ -32,6 +38,53 @@ Plus a skill, `carbon-aware-coding`, which teaches Claude when to reach for
 
 The plugin auto-configures the `ebb-ai` MCP server via `npx -y @ebb-ai/mcp`
 on first invocation, so no separate `claude mcp add` step is needed.
+
+### Persistence (new in v0.7.1)
+
+Tasks queued via `/ebb-ai:defer` are persisted to `~/.ebb-ai/queue.db`
+(SQLite) by default. The queue survives Claude Code restarts, is
+shared across MCP hosts (Claude Code, Claude Desktop, Cursor), and
+can be inspected from the CLI:
+
+```bash
+npx @ebb-ai/cli list
+```
+
+To override the path: set `EBB_DB_PATH=/some/where/queue.db` in the
+plugin's `.mcp.json` env block (or your shell). Use
+`EBB_DB_PATH=:memory:` to opt out of persistence (mainly useful for
+tests).
+
+### Actually dispatching tasks
+
+The MCP server **queues** tasks but does not run a clock. Actual
+dispatch at the chosen window requires the **`ebb tick` daemon**:
+
+```bash
+npm install -g @ebb-ai/cli
+ebb install      # registers launchd (macOS) / systemd (Linux) cron-tick
+ebb status       # confirm the tick is wired
+```
+
+Until the daemon is installed, tasks sit queued and you can dispatch
+them manually with `ebb tick --once`. This is a known v0.7.1 sharp
+edge — the plugin install path doesn't auto-install the daemon yet
+(adds reasonably-scary system-level state). v0.8 will offer an
+interactive opt-in.
+
+### Result delivery
+
+Three options to get the result back after a task completes:
+
+1. **Poll** — `/ebb-ai:check <task_id>` returns the LLM response under
+   `result` once the receipt is written.
+2. **File output** — pass `--output <abs-path>` at defer time. The
+   dispatcher writes `{ taskId, result, receipt }` as JSON to that
+   path on completion. Pair with `tail -f` or a file-watcher to get
+   a desktop-grade "task done" surface.
+3. **CLI inbox** — point `--output` at `~/.ebb-ai/inbox/<id>.json`;
+   a tiny `fswatch` / `entr` loop can pick it up and forward to
+   Telegram, email, macOS notifications — your choice.
 
 ## Example
 

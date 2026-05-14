@@ -40,9 +40,32 @@ Use the **`/ebb-ai:defer`** slash command — that is its sole purpose. Pass:
   use `--by 24h`. If they said "by Friday at 9", convert to ISO-8601.
 - `--region` only when the user named one. Otherwise let the default fire.
 - `--budget` only when the user gave a numeric carbon ceiling.
+- `--output <path>` only when the user wants the result written to a
+  file (so `tail -f` or a file-watcher surfaces it).
 
 The command will return immediately with a `task_id`, the scheduled time, and
 the projected carbon. You do **not** need to dispatch the task yourself.
+
+As of v0.7.1 the MCP server persists tasks to `~/.ebb-ai/queue.db` by
+default — queued tasks survive Claude Code restarts and are shared
+across MCP hosts.
+
+## The full command surface
+
+| Command | Purpose |
+|---|---|
+| `/ebb-ai:defer <task> --by <when>` | Queue a deferrable LLM task |
+| `/ebb-ai:plan <task> --by <when>` | Preview the chosen window, no commit |
+| `/ebb-ai:check [<id>\|--all]` | List or detail of queued tasks |
+| `/ebb-ai:cancel <id> \| --all` | Remove a task (or all queued/scheduled) |
+| `/ebb-ai:expedite <id>` | Run now, bypass the carbon window |
+| `/ebb-ai:reschedule <id> --by <new>` | Change the deadline, re-score |
+| `/ebb-ai:retry <id>` | Re-dispatch a failed task |
+| `/ebb-ai:grid <zone>` | Just look at the grid, no task involved |
+
+For "should I defer this?" or "when would be best?" — use **`/ebb-ai:plan`**,
+which returns the same window math without enqueueing. Commit with
+`/ebb-ai:defer` only after the plan looks right.
 
 ## Reading the receipt
 
@@ -52,6 +75,26 @@ use **`/ebb-ai:check`**. The receipt includes:
 - `scheduled_for` vs `completed_at` — did it dispatch on time?
 - `estimated_carbon_g` vs `actual_carbon_g` — how good was the forecast?
 - `result` — the LLM response itself, ready to surface to the user.
+
+If the user supplied `--output` at defer time, the same JSON also
+appears at that path — they can `cat` it or have a file-watcher pick
+it up.
+
+## When dispatch isn't happening
+
+Deferred tasks live in `~/.ebb-ai/queue.db` (or the user's
+`EBB_DB_PATH`). The MCP server only **queues** — it doesn't run a
+clock. Actual dispatch needs the **`ebb tick` daemon**:
+
+```bash
+npm install -g @ebb-ai/cli
+ebb install      # registers launchd (macOS) / systemd (Linux) cron-tick
+```
+
+If the user reports that a task "never ran", first check whether the
+daemon is installed (`ebb status`). The most common bug at v0.7.1 is
+"plugin installed, daemon not installed — tasks accumulate but never
+fire."
 
 ## Anti-patterns to avoid
 

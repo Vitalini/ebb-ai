@@ -23,8 +23,18 @@ Parse `$ARGUMENTS` into:
 - **`--region <zone>`** — optional Electricity Maps zone code (e.g.
   `US-CAL-CISO`, `GB`, `FR`). **Default: `US-CAL-CISO`** (heuristic — most
   AWS/GCP US workloads run there). Tell the user the default if you guessed.
-- **`--model <name>`** — optional vendor model hint (e.g. `claude-sonnet-4-5`).
-  Used only for the `batch_eligible` flag in the response.
+- **`--model <name>`** — optional vendor model hint (e.g.
+  `claude-sonnet-4-6`). **Required when the deferred task should
+  actually dispatch via `ebb tick`** — without a model the dispatcher
+  falls back to `claude-sonnet-4-6`.
+- **`--output <abs-path>`** — optional absolute file path. When the
+  task completes, ebb-ai writes `{ taskId, result, receipt }` as JSON
+  to this path. Useful if the user wants the result to land in an
+  inbox folder (so `tail -f` or a file-watcher surfaces it) rather
+  than polling `/ebb-ai:check` by hand. Recommend
+  `~/.ebb-ai/inbox/<task_id>.json` when the user is unsure where to
+  put it.
+- **`--provider <anthropic|openai>`** — optional. Default `anthropic`.
 
 ## What to do
 
@@ -36,6 +46,11 @@ Parse `$ARGUMENTS` into:
    - `region` — the parsed or default zone
    - `carbon_budget_g` — the parsed budget, omit if not given
    - `model` — the parsed model hint, omit if not given
+   - `output_path` — the parsed `--output` value, omit if not given
+   - `provider` — the parsed `--provider` value, omit if not given
+   - **Do not pass `dispatch`.** As of v0.7.1 the MCP server defaults
+     to persistent provider_call mode, which is what the user wants
+     99% of the time.
 3. After the tool returns, report back in this exact shape:
 
    ```
@@ -46,8 +61,14 @@ Parse `$ARGUMENTS` into:
      savings        <estimated_savings_vs_now_pct>% cleaner than running now
      band           <band>
      batch          <yes/no>  ← only if model was provided
+     persisted to   <path-from-tool-response>
      check status   /ebb-ai:check <task_id>
+     cancel         /ebb-ai:cancel <task_id>
    ```
+
+   If the tool response mentions `ebb tick`/daemon, surface that warning
+   verbatim to the user — they need to know whether the task will
+   actually dispatch or just sit in the queue.
 
 4. If `schedule_task` raises `CarbonBudgetExceededError`, do NOT silently fall
    back. Tell the user the budget could not be met, show the cheapest feasible
@@ -64,4 +85,15 @@ Parse `$ARGUMENTS` into:
 /ebb-ai:defer summarize today's GitHub notifications --by 4h
 /ebb-ai:defer translate the README to Russian --by 24h --budget 0.5 --region GB
 /ebb-ai:defer regenerate the test fixtures --by 2026-05-15T08:00:00Z --model claude-haiku-4-5
+/ebb-ai:defer overnight log triage --by 8h --region US-MIDA-PJM --output ~/.ebb-ai/inbox/log-triage.json
 ```
+
+## Related commands
+
+- `/ebb-ai:check [<task_id>]` — list / get status of deferred tasks
+- `/ebb-ai:plan <task> --by <when>` — preview window without committing
+- `/ebb-ai:cancel <task_id>` — drop a queued/scheduled task
+- `/ebb-ai:expedite <task_id>` — run now, bypass the carbon window
+- `/ebb-ai:reschedule <task_id> --by <new>` — change the deadline
+- `/ebb-ai:retry <task_id>` — re-dispatch a failed task
+- `/ebb-ai:grid <zone>` — look at the grid, no task involved

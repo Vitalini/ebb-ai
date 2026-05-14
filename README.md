@@ -146,7 +146,14 @@ That ships three slash commands (`/ebb-ai:defer`, `/ebb-ai:check`,
 ```
 > /ebb-ai:defer "Summarize today's GitHub notifications" --by 4h
 Deferred ✓ 38% cleaner than now, scheduled for 22:15 UTC, est. 0.34 g CO2e
+
+> /ebb-ai:check
+2 tasks queued · oldest in 1h · cleanest at 03:00 UTC
 ```
+
+Full command surface: `/ebb-ai:{defer, plan, check, cancel, expedite,
+reschedule, retry, grid}`. Tasks persist to `~/.ebb-ai/queue.db` and
+survive Claude Code restarts.
 
 ### As an MCP server (Claude Desktop / Cursor / Cline / Zed)
 

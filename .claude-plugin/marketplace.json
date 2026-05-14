@@ -9,8 +9,8 @@
   "plugins": [
     {
       "name": "ebb-ai",
-      "description": "Three slash commands (/ebb-ai:defer, /ebb-ai:check, /ebb-ai:grid), a carbon-aware-coding skill, and auto-wires the @ebb-ai/mcp MCP server.",
-      "version": "0.7.0",
+      "description": "Eight slash commands (/ebb-ai:{defer, plan, check, cancel, expedite, reschedule, retry, grid}), a carbon-aware-coding skill, persistent SQLite queue, and auto-wires the @ebb-ai/mcp MCP server.",
+      "version": "0.7.1",
       "source": "./"
     }
   ]

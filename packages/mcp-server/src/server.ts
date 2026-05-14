@@ -15,6 +15,9 @@
  * the whole stack still runs end-to-end.
  */
 
+import { mkdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -34,8 +37,48 @@ import { z } from "zod";
 
 const DEFAULT_REGION = process.env.EBB_DEFAULT_REGION ?? "US-CAL-CISO";
 
+/**
+ * Resolve where the scheduler should store its persistent queue. v0.7.1
+ * makes persistence the default — without it, every MCP server restart
+ * dropped the entire queue (one of the loudest UX bugs reported). The
+ * order:
+ *
+ *   1. `EBB_DB_PATH` env var if set (explicit path, used unchanged).
+ *   2. `~/.ebb-ai/queue.db` otherwise. Parent directory is created if
+ *      missing so the first call doesn't crash with ENOENT.
+ *
+ * To opt out of persistence and use the old in-memory mode, set
+ * `EBB_DB_PATH=:memory:` — better-sqlite3 treats that as an ephemeral
+ * database. Mostly useful for tests.
+ */
+function resolveDbPath(): string {
+  const explicit = process.env.EBB_DB_PATH;
+  if (explicit) return explicit;
+  return join(homedir(), ".ebb-ai", "queue.db");
+}
+
+const DB_PATH = resolveDbPath();
+if (DB_PATH !== ":memory:") {
+  try {
+    mkdirSync(dirname(DB_PATH), { recursive: true });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(
+      `[ebb-mcp] could not create ${dirname(DB_PATH)} — falling back to in-memory:`,
+      err,
+    );
+  }
+}
+
+const DEFAULT_MODEL =
+  process.env.EBB_DEFAULT_MODEL ?? "claude-sonnet-4-6";
+
 const feed = electricityMapsFeed();
-const scheduler = new Scheduler({ feed, defaultRegion: DEFAULT_REGION });
+const scheduler = new Scheduler({
+  feed,
+  defaultRegion: DEFAULT_REGION,
+  dbPath: DB_PATH,
+});
 
 function buildAdapters(): { anthropic?: ProviderAdapter; openai?: ProviderAdapter } {
   const out: { anthropic?: ProviderAdapter; openai?: ProviderAdapter } = {};
@@ -99,7 +142,7 @@ const scheduleTaskInput = z.object({
     .boolean()
     .optional()
     .describe(
-      "If true, persist a provider_call task body that `ebb tick` (CLI) or scheduler.tick (library) can dispatch via the configured provider. Default false — task stores the prompt only.",
+      "If true (default in v0.7.1+), persist a provider_call task body that `ebb tick` (CLI) or scheduler.tick (library) can dispatch via the configured provider. Set to false only to enqueue a placeholder prompt without a dispatchable body (legacy in-memory mode).",
     ),
   provider: z
     .enum(["anthropic", "openai"])
@@ -169,7 +212,7 @@ const recommendWindowInput = z.object({
 });
 
 const server = new Server(
-  { name: "ebb-mcp", version: "0.5.0" },
+  { name: "ebb-mcp", version: "0.7.1" },
   { capabilities: { tools: {} } },
 );
 
@@ -323,6 +366,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ["task_id"],
       },
     },
+    {
+      name: "cancel_all",
+      description:
+        "Bulk-cancel every task in the queue that is still cancellable (status `queued` or `scheduled`). Running/completed/failed/cancelled tasks are left alone. Optionally filter by status. Returns the number of tasks cancelled.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          status: {
+            type: "string",
+            description:
+              "Optional. If set, cancel only tasks in this status. Valid: 'queued', 'scheduled'. Defaults to both.",
+            enum: ["queued", "scheduled"],
+          },
+        },
+      },
+    },
   ],
 }));
 
@@ -407,12 +466,15 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
             ],
           };
         }
-        // Persistent provider_call (v0.4+) — dispatchable by `ebb tick`.
-        if (parsed.dispatch) {
+        // Persistence-by-default (v0.7.1+) — dispatchable by `ebb tick`.
+        // Opt out with `dispatch=false` for the legacy in-memory closure
+        // mode (mostly useful for testing or no-dispatch placeholders).
+        const shouldDispatch = parsed.dispatch ?? true;
+        if (shouldDispatch) {
           const spec: ProviderCallSpec = {
             type: "provider_call",
             provider: parsed.provider ?? "anthropic",
-            model: parsed.model ?? "claude-sonnet-4-5",
+            model: parsed.model ?? DEFAULT_MODEL,
             prompt: parsed.prompt,
             outputPath: parsed.output_path,
             redactInReceipt: parsed.redact_in_receipt,
@@ -422,29 +484,43 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
             region: parsed.region,
             carbonBudgetG: parsed.carbon_budget_g,
           });
+          const persistedAt =
+            DB_PATH === ":memory:" ? "(in-memory)" : DB_PATH;
           return {
             content: [
               {
                 type: "text",
                 text:
-                  `Task queued (provider_call, dispatchable by \`ebb tick\`).\n` +
+                  `Task persisted (provider_call, dispatchable by \`ebb tick\`).\n` +
                   `task_id: ${record.taskId}\n` +
                   `provider: ${spec.provider}\n` +
                   `model: ${spec.model}\n` +
                   `region: ${record.region}\n` +
                   `status: ${record.status}\n` +
                   `scheduled_for: ${record.scheduledFor ?? "(immediate)"}\n` +
-                  `deadline: ${parsed.deadline}`,
+                  `deadline: ${parsed.deadline}\n` +
+                  `persisted_to: ${persistedAt}\n` +
+                  `\n` +
+                  `To actually dispatch tasks at their windows, run the\n` +
+                  `\`ebb tick\` daemon (separate process):\n` +
+                  `  npm install -g @ebb-ai/cli\n` +
+                  `  ebb install      # registers launchd/systemd cron-tick\n` +
+                  `\n` +
+                  `Without the daemon the task sits queued until you manually\n` +
+                  `run \`ebb tick --once\` against the same EBB_DB_PATH.`,
               },
             ],
           };
         }
-        // Default v0.1 behavior: closure-based; agent dispatches LLM itself.
+        // Legacy closure-based mode (opt-in via dispatch=false). The closure
+        // does no LLM work — it's a placeholder useful for testing or for
+        // workflows where the caller dispatches inline.
         const record = scheduler.enqueue(
           async () => ({
             prompt: parsed.prompt,
             model: parsed.model ?? null,
-            dispatched: true,
+            dispatched: false,
+            note: "closure placeholder — dispatch=true on schedule_task to persist a real provider_call",
           }),
           {
             deadline: parsed.deadline,
@@ -457,13 +533,14 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
             {
               type: "text",
               text:
-                `Task queued (closure-based, in-process only).\n` +
+                `Task queued (closure placeholder, in-process only).\n` +
                 `task_id: ${record.taskId}\n` +
                 `region: ${record.region}\n` +
                 `status: ${record.status}\n` +
                 `deadline: ${parsed.deadline}\n` +
-                `Note: This task type does NOT survive process restart. ` +
-                `Pass dispatch=true to persist a provider_call body that survives via ebb tick.`,
+                `Note: dispatch=false placeholder. Will NOT actually call ` +
+                `the LLM. Remove dispatch=false to enqueue a real ` +
+                `provider_call (default in v0.7.1+).`,
             },
           ],
         };
@@ -580,6 +657,42 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         const msg = err instanceof Error ? err.message : String(err);
         return { content: [{ type: "text", text: `update_deadline rejected: ${msg}` }], isError: true };
       }
+    }
+
+    if (name === "cancel_all") {
+      const cancelAllInput = z.object({
+        status: z.enum(["queued", "scheduled"]).optional(),
+      });
+      const parsed = cancelAllInput.parse(args);
+      const allTasks = scheduler.listTasks();
+      const targets = allTasks.filter(
+        (t): t is NonNullable<typeof t> =>
+          !!t &&
+          (t.status === "queued" || t.status === "scheduled") &&
+          (!parsed.status || t.status === parsed.status),
+      );
+      let cancelled = 0;
+      const errors: string[] = [];
+      for (const t of targets) {
+        try {
+          scheduler.cancelTask(t.taskId);
+          cancelled++;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          errors.push(`${t.taskId}: ${msg}`);
+        }
+      }
+      const lines = [
+        `Cancelled ${cancelled} of ${targets.length} ${
+          parsed.status ?? "queued/scheduled"
+        } task(s).`,
+      ];
+      if (errors.length > 0) {
+        lines.push("");
+        lines.push("Errors:");
+        for (const e of errors) lines.push(`  ${e}`);
+      }
+      return { content: [{ type: "text", text: lines.join("\n") }] };
     }
 
     if (name === "retry_task") {
@@ -738,10 +851,9 @@ async function main() {
   await server.connect(transport);
   // eslint-disable-next-line no-console
   console.error(
-    "[ebb-mcp] ready (stdio) — region=" +
-      DEFAULT_REGION +
-      ", grid feed=" +
-      feed.source,
+    `[ebb-mcp] ready (stdio, v0.7.1) — region=${DEFAULT_REGION}, ` +
+      `grid feed=${feed.source}, ` +
+      `db=${DB_PATH === ":memory:" ? "in-memory" : DB_PATH}`,
   );
 }
 
