@@ -128,6 +128,20 @@ right now."
 
 ---
 
+## Architecture
+
+![ebb-ai architecture diagram](./docs/release/v0.7.1/diagrams/architecture.png)
+
+The MCP server is a thin stdio process the agent host (Claude Code,
+Claude Desktop, Cursor, Cline, Zed, OpenClaw) spawns. It enqueues
+work to a SQLite-backed queue at `~/.ebb-ai/queue.db`; an off-process
+`ebb tick` daemon (launchd / systemd / cron) reads scheduled rows
+and dispatches them to the LLM provider at the chosen window. The
+grid feed is a side-channel — the router picks per-zone between four
+real-data sources before falling back to mock.
+
+![grid feed routing](./docs/release/v0.7.1/diagrams/grid-feed-routing.png)
+
 ## Quick start
 
 **See [QUICKSTART.md](./QUICKSTART.md) — four steps, five minutes.**

@@ -1,0 +1,33 @@
+%% ebb-ai architecture (v0.7.1)
+%% Request flow from agentic-AI client → MCP server → SQLite queue →
+%% off-process tick daemon → LLM provider. Carbon receipts and grid feed
+%% are side-channels.
+flowchart LR
+    A["Agent host<br/>Claude Code · Desktop · Cursor<br/>Cline · Zed · OpenClaw"]
+
+    A -- "schedule_task<br/>recommend_window<br/>check_queue_status" --> M["@ebb-ai/mcp<br/>stdio server"]
+
+    M -- "enqueue<br/>provider_call" --> Q[("SQLite<br/>~/.ebb-ai/queue.db")]
+    M -- "read intensity" --> G["Grid feed router<br/>UK ESO · EIA · ENTSO-E<br/>Electricity Maps · mock"]
+
+    T["ebb tick daemon<br/>launchd / systemd / cron<br/>5-min interval"]
+
+    Q -. "read scheduled rows" .-> T
+    T -- "claim row,<br/>dispatch at window" --> P["LLM provider<br/>Anthropic · OpenAI<br/>+ Batch API"]
+    P -- "response" --> T
+    T -- "write receipt<br/>+ optional outputPath" --> Q
+    T -- "side-channel<br/>file output" --> O["~/.ebb-ai/inbox/<br/>task_id.json"]
+
+    A -. "poll status" .-> M
+    M -. "read receipt" .-> Q
+
+    classDef store fill:#1e293b,stroke:#5eead4,color:#e2e8f0
+    classDef daemon fill:#0f172a,stroke:#fbbf24,color:#e2e8f0
+    classDef provider fill:#0f172a,stroke:#a78bfa,color:#e2e8f0
+    classDef grid fill:#0f172a,stroke:#22c55e,color:#e2e8f0
+    classDef mcp fill:#1e293b,stroke:#5eead4,color:#e2e8f0
+    class Q,O store
+    class T daemon
+    class P provider
+    class G grid
+    class M mcp

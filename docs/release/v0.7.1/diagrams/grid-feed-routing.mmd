@@ -1,0 +1,33 @@
+%% ebb-ai grid feed routing (v0.7.0 — multi-source)
+%% Shows the per-zone dispatch in fetchGridForecast(region, hours).
+flowchart TD
+    R[/region: zone code/] --> D{Which zone?}
+    D -->|GB| UK[UK National Grid ESO<br/>Carbon Intensity API<br/>free · no key · 48h forecast]
+    D -->|US-CAL-CISO<br/>US-TEX-ERCO<br/>US-NE-ISNE<br/>US-MIDA-PJM<br/>US-NY-NYIS<br/>US-MIDW-MISO| EIA{EBB_EIA_API_KEY set?}
+    D -->|FR · DE · ES · IT · NL| EE{EBB_ENTSOE_SECURITY_TOKEN set?}
+    D -->|other| EM{EBB_ELECTRICITY_MAPS_API_KEY set?}
+
+    EIA -->|yes| EIA_OK[US EIA Open Data v2<br/>fuel-mix → IPCC AR5 factors<br/>last-24h shifted as forecast]
+    EIA -->|no| EM
+    EE -->|yes| EE_OK[ENTSO-E Transparency Platform<br/>A75 generation by type<br/>fuel-mix → IPCC AR5 factors]
+    EE -->|no| EM
+    EM -->|yes| EM_OK[Electricity Maps free tier<br/>v3 carbon-intensity forecast]
+    EM -->|no| MOCK[Deterministic mock<br/>sinusoidal intraday curve<br/>region-specific floor]
+
+    UK -.->|fetch fails<br/>or empty data| MOCK
+    EIA_OK -.->|fetch fails| MOCK
+    EE_OK -.->|fetch fails| MOCK
+    EM_OK -.->|fetch fails| MOCK
+
+    UK --> OUT[/GridForecast/]
+    EIA_OK --> OUT
+    EE_OK --> OUT
+    EM_OK --> OUT
+    MOCK --> OUT
+
+    classDef real fill:#0f172a,stroke:#22c55e,color:#e2e8f0
+    classDef synthetic fill:#1e293b,stroke:#fbbf24,color:#e2e8f0
+    classDef router fill:#0f172a,stroke:#5eead4,color:#e2e8f0
+    class UK,EIA_OK,EE_OK,EM_OK real
+    class MOCK synthetic
+    class R,D,EIA,EE,EM,OUT router
