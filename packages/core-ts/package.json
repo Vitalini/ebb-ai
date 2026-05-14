@@ -32,12 +32,12 @@
     "openai": { "optional": true }
   },
   "devDependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
-    "openai": "^4.77.0",
+    "@anthropic-ai/sdk": "^0.96.0",
+    "openai": "^6.37.0",
     "@types/better-sqlite3": "^7.6.12",
-    "typescript": "^5.6.3",
-    "vitest": "^2.1.5",
-    "@types/node": "^22.10.0"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.6",
+    "@types/node": "^25.7.0"
   },
   "repository": {
     "type": "git",
