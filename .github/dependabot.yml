@@ -1,0 +1,62 @@
+version: 2
+updates:
+  # GitHub Actions workflows
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: tuesday
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # pnpm workspace root + each package
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: tuesday
+    open-pull-requests-limit: 5
+    groups:
+      dev-dependencies:
+        dependency-type: development
+      production-dependencies:
+        dependency-type: production
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: "/apps/dashboard"
+    schedule:
+      interval: weekly
+      day: tuesday
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: npm
+    directory: "/packages/core-ts"
+    schedule:
+      interval: weekly
+      day: tuesday
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: npm
+    directory: "/packages/mcp-server"
+    schedule:
+      interval: weekly
+      day: tuesday
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: npm
+    directory: "/packages/cli"
+    schedule:
+      interval: weekly
+      day: tuesday
+    open-pull-requests-limit: 3
+
+  # Python — for the ebb_ai port
+  - package-ecosystem: pip
+    directory: "/packages/core-py"
+    schedule:
+      interval: weekly
+      day: tuesday
+    open-pull-requests-limit: 3
