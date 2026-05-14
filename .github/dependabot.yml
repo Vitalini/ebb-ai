@@ -1,62 +1,47 @@
 version: 2
+
+# Conservative config:
+# - Each ecosystem opens at most 1 grouped PR per scan.
+# - Major-version bumps are IGNORED — we'd rather opt-in to those manually
+#   after reading the release notes than have Dependabot break the build.
+# - Weekly cadence (Tuesday) so the inbox stays quiet.
+
 updates:
-  # GitHub Actions workflows
+  # GitHub Actions
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: weekly
       day: tuesday
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 1
     groups:
       actions:
         patterns: ["*"]
 
-  # pnpm workspace root + each package
+  # Root pnpm workspace (catches every workspace package via pnpm workspaces)
   - package-ecosystem: npm
     directory: "/"
     schedule:
       interval: weekly
       day: tuesday
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 1
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
-      dev-dependencies:
-        dependency-type: development
-      production-dependencies:
-        dependency-type: production
-        update-types: [minor, patch]
+      all-npm:
+        patterns: ["*"]
 
-  - package-ecosystem: npm
-    directory: "/apps/dashboard"
-    schedule:
-      interval: weekly
-      day: tuesday
-    open-pull-requests-limit: 3
-
-  - package-ecosystem: npm
-    directory: "/packages/core-ts"
-    schedule:
-      interval: weekly
-      day: tuesday
-    open-pull-requests-limit: 3
-
-  - package-ecosystem: npm
-    directory: "/packages/mcp-server"
-    schedule:
-      interval: weekly
-      day: tuesday
-    open-pull-requests-limit: 3
-
-  - package-ecosystem: npm
-    directory: "/packages/cli"
-    schedule:
-      interval: weekly
-      day: tuesday
-    open-pull-requests-limit: 3
-
-  # Python — for the ebb_ai port
+  # Python — for ebb_ai
   - package-ecosystem: pip
     directory: "/packages/core-py"
     schedule:
       interval: weekly
       day: tuesday
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 1
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      all-pip:
+        patterns: ["*"]
