@@ -14,12 +14,12 @@ jobs:
       matrix:
         node: ["20", "22"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
         # pnpm version comes from package.json packageManager (v9.15.0).
-        # Do not also set `version:` here — pnpm/action-setup@v4 errors
+        # Do not also set `version:` here — pnpm/action-setup@v6 errors
         # with ERR_PNPM_BAD_PM_VERSION on duplicates.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
           cache: "pnpm"
@@ -38,8 +38,8 @@ jobs:
       matrix:
         python: ["3.11", "3.12"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
       - name: install ebb_ai
