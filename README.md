@@ -109,12 +109,26 @@ follow:
 
 **See [QUICKSTART.md](./QUICKSTART.md) — four steps, five minutes.**
 
-### As an MCP server (recommended path)
+### As a Claude Code plugin (one-command install)
 
 ```bash
-# from this repo, after the install step below
-pnpm --filter @ebb-ai/mcp build
-node packages/mcp-server/dist/server.js
+claude plugin marketplace add Vitalini/ebb-ai
+claude plugin install ebb-ai
+```
+
+That ships three slash commands (`/ebb-ai:defer`, `/ebb-ai:check`,
+`/ebb-ai:grid`), a `carbon-aware-coding` skill, and auto-wires the
+`@ebb-ai/mcp` MCP server. Full plugin reference: **[`PLUGIN.md`](./PLUGIN.md)**.
+
+```
+> /ebb-ai:defer "Summarize today's GitHub notifications" --by 4h
+Deferred ✓ 38% cleaner than now, scheduled for 22:15 UTC, est. 0.34 g CO2e
+```
+
+### As an MCP server (Claude Desktop / Cursor / Cline / Zed)
+
+```bash
+npm install -g @ebb-ai/mcp     # or run via npx -y @ebb-ai/mcp
 ```
 
 Then add to Claude Desktop's MCP config
@@ -125,8 +139,8 @@ macOS):
 {
   "mcpServers": {
     "ebb-ai": {
-      "command": "node",
-      "args": ["/absolute/path/to/ebb-ai/packages/mcp-server/dist/server.js"],
+      "command": "npx",
+      "args": ["-y", "@ebb-ai/mcp"],
       "env": {
         "EBB_ELECTRICITY_MAPS_API_KEY": "optional; falls back to mock data without it. GB is always live via the free UK Carbon Intensity API."
       }

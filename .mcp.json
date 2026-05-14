@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "ebb-ai": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@ebb-ai/mcp"]
+    }
+  }
+}

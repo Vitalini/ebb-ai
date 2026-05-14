@@ -1,0 +1,12 @@
+{
+  "name": "ebb-ai",
+  "description": "Carbon-aware deferral for Claude Code. Send any \"do it later\" task to the cleanest grid-energy window inside your deadline. Adds /ebb-ai:defer, /ebb-ai:check, /ebb-ai:grid slash commands and auto-wires the ebb-ai MCP server.",
+  "version": "0.6.0",
+  "author": {
+    "name": "Vitalii Borovyk",
+    "url": "https://github.com/Vitalini"
+  },
+  "homepage": "https://ebb-ai.com",
+  "repository": "https://github.com/Vitalini/ebb-ai",
+  "license": "Apache-2.0"
+}
