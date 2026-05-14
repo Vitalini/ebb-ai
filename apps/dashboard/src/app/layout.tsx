@@ -6,12 +6,29 @@ export const metadata: Metadata = {
   title: "ebb-ai · live carbon map for AI compute",
   description:
     "Real-time carbon-intensity map of the electricity grids that power major LLM provider regions. Best-window finder for carbon-aware AI workloads.",
-  metadataBase: new URL("https://ebb-ai.dev"),
+  metadataBase: new URL("https://ebb-ai.com"),
   openGraph: {
-    title: "ebb-ai dashboard",
+    title: "ebb-ai — Carbon-aware scheduling for agentic AI workflows",
     description:
-      "Carbon-aware scheduling for agentic AI workflows. Live grid intensity, 72-hour forecasts, best-window finder.",
+      "MCP server that defers non-urgent AI tasks to the cleanest grid window inside your deadline. Per-task carbon receipts, Anthropic + OpenAI Batch APIs, durable SQLite queue. Apache-2.0.",
+    url: "https://ebb-ai.com",
+    siteName: "ebb-ai",
     type: "website",
+    images: [
+      {
+        url: "/og.png",
+        width: 1200,
+        height: 630,
+        alt: "ebb-ai — Carbon-aware scheduling for agentic AI workflows",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "ebb-ai — Carbon-aware scheduling for agentic AI workflows",
+    description:
+      "MCP server that defers non-urgent AI tasks to the cleanest grid window. 169 tests, 8 MCP tools, 10 host integrations. Apache-2.0.",
+    images: ["/og.png"],
   },
 };
 
