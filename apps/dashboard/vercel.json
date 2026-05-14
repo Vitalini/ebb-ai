@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "buildCommand": "cd ../.. && pnpm install --frozen-lockfile=false && pnpm --filter @ebb-ai/core build && pnpm --filter @ebb-ai/dashboard build",
-  "installCommand": "echo 'install handled by buildCommand'",
+  "installCommand": "cd ../.. && pnpm install --frozen-lockfile=false",
+  "buildCommand": "cd ../.. && pnpm --filter @ebb-ai/core build && pnpm --filter @ebb-ai/dashboard build",
   "outputDirectory": ".next"
 }
