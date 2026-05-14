@@ -1,23 +1,24 @@
 /**
  * GET /api/grid/[region]?hours=72
  *
- * Returns a GridForecast for the requested zone, sourced from Electricity
- * Maps if `EBB_ELECTRICITY_MAPS_API_KEY` is set, otherwise from the local
- * deterministic mock.
+ * Returns a GridForecast for the requested zone via the per-zone router
+ * `fetchGridForecast`:
+ *   - GB           → UK National Grid ESO Carbon Intensity API (free, no key)
+ *   - other zones  → Electricity Maps (when EBB_ELECTRICITY_MAPS_API_KEY is set)
+ *   - any failure  → deterministic mock curve
  *
  * Failure modes:
  *   - Bad region → 400
- *   - Electricity Maps unreachable or auth fails → silently fall back to
- *     the mock (logged once to stderr), 200 with `source: "mock"`. This
- *     mirrors the core-ts behavior so the dashboard never goes dark.
+ *   - Upstream feed unreachable → silently fall back to mock, 200 with
+ *     `source: "mock"` (logged once to stderr). The dashboard never goes dark.
  *
- * Cache: 5 minutes at the edge (s-maxage). The free-tier Electricity Maps
- * API does not promise sub-hour freshness; 5 minutes is a fair compromise
- * between cost and "live" feel.
+ * Cache: 5 minutes at the edge (s-maxage). Neither upstream feed promises
+ * sub-hour freshness; 5 minutes is a fair compromise between cost and
+ * "live" feel.
  */
 
 import { NextResponse } from "next/server";
-import { fetchElectricityMaps, mockGridForecast } from "@/lib/grid";
+import { fetchGridForecast } from "@/lib/grid";
 import { REGION_BY_ZONE } from "@/lib/regions";
 
 export const runtime = "nodejs";
@@ -47,23 +48,7 @@ export async function GET(
   const hoursParam = url.searchParams.get("hours");
   const hours = clampHours(hoursParam);
 
-  const apiKey = process.env.EBB_ELECTRICITY_MAPS_API_KEY;
-  if (apiKey) {
-    try {
-      const forecast = await fetchElectricityMaps(region, hours, apiKey);
-      return NextResponse.json(forecast, {
-        headers: {
-          "cache-control": "public, s-maxage=300, stale-while-revalidate=60",
-        },
-      });
-    } catch (err) {
-      console.warn(
-        `[ebb-ai/api/grid] electricity-maps fetch failed (${(err as Error).message}); using mock`,
-      );
-    }
-  }
-
-  const forecast = mockGridForecast(region, hours);
+  const forecast = await fetchGridForecast(region, hours);
   return NextResponse.json(forecast, {
     headers: {
       "cache-control": "public, s-maxage=300, stale-while-revalidate=60",

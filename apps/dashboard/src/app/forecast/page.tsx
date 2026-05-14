@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ForecastChart } from "@/components/forecast-chart";
 import { CarbonBandBadge } from "@/components/carbon-band";
-import { fetchElectricityMaps, mockGridForecast } from "@/lib/grid";
+import { fetchGridForecast } from "@/lib/grid";
 import { REGION_BY_ZONE, REGIONS, findRegion } from "@/lib/regions";
 import type { GridForecast, GridForecastEntry } from "@/lib/types";
 
@@ -11,15 +11,7 @@ export const revalidate = 0;
 const DEFAULT_REGION = "US-CAL-CISO";
 
 async function loadForecast(zone: string, hours = 72): Promise<GridForecast> {
-  const apiKey = process.env.EBB_ELECTRICITY_MAPS_API_KEY;
-  if (apiKey) {
-    try {
-      return await fetchElectricityMaps(zone, hours, apiKey);
-    } catch {
-      // fall through
-    }
-  }
-  return mockGridForecast(zone, hours);
+  return fetchGridForecast(zone, hours);
 }
 
 export default async function ForecastPage({

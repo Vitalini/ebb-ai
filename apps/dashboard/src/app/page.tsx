@@ -1,5 +1,5 @@
 import { RegionCard } from "@/components/region-card";
-import { fetchElectricityMaps, mockGridForecast } from "@/lib/grid";
+import { fetchGridForecast } from "@/lib/grid";
 import { REGIONS } from "@/lib/regions";
 import type { GridForecast } from "@/lib/types";
 
@@ -10,15 +10,11 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 async function loadForecast(zone: string): Promise<GridForecast | null> {
-  const apiKey = process.env.EBB_ELECTRICITY_MAPS_API_KEY;
-  if (apiKey) {
-    try {
-      return await fetchElectricityMaps(zone, 24, apiKey);
-    } catch {
-      // fall through to mock
-    }
+  try {
+    return await fetchGridForecast(zone, 24);
+  } catch {
+    return null;
   }
-  return mockGridForecast(zone, 24);
 }
 
 export default async function HomePage() {
@@ -29,7 +25,11 @@ export default async function HomePage() {
     })),
   );
 
-  const live = forecasts.filter((f) => f.forecast?.source === "electricityMaps").length;
+  const live = forecasts.filter(
+    (f) =>
+      f.forecast?.source === "electricityMaps" ||
+      f.forecast?.source === "ukCarbonIntensity",
+  ).length;
   const total = forecasts.length;
   const cleanCount = forecasts.filter(
     (f) =>
@@ -89,7 +89,11 @@ function Hero({
         <Kpi
           label="feeds live"
           value={live > 0 ? `${live} / ${total}` : "mock"}
-          hint={live === 0 ? "set EBB_ELECTRICITY_MAPS_API_KEY for live data" : undefined}
+          hint={
+            live === 0
+              ? "set EBB_ELECTRICITY_MAPS_API_KEY for live data (GB is always live)"
+              : undefined
+          }
         />
         <Kpi
           label="clean right now"
@@ -158,6 +162,16 @@ function Methodology() {
             grid feed
           </h3>
           <p className="mt-1">
+            GB is powered by the{" "}
+            <a
+              href="https://carbonintensity.org.uk/"
+              className="text-fg hover:text-accent"
+              target="_blank"
+              rel="noreferrer"
+            >
+              National Grid ESO Carbon Intensity API
+            </a>{" "}
+            (free, no key, real 48-hour forecast). Other zones use{" "}
             <a
               href="https://www.electricitymaps.com/"
               className="text-fg hover:text-accent"
@@ -166,8 +180,7 @@ function Methodology() {
             >
               Electricity Maps
             </a>{" "}
-            free-tier API for forecast data. WattTime marginal-emissions
-            support is planned for v0.3.
+            when a key is configured; otherwise a deterministic mock.
           </p>
         </div>
         <div>

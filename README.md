@@ -60,11 +60,13 @@ Windsurf, OpenClaw, OpenAI Codex CLI, Pi). The agent asks
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FVitalini%2Febb-ai&root-directory=apps%2Fdashboard&project-name=ebb-ai-dashboard&repository-name=ebb-ai-dashboard)
 
 Or visit the maintainer-hosted dashboard at
-**[ebb-ai.vercel.app](https://ebb-ai.vercel.app)** (or
-[ebb-ai.com](https://ebb-ai.com) once DNS propagates) to see live
-carbon-intensity forecasts across CAISO, ERCOT, ISO-NE, PJM, France,
-and Germany — and to try the carbon-window planner without
-installing anything.
+**[ebb-ai.com](https://ebb-ai.com)** to see live
+carbon-intensity forecasts across CAISO, ERCOT, ISO-NE, PJM, Great Britain,
+France, and Germany — and to try the carbon-window planner without
+installing anything. Great Britain is powered by the free
+[National Grid ESO Carbon Intensity API](https://carbonintensity.org.uk/)
+(real data, no key required); the other zones use Electricity Maps when
+a key is configured and a deterministic mock otherwise.
 
 ---
 
@@ -126,7 +128,7 @@ macOS):
       "command": "node",
       "args": ["/absolute/path/to/ebb-ai/packages/mcp-server/dist/server.js"],
       "env": {
-        "EBB_ELECTRICITY_MAPS_API_KEY": "optional; falls back to mock data without it"
+        "EBB_ELECTRICITY_MAPS_API_KEY": "optional; falls back to mock data without it. GB is always live via the free UK Carbon Intensity API."
       }
     }
   }
@@ -205,8 +207,20 @@ pnpm --filter @ebb-ai/dashboard dev
 # → http://localhost:3000
 ```
 
-Pages: live carbon-intensity map (6 regions), 72-hour forecast charts,
-best-window planner, queue viewer.
+Pages: live carbon-intensity map (7 regions: CAISO, ERCOT, ISO-NE, PJM,
+GB, FR, DE), 72-hour forecast charts, best-window planner, queue viewer.
+
+**Grid data sources** (per zone, falls back to mock on failure):
+
+| Zone | Source | Notes |
+|---|---|---|
+| `GB` | [UK National Grid ESO Carbon Intensity API](https://carbonintensity.org.uk/) | Free, no auth, real 48h forecast |
+| US ISOs, FR, DE | [Electricity Maps](https://www.electricitymaps.com/) free-tier | Requires `EBB_ELECTRICITY_MAPS_API_KEY` |
+| any zone (fallback) | Deterministic mock curve | Used when no key set or upstream fails |
+
+Want to add a new free public source (WattTime, EIA, ENTSO-E)? See
+`packages/core-ts/src/grid.ts` — each adapter is ~60 lines, drop into
+`multiSourceGridFeed({ feeds: { … } })`.
 
 ---
 

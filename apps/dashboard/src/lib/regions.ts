@@ -9,11 +9,15 @@
  *   - US-NE-ISNE    — ISO New England, host to several Azure regions
  *   - US-MIDA-PJM   — PJM (mid-Atlantic / Virginia), the biggest US-East
  *                     data-center cluster, where Anthropic + OpenAI lean
+ *   - GB            — Great Britain. London is a major EU cloud hub
+ *                     (AWS eu-west-2, Azure UK South). Powered by the free
+ *                     UK National Grid ESO Carbon Intensity API — the only
+ *                     zone with real data when no Electricity Maps key is set.
  *   - FR            — France, nuclear-heavy, where Anthropic Europe and
  *                     Mistral run
  *   - DE            — Germany, large data-center hub, dirtier grid
  *
- * The zone codes match Electricity Maps. Updating this list automatically
+ * Zone codes match Electricity Maps. Updating this list automatically
  * updates the homepage grid.
  */
 
@@ -58,6 +62,13 @@ export const REGIONS: Region[] = [
     longName: "PJM (Mid-Atlantic / Virginia)",
     provider: "AWS us-east-1 · Anthropic primary",
     utcOffset: -5,
+  },
+  {
+    zone: "GB",
+    name: "Great Britain",
+    longName: "Great Britain (National Grid ESO)",
+    provider: "AWS eu-west-2 · Azure UK South",
+    utcOffset: 0,
   },
   {
     zone: "FR",

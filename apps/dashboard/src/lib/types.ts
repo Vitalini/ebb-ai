@@ -35,7 +35,7 @@ export interface GridForecastEntry {
 
 export interface GridForecast {
   region: string;
-  source: "electricityMaps" | "wattTime" | "mock";
+  source: "electricityMaps" | "ukCarbonIntensity" | "wattTime" | "mock";
   /** ISO-8601 timestamp when this forecast was generated. */
   generatedAt: string;
   entries: GridForecastEntry[];

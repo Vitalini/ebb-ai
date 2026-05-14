@@ -27,7 +27,12 @@ export {
 } from "./scheduler.js";
 export type { SchedulerOptions } from "./scheduler.js";
 export { recommendWindow } from "./recommend.js";
-export { mockGridFeed, electricityMapsFeed } from "./grid.js";
+export {
+  mockGridFeed,
+  electricityMapsFeed,
+  ukCarbonIntensityFeed,
+  multiSourceGridFeed,
+} from "./grid.js";
 export type {
   DeferOptions,
   GridForecast,

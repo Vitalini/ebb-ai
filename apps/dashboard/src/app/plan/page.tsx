@@ -1,9 +1,8 @@
 import { BestWindowResult } from "@/components/best-window";
 import { ForecastChart } from "@/components/forecast-chart";
 import {
-  fetchElectricityMaps,
+  fetchGridForecast,
   intensityToGrams,
-  mockGridForecast,
   pickBestWindow,
 } from "@/lib/grid";
 import { REGIONS, findRegion } from "@/lib/regions";
@@ -21,15 +20,7 @@ const DEFAULT_REGION = "US-CAL-CISO";
 const DEFAULT_HORIZON_HOURS = 24;
 
 async function loadForecast(zone: string, hours: number): Promise<GridForecast> {
-  const apiKey = process.env.EBB_ELECTRICITY_MAPS_API_KEY;
-  if (apiKey) {
-    try {
-      return await fetchElectricityMaps(zone, hours, apiKey);
-    } catch {
-      // fall through
-    }
-  }
-  return mockGridForecast(zone, hours);
+  return fetchGridForecast(zone, hours);
 }
 
 export default async function PlanPage({

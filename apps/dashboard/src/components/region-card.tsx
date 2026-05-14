@@ -4,6 +4,20 @@ import { Sparkline } from "./forecast-chart";
 import type { GridForecast } from "@/lib/types";
 import type { Region } from "@/lib/regions";
 
+function sourceLabel(source: GridForecast["source"] | undefined): string {
+  switch (source) {
+    case "electricityMaps":
+      return "live · electricity maps";
+    case "ukCarbonIntensity":
+      return "live · uk grid";
+    case "wattTime":
+      return "live · watttime";
+    case "mock":
+    default:
+      return "mock feed";
+  }
+}
+
 interface RegionCardProps {
   region: Region;
   forecast: GridForecast | null;
@@ -37,7 +51,7 @@ export function RegionCard({ region, forecast }: RegionCardProps) {
               <span className="ml-1 text-xs font-normal text-fg-muted">g/kWh</span>
             </p>
             <p className="text-xs text-fg-muted">
-              {forecast?.source === "mock" ? "mock feed" : "live"}
+              {sourceLabel(forecast?.source)}
             </p>
           </>
         ) : (

@@ -2,13 +2,14 @@
  * Carbon-intensity grid feeds for the dashboard.
  *
  * Ported (and trimmed) from `packages/core-ts/src/grid.ts` so the
- * dashboard does not need a workspace dependency on @ebb-ai/core in v0.2.
+ * dashboard does not need a workspace dependency on @ebb-ai/core.
  *
  *   - `mockGridForecast`: deterministic synthetic curve, zero-config.
- *   - `fetchElectricityMaps`: hits Electricity Maps' free-tier API
- *     with a 5-second timeout. Falls back to the mock on any failure.
- *
- * Used by `/api/grid/[region]/route.ts`.
+ *   - `fetchElectricityMaps`: Electricity Maps free-tier API (key required).
+ *   - `fetchUkCarbonIntensity`: National Grid ESO Carbon Intensity API
+ *     (GB only, no auth, real 48-hour forecast).
+ *   - `fetchGridForecast`: per-zone router. GB → UK feed; other zones →
+ *     Electricity Maps (when key is set) → mock fallback.
  */
 
 import type {
@@ -126,6 +127,113 @@ export async function fetchElectricityMaps(
     generatedAt: new Date().toISOString(),
     entries,
   };
+}
+
+/**
+ * UK National Grid ESO Carbon Intensity API.
+ *
+ * Free, no auth, no key registration. Returns 30-minute interval forecasts
+ * up to 48 hours ahead; we average consecutive pairs into the hourly buckets
+ * the dashboard uses everywhere else.
+ *
+ * `actual` is preferred over `forecast` where available (the upstream API
+ * backfills `actual` for intervals that have moved into the past).
+ *
+ * Docs: https://carbon-intensity.github.io/api-definitions/
+ */
+export async function fetchUkCarbonIntensity(
+  hours: number,
+): Promise<GridForecast> {
+  const now = new Date();
+  now.setMinutes(0, 0, 0);
+  now.setSeconds(0, 0);
+  // API wants YYYY-MM-DDTHH:MMZ.
+  const fromStr = `${now.toISOString().slice(0, 16)}Z`;
+  const url = `https://api.carbonintensity.org.uk/intensity/${fromStr}/fw48h`;
+  const res = await fetch(url, {
+    headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(5_000),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new Error(`UK Carbon Intensity API returned ${res.status}`);
+  }
+  const json = (await res.json()) as {
+    data?: Array<{
+      from: string;
+      to: string;
+      intensity: { forecast: number | null; actual: number | null };
+    }>;
+  };
+  const raw = json.data ?? [];
+  if (raw.length === 0) {
+    throw new Error("UK Carbon Intensity API returned empty forecast");
+  }
+  const hourly: GridForecastEntry[] = [];
+  for (let i = 0; i + 1 < raw.length && hourly.length < hours; i += 2) {
+    const a = raw[i];
+    const b = raw[i + 1];
+    if (!a || !b) continue;
+    const va = a.intensity.actual ?? a.intensity.forecast;
+    const vb = b.intensity.actual ?? b.intensity.forecast;
+    if (va == null || vb == null) continue;
+    const avg = Math.round((va + vb) / 2);
+    hourly.push({
+      datetime: new Date(a.from).toISOString(),
+      carbonIntensityGCo2PerKwh: avg,
+      band: classifyBand(avg),
+    });
+  }
+  if (hourly.length === 0) {
+    throw new Error("UK Carbon Intensity API returned no usable entries");
+  }
+  return {
+    region: "GB",
+    source: "ukCarbonIntensity",
+    generatedAt: new Date().toISOString(),
+    entries: hourly,
+  };
+}
+
+/**
+ * Per-zone routing across the configured providers. The dashboard's only
+ * "smart" feed: picks the right source for each region and silently falls
+ * back to mock so the page never goes dark.
+ *
+ *   - "GB"     → UK Carbon Intensity API (free, no key)
+ *   - everything else, when `EBB_ELECTRICITY_MAPS_API_KEY` is set
+ *             → Electricity Maps free-tier API
+ *   - any failure or missing key → deterministic mock curve
+ *
+ * The returned forecast's `source` field reports the actual data origin,
+ * so the UI can distinguish "live" vs "mock" without inspecting URLs.
+ */
+export async function fetchGridForecast(
+  region: string,
+  hours: number,
+): Promise<GridForecast> {
+  if (region === "GB") {
+    try {
+      return await fetchUkCarbonIntensity(hours);
+    } catch (err) {
+      console.warn(
+        `[ebb-ai/grid] uk-carbon-intensity fetch failed (${(err as Error).message}); using mock`,
+      );
+      return mockGridForecast(region, hours);
+    }
+  }
+
+  const apiKey = process.env.EBB_ELECTRICITY_MAPS_API_KEY;
+  if (apiKey) {
+    try {
+      return await fetchElectricityMaps(region, hours, apiKey);
+    } catch (err) {
+      console.warn(
+        `[ebb-ai/grid] electricity-maps fetch failed (${(err as Error).message}); using mock`,
+      );
+    }
+  }
+  return mockGridForecast(region, hours);
 }
 
 export interface BestWindow {
