@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  eiaFeed,
+  entsoeFeed,
   mockGridFeed,
   multiSourceGridFeed,
   ukCarbonIntensityFeed,
@@ -195,6 +197,152 @@ describe("multiSourceGridFeed", () => {
     const fc = await feed.fetchForecast("DE", 6);
     expect(fc.source).toBe("mock");
     expect(fc.entries.length).toBe(6);
+  });
+});
+
+describe("eiaFeed", () => {
+  it("returns mock when no API key is configured", async () => {
+    delete process.env.EBB_EIA_API_KEY;
+    const fc = await eiaFeed().fetchForecast("US-CAL-CISO", 6);
+    expect(fc.source).toBe("mock");
+    expect(fc.entries.length).toBe(6);
+  });
+
+  it("returns mock for zones EIA does not cover", async () => {
+    const fc = await eiaFeed("test-key").fetchForecast("GB", 6);
+    expect(fc.source).toBe("mock");
+  });
+
+  it("computes intensity from fuel mix via emission factors", async () => {
+    // CAISO is half coal (820 g) + half nuclear (12 g) for two hours.
+    // Expected weighted average: (820 + 12) / 2 = 416 → rounded 416.
+    // Use enough hours so the synthesis round-trips through tail.
+    const rows = [
+      { period: "2026-05-14T10", respondent: "CISO", fueltype: "COL", value: 500 },
+      { period: "2026-05-14T10", respondent: "CISO", fueltype: "NUC", value: 500 },
+      { period: "2026-05-14T11", respondent: "CISO", fueltype: "COL", value: 500 },
+      { period: "2026-05-14T11", respondent: "CISO", fueltype: "NUC", value: 500 },
+    ];
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ response: { data: rows } }), {
+        status: 200,
+      })) as typeof fetch;
+    const fc = await eiaFeed("test-key").fetchForecast("US-CAL-CISO", 3);
+    expect(fc.source).toBe("eia");
+    expect(fc.entries.length).toBe(3);
+    // Every entry should reflect the same fuel-mix intensity (416 g).
+    for (const e of fc.entries) {
+      expect(e.carbonIntensityGCo2PerKwh).toBe(416);
+      expect(e.band).toBe("average"); // 250-450 → average
+    }
+  });
+
+  it("skips fuel-types it does not recognise without crashing", async () => {
+    const rows = [
+      { period: "2026-05-14T10", respondent: "CISO", fueltype: "COL", value: 100 },
+      { period: "2026-05-14T10", respondent: "CISO", fueltype: "XXX_UNKNOWN", value: 9999 },
+    ];
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ response: { data: rows } }), {
+        status: 200,
+      })) as typeof fetch;
+    const fc = await eiaFeed("test-key").fetchForecast("US-CAL-CISO", 1);
+    // 100% coal at 820 g → intensity 820.
+    expect(fc.entries[0]?.carbonIntensityGCo2PerKwh).toBe(820);
+  });
+
+  it("falls back to mock when EIA returns 5xx", async () => {
+    globalThis.fetch = (async () =>
+      new Response("oops", { status: 503 })) as typeof fetch;
+    const fc = await eiaFeed("test-key").fetchForecast("US-CAL-CISO", 4);
+    expect(fc.source).toBe("mock");
+  });
+
+  it("falls back to mock when EIA returns empty data", async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ response: { data: [] } }), {
+        status: 200,
+      })) as typeof fetch;
+    const fc = await eiaFeed("test-key").fetchForecast("US-CAL-CISO", 4);
+    expect(fc.source).toBe("mock");
+  });
+});
+
+describe("entsoeFeed", () => {
+  it("returns mock when no security token is configured", async () => {
+    delete process.env.EBB_ENTSOE_SECURITY_TOKEN;
+    const fc = await entsoeFeed().fetchForecast("FR", 6);
+    expect(fc.source).toBe("mock");
+  });
+
+  it("returns mock for zones ENTSO-E does not cover", async () => {
+    const fc = await entsoeFeed("test-token").fetchForecast("US-CAL-CISO", 6);
+    expect(fc.source).toBe("mock");
+  });
+
+  it("parses XML, computes intensity from psrType mix", async () => {
+    // FR: 1 hour of all nuclear (B14, 12 g), at 1000 MW.
+    // Expected: weighted avg = 12 g/kWh → very_clean.
+    const xml = `
+      <GL_MarketDocument>
+        <TimeSeries>
+          <MktPSRType><psrType>B14</psrType></MktPSRType>
+          <Period>
+            <timeInterval><start>2026-05-14T10:00Z</start><end>2026-05-14T11:00Z</end></timeInterval>
+            <resolution>PT60M</resolution>
+            <Point><position>1</position><quantity>1000</quantity></Point>
+          </Period>
+        </TimeSeries>
+      </GL_MarketDocument>`;
+    globalThis.fetch = (async () =>
+      new Response(xml, { status: 200 })) as typeof fetch;
+    const fc = await entsoeFeed("test-token").fetchForecast("FR", 2);
+    expect(fc.source).toBe("entsoe");
+    expect(fc.entries[0]?.carbonIntensityGCo2PerKwh).toBe(12);
+    expect(fc.entries[0]?.band).toBe("very_clean");
+  });
+
+  it("blends two psrTypes by weighted MWh", async () => {
+    // DE: half coal (820 g) + half wind (11 g) at 1000 each.
+    // Expected: weighted avg = (1000*820 + 1000*11) / 2000 = 415.5 → rounded 416.
+    const xml = `
+      <GL_MarketDocument>
+        <TimeSeries>
+          <MktPSRType><psrType>B05</psrType></MktPSRType>
+          <Period>
+            <timeInterval><start>2026-05-14T10:00Z</start><end>2026-05-14T11:00Z</end></timeInterval>
+            <resolution>PT60M</resolution>
+            <Point><position>1</position><quantity>1000</quantity></Point>
+          </Period>
+        </TimeSeries>
+        <TimeSeries>
+          <MktPSRType><psrType>B19</psrType></MktPSRType>
+          <Period>
+            <timeInterval><start>2026-05-14T10:00Z</start><end>2026-05-14T11:00Z</end></timeInterval>
+            <resolution>PT60M</resolution>
+            <Point><position>1</position><quantity>1000</quantity></Point>
+          </Period>
+        </TimeSeries>
+      </GL_MarketDocument>`;
+    globalThis.fetch = (async () =>
+      new Response(xml, { status: 200 })) as typeof fetch;
+    const fc = await entsoeFeed("test-token").fetchForecast("DE", 2);
+    expect(fc.entries[0]?.carbonIntensityGCo2PerKwh).toBe(416);
+  });
+
+  it("falls back to mock when ENTSO-E returns a 4xx (typical for bad token)", async () => {
+    globalThis.fetch = (async () =>
+      new Response("Unauthorized", { status: 401 })) as typeof fetch;
+    const fc = await entsoeFeed("bad-token").fetchForecast("FR", 4);
+    expect(fc.source).toBe("mock");
+  });
+
+  it("falls back to mock when XML has no TimeSeries blocks", async () => {
+    const xml = "<GL_MarketDocument></GL_MarketDocument>";
+    globalThis.fetch = (async () =>
+      new Response(xml, { status: 200 })) as typeof fetch;
+    const fc = await entsoeFeed("test-token").fetchForecast("FR", 4);
+    expect(fc.source).toBe("mock");
   });
 });
 

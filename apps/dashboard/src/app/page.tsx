@@ -28,7 +28,9 @@ export default async function HomePage() {
   const live = forecasts.filter(
     (f) =>
       f.forecast?.source === "electricityMaps" ||
-      f.forecast?.source === "ukCarbonIntensity",
+      f.forecast?.source === "ukCarbonIntensity" ||
+      f.forecast?.source === "eia" ||
+      f.forecast?.source === "entsoe",
   ).length;
   const total = forecasts.length;
   const cleanCount = forecasts.filter(
@@ -73,7 +75,7 @@ function Hero({
     <section className="space-y-6">
       <div className="inline-flex items-center gap-2 rounded-md border border-accent/40 bg-accent/5 px-3 py-1 font-mono text-xs uppercase tracking-wider text-accent">
         <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-        v0.6 · operator preview
+        v0.7 · operator preview
       </div>
       <h1 className="max-w-3xl text-4xl font-extrabold leading-[1.05] tracking-tight text-fg sm:text-5xl">
         Cheaper inference, smoother grid.
@@ -92,7 +94,7 @@ function Hero({
           value={live > 0 ? `${live} / ${total}` : "mock"}
           hint={
             live === 0
-              ? "set EBB_ELECTRICITY_MAPS_API_KEY for live data (GB is always live)"
+              ? "GB is always live via UK National Grid ESO; add EIA / ENTSO-E keys for the rest"
               : undefined
           }
         />
@@ -160,28 +162,38 @@ function Methodology() {
       <div className="mt-5 grid grid-cols-1 gap-5 text-sm text-fg-muted sm:grid-cols-3">
         <div>
           <h3 className="font-mono text-xs uppercase tracking-wider text-accent">
-            grid feed
+            grid feeds
           </h3>
           <p className="mt-1">
-            GB is powered by the{" "}
+            Multi-source, free-public-data first:{" "}
             <a
               href="https://carbonintensity.org.uk/"
               className="text-fg hover:text-accent"
               target="_blank"
               rel="noreferrer"
             >
-              National Grid ESO Carbon Intensity API
+              UK National Grid ESO
             </a>{" "}
-            (free, no key, real 48-hour forecast). Other zones use{" "}
+            (GB),{" "}
             <a
-              href="https://www.electricitymaps.com/"
+              href="https://www.eia.gov/opendata/"
               className="text-fg hover:text-accent"
               target="_blank"
               rel="noreferrer"
             >
-              Electricity Maps
+              US EIA
             </a>{" "}
-            when a key is configured; otherwise a deterministic mock.
+            (US ISOs),{" "}
+            <a
+              href="https://transparency.entsoe.eu/"
+              className="text-fg hover:text-accent"
+              target="_blank"
+              rel="noreferrer"
+            >
+              ENTSO-E Transparency Platform
+            </a>{" "}
+            (EU). Electricity Maps as universal fallback when a key is
+            set; deterministic mock otherwise.
           </p>
         </div>
         <div>

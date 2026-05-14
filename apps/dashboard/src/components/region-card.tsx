@@ -10,6 +10,10 @@ function sourceLabel(source: GridForecast["source"] | undefined): string {
       return "live · electricity maps";
     case "ukCarbonIntensity":
       return "live · uk grid";
+    case "eia":
+      return "live · us eia";
+    case "entsoe":
+      return "live · entso-e";
     case "wattTime":
       return "live · watttime";
     case "mock":

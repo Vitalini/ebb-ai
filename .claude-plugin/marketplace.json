@@ -10,7 +10,7 @@
     {
       "name": "ebb-ai",
       "description": "Three slash commands (/ebb-ai:defer, /ebb-ai:check, /ebb-ai:grid), a carbon-aware-coding skill, and auto-wires the @ebb-ai/mcp MCP server.",
-      "version": "0.6.0",
+      "version": "0.7.0",
       "source": "./"
     }
   ]

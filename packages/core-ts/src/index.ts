@@ -31,6 +31,8 @@ export {
   mockGridFeed,
   electricityMapsFeed,
   ukCarbonIntensityFeed,
+  eiaFeed,
+  entsoeFeed,
   multiSourceGridFeed,
 } from "./grid.js";
 export type {

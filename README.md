@@ -7,7 +7,7 @@ auditable carbon receipts. MCP-native, ships as an `npm` package and
 a one-command Claude Code plugin.*
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-5eead4)](./LICENSE)
-[![v0.6.0](https://img.shields.io/badge/release-v0.6.0-fbbf24)](https://github.com/Vitalini/ebb-ai/releases/tag/v0.6.0)
+[![v0.7.0](https://img.shields.io/badge/release-v0.7.0-fbbf24)](https://github.com/Vitalini/ebb-ai/releases/tag/v0.7.0)
 [![npm](https://img.shields.io/badge/npm-%40ebb--ai%2Fmcp-cb3837)](https://www.npmjs.com/package/@ebb-ai/mcp)
 [![Tests](https://img.shields.io/badge/tests-169%20passing-22c55e)](#tests)
 [![MCP tools](https://img.shields.io/badge/MCP-8%20tools-5eead4)](https://modelcontextprotocol.io)
@@ -50,19 +50,20 @@ Windsurf, OpenClaw, OpenAI Codex CLI, Pi). The agent asks
 `recommend_window`, sees the plan, then commits via `schedule_task`
 — or doesn't.
 
-> **Status:** v0.6 · 2026-05-14 · `@ebb-ai/{core,mcp,cli}` published
+> **Status:** v0.7 · 2026-05-14 · `@ebb-ai/{core,mcp,cli}` published
 > to npm under the `@ebb-ai` org. **One-command Claude Code plugin**
-> via `claude plugin install ebb-ai`. Multi-source grid feed: UK
-> National Grid ESO Carbon Intensity API live for the GB zone (free,
-> no key, real 48h forecast); Electricity Maps for other zones when
-> a key is set. Anthropic + OpenAI Batch adapters, durable SQLite
-> queue, Python port at parity, live dashboard, `recommend_window`
-> planning endpoint, always-on `ebb tick` CLI with macOS launchd +
-> Linux systemd + pmset/rtcwake wake events, full control surface
-> (`cancel_task` / `expedite_task` / `update_deadline` /
-> `retry_task`), receipt redaction, file output, retry-with-backoff.
-> **169 tests passing across 4 packages and 2 languages.**
-> See [QUICKSTART.md](./QUICKSTART.md).
+> via `claude plugin install ebb-ai`. **Four real-data grid feeds**:
+> UK National Grid ESO Carbon Intensity API (GB, free no key),
+> US EIA Open Data (CAISO / ERCOT / ISO-NE / PJM, free with key),
+> ENTSO-E Transparency Platform (FR / DE, free with token), and
+> Electricity Maps as universal fallback. Anthropic + OpenAI Batch
+> adapters, durable SQLite queue, Python port at parity, live
+> dashboard, `recommend_window` planning endpoint, always-on `ebb
+> tick` CLI with macOS launchd + Linux systemd + pmset/rtcwake wake
+> events, full control surface (`cancel_task` / `expedite_task` /
+> `update_deadline` / `retry_task`), receipt redaction, file output,
+> retry-with-backoff. **88 + Python tests passing across 4 packages
+> and 2 languages.** See [QUICKSTART.md](./QUICKSTART.md).
 
 ### Live demo
 
@@ -248,15 +249,17 @@ GB, FR, DE), 72-hour forecast charts, best-window planner, queue viewer.
 
 **Grid data sources** (per zone, falls back to mock on failure):
 
-| Zone | Source | Notes |
-|---|---|---|
-| `GB` | [UK National Grid ESO Carbon Intensity API](https://carbonintensity.org.uk/) | Free, no auth, real 48h forecast |
-| US ISOs, FR, DE | [Electricity Maps](https://www.electricitymaps.com/) free-tier | Requires `EBB_ELECTRICITY_MAPS_API_KEY` |
-| any zone (fallback) | Deterministic mock curve | Used when no key set or upstream fails |
+| Zone | Source | Auth | Notes |
+|---|---|---|---|
+| `GB` | [UK National Grid ESO Carbon Intensity API](https://carbonintensity.org.uk/) | None | Real 48h forecast, always on |
+| `US-CAL-CISO`, `US-TEX-ERCO`, `US-NE-ISNE`, `US-MIDA-PJM` | [US EIA Open Data](https://www.eia.gov/opendata/) | Free API key (`EBB_EIA_API_KEY`) | Hourly fuel-mix → carbon intensity via IPCC AR5 factors |
+| `FR`, `DE` (plus `ES`, `IT`, `NL` opt-in) | [ENTSO-E Transparency Platform](https://transparency.entsoe.eu/) | Free token (`EBB_ENTSOE_SECURITY_TOKEN`) | Realised generation by type → carbon intensity |
+| any zone (universal fallback) | [Electricity Maps](https://www.electricitymaps.com/) free-tier | `EBB_ELECTRICITY_MAPS_API_KEY` | Used when zone-specific source missing |
+| anything else | Deterministic mock curve | None | Used when no key set or upstream fails |
 
-Want to add a new free public source (WattTime, EIA, ENTSO-E)? See
-`packages/core-ts/src/grid.ts` — each adapter is ~60 lines, drop into
-`multiSourceGridFeed({ feeds: { … } })`.
+WattTime marginal-emissions support is on the v0.8 roadmap. Want to add
+another free public source? Each adapter is a single function in
+`packages/core-ts/src/grid.ts` (~80 lines) — open a PR.
 
 ---
 
