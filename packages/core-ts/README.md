@@ -1,9 +1,14 @@
 # @ebb-ai/core
 
-Carbon-aware scheduling for agentic AI workflows — the core TypeScript library.
+Workload scheduling for the agentic-AI economy — the core TypeScript library.
 
-`@ebb-ai/core` lets your code wait for cleaner grid-energy windows before
-dispatching deferrable LLM calls. It ships:
+`@ebb-ai/core` lets your code defer non-urgent LLM tasks to cheap, off-peak
+grid windows. Anthropic and OpenAI Batch APIs already give a flat **50%
+discount** for 24h-tolerant work; `@ebb-ai/core` makes the choice automatic,
+picks the cheapest window inside your deadline, and writes an auditable
+receipt (cost + carbon + provider + duration) for every dispatch.
+
+It ships:
 
 - `defer(fn, { deadline, region, carbonBudgetG })` — wrap any async task.
 - `Scheduler` — opt-in SQLite-backed durable queue (`new Scheduler({ dbPath })`).

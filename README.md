@@ -1,21 +1,26 @@
 # ebb-ai
 
-**Carbon-aware scheduling for agentic AI workflows.**
-*An MCP server that defers non-urgent AI tasks to the cleanest grid
-window inside your deadline. Per-task carbon receipts, Anthropic +
-OpenAI Batch API support, SQLite-backed durable queue.*
+**Workload scheduling for the agentic-AI economy.**
+*Defer non-urgent LLM tasks to cheap, low-load grid windows. ~50%
+cheaper inference via Batch APIs, smoother data-center load curves,
+auditable carbon receipts. MCP-native, ships as an `npm` package and
+a one-command Claude Code plugin.*
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-5eead4)](./LICENSE)
-[![v0.5.0](https://img.shields.io/badge/release-v0.5.0-fbbf24)](https://github.com/Vitalini/ebb-ai/releases/tag/v0.5.0)
+[![v0.6.0](https://img.shields.io/badge/release-v0.6.0-fbbf24)](https://github.com/Vitalini/ebb-ai/releases/tag/v0.6.0)
+[![npm](https://img.shields.io/badge/npm-%40ebb--ai%2Fmcp-cb3837)](https://www.npmjs.com/package/@ebb-ai/mcp)
 [![Tests](https://img.shields.io/badge/tests-169%20passing-22c55e)](#tests)
 [![MCP tools](https://img.shields.io/badge/MCP-8%20tools-5eead4)](https://modelcontextprotocol.io)
 [![Hosts](https://img.shields.io/badge/MCP%20hosts-10-5eead4)](./QUICKSTART.md)
 
-`ebb-ai` defers non-urgent AI agent tasks to execution windows that are
-simultaneously cleaner on the electricity grid and cheaper at the LLM
-provider. The same agent code that would have run a synchronous LLM
-call now calls `ebb-ai`, which picks the right time and the right route
-— and writes a per-task carbon receipt you can audit.
+AI inference is on track to consume 6.7–12% of US grid load by 2028
+([DOE projections](https://www.energy.gov/eere/buildings/articles/2024-united-states-data-center-energy-usage-report)).
+A lot of agentic-AI workload is *deferrable* (overnight summaries,
+batch analysis, scheduled compliance scans, document processing) but
+agent code dispatches it synchronously by default. `ebb-ai` makes the
+choice automatic: the same code that would have fired a sync LLM call
+now defers to a cheap, off-peak grid window — and writes an auditable
+receipt (cost + carbon + provider + duration) for every dispatch.
 
 ```typescript
 import { recommendWindow } from "@ebb-ai/core";
@@ -45,14 +50,18 @@ Windsurf, OpenClaw, OpenAI Codex CLI, Pi). The agent asks
 `recommend_window`, sees the plan, then commits via `schedule_task`
 — or doesn't.
 
-> **Status:** v0.5 · 2026-05-13 · Anthropic + OpenAI Batch adapters,
-> durable SQLite queue, Python port at parity, live dashboard,
-> `recommend_window` planning endpoint, always-on `ebb tick` CLI
-> with macOS launchd + Linux systemd + pmset/rtcwake wake events,
-> full control surface (`cancel_task` / `expedite_task` /
-> `update_deadline` / `retry_task`), receipt redaction, file output,
-> retry-with-backoff. **169 tests passing across 4 packages and
-> 2 languages.**
+> **Status:** v0.6 · 2026-05-14 · `@ebb-ai/{core,mcp,cli}` published
+> to npm under the `@ebb-ai` org. **One-command Claude Code plugin**
+> via `claude plugin install ebb-ai`. Multi-source grid feed: UK
+> National Grid ESO Carbon Intensity API live for the GB zone (free,
+> no key, real 48h forecast); Electricity Maps for other zones when
+> a key is set. Anthropic + OpenAI Batch adapters, durable SQLite
+> queue, Python port at parity, live dashboard, `recommend_window`
+> planning endpoint, always-on `ebb tick` CLI with macOS launchd +
+> Linux systemd + pmset/rtcwake wake events, full control surface
+> (`cancel_task` / `expedite_task` / `update_deadline` /
+> `retry_task`), receipt redaction, file output, retry-with-backoff.
+> **169 tests passing across 4 packages and 2 languages.**
 > See [QUICKSTART.md](./QUICKSTART.md).
 
 ### Live demo
@@ -60,10 +69,11 @@ Windsurf, OpenClaw, OpenAI Codex CLI, Pi). The agent asks
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FVitalini%2Febb-ai&root-directory=apps%2Fdashboard&project-name=ebb-ai-dashboard&repository-name=ebb-ai-dashboard)
 
 Or visit the maintainer-hosted dashboard at
-**[ebb-ai.com](https://ebb-ai.com)** to see live
-carbon-intensity forecasts across CAISO, ERCOT, ISO-NE, PJM, Great Britain,
-France, and Germany — and to try the carbon-window planner without
-installing anything. Great Britain is powered by the free
+**[ebb-ai.com](https://ebb-ai.com)** to see live grid-load and
+carbon-intensity forecasts across the seven regions where the major
+LLM providers run inference (CAISO, ERCOT, ISO-NE, PJM, Great Britain,
+France, Germany) and to try the best-window planner without installing
+anything. Great Britain is powered by the free
 [National Grid ESO Carbon Intensity API](https://carbonintensity.org.uk/)
 (real data, no key required); the other zones use Electricity Maps when
 a key is configured and a deterministic mock otherwise.
@@ -72,23 +82,35 @@ a key is configured and a deterministic mock otherwise.
 
 ## Why
 
-Modern AI agents call LLM APIs synchronously by default. Three costs
-follow:
+AI inference is becoming a major load on US grid infrastructure.
+Data-center electricity demand has doubled since 2020 and is projected
+to keep rising as agentic workloads scale.
+But the same agent code that triggers this load dispatches it
+synchronously by default — even when the task is "summarize my inbox
+overnight" or "rewrite these 5,000 product descriptions by Friday."
+Three things follow:
 
-- **Carbon.** Grid carbon intensity varies 30 to 60 percent inside a
-  single day across the major US ISOs. Inference at 2 p.m. on a hot
-  day is materially dirtier than the same call at 3 a.m.
-- **Dollars.** Anthropic and OpenAI both offer batch APIs at a flat 50
-  percent discount for tasks that can wait up to 24 hours. Almost no
-  agent code uses them by default, because it requires rewriting the
-  call site.
-- **Latency, honestly.** Off-peak *sync* execution is sometimes
-  faster because providers throttle and queue at peak. **Batch API
-  is *not* faster** — it trades latency (up to 24h SLA) for the
-  50% discount. We pitch carbon + cost first; latency is a third-tier
-  side effect.
+- **Cost.** Anthropic and OpenAI both offer Batch APIs at a flat **50%
+  discount** for tasks that can wait up to 24 hours. Almost no agent
+  code uses them, because the choice has to be made at the call site.
+  `ebb-ai` makes the choice automatic — and routes deadline-tolerant
+  work through the cheaper path.
+- **Grid load.** Data-center AI compute is concentrated in a few
+  US regions (PJM Mid-Atlantic / Virginia, ERCOT Texas, CAISO
+  California). Peak-hour AI workloads compete with hospitals,
+  industrial users, and residential customers for capacity that is
+  already constrained — Virginia regulators have flagged data-center
+  load growth as a top-tier reliability concern. Time-shifting
+  deferrable workloads to off-peak windows reduces the peak the grid
+  has to plan for.
+- **Carbon, as a measurable side effect.** Grid carbon intensity
+  varies 30–60% inside a single day. The same dispatch decision that
+  saves cost and smooths load also emits less CO₂. `ebb-ai` writes an
+  auditable receipt for every dispatch — useful for ESG reporting,
+  cost-accounting, and upcoming compute-disclosure regulations.
 
-`ebb-ai` fixes all three for any task that is not "answer me right now."
+`ebb-ai` automates the choice for any task that is not "answer me
+right now."
 
 ---
 

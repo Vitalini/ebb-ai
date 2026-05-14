@@ -45,8 +45,8 @@ export default async function HomePage() {
       <section>
         <SectionHeader
           eyebrow="live map"
-          title="AI-compute carbon intensity, right now"
-          subtitle="Six grids where the major LLM providers run inference. Click any region for the 72-hour forecast and a best-window finder."
+          title="Grid intensity where AI compute runs"
+          subtitle="Seven regions hosting the major LLM providers' inference workloads. Click any card for the 72-hour forecast and a cost-and-carbon best-window finder."
         />
         <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {forecasts.map(({ region, forecast }) => (
@@ -73,16 +73,17 @@ function Hero({
     <section className="space-y-6">
       <div className="inline-flex items-center gap-2 rounded-md border border-accent/40 bg-accent/5 px-3 py-1 font-mono text-xs uppercase tracking-wider text-accent">
         <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-        v0.2 · operator preview
+        v0.6 · operator preview
       </div>
       <h1 className="max-w-3xl text-4xl font-extrabold leading-[1.05] tracking-tight text-fg sm:text-5xl">
-        Live carbon map for AI compute.
+        Cheaper inference, smoother grid.
       </h1>
       <p className="max-w-2xl text-base text-fg-muted">
-        Carbon intensity of the grids that power the regions where Anthropic,
-        OpenAI, and Google run inference. Forecasts up to 72 hours. A
-        best-window finder for any deferrable LLM workload — and a window into
-        the scheduler&apos;s own queue.
+        US data-center electricity demand is projected to hit 6.7–12% of
+        national grid load by 2028. ebb-ai schedules non-urgent LLM workloads
+        into cheap, off-peak windows — ~50% cost reduction via Batch APIs,
+        smoother data-center load curves, auditable carbon receipts. Live
+        grid data for the seven regions where the major LLM providers run.
       </p>
       <dl className="grid max-w-2xl grid-cols-3 gap-4 pt-2 sm:gap-8">
         <Kpi label="regions tracked" value={total.toString()} />

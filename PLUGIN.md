@@ -1,5 +1,11 @@
 # ebb-ai · Claude Code plugin
 
+A one-command install that turns any Claude Code session into a cost-aware,
+grid-aware AI workload scheduler. Defer non-urgent LLM tasks (overnight
+summaries, batch analyses, scheduled compliance scans) to cheap off-peak
+windows — ~50% cost savings via Batch APIs, smoother data-center load, and
+an auditable carbon receipt for every dispatch.
+
 `ebb-ai` ships a Claude Code plugin that wires the ebb-ai MCP server and three
 slash commands into your CLI in one step.
 
