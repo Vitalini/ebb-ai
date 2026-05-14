@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "ebb-ai",
+  "description": "Carbon-aware deferral for Claude Code. Route deferrable LLM tasks to cleaner-grid windows via the ebb-ai MCP scheduler.",
+  "owner": {
+    "name": "Vitalini",
+    "url": "https://github.com/Vitalini"
+  },
+  "plugins": [
+    {
+      "name": "ebb-ai",
+      "description": "Three slash commands (/ebb-ai:defer, /ebb-ai:check, /ebb-ai:grid), a carbon-aware-coding skill, and auto-wires the @ebb-ai/mcp MCP server.",
+      "version": "0.6.0",
+      "source": "./"
+    }
+  ]
+}
