@@ -14,9 +14,11 @@ pre-1.0; please always upgrade to the latest tag before reporting.
 
 **Please do not open a public GitHub issue.**
 
-Email the maintainer privately at
-[vitalii.borovyk@gmail.com](mailto:vitalii.borovyk@gmail.com)
-with subject prefix `[security]`. Include:
+Use the repository's private **Security Advisory** submission form:
+
+> https://github.com/Vitalini/ebb-ai/security/advisories/new
+
+Include:
 
 - A description of the issue and its blast radius (what an attacker
   can do).
