@@ -21,7 +21,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "better-sqlite3": "^11.5.0"
+    "better-sqlite3": "^12.10.0"
   },
   "peerDependencies": {
     "@anthropic-ai/sdk": ">=0.32.0",
