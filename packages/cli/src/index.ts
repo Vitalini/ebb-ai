@@ -14,6 +14,7 @@ import { runInstall, type InstallMode } from "./commands/install.js";
 import { runQueueList } from "./commands/queue.js";
 import { runReceiptsList } from "./commands/receipts.js";
 import { runRegisterWake } from "./commands/register-wake.js";
+import { runStats } from "./commands/stats.js";
 import { runTick } from "./commands/tick.js";
 
 export function buildProgram(): Command {
@@ -92,6 +93,23 @@ export function buildProgram(): Command {
     .action(async (opts) => {
       try {
         const res = await runReceiptsList({ db: opts.db, since: opts.since });
+        // eslint-disable-next-line no-console
+        console.log(res.rendered);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error((err as Error).message);
+        process.exit(1);
+      }
+    });
+
+  program
+    .command("stats")
+    .description("Show local-only personal-impact stats from the queue ledger")
+    .option("--db <path>", "SQLite queue path", undefined)
+    .option("--json", "Emit JSON instead of the human-readable table")
+    .action(async (opts) => {
+      try {
+        const res = await runStats({ db: opts.db, json: opts.json === true });
         // eslint-disable-next-line no-console
         console.log(res.rendered);
       } catch (err) {

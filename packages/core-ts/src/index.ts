@@ -28,6 +28,20 @@ export {
 export type { SchedulerOptions } from "./scheduler.js";
 export { recommendWindow } from "./recommend.js";
 export {
+  ASSUMED_KWH_PER_CALL,
+  classifyBand,
+  aggregateStats,
+  aggregateByRegion,
+  bandHistogram,
+  achievements,
+} from "./aggregator.js";
+export type {
+  CarbonStats,
+  RegionStats,
+  BandHistogram,
+  Achievement,
+} from "./aggregator.js";
+export {
   mockGridFeed,
   electricityMapsFeed,
   ukCarbonIntensityFeed,
