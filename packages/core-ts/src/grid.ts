@@ -51,7 +51,7 @@ function syntheticIntensityForHour(date: Date, region: string): number {
   const hour = date.getUTCHours();
   const phase = (hour - 17) * (Math.PI / 12);
   const value = floor + amplitude * Math.cos(phase);
-  return Math.round(value);
+  return Math.max(0, Math.round(value));
 }
 
 export function mockGridFeed(): GridFeed {
@@ -711,17 +711,54 @@ export function entsoeFeed(securityToken?: string): GridFeed {
  * wrapper is a router, not a source itself.
  */
 export function multiSourceGridFeed(options: {
-  feeds: Record<string, GridFeed>;
+  feeds?: Record<string, GridFeed>;
   fallback?: GridFeed;
 }): GridFeed {
+  const feeds = options.feeds ?? {};
   const fallback = options.fallback ?? mockGridFeed();
   return {
     // The router has no single source; report "mock" for the (rare) callers
     // that read `feed.source` without inspecting the forecast.
     source: "mock",
     async fetchForecast(region, hours) {
-      const feed = options.feeds[region] ?? fallback;
+      const feed = feeds[region] ?? fallback;
       return feed.fetchForecast(region, hours);
     },
   };
+}
+
+/**
+ * Auto-build the best free grid feed for every supported zone.
+ *
+ * Selection logic (per zone):
+ *   - "GB"                              → UK Carbon Intensity (free, no key)
+ *   - "US-CAL-CISO" / ERCO / ISNE /
+ *     MIDA-PJM / NY-NYIS / MIDW-MISO    → EIA when EBB_EIA_API_KEY is set
+ *   - "FR" / "DE" / "ES" / "IT" / "NL"  → ENTSO-E when EBB_ENTSOE_SECURITY_TOKEN is set
+ *   - everything else                   → Electricity Maps when EBB_ELECTRICITY_MAPS_API_KEY is set
+ *   - any zone without a configured key → deterministic mock curve
+ *
+ * Each leaf feed already falls back to the mock on its own when its key
+ * is missing or the request fails. The returned forecast's `source` field
+ * reports the actual origin, so callers can distinguish "live" from "mock"
+ * data without inspecting URLs.
+ *
+ * Use this in production entry points (MCP server, CLI tick daemon, web
+ * APIs) so the user gets real numbers wherever a free source exists — even
+ * if they've configured zero API keys, GB still resolves to live data.
+ */
+export function buildDefaultGridFeed(): GridFeed {
+  const feeds: Record<string, GridFeed> = {
+    GB: ukCarbonIntensityFeed(),
+  };
+  for (const zone of Object.keys(EIA_RESPONDENT_BY_ZONE)) {
+    feeds[zone] = eiaFeed();
+  }
+  for (const zone of Object.keys(ENTSOE_BIDDING_ZONE_BY_REGION)) {
+    feeds[zone] = entsoeFeed();
+  }
+  return multiSourceGridFeed({
+    feeds,
+    fallback: electricityMapsFeed(),
+  });
 }

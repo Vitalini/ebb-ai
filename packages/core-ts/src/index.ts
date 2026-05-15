@@ -34,6 +34,7 @@ export {
   eiaFeed,
   entsoeFeed,
   multiSourceGridFeed,
+  buildDefaultGridFeed,
 } from "./grid.js";
 export type {
   DeferOptions,

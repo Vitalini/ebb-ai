@@ -26,7 +26,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import {
   AnthropicAdapter,
-  electricityMapsFeed,
+  buildDefaultGridFeed,
   OpenAIAdapter,
   recommendWindow,
   Scheduler,
@@ -73,7 +73,7 @@ if (DB_PATH !== ":memory:") {
 const DEFAULT_MODEL =
   process.env.EBB_DEFAULT_MODEL ?? "claude-sonnet-4-6";
 
-const feed = electricityMapsFeed();
+const feed = buildDefaultGridFeed();
 const scheduler = new Scheduler({
   feed,
   defaultRegion: DEFAULT_REGION,
