@@ -1,5 +1,7 @@
 # ebb-ai v0.7.1 release notes
 
+![ebb-ai v0.7.1 — Persistent queue. Full CRUD.](./images/hero.png)
+
 **Date:** 2026-05-14
 **Tag:** [`v0.7.1`](https://github.com/Vitalini/ebb-ai/releases/tag/v0.7.1)
 **Affected packages:** `@ebb-ai/mcp@0.7.1` (others unchanged at 0.7.0)

@@ -1,8 +1,10 @@
 # ebb-ai v0.7.1 release package
 
+![ebb-ai v0.7.1 — Persistent queue. Full CRUD.](./images/hero.png)
+
 This folder is the **ready-to-share artefact** for v0.7.1. Drop links
-to it on Show HN, in the npm release notes, in the press kit, or
-anywhere else the project gets cited.
+to it on Show HN, in the npm release notes, in a press kit, or anywhere
+else the project gets cited.
 
 ## Contents
 
@@ -10,8 +12,8 @@ anywhere else the project gets cited.
 |---|---|
 | [`release-notes.md`](./release-notes.md) | Human-readable summary of what changed in v0.7.1 (paste-ready for Show HN comments, X thread, mailing-list announcement) |
 | [`diagrams/`](./diagrams/) | Architecture + grid-routing diagrams (Mermaid sources + rendered PNGs) |
-| [`pdf/`](./pdf/) | PDF renders of the public docs (README, PLUGIN.md) |
-| `images/` | (to come) OG card / hero illustration generated via OpenAI gpt-image — pending CLI install |
+| [`pdf/`](./pdf/) | PDF renders of the public docs (README, PLUGIN.md, CHANGELOG.md, release-notes.md) |
+| [`images/`](./images/) | 1200×630 hero card (`hero.png`) + 512×512 brand mark (`mark.png`). SVG sources live in `images/src/`. |
 
 ## Source of truth
 
