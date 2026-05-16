@@ -7,6 +7,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-05-16
+
+**Theme:** "Personal impact + even distribution." Adds a local-only
+aggregator over the persistent SQLite ledger, a new `ebb stats` CLI
+command on top of it, an even-distribution simulation that exposes
+(and fixes) a scheduler concentration pathology, and the per-zone
+grid-feed router default for the MCP server.
+
+### Added
+
+- **`@ebb-ai/core` — local-impact aggregator** (`src/aggregator.ts`).
+  Pure functions over `CarbonReceipt` rows: `aggregateStats`,
+  `aggregateByRegion`, `bandHistogram`, `achievements` (seven local-
+  only badges).
+- **`@ebb-ai/cli` — `ebb stats` command** consuming the aggregator.
+  Reads `~/.ebb-ai/queue.db` directly, prints a compact human table
+  or `--json` for programmatic consumption. No telemetry.
+- **`@ebb-ai/core` — `buildDefaultGridFeed()`** helper exported.
+  Wraps `multiSourceGridFeed` with per-zone routing: GB →
+  `ukCarbonIntensityFeed` (free, key-less, real data); US ISOs →
+  `eiaFeed`; EU zones → `entsoeFeed`; universal fallback →
+  `electricityMapsFeed`. Each leaf falls back to the deterministic
+  mock when its API key is missing. The MCP server now uses this
+  helper as its default, so a fresh install yields live grid data
+  for GB without configuring any environment variables.
+- **`@ebb-ai/core` — even-distribution simulation** at
+  `test/even-distribution.test.ts`. Runs 10 000 synthetic tasks
+  through `recommendWindow` across seven grid regions with varied
+  deadlines (1 h to 72 h) and bins the chosen UTC-hour dispatch
+  into a 24-bucket histogram. Asserts no single bucket holds the
+  entire load and prints the histogram to the test log for
+  inspection.
+
+### Changed — scheduler
+
+- **`recommendWindow` randomized tie-break.** Entries within a 15 %
+  tolerance of the cheapest in-deadline window (floor 30 g
+  CO2e/kWh) are treated as equally clean; one is selected via the
+  injectable `rng` dependency (defaults to `Math.random`). Closes
+  the "everyone runs at 03:00 UTC" pathology revealed by the new
+  simulation: pre-fix concentration was 66.9 % in a single hour;
+  post-fix the chosen-hour distribution spreads across the full
+  forecast window.
+- **`mockGridFeed` per-region phase offsets.** Each region's
+  synthetic curve is now phase-shifted by its canonical UTC offset
+  so different regions exhibit different trough hours, more
+  faithfully modelling real-grid per-region timing variance.
+
+### Fixed
+
+- `mockGridFeed` no longer produces negative carbon-intensity
+  values. Previously, FR's `regionFloor` (60 g/kWh) plus the
+  amplitude (220) at trough yielded a -160 g/kWh value; the
+  returned curve now clamps at zero.
+- `multiSourceGridFeed({ feeds: undefined, fallback })` no longer
+  throws. The `feeds` parameter is optional; the router degenerates
+  to the fallback feed when omitted.
+- Dashboard version banner updated to track the released version.
+
+### npm
+
+- `@ebb-ai/core` 0.7.0 → 0.8.0
+- `@ebb-ai/cli` 0.7.0 → 0.8.0
+- `@ebb-ai/mcp` 0.7.1 → 0.8.0
+
+### Tests
+
+- Core TypeScript: 100 (aggregator + even-distribution simulation
+  added).
+- CLI: 21 (`ebb stats` paths covered).
+- MCP server: 8 (unchanged).
+- Python parity: 75 (unchanged).
+- **Total: 204 passing tests** across all packages.
+
 ## [0.5.0] — 2026-05-13
 
 **Theme:** "Control and reliability." Answers the four product
