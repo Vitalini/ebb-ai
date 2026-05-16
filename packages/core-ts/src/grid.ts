@@ -42,14 +42,33 @@ function syntheticIntensityForHour(date: Date, region: string): number {
     "DE": 380,
     "GB": 220,
   };
+  // Per-region phase offset in UTC hours: each region's local-time
+  // trough (≈ 03:00 local) translates to a different UTC hour. Without
+  // this offset, every region shares the same 03:00 UTC trough and
+  // multi-region simulations pile every "cleanest hour" choice into
+  // the same bucket (the even-distribution.test.ts pathology shown
+  // pre-v0.8.1: 66.9 % of dispatch in a single hour). The offset is
+  // approximate — real local clock varies with DST, but a single
+  // canonical UTC offset is sufficient for the synthetic curve to
+  // exhibit per-region trough variation.
+  const regionUtcOffsetHours: Record<string, number> = {
+    "US-CAL-CISO": -8,
+    "US-TEX-ERCO": -6,
+    "US-MIDW-MISO": -6,
+    "US-NE-ISNE": -5,
+    "US-NY-NYIS": -5,
+    "US-MIDA-PJM": -5,
+    "GB": 0,
+    "FR": 1,
+    "DE": 1,
+  };
   const floor = regionFloor[region] ?? 380;
+  const offsetH = regionUtcOffsetHours[region] ?? 0;
   const amplitude = 220;
-  // We use UTC hours so the synthesized curve is deterministic across CI /
-  // developer machines and matches the UTC ISO timestamps we emit. Peak ~17:00
-  // UTC; trough ~03:00 UTC. (Real provider data is region-local in practice,
-  // but for a synthetic feed any deterministic phase is acceptable.)
-  const hour = date.getUTCHours();
-  const phase = (hour - 17) * (Math.PI / 12);
+  // Local-clock trough at 03:00, peak at 17:00. Phase 0 ⇒ peak.
+  const utcHour = date.getUTCHours();
+  const localHour = ((utcHour + offsetH) % 24 + 24) % 24;
+  const phase = (localHour - 17) * (Math.PI / 12);
   const value = floor + amplitude * Math.cos(phase);
   return Math.max(0, Math.round(value));
 }

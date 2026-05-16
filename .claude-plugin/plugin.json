@@ -1,7 +1,7 @@
 {
   "name": "ebb-ai",
   "description": "Carbon-aware deferral for Claude Code. Send any \"do it later\" task to the cleanest grid-energy window inside your deadline. Full CRUD: /ebb-ai:defer, plan, check, cancel, expedite, reschedule, retry, grid. Persistent SQLite queue (~/.ebb-ai/queue.db). Auto-wires the ebb-ai MCP server.",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "author": {
     "name": "Vitalii Borovyk",
     "url": "https://github.com/Vitalini"

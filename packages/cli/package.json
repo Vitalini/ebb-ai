@@ -1,7 +1,7 @@
 {
   "name": "@ebb-ai/cli",
-  "version": "0.7.0",
-  "description": "CLI for ebb-ai — cron-tick drain, launchd install, and sleep-prevention for the carbon-aware scheduler.",
+  "version": "0.8.0",
+  "description": "CLI for ebb-ai \u2014 cron-tick drain, launchd install, and sleep-prevention for the carbon-aware scheduler.",
   "license": "Apache-2.0",
   "author": "Vitalii Borovyk",
   "type": "module",
@@ -9,7 +9,11 @@
   "bin": {
     "ebb": "./dist/index.js"
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json && chmod +x dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -25,8 +29,12 @@
     "openai": ">=4.70.0"
   },
   "peerDependenciesMeta": {
-    "@anthropic-ai/sdk": { "optional": true },
-    "openai": { "optional": true }
+    "@anthropic-ai/sdk": {
+      "optional": true
+    },
+    "openai": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "typescript": "^5.6.3",

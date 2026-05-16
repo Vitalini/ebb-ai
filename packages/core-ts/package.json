@@ -1,7 +1,7 @@
 {
   "name": "@ebb-ai/core",
-  "version": "0.7.0",
-  "description": "Carbon-aware scheduling for agentic AI workflows — core TypeScript library.",
+  "version": "0.8.0",
+  "description": "Carbon-aware scheduling for agentic AI workflows \u2014 core TypeScript library.",
   "license": "Apache-2.0",
   "author": "Vitalii Borovyk",
   "type": "module",
@@ -13,7 +13,11 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -28,8 +32,12 @@
     "openai": ">=4.70.0"
   },
   "peerDependenciesMeta": {
-    "@anthropic-ai/sdk": { "optional": true },
-    "openai": { "optional": true }
+    "@anthropic-ai/sdk": {
+      "optional": true
+    },
+    "openai": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.96.0",

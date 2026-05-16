@@ -43,6 +43,13 @@ interface RecommendDependencies {
   feed?: GridFeed;
   /** Inject a clock (mostly for tests). Defaults to `Date.now`. */
   now?: () => Date;
+  /**
+   * Inject a pseudo-random number generator returning [0, 1). Defaults to
+   * `Math.random`. Use a seeded PRNG in tests to make the tie-break
+   * deterministic. Only affects the choice among entries within the
+   * cleanest-tolerance band when multiple equally-clean entries exist.
+   */
+  rng?: () => number;
 }
 
 /**
@@ -114,12 +121,37 @@ export async function recommendWindow(
     );
   }
 
-  // Sort ascending by intensity — chosen = [0], alternatives = next 3.
+  // Sort ascending by intensity. Then apply a randomized tie-break:
+  // every entry within a tolerance band of the cheapest is treated as
+  // "equally clean" and one is selected at random. Without the tie-break
+  // the scheduler collapses every task with a long deadline onto the
+  // single global trough — the v0.8.0 even-distribution simulation
+  // observed 66.9 % of dispatch piling into one UTC hour. With the
+  // tie-break, equally-clean entries spread evenly across the band.
+  //
+  // Tolerance: max(15 % of cheapest intensity, 30 g CO2e / kWh). The
+  // 30-g floor matters when cheapest intensity is very small (e.g.,
+  // FR overnight at < 100 g/kWh) where a flat 15 % would collapse the
+  // band to almost nothing. The 15 % top is conservative: an entry
+  // 15 % dirtier than the cheapest is still well within the "clean"
+  // band (the scoring function classifies 0-100 g/kWh as very_clean
+  // and 100-250 as clean; a 15 % step from 200 lands at 230, same
+  // band) and the carbon-savings claim against running-now (which is
+  // typically 30-70 % dirtier) remains accurate.
   const sorted = [...survivors].sort(
     (a, b) => a.carbonIntensityGCo2PerKwh - b.carbonIntensityGCo2PerKwh,
   );
-  const chosen = sorted[0]!;
-  const altEntries = sorted.slice(1, 4);
+  const cheapest = sorted[0]!.carbonIntensityGCo2PerKwh;
+  const tolerance = Math.max(cheapest * 0.15, 30);
+  const equallyClean = sorted.filter(
+    (e) => e.carbonIntensityGCo2PerKwh <= cheapest + tolerance,
+  );
+  const chosen =
+    equallyClean.length > 1
+      ? equallyClean[Math.floor((deps.rng ?? Math.random)() * equallyClean.length)]!
+      : sorted[0]!;
+  // Alternatives = next 3 cheapest entries that weren't chosen.
+  const altEntries = sorted.filter((e) => e !== chosen).slice(0, 3);
 
   const nowIntensity = entries[0]!.carbonIntensityGCo2PerKwh;
   const savingsPct = computeSavingsPct(
