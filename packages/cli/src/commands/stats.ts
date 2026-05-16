@@ -11,6 +11,8 @@
  * filters and `--per-day` time-bucket histograms.
  */
 
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import {
   TaskStore,
   aggregateStats,
@@ -118,6 +120,17 @@ export function renderStats(r: StatsResult): string {
 
 export async function runStats(opts: StatsCommandOptions = {}): Promise<StatsResult> {
   const dbPath = opts.db ?? defaultDbPath();
+  // Ensure the parent directory exists before better-sqlite3 opens the
+  // file. Matches the MCP server's behaviour, so a first-time `ebb
+  // stats` invocation before the MCP server has ever written to the
+  // ledger returns an empty result rather than throwing ENOENT.
+  if (dbPath !== ":memory:") {
+    try {
+      mkdirSync(dirname(dbPath), { recursive: true });
+    } catch {
+      // Best-effort; the open below will surface any real error.
+    }
+  }
   const store = new TaskStore({ dbPath });
   try {
     const completed = store.list({ status: "completed" });

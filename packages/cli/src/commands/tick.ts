@@ -13,6 +13,7 @@ import {
   Scheduler,
   type ProviderAdapter,
 } from "@ebb-ai/core";
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -29,8 +30,25 @@ export interface TickRunResult {
   message: string;
 }
 
+/**
+ * Default queue path. Matches the MCP server's persistence default
+ * (`~/.ebb-ai/queue.db`, established in v0.7.1) so `ebb tick`,
+ * `ebb queue list`, `ebb receipts list`, and `ebb stats` all read
+ * the same SQLite ledger the MCP server writes to. Prior versions
+ * defaulted to `~/.ebb/queue.sqlite`, which silently diverged from
+ * the MCP server's actual path — fixed in v0.8.x.
+ *
+ * If the legacy `~/.ebb/queue.sqlite` exists and the new path
+ * doesn't, the legacy path is returned so users who pre-date v0.7.1
+ * keep seeing their historical data. Once they begin writing to
+ * the new path (via the MCP server), pass `--db` explicitly to
+ * read the old one.
+ */
 export function defaultDbPath(): string {
-  return join(homedir(), ".ebb", "queue.sqlite");
+  const newPath = join(homedir(), ".ebb-ai", "queue.db");
+  const legacyPath = join(homedir(), ".ebb", "queue.sqlite");
+  if (!existsSync(newPath) && existsSync(legacyPath)) return legacyPath;
+  return newPath;
 }
 
 function buildAdapters(): {

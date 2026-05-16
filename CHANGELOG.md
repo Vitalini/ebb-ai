@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] — 2026-05-16
+
+**Theme:** "Three bugs caught by the post-release global test pass."
+
+### Fixed
+
+- **`@ebb-ai/mcp` — `serverInfo` and stderr banner reported the wrong
+  version** (`0.7.1` hardcoded, while the package was on 0.8.0). The
+  MCP protocol surface now reports the actual server version via a
+  `SERVER_VERSION` constant kept in sync with `package.json`.
+- **`@ebb-ai/cli` — `defaultDbPath()` pointed to `~/.ebb/queue.sqlite`,
+  but the MCP server writes to `~/.ebb-ai/queue.db`** (the v0.7.1+
+  persistence default). The two never agreed, so `ebb stats`,
+  `ebb queue list`, and `ebb receipts list` silently returned empty
+  results even when the user's MCP server had real data. The CLI now
+  defaults to the MCP server's path; if the legacy `~/.ebb/queue.sqlite`
+  exists and the new path doesn't, the legacy path is returned so
+  pre-v0.7.1 users keep seeing their historical data.
+- **`@ebb-ai/cli` — `ebb stats` did not create the parent directory
+  before opening the SQLite database**, causing a first-time invocation
+  before the MCP server had ever written to the ledger to throw
+  ENOENT. The CLI now `mkdirSync(..., recursive)` on the parent
+  before opening.
+
+### npm
+
+- `@ebb-ai/cli` 0.8.0 → 0.8.1
+- `@ebb-ai/mcp` 0.8.0 → 0.8.1
+- `@ebb-ai/core` unchanged at 0.8.0.
+
 ## [0.8.0] — 2026-05-16
 
 **Theme:** "Personal impact + even distribution." Adds a local-only

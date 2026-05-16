@@ -35,6 +35,10 @@ import {
 } from "@ebb-ai/core";
 import { z } from "zod";
 
+/** Server version — keep in sync with `package.json`. Sole source of truth for
+ *  both the MCP `serverInfo` field and the stderr ready banner. */
+const SERVER_VERSION = "0.8.1";
+
 const DEFAULT_REGION = process.env.EBB_DEFAULT_REGION ?? "US-CAL-CISO";
 
 /**
@@ -212,7 +216,7 @@ const recommendWindowInput = z.object({
 });
 
 const server = new Server(
-  { name: "ebb-mcp", version: "0.7.1" },
+  { name: "ebb-mcp", version: SERVER_VERSION },
   { capabilities: { tools: {} } },
 );
 
@@ -851,7 +855,7 @@ async function main() {
   await server.connect(transport);
   // eslint-disable-next-line no-console
   console.error(
-    `[ebb-mcp] ready (stdio, v0.7.1) — region=${DEFAULT_REGION}, ` +
+    `[ebb-mcp] ready (stdio, v${SERVER_VERSION}) — region=${DEFAULT_REGION}, ` +
       `grid feed=${feed.source}, ` +
       `db=${DB_PATH === ":memory:" ? "in-memory" : DB_PATH}`,
   );
