@@ -59,9 +59,7 @@ export default async function QueuePage() {
           picked the window.
         </p>
         <p className="text-xs text-fg-dim">
-          {stub
-            ? "stub data — the dashboard does not talk to ebb-mcp yet (v0.3 wires this through the scheduler HTTP API)"
-            : "live"}
+          {stub ? "demo data" : "live"}
           {" · "}
           updated{" "}
           {new Date(generatedAt).toLocaleString(undefined, {
@@ -71,6 +69,23 @@ export default async function QueuePage() {
           })}
         </p>
       </header>
+
+      {stub ? (
+        <aside className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 text-sm text-fg-muted">
+          <p className="mb-1 font-mono text-xs uppercase tracking-wider text-amber-500">
+            demo mode
+          </p>
+          <p>
+            The numbers below are a deterministic synthetic snapshot —
+            useful for screenshots and for understanding the queue UI
+            shape, not a reflection of any running scheduler. The
+            dashboard does not yet talk to <code className="font-mono text-fg">ebb-mcp</code>;
+            a scheduler HTTP control plane is on the v0.9 roadmap. For
+            real personal data today, run <code className="font-mono text-fg">npx -y @ebb-ai/cli@latest stats</code> against
+            your local <code className="font-mono text-fg">~/.ebb-ai/queue.db</code>.
+          </p>
+        </aside>
+      ) : null}
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <Stat label="queued" value={counts.queued} />

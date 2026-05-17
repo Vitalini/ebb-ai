@@ -46,7 +46,15 @@ const MODELS = [
 export async function GET() {
   const tasks = generateStubQueue();
   return NextResponse.json(
-    { tasks, generatedAt: new Date().toISOString(), stub: true },
+    {
+      tasks,
+      generatedAt: new Date().toISOString(),
+      stub: true,
+      note: "demo data — the dashboard does not yet talk to ebb-mcp. " +
+            "For real per-user queue data, run `ebb stats` or `ebb queue list` " +
+            "from the @ebb-ai/cli package against ~/.ebb-ai/queue.db. A scheduler " +
+            "HTTP control plane is planned for v0.9.",
+    },
     {
       headers: {
         "cache-control": "public, s-maxage=60, stale-while-revalidate=60",

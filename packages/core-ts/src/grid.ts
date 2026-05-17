@@ -73,11 +73,22 @@ function syntheticIntensityForHour(date: Date, region: string): number {
   return Math.max(0, Math.round(value));
 }
 
-export function mockGridFeed(): GridFeed {
+/**
+ * Mock grid feed.
+ *
+ * `clock` is optional; if supplied, the forecast starts at the clock's
+ * current hour (top-of-hour) rather than wall-clock now. Tests that
+ * sweep many synthetic "submitted-at" moments through the scheduler
+ * pass their own clock so the forecast aligns with the simulated time;
+ * production code can omit the parameter and get the natural wall-clock
+ * behaviour.
+ */
+export function mockGridFeed(clock?: () => Date): GridFeed {
   return {
     source: "mock",
     async fetchForecast(region: string, hours: number): Promise<GridForecast> {
-      const now = new Date();
+      const baseNow = clock ? clock() : new Date();
+      const now = new Date(baseNow.getTime());
       now.setMinutes(0, 0, 0);
       const entries: GridForecastEntry[] = [];
       for (let i = 0; i < hours; i++) {
@@ -92,7 +103,7 @@ export function mockGridFeed(): GridFeed {
       return {
         region,
         source: "mock",
-        generatedAt: new Date().toISOString(),
+        generatedAt: baseNow.toISOString(),
         entries,
       };
     },

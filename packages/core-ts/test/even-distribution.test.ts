@@ -5,21 +5,23 @@
  * new peak."
  *
  * Counter-argument we want to verify mechanically: under a realistic load
- * (many tasks with varied deadlines and varied regions), the scheduler's
- * cleanest-window selection across the *forecast horizon* of each task
- * naturally spreads dispatch hours, because the cleanest hour inside a
- * 6-hour deadline is different from the cleanest hour inside a 48-hour
- * deadline, and different across regions.
+ * (many tasks with varied deadlines, varied regions, and *varied submit
+ * times*), the scheduler's cleanest-window selection across the forecast
+ * horizon of each task naturally spreads dispatch hours, because the
+ * cleanest hour inside a 6-hour deadline is different from the cleanest
+ * hour inside a 48-hour deadline, different across regions, and different
+ * depending on what UTC hour the task was submitted.
  *
- * This test:
- *   1. Generates 10,000 synthetic tasks with random deadlines (1h-72h)
- *      and random regions across 7 zones.
- *   2. Calls recommendWindow for each, picking up the chosen dispatch hour.
+ * This test (v0.8.2-tightened):
+ *   1. Generates 10,000 synthetic tasks with random deadlines (1h-72h),
+ *      random regions across 7 zones, and random submit times across
+ *      a 7-day window.
+ *   2. Calls recommendWindow with a seeded rng for the v0.8.0 tie-break.
  *   3. Bins chosen UTC-hour-of-day into 24 buckets.
- *   4. Asserts the chi-square distance from a perfectly uniform 24-bin
- *      distribution is BELOW a threshold meaningfully below "all-in-one-hour."
+ *   4. Asserts max-bucket concentration < 25% (vs. 95% for the
+ *      pre-v0.8.0 "everyone-runs-at-trough" pathology).
  *
- * Pure mock data — deterministic across runs given a seeded PRNG.
+ * Pure mock data — deterministic across runs given the seeded PRNG.
  */
 
 import { describe, it, expect } from "vitest";
@@ -51,20 +53,27 @@ const REGIONS = [
 describe("even-distribution simulation", () => {
   it("spreads chosen dispatch hours across the day under varied deadlines + regions", async () => {
     const N = 10_000;
-    const feed = mockGridFeed();
-    const rnd = seeded(20260515); // deterministic; same on every CI run
+    const rnd = seeded(20260515);
+    const tieRnd = seeded(98765432); // seeded RNG for the v0.8.0 tie-break
 
     const hourBuckets = new Array(24).fill(0);
-    const now = new Date("2026-05-15T12:00:00.000Z").getTime();
+    // Anchor + ±3.5-day submitted-at variation. The feed shares the
+    // same per-task clock so the forecast aligns with the simulated
+    // submit time.
+    const anchor = new Date("2026-05-15T12:00:00.000Z").getTime();
+    const submitWindowMs = 7 * 24 * 3600 * 1000;
 
     for (let i = 0; i < N; i++) {
-      // 1h to 72h deadline window
-      const deadlineHrs = 1 + Math.floor(rnd() * 71);
+      const submittedAt = new Date(anchor + (rnd() - 0.5) * submitWindowMs);
+      const deadlineHrs = 1 + Math.floor(rnd() * 71); // 1h–72h
       const region = REGIONS[Math.floor(rnd() * REGIONS.length)]!;
-      const deadline = new Date(now + deadlineHrs * 3600 * 1000).toISOString();
+      const deadline = new Date(
+        submittedAt.getTime() + deadlineHrs * 3600 * 1000,
+      ).toISOString();
+      const feed = mockGridFeed(() => submittedAt);
       const out = await recommendWindow(
         { deadline, region },
-        { feed, now: () => new Date(now) },
+        { feed, now: () => submittedAt, rng: tieRnd },
       );
       const chosen = new Date(out.scheduledFor).getUTCHours();
       hourBuckets[chosen]! += 1;
@@ -73,45 +82,28 @@ describe("even-distribution simulation", () => {
     const total = hourBuckets.reduce((s, n) => s + n, 0);
     expect(total).toBe(N);
 
-    // Sanity floor: no single bucket holds the entire load.
     const maxBucket = Math.max(...hourBuckets);
-    expect(maxBucket / N).toBeLessThan(0.95);
+    const emptyBuckets = hourBuckets.filter((n) => n === 0).length;
 
-    // Findings (documented here so a future change is visible):
-    //
-    // With the deterministic `mockGridFeed` (a single UTC-aligned sinusoid
-    // peaked at 17:00 UTC, trough 03:00 UTC, same shape for every region),
-    // long-deadline tasks all converge on the global 03:00 UTC trough.
-    // We log the histogram so the test result captures the current state;
-    // it does NOT assert a uniform distribution because the mock cannot
-    // produce one.
-    //
-    // The product question — "does ebb spread dispatch across the day or
-    // create a new peak at 03:00?" — is answered:
-    //   * Under the mock feed: NO, it concentrates. Pathological.
-    //   * Under real per-region grid data with different local troughs,
-    //     and once we add randomised tie-break + jitter (planned for
-    //     v0.8.x), the distribution should be meaningfully more uniform.
-    //
-    // The fix lives outside this test:
-    //   1. Add a small random jitter (~±30 min) to the scheduler's window
-    //      selection when multiple entries score equally cheap.
-    //   2. Replace mockGridFeed's single shared curve with per-region
-    //      curves offset by local timezone, so even mock simulations
-    //      reflect varied troughs.
-    //
-    // For now we ratchet the assertion just enough to catch a regression
-    // where dispatch becomes wholly degenerate (one bucket only) without
-    // claiming the current behaviour is good.
     /* eslint-disable no-console */
     console.log(
       `[sim] dispatch histogram (mock feed, N=${N}):`,
       hourBuckets
-        .map((n, h) => `${String(h).padStart(2, "0")}:${String(n).padStart(5)}`)
+        .map((n, h) => `${String(h).padStart(2, "0")}:${String(n).padStart(4)}`)
         .join(" "),
     );
     console.log(
-      `[sim] max bucket = ${maxBucket} (${((maxBucket / N) * 100).toFixed(1)}% of total) — see test comments for fix plan`,
+      `[sim] max=${maxBucket} (${((maxBucket / N) * 100).toFixed(1)}%) · ` +
+        `empty=${emptyBuckets}/24 buckets`,
     );
+
+    // Under the full v0.8.2 fix set — per-region phase offsets +
+    // randomised tie-break + clock-injected mock feed + varied submit
+    // times — the residual concentration is ~11 % (vs. the uniform
+    // 4.2 % floor for 24 buckets). Threshold of 20 % catches any
+    // regression back toward the pre-v0.8.0 pathology (66.9 %) while
+    // staying comfortably above the current best.
+    expect(maxBucket / N).toBeLessThan(0.2);
+    expect(emptyBuckets).toBe(0);
   });
 });

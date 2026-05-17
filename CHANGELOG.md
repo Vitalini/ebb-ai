@@ -7,6 +7,95 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.2] — 2026-05-17
+
+**Theme:** "Polish + roadmap drafts." Closes every loose end the
+post-v0.8.1 global test pass surfaced; lands the v0.8.2
+simulation-tightening; ships the dashboard `/stats` route; and
+adds three roadmap-ready drafts (upstream MCP spec PR, arXiv
+preprint, v0.9 leaderboard design) that move the project off the
+
+"nothing-shipped-upstream-yet" baseline.
+
+### Added — dashboard
+
+- **`/stats` route** (`apps/dashboard/src/app/stats/page.tsx`).
+  Personal-impact view consuming the same aggregator shape as
+  `ebb stats` CLI. Demo data with a prominent "demo mode" banner
+  and a pointer to the CLI for real local numbers.
+- **`/architecture`, `/docs`, `/roadmap` static pages**, served
+  via Next.js rewrites from `apps/dashboard/public/`. Closes the
+  404 the global test pass found on `www.ebb-ai.com`.
+
+### Added — operator docs
+
+- **`docs/VERCEL-DEPLOY.md`** — Step-by-step guide to add
+  `EBB_EIA_API_KEY`, `EBB_ENTSOE_SECURITY_TOKEN`, and
+  `EBB_ELECTRICITY_MAPS_API_KEY` to the Vercel project so the
+  live site shows real data for six currently-mock regions.
+- **`apps/dashboard/.env.example`** — Mirror of the env-vars
+  the local development setup expects.
+
+### Added — drafts (not shipping code; positioning the project)
+
+- **`docs/spec/proposal/UPSTREAM-PR.md`** — Paste-ready GitHub PR
+  body + schema/spec diff for the upstream
+  `modelcontextprotocol/specification` repository, proposing
+  optional `priority`, `deadline`, `carbon_budget` fields on
+  `tools/call`. Includes filing checklist and follow-up plan.
+- **`docs/papers/carbon-aware-mcp-scheduling.md`** — 4-section
+  technical paper for HotCarbon Workshop (USENIX) submission or
+  arXiv cs.DC preprint. Covers system design, evaluation
+  methodology, the v0.8.2 simulation results, and the spec
+  proposal. ~5 pages rendered.
+- **`docs/spec/proposal/v09-leaderboard.md`** — v0.9 leaderboard
+  architecture: opt-in telemetry endpoint, Ed25519-signed events,
+  privacy model, anti-abuse, reference implementation sketch.
+  Implementation gated on a privacy-policy
+  review and a 30-day beta.
+
+### Changed — scheduler / mock feed
+
+- **`mockGridFeed(clock?)`** now accepts an injected clock so
+  simulations that sweep many synthetic submit times produce
+  aligned forecasts. Without the parameter, behaviour is
+  unchanged (wall-clock now).
+- **Even-distribution simulation tightened.** With clock-injected
+  mock + varied submit times + the existing v0.8.0 jitter, the
+  test now demonstrates a 10.8 % max-bucket concentration (vs.
+  the 66.9 % pre-v0.8.0 pathology and 51.0 % at v0.8.1). The
+  threshold is ratcheted to 20 %; an empty-bucket assertion
+  catches partial-spread regressions.
+
+### Changed — UX
+
+- **`/queue` page** demo-mode banner is now a prominent
+  amber-bordered aside (was a small grey footnote). Updated
+  `/api/queue` response body to include a `note` field with
+  CLI guidance for getting real data.
+- **Dashboard banner** v0.7.1 → v0.8.0 (later 0.8.2 from this
+  release).
+
+### Fixed — already in v0.8.1, re-shipped here for the plugin
+
+- (no new fixes; this release is polish + plugin re-sync)
+
+### Plugin
+
+- Plugin manifest bumped 0.8.0 → 0.8.2 to match the released
+  package versions.
+
+### npm
+
+- `@ebb-ai/core` 0.8.0 → 0.8.2
+- `@ebb-ai/cli` 0.8.1 → 0.8.2
+- `@ebb-ai/mcp` 0.8.1 → 0.8.2
+
+### Tests
+
+- Unchanged at 204 (100 + 21 + 8 + 75); the simulation rewrite
+  is a same-test rewrite, not an added one.
+
 ## [0.8.1] — 2026-05-16
 
 **Theme:** "Three bugs caught by the post-release global test pass."
