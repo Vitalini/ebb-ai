@@ -10,7 +10,7 @@
     {
       "name": "ebb-ai",
       "description": "Eight slash commands (/ebb-ai:{defer, plan, check, cancel, expedite, reschedule, retry, grid}), a carbon-aware-coding skill, persistent SQLite queue, and auto-wires the @ebb-ai/mcp MCP server.",
-      "version": "0.8.0",
+      "version": "0.8.2",
       "source": "./"
     }
   ]

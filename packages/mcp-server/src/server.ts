@@ -37,7 +37,7 @@ import { z } from "zod";
 
 /** Server version — keep in sync with `package.json`. Sole source of truth for
  *  both the MCP `serverInfo` field and the stderr ready banner. */
-const SERVER_VERSION = "0.8.1";
+const SERVER_VERSION = "0.8.2";
 
 const DEFAULT_REGION = process.env.EBB_DEFAULT_REGION ?? "US-CAL-CISO";
 
