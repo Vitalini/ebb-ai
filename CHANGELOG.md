@@ -14,7 +14,6 @@ post-v0.8.1 global test pass surfaced; lands the v0.8.2
 simulation-tightening; ships the dashboard `/stats` route; and
 adds three roadmap-ready drafts (upstream MCP spec PR, arXiv
 preprint, v0.9 leaderboard design) that move the project off the
-
 "nothing-shipped-upstream-yet" baseline.
 
 ### Added — dashboard

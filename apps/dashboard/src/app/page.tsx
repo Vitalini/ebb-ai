@@ -75,7 +75,7 @@ function Hero({
     <section className="space-y-6">
       <div className="inline-flex items-center gap-2 rounded-md border border-accent/40 bg-accent/5 px-3 py-1 font-mono text-xs uppercase tracking-wider text-accent">
         <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-        v0.8.0 · operator preview
+        v0.8.2 · operator preview
       </div>
       <h1 className="max-w-3xl text-4xl font-extrabold leading-[1.05] tracking-tight text-fg sm:text-5xl">
         Cheaper inference, smoother grid.

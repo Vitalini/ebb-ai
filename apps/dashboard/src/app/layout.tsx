@@ -57,7 +57,7 @@ export default function RootLayout({
               (mock fallback when no key is configured)
             </p>
             <p className="font-mono text-fg-dim">
-              v0.2 · operator preview · UTC-aligned
+              v0.8.2 · operator preview · UTC-aligned
             </p>
           </div>
         </footer>
