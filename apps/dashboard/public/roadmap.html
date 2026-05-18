@@ -49,26 +49,28 @@
       </section>
 
       <section class="block alt">
-        <h2>v0.2 — current</h2>
+        <h2>v0.2 → v0.8.2 — landed</h2>
         <ul class="rm-list">
-          <li class="active">Provider adapters: Anthropic (sync + Batch) and OpenAI (sync + Batch). Real LLM dispatch, real receipts, automatic Batch-API routing when deadline allows.</li>
-          <li class="active">SQLite-backed durable queue. Tasks survive process restart. Full audit log of every dispatch.</li>
-          <li class="active">Python port — <code>ebb-ai</code> on PyPI. Same API surface, async, with <code>aiosqlite</code> persistence and optional Anthropic / OpenAI extras.</li>
-          <li class="active">Dashboard MVP — <code>apps/dashboard/</code>. Live carbon-intensity map across six regions, 72-hour forecast charts, best-window planner, queue viewer.</li>
-          <li class="active">Real MCP protocol smoke test via <code>InMemoryTransport</code>.</li>
-          <li class="active">MCP spec proposal drafted for upstream (<code>docs/spec/01-priority-and-deadline-fields.md</code>).</li>
+          <li class="done">Provider adapters: Anthropic (sync + Batch) and OpenAI (sync + Batch). Real LLM dispatch, real receipts, automatic Batch-API routing when deadline allows.</li>
+          <li class="done">SQLite-backed durable queue (<code>~/.ebb-ai/queue.db</code>). Tasks survive process restart. Full audit log of every dispatch.</li>
+          <li class="done">Python port — <code>ebb-ai</code> on PyPI. Same API surface, async, with <code>aiosqlite</code> persistence and optional Anthropic / OpenAI extras.</li>
+          <li class="done">Dashboard hosted at <a href="https://www.ebb-ai.com">ebb-ai.com</a>. Live carbon-intensity map across seven regions with real EIA / ENTSO-E / Electricity Maps / UK CI data, 72-hour forecast charts, best-window planner, queue viewer, personal-impact <code>/stats</code> view.</li>
+          <li class="done">Real MCP protocol smoke test via <code>InMemoryTransport</code>.</li>
+          <li class="done">Per-zone grid-feed router (<code>buildDefaultGridFeed</code>): GB → UK CI key-less; US ISOs → EIA; EU → ENTSO-E; fallback → Electricity Maps.</li>
+          <li class="done">Tolerance-banded randomized tie-break (15 % tolerance, 30 g floor) closing the "everyone at 03:00 UTC" pathology — even-distribution simulation now under 11 % max-bucket concentration.</li>
+          <li class="done">Local-only personal-impact aggregator + <code>ebb stats</code> CLI on top of the SQLite ledger.</li>
         </ul>
       </section>
 
       <section class="block">
-        <h2>v0.3 — next</h2>
+        <h2>v0.9 — next</h2>
         <ul class="rm-list">
-          <li>Upstream MCP spec PRs filed and in maintainer review. Targeting <code>priority</code>, <code>deadline</code>, <code>carbon_budget</code>, and an <code>audit</code> block on <code>CallToolResult</code>.</li>
-          <li>Public hosted dashboard (deployable to Vercel) at a stable URL, showing aggregated opt-in stats and live grid intensity across all major LLM-provider regions.</li>
+          <li>Upstream MCP spec PR filed at <code>modelcontextprotocol/specification</code> proposing optional <code>priority</code>, <code>deadline</code>, <code>carbon_budget</code> on <code>tools/call</code> (draft at <code>docs/spec/proposal/UPSTREAM-PR.md</code>).</li>
+          <li>Opt-in global leaderboard backend: Ed25519-signed anonymous events to a Vercel edge function, daily rollup, aggregate counters + zone rank on <code>/stats</code> (design at <code>docs/spec/proposal/v09-leaderboard.md</code>).</li>
           <li>WattTime marginal-emissions feed. Default grid signal moves from average to marginal where available — the honest climate signal for time-shifting.</li>
           <li>Gemini Batch adapter and a local Ollama adapter for laptop / edge dispatch.</li>
           <li>Cross-provider routing — for a given prompt, pick the cheapest carbon-weighted route across {Anthropic, OpenAI, Gemini, local}.</li>
-          <li>ESG / SEC-disclosure-friendly carbon receipt export. CSV + JSON + a printable monthly report.</li>
+          <li>ESG-friendly carbon receipt export. CSV + JSON + a printable monthly report.</li>
           <li>Multi-region failover with regional privacy locking (<code>us-only</code>, <code>eu-only</code> hints).</li>
         </ul>
       </section>
