@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 /**
- * `ebb` — CLI entry point. v0.4 surface:
+ * `ebb` — CLI entry point.
  *
  *   ebb tick           drain due tasks (one-shot or --daemon)
  *   ebb install        write launchd plist or print systemd/schtasks templates
  *   ebb queue list     print queued/scheduled/running/completed tasks
  *   ebb receipts list  print carbon receipts for completed tasks
+ *   ebb stats          local-only personal-impact summary
  *   ebb register-wake  schedule a macOS wake event 30s before a task
  */
 
@@ -17,12 +18,16 @@ import { runRegisterWake } from "./commands/register-wake.js";
 import { runStats } from "./commands/stats.js";
 import { runTick } from "./commands/tick.js";
 
+/** CLI version — keep in sync with `package.json`. Sole source of truth for
+ * what `ebb --version` prints. */
+const CLI_VERSION = "0.8.3";
+
 export function buildProgram(): Command {
   const program = new Command();
   program
     .name("ebb")
     .description("CLI for ebb-ai — carbon-aware scheduler tick + install")
-    .version("0.4.0");
+    .version(CLI_VERSION);
 
   program
     .command("tick")

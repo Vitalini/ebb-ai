@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.3] — 2026-05-17
+
+**Theme:** "CLI version-string fix."
+
+### Fixed
+
+- **`@ebb-ai/cli` — `ebb --version` was returning the hardcoded
+  string `0.4.0` instead of the actual package version** (the
+  string had been left in `src/index.ts` since the v0.4 surface
+  and never re-synced to `package.json`). Same bug pattern as
+  the v0.7.1 MCP server `serverInfo` issue fixed in v0.8.1.
+  The CLI now reads from a single `CLI_VERSION` constant kept in
+  sync with `package.json`. Discovered by the v0.8.2 post-release
+  global test pass.
+
+### npm
+
+- `@ebb-ai/cli` 0.8.2 → 0.8.3
+- `@ebb-ai/mcp`, `@ebb-ai/core` unchanged at 0.8.2.
+
 ## [0.8.2] — 2026-05-17
 
 **Theme:** "Polish + roadmap drafts." Closes every loose end the
