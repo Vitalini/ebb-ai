@@ -27,12 +27,12 @@ export function Nav() {
           </span>
         </Link>
 
-        <nav className="flex items-center gap-0.5 whitespace-nowrap text-sm sm:gap-1">
+        <nav className="flex items-center gap-0.5 whitespace-nowrap text-xs sm:gap-1 sm:text-sm">
           {LINKS.map((link) => (
             <Link
               key={link.href}
               href={link.href}
-              className="rounded-md px-2 py-1.5 text-fg-muted transition-colors hover:bg-bg-elev hover:text-fg sm:px-3"
+              className="rounded-md px-1.5 py-1.5 text-fg-muted transition-colors hover:bg-bg-elev hover:text-fg sm:px-3"
             >
               {link.label}
             </Link>
@@ -41,9 +41,9 @@ export function Nav() {
             href="https://github.com/Vitalini/ebb-ai"
             target="_blank"
             rel="noreferrer"
-            className="ml-1 rounded-md px-2 py-1.5 text-fg-muted transition-colors hover:bg-bg-elev hover:text-fg sm:ml-2 sm:px-3"
+            className="ml-0.5 rounded-md px-1.5 py-1.5 text-fg-muted transition-colors hover:bg-bg-elev hover:text-fg sm:ml-2 sm:px-3"
           >
-            GitHub <span aria-hidden="true">→</span>
+            GitHub<span aria-hidden="true" className="hidden sm:inline"> →</span>
           </a>
         </nav>
       </div>
