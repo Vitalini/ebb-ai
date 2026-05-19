@@ -27,6 +27,8 @@ Each row: `YYYY-MM-DD | platform | action | URL | status | notes`.
 | - | glama.ai/mcp | Auto-indexed? Check | https://glama.ai/mcp/servers | not started | Aggregator, may auto-detect |
 | - | mcp-get.com | Auto-index of `@ebb-ai/mcp` on npm? | https://mcp-get.com | not started | Indexes npm scoped packages |
 | 2026-05-19 | punkpeye/awesome-mcp-servers | PR #6348 — Environment & Nature section | https://github.com/punkpeye/awesome-mcp-servers/pull/6348 | OPEN, labels `has-emoji` + `valid-name`, awaiting maintainer merge | AI-PR opt-in title (`🤖🤖🤖`) honored by maintainer's streamlined process |
+| 2026-05-19 | Green-Software-Foundation/awesome-green-software | PR #215 — AI > Carbon section | https://github.com/Green-Software-Foundation/awesome-green-software/pull/215 | OPEN, DCO-signed, targets `dev` branch | Highest semantic fit; only 2 existing entries in AI Carbon (1ClickImpact, Experiment Impact Tracker), ebb-ai is a reduction-at-source complement |
+| 2026-05-19 | ComposioHQ/awesome-claude-skills | PR #877 — Development & Code Tools | https://github.com/ComposioHQ/awesome-claude-skills/pull/877 | OPEN | 60k⭐ list; ebb-ai inserted alphabetically between D3.js and FFUF |
 | 2026-05-19 | hesreallyhim/awesome-claude-code | (deferred) | https://github.com/hesreallyhim/awesome-claude-code | not opened | Repo is mid-restructure ("Table of Contents: TODO" + "update in progress" banner). Wait for them to ship the new TOC, then PR. |
 | 2026-05-19 | ClawHub | Plugin published as `@vitalini/ebb-ai@0.1.0` | https://clawhub.ai/plugins/@vitalini/ebb-ai | published (pending security review for public listing) | Skill stayed local (`~/.openclaw/workspace/skills/personal/ebb-ai/`) — user decided maintainer-side ops skill doesn't need publishing |
 
