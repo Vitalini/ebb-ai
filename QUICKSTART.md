@@ -1,274 +1,138 @@
 # Quick start
 
-**Four steps. Five minutes. Carbon-aware AI scheduling on your machine.**
+**One command. Thirty seconds. Carbon-aware AI scheduling in any MCP host.**
 
 ---
 
-## Step 1 — Install ebb-ai
+## Step 1 — Install in your AI host
 
-```bash
-git clone https://github.com/Vitalini/ebb-ai
-cd ebb-ai
-pnpm install
-pnpm build
+### Claude Code (one line)
+
+```
+/plugin marketplace add Vitalini/ebb-ai
+/plugin install ebb-ai
 ```
 
-Requirements: **Node 20+**, **pnpm 9+**, **Python 3.11+** if you want
-the Python package.
+Auto-wires the MCP server and adds eight `/ebb-ai:*` slash commands.
 
-> No npm / PyPI publish yet — install from source for now.
+### Cursor · Claude Desktop · any other MCP host
 
----
-
-## Step 2 — (Optional) Add an Electricity Maps API key
-
-Without a key, ebb-ai uses a deterministic mock grid feed — the whole
-stack still works end-to-end. With a key, you get live data.
-
-```bash
-export EBB_ELECTRICITY_MAPS_API_KEY="..."   # free tier at electricitymaps.com
-```
-
----
-
-## Step 3 — Wire ebb-ai into your agent
-
-### A. Claude Desktop
-
-Edit `~/Library/Application Support/Claude/claude_desktop_config.json`
-(macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+Add the MCP server to your host's config:
 
 ```json
 {
   "mcpServers": {
     "ebb-ai": {
-      "command": "node",
-      "args": ["/absolute/path/to/ebb-ai/packages/mcp-server/dist/server.js"],
-      "env": {
-        "EBB_ELECTRICITY_MAPS_API_KEY": "optional"
-      }
+      "command": "npx",
+      "args": ["-y", "@ebb-ai/mcp"]
     }
   }
 }
 ```
 
-Restart Claude Desktop. The three ebb-ai tools appear in the agent's
-tool list.
+Locations:
+- **Claude Desktop:** `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) · `%APPDATA%\Claude\claude_desktop_config.json` (Windows)
+- **Cursor:** `~/.cursor/mcp.json` or Settings → MCP
+- **Cline / Windsurf / Zed / Continue / Goose / OpenClaw:** see the host-specific snippets at <https://www.ebb-ai.com/#install>
 
-### B. Claude Code
-
-```bash
-claude mcp add ebb-ai node /absolute/path/to/ebb-ai/packages/mcp-server/dist/server.js
-```
-
-### C. OpenClaw
+### Python library (no MCP)
 
 ```bash
-cp -r examples/openclaw-skill ~/.openclaw/skills/ebb-ai
+pip install ebb-ai
 ```
 
-Reload OpenClaw. The skill describes when to use ebb-ai; the MCP server
-exposes the actual tools.
+Use the `ebb_ai.Scheduler` API directly.
 
-### D. As a TypeScript library
-
-```typescript
-import { defer } from "@ebb-ai/core";
-
-const result = await defer(
-  () => anthropic.messages.create({ /* … */ }),
-  {
-    deadline: "2026-05-13T08:00:00-04:00",
-    carbonBudgetG: 5,
-    region: "US-CAL-CISO",
-  },
-);
-```
-
-### E. As a Python library
+### TypeScript / Node library (no MCP)
 
 ```bash
-pip install -e "packages/core-py[anthropic,openai]"
+pnpm add @ebb-ai/core
 ```
 
-```python
-import asyncio
-from ebb_ai import defer
+Import `createScheduler`, `recommendWindow`, `TaskStore` from `@ebb-ai/core`.
 
-asyncio.run(defer(
-    lambda: do_work(),
-    deadline="2026-05-13T08:00:00-04:00",
-    carbon_budget_g=5,
-    region="US-CAL-CISO",
-))
+---
+
+## Step 2 — Try it
+
+In any chat session with the host you installed it in, type a request
+with deferral phrasing:
+
+```
+defer "summarize my GitHub notifications" by tomorrow 6pm
+```
+
+The agent picks up the trigger automatically and queues the task at
+the cleanest electricity-grid hour inside the deadline. You get a
+`task_id` immediately; the actual LLM call fires later.
+
+Equivalent explicit form:
+
+```
+/ebb-ai:defer "summarize my GitHub notifications" --by tomorrow 6pm
 ```
 
 ---
 
-## Step 4 — Try it
+## Step 3 — Run the tick daemon (for actual dispatch)
 
-In your agent host:
+The MCP server **queues** tasks but doesn't run a clock. To actually
+dispatch at the chosen window, install the CLI's tick daemon once:
 
-> Run `analyze the last 30 days of git commits and write a summary report`,
-> but defer it to the cleanest carbon window in the next 12 hours.
+```bash
+npm install -g @ebb-ai/cli
+ebb install      # registers launchd (macOS) or systemd (Linux) cron
+ebb status       # confirm the tick is wired
+```
 
-The agent will:
-
-1. Call `get_grid_forecast("US-CAL-CISO", 12)` — see the next 12 hours.
-2. Call `schedule_task(prompt, deadline=now+12h, region="US-CAL-CISO")` —
-   queue the task.
-3. Get back a `task_id` and the scheduled time.
-4. At the chosen window, ebb-ai dispatches and writes a carbon receipt.
-5. Agent polls `check_queue_status(task_id)` to retrieve the result and
-   receipt.
+Without the daemon, tasks sit queued; you can dispatch manually with
+`ebb tick --once`.
 
 ---
 
-## Step 5 — (optional, macOS) Make tasks survive a closed laptop
+## Step 4 — (Optional) live grid data for more regions
 
-Without this step, deferred tasks live only as long as the MCP host
-process. Close Claude Desktop, sleep your laptop, and a 3am task runs
-when you wake it — not at 3am.
+GB is always live via UK National Grid ESO with no API key. To unlock
+live data for the US and EU regions, set any of:
 
 ```bash
-pnpm --filter @ebb-ai/cli build
-node packages/cli/dist/index.js install --laptop
+export EBB_EIA_API_KEY="..."              # US ISOs (free at eia.gov)
+export EBB_ENTSOE_SECURITY_TOKEN="..."    # Europe (free at transparency.entsoe.eu)
+export EBB_ELECTRICITY_MAPS_API_KEY="..." # universal fallback (free at electricitymaps.com)
 ```
 
-This writes:
-- `~/Library/LaunchAgents/com.ebb-ai.tick.plist` — runs `ebb tick`
-  every 5 minutes.
-- `~/.ebb/laptop-wake.sh` — pre-registers `pmset` wake events for
-  scheduled tasks. Requires a sudoers entry for `pmset schedule wake`
-  if you want it to run unattended.
+Without any of these, ebb-ai uses a deterministic mock curve so the
+stack still works end-to-end (useful for demos and CI).
+
+---
+
+## Where to go next
+
+- **Live carbon map + planner:** <https://www.ebb-ai.com/>
+- **Full docs (all 8 commands + 9 MCP tools + install matrix):** <https://www.ebb-ai.com/docs>
+- **Why it exists:** <https://www.ebb-ai.com/about>
+- **Architecture:** <https://www.ebb-ai.com/architecture>
+- **Source / issues / CHANGELOG:** <https://github.com/Vitalini/ebb-ai>
+
+---
+
+## Developer setup (only if hacking on ebb-ai itself)
+
+```bash
+git clone https://github.com/Vitalini/ebb-ai
+cd ebb-ai
+pnpm install
+pnpm -r build       # build every package in the workspace
+pnpm -r test        # 204 tests across TS + Python
+```
+
+Requirements: **Node 20+**, **pnpm 9+**, **Python 3.11+** for the
+Python port.
 
 Then:
 
 ```bash
-launchctl load ~/Library/LaunchAgents/com.ebb-ai.tick.plist
-tail -f ~/.ebb/tick.log    # see the cron in action
+pnpm --filter @ebb-ai/web dev   # local dashboard at :3000
 ```
 
-Server / always-on Linux box variant:
-
-```bash
-node packages/cli/dist/index.js install --server
-```
-
-Linux + Windows: `install` emits a systemd unit / `schtasks` command
-template — copy + adapt. Native daemonization for both lands in v0.5.
-
----
-
-## Troubleshooting
-
-### `pnpm install` fails with `node-gyp` / `better-sqlite3` errors
-
-`@ebb-ai/core` depends on **better-sqlite3**, which has a tiny native
-binding. On macOS you need the **Xcode Command Line Tools** (one-time):
-
-```bash
-xcode-select --install
-```
-
-On Linux, you need `python3`, `make`, and `g++`:
-
-```bash
-sudo apt-get install build-essential python3
-# or, on RHEL/Fedora:
-sudo dnf groupinstall "Development Tools" && sudo dnf install python3
-```
-
-If `pnpm install` still fails, rebuild explicitly:
-
-```bash
-pnpm rebuild better-sqlite3
-```
-
-### `pnpm` not found
-
-```bash
-npm install -g pnpm@9
-```
-
-### `Node version mismatch`
-
-ebb-ai targets Node 20+. Check with `node --version`. Use
-[`fnm`](https://github.com/Schniz/fnm) or [`nvm`](https://github.com/nvm-sh/nvm)
-to manage versions:
-
-```bash
-fnm install 22 && fnm use 22
-```
-
-### MCP server starts but Claude Desktop doesn't see the tools
-
-Check `~/Library/Logs/Claude/mcp-server-ebb-ai.log` (macOS). Most
-common causes: wrong absolute path to `node`, wrong path to
-`server.js`, or Claude Desktop not restarted after editing
-`claude_desktop_config.json`.
-
-Use absolute paths in the config — Claude Desktop launches MCP
-servers in a minimal `PATH`.
-
-### `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` warnings on `ebb tick`
-
-This is expected when no provider keys are set. `ebb tick` exits with
-status 0 and a warning; tasks that need a provider remain in the
-`scheduled` state until a key is configured. Set the env var either
-in the MCP host config block (for in-process dispatch) or in the
-launchd plist's `EnvironmentVariables` (for `ebb tick`).
-
-### Python `pytest` finds no tests
-
-Activate the venv first:
-
-```bash
-cd packages/core-py
-. .venv/bin/activate
-pytest -q
-```
-
-If `.venv` doesn't exist:
-
-```bash
-python3 -m venv .venv && . .venv/bin/activate && pip install -e ".[dev,anthropic,openai]"
-```
-
----
-
-## What lives where (when something breaks)
-
-| You want | Where to look |
-|---|---|
-| Live carbon dashboard | `pnpm --filter @ebb-ai/dashboard dev` → http://localhost:3000 |
-| Queue ledger | `sqlite3 ~/.ebb/queue.sqlite` (or wherever you point `dbPath`) |
-| Carbon receipts | Same SQLite — `SELECT * FROM tasks WHERE status = 'completed';` |
-| Force a quick sanity run | `pnpm --filter @ebb-ai/core test` |
-
----
-
-## Honest caveats
-
-- **Computer must be awake** when the chosen window fires. v0.2 keeps
-  timers in-process. If your laptop sleeps at midnight and a task is
-  due at 3am, it will run when the laptop wakes (not at 3am). The
-  always-on `ebb tick` + macOS pmset wake events are queued for v0.3.
-- **`schedule_task` does not call the LLM itself.** It picks the
-  window. The agent calling the tool is expected to execute the
-  prompt when the window arrives. (The provider adapters in
-  `@ebb-ai/core` can do the actual LLM dispatch — see the library
-  examples above.)
-- **Carbon estimates use a placeholder energy coefficient**
-  (0.0015 kWh per task). Per-model coefficients land in v0.3.
-
----
-
-## Next reads
-
-- [Architecture](./apps/site/architecture.html) — system diagram + data flow
-- [Roadmap](./apps/site/roadmap.html) — v0.1 → v1.0
-- [ROADMAP.md](./ROADMAP.md) — full 24-week execution plan
-- [CHANGELOG.md](./CHANGELOG.md) — what shipped in v0.2
-
-Bugs and feature ideas: [Issues](https://github.com/Vitalini/ebb-ai/issues).
+See `apps/web/README.md` for dashboard-specific details.
