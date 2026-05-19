@@ -60,10 +60,8 @@ function Hero() {
         <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
         v0.8.2 · operator preview
       </div>
-      <h1 className="max-w-4xl text-4xl font-extrabold leading-[1.05] tracking-tight text-fg sm:text-6xl">
-        Defer AI work to the
-        <br />
-        <span className="text-accent">cleanest hour</span> of the grid.
+      <h1 className="max-w-5xl text-balance text-3xl font-extrabold leading-[1.1] tracking-tight text-fg sm:text-4xl md:text-5xl">
+        Defer AI work to the <span className="text-accent">cleanest hour</span> of the grid.
       </h1>
       <p className="max-w-2xl text-base leading-relaxed text-fg-muted sm:text-lg">
         ebb-ai is an open-source MCP scheduler. Hand it any deferrable LLM
