@@ -7,11 +7,13 @@ auditable carbon receipts. MCP-native, ships as an `npm` package and
 a one-command Claude Code plugin.*
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-5eead4)](./LICENSE)
-[![v0.7.0](https://img.shields.io/badge/release-v0.7.0-fbbf24)](https://github.com/Vitalini/ebb-ai/releases/tag/v0.7.0)
-[![npm](https://img.shields.io/badge/npm-%40ebb--ai%2Fmcp-cb3837)](https://www.npmjs.com/package/@ebb-ai/mcp)
-[![Tests](https://img.shields.io/badge/tests-169%20passing-22c55e)](#tests)
-[![MCP tools](https://img.shields.io/badge/MCP-8%20tools-5eead4)](https://modelcontextprotocol.io)
-[![Hosts](https://img.shields.io/badge/MCP%20hosts-10-5eead4)](./QUICKSTART.md)
+[![npm (core)](https://img.shields.io/npm/v/%40ebb-ai%2Fcore?label=%40ebb-ai%2Fcore&color=cb3837)](https://www.npmjs.com/package/@ebb-ai/core)
+[![npm (mcp)](https://img.shields.io/npm/v/%40ebb-ai%2Fmcp?label=%40ebb-ai%2Fmcp&color=cb3837)](https://www.npmjs.com/package/@ebb-ai/mcp)
+[![npm (cli)](https://img.shields.io/npm/v/%40ebb-ai%2Fcli?label=%40ebb-ai%2Fcli&color=cb3837)](https://www.npmjs.com/package/@ebb-ai/cli)
+[![Tests](https://img.shields.io/badge/tests-204%20passing-22c55e)](#tests)
+[![MCP tools](https://img.shields.io/badge/MCP-9%20tools-5eead4)](https://www.ebb-ai.com/docs)
+[![Hosts](https://img.shields.io/badge/MCP%20hosts-13-5eead4)](https://www.ebb-ai.com/docs#install)
+[![Website](https://img.shields.io/badge/website-ebb--ai.com-5eead4)](https://www.ebb-ai.com)
 
 AI inference is on track to consume 6.7–12% of US grid load by 2028
 ([DOE projections](https://www.energy.gov/eere/buildings/articles/2024-united-states-data-center-energy-usage-report)).
