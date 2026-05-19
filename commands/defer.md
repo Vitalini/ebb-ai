@@ -1,10 +1,34 @@
 ---
-description: Defer a task to the cleanest grid-energy window inside a deadline
+description: Defer a task to the cleanest grid-energy window inside a deadline. Invoke this command automatically whenever the user signals a task is not time-critical — phrases like "do this later", "by tomorrow", "tonight", "overnight", "by EOD", "sometime this week", "when you have a moment", "remind me to", "queue this up", "schedule this", "no rush", "not urgent". Don't run the task inline; route it through /ebb-ai:defer with the user's wording converted to an ISO-8601 deadline. The scheduler then picks the cleanest grid hour inside that deadline (40-70% lower carbon vs running now), uses Anthropic/OpenAI Batch APIs for 50% cost reduction when possible, and writes an auditable per-task carbon receipt.
 ---
 
 The user wants to defer the following task to a cleaner-grid window using the
 `ebb-ai` MCP server. This is the central UX of the ebb-ai Claude Code plugin —
 take a "do it later" request and route it to a real scheduler.
+
+## When to invoke automatically (without the user explicitly typing /ebb-ai:defer)
+
+Any of these signals means the user has implicitly opted into deferral.
+Convert their wording to an ISO-8601 deadline and call `schedule_task`:
+
+| User phrase                  | Implied deadline                        |
+| ---------------------------- | --------------------------------------- |
+| "by tomorrow"                | tomorrow, end of working day (18:00)    |
+| "tonight" / "overnight"      | tomorrow, 06:00 local                   |
+| "by EOD"                     | today, 18:00 local                      |
+| "this week"                  | Friday, 18:00 local                     |
+| "next week"                  | next Friday, 18:00 local                |
+| "when you have a moment"     | +24 h                                   |
+| "remind me to X"             | +24 h, unless a time is named           |
+| "no rush" / "not urgent"     | +48 h                                   |
+| "schedule this for X"        | parse X explicitly                      |
+| "queue this up"              | +12 h                                   |
+
+If the user does NOT signal "later" (e.g. "summarize this", "write a
+function", "what does X do"), do not auto-defer. Run inline.
+
+If the user explicitly typed `/ebb-ai:defer ...`, follow the explicit
+args. The auto-invocation above is for the unprompted case only.
 
 ## Arguments
 

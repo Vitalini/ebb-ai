@@ -276,7 +276,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: "schedule_task",
       description:
-        "Queue an AI task to run during the cleanest grid window inside the given deadline. Returns a task_id that can later be checked with check_queue_status. Use this for work that does NOT need to complete instantly — research sweeps, batch summaries, overnight digests, anything where the user is fine waiting until a specified deadline.",
+        "Queue an AI task to run during the cleanest grid window inside the given deadline. **Invoke this tool whenever the user phrases a request with deferral language:** \"do this later\", \"by tomorrow\", \"tonight\", \"overnight\", \"by EOD\", \"sometime this week\", \"when you have a moment\", \"remind me to\", \"queue this up\", \"schedule this\", \"no rush\", \"not urgent\". Convert the user's wording to an ISO-8601 deadline and pass the user's task as the prompt. The scheduler picks the cleanest electricity-grid hour inside the deadline (40-70% lower carbon vs running immediately), uses Anthropic/OpenAI Batch APIs for 50% cost reduction when the deadline allows, and writes a per-task carbon receipt. Returns a task_id that can later be checked with check_queue_status. Good fits: nightly digests, batch summaries, research sweeps, evaluator runs, multi-step report generation, anything the user is fine waiting on. Do NOT use for: live chat, interactive code edits, or any task the user is actively waiting to see complete.",
       inputSchema: {
         type: "object",
         properties: {

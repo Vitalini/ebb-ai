@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "ebb-ai",
-  "description": "Carbon-aware deferral for Claude Code. Route deferrable LLM tasks to cleaner-grid windows via the ebb-ai MCP scheduler.",
+  "description": "Auto-defer \"do it later\" work to the cleanest electricity-grid hour. Route any AI request signaled with later / tomorrow / overnight / EOD / remind-me through ebb-ai instead of running immediately. Carbon-aware MCP scheduler + 8 Claude Code slash commands. Apache-2.0.",
   "owner": {
     "name": "Vitalini",
     "url": "https://github.com/Vitalini"
@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "ebb-ai",
-      "description": "Eight slash commands (/ebb-ai:{defer, plan, check, cancel, expedite, reschedule, retry, grid}), a carbon-aware-coding skill, persistent SQLite queue, and auto-wires the @ebb-ai/mcp MCP server.",
+      "description": "Auto-dispatch any \"do this later / by tomorrow / overnight / when you have a moment\" task to the cleanest grid hour inside the deadline. Invoke when the user defers — queues + scores against live carbon-intensity for 7 LLM-provider regions, routes through Anthropic/OpenAI Batch APIs (50% cheaper), writes per-task carbon receipt. Eight slash commands (/ebb-ai:{defer, plan, check, cancel, expedite, reschedule, retry, grid}). Persistent SQLite queue. Apache-2.0.",
       "version": "0.8.2",
       "source": "./"
     }
