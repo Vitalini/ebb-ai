@@ -147,7 +147,7 @@ export default function DocsPage() {
             Architecture, roadmap, source.
           </h2>
         </header>
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <Link
             href="/architecture"
             className="rounded-md border border-rule bg-bg-card p-4 transition-colors hover:border-accent/40 hover:bg-accent/5"
@@ -156,15 +156,6 @@ export default function DocsPage() {
             <p className="mt-1 text-sm text-fg-muted">
               System diagram, ingest→dispatch→receipt flow, what&apos;s
               deliberately not in v0.8.
-            </p>
-          </Link>
-          <Link
-            href="/roadmap"
-            className="rounded-md border border-rule bg-bg-card p-4 transition-colors hover:border-accent/40 hover:bg-accent/5"
-          >
-            <p className="font-semibold text-fg">Roadmap</p>
-            <p className="mt-1 text-sm text-fg-muted">
-              v0.1 → v0.8.2 (landed) · v0.9 (next) · v1.0 (stable surface).
             </p>
           </Link>
           <a

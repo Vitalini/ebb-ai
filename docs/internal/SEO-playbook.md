@@ -22,8 +22,9 @@ Auto-generated at `apps/dashboard/src/app/sitemap.ts`. Routes:
 - `/stats` (weekly · 0.7)
 - `/queue` (weekly · 0.6)
 - `/architecture` (monthly · 0.7)
-- `/roadmap` (weekly · 0.7)
 - `/docs` (weekly · 0.6)
+
+(`/roadmap` was removed — content moved to private planning, not published.)
 - `/map` *(add to sitemap when next bumped)*
 
 Update the sitemap.ts list when adding/removing routes.

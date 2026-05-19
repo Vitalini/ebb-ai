@@ -38,7 +38,6 @@ The agent gets a `task_id`; the task lands at the cleanest hour.
 - [Live carbon-intensity map (7 grid regions)](https://www.ebb-ai.com/map)
 - [Best-window finder UI](https://www.ebb-ai.com/plan)
 - [Architecture deep-dive](https://www.ebb-ai.com/architecture)
-- [Roadmap (v0.2 → v0.8.2 landed, v0.9 next, v1.0 stable)](https://www.ebb-ai.com/roadmap)
 - [Source · CHANGELOG · issues](https://github.com/Vitalini/ebb-ai)
 
 ## MCP tools (9)

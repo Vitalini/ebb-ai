@@ -193,11 +193,9 @@ export default function AboutPage() {
           regions with under 11 % max-bucket concentration, the SQLite ledger
           survives process restart, and per-region routing is auto-wired. The
           public surface is still pre-1.0: API shapes can change in minor
-          versions. The{" "}
-          <Link href="/roadmap" className="text-accent hover:underline">roadmap</Link>{" "}
-          spells out what&apos;s deferred to v0.9 (upstream MCP PR, opt-in
-          aggregate leaderboard, WattTime marginal-emissions feed,
-          cross-provider routing) and v1.0 (frozen API surface).
+          versions. Deferred for v0.9: upstream MCP spec PR, opt-in aggregate
+          leaderboard, WattTime marginal-emissions feed, cross-provider
+          routing. v1.0 will freeze the API surface.
         </p>
       </section>
 
