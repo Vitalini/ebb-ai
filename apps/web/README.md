@@ -7,8 +7,8 @@ a best-window finder, and a view into the scheduler's task queue.
 Built with Next.js 15 (app router), React 19, TypeScript strict mode,
 Tailwind 4, and Recharts.
 
-This app is the operator's tool. It is intentionally distinct from the
-marketing/landing site under [`../site/`](../site/).
+This app is the single public website at https://www.ebb-ai.com —
+combines install picker, live data, planner, and docs.
 
 ---
 
