@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import type { LucideIcon } from "lucide-react";
+import { BarChart3, BookOpen, CalendarClock, Globe } from "lucide-react";
 import { InstallPicker } from "@/components/install-picker";
 
 export const metadata: Metadata = {
@@ -11,32 +13,32 @@ export const metadata: Metadata = {
 
 const TILES: Array<{
   href: string;
-  emoji: string;
+  Icon: LucideIcon;
   title: string;
   body: string;
   external?: boolean;
 }> = [
   {
     href: "/map",
-    emoji: "🌍",
+    Icon: Globe,
     title: "Live carbon map",
     body: "Seven LLM-provider grid regions, real-time data. Click any region for the 72-hour forecast.",
   },
   {
     href: "/plan",
-    emoji: "📅",
+    Icon: CalendarClock,
     title: "Plan a task",
     body: "Pick a region + deadline. See the cleanest hour and the carbon you'd save vs running now.",
   },
   {
     href: "/stats",
-    emoji: "📊",
+    Icon: BarChart3,
     title: "My impact",
     body: "Personal carbon-receipt summary from your local ebb-ai queue. CLI-parity in the browser.",
   },
   {
     href: "/docs",
-    emoji: "📜",
+    Icon: BookOpen,
     title: "Docs & commands",
     body: "All 8 /ebb-ai:* slash commands, 9 MCP tools, install matrix for every host. Architecture deep-dive.",
   },
@@ -133,8 +135,13 @@ function TilesBlock() {
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-2xl">{t.emoji}</p>
-                <h3 className="mt-2 text-lg font-semibold tracking-tight text-fg">
+                <span
+                  aria-hidden="true"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-accent/30 bg-accent/10 text-accent transition-colors group-hover:bg-accent/15"
+                >
+                  <t.Icon className="h-5 w-5" strokeWidth={1.75} />
+                </span>
+                <h3 className="mt-3 text-lg font-semibold tracking-tight text-fg">
                   {t.title}
                 </h3>
                 <p className="mt-1 text-sm leading-relaxed text-fg-muted">

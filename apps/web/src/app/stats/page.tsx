@@ -13,6 +13,16 @@
  */
 
 import Link from "next/link";
+import type { LucideIcon } from "lucide-react";
+import {
+  BatteryCharging,
+  CalendarCheck,
+  Globe,
+  MapPinned,
+  Sprout,
+  Target,
+  Zap,
+} from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +54,7 @@ interface DemoBand {
 interface DemoBadge {
   id: string;
   label: string;
+  Icon: LucideIcon;
   description: string;
   unlocked: boolean;
 }
@@ -121,13 +132,13 @@ function generateDemo(): {
   };
 
   const badges: DemoBadge[] = [
-    { id: "first-deferral",     label: "🌱  First Deferral", description: "Queue your first ebb-ai task.",                       unlocked: stats.taskCount >= 1 },
-    { id: "ten-deferrals",      label: "⚡  Ten Up",         description: "Ship 10 deferred tasks.",                              unlocked: stats.taskCount >= 10 },
-    { id: "hundred-deferrals",  label: "🔋  Centurion",      description: "Ship 100 deferred tasks.",                             unlocked: stats.taskCount >= 100 },
-    { id: "thousand-deferrals", label: "🌍  Long Run",       description: "Ship 1 000 deferred tasks.",                           unlocked: stats.taskCount >= 1_000 },
-    { id: "multi-region",       label: "🗺️  World Tour",     description: "Dispatch across three or more grid regions.",          unlocked: regionRows.length >= 3 },
-    { id: "scored-streak",      label: "🎯  Sniper",         description: "Honour the scored window for 90%+ of completed tasks.", unlocked: stats.taskCount >= 10 && stats.scoredHits / stats.taskCount >= 0.9 },
-    { id: "endurance",          label: "📅  Endurance",      description: "Active across 7+ calendar days.",                       unlocked: true },
+    { id: "first-deferral",     label: "First Deferral", Icon: Sprout,          description: "Queue your first ebb-ai task.",                         unlocked: stats.taskCount >= 1 },
+    { id: "ten-deferrals",      label: "Ten Up",         Icon: Zap,             description: "Ship 10 deferred tasks.",                                unlocked: stats.taskCount >= 10 },
+    { id: "hundred-deferrals",  label: "Centurion",      Icon: BatteryCharging, description: "Ship 100 deferred tasks.",                               unlocked: stats.taskCount >= 100 },
+    { id: "thousand-deferrals", label: "Long Run",       Icon: Globe,           description: "Ship 1 000 deferred tasks.",                             unlocked: stats.taskCount >= 1_000 },
+    { id: "multi-region",       label: "World Tour",     Icon: MapPinned,       description: "Dispatch across three or more grid regions.",            unlocked: regionRows.length >= 3 },
+    { id: "scored-streak",      label: "Sniper",         Icon: Target,          description: "Honour the scored window for 90%+ of completed tasks.",  unlocked: stats.taskCount >= 10 && stats.scoredHits / stats.taskCount >= 0.9 },
+    { id: "endurance",          label: "Endurance",      Icon: CalendarCheck,   description: "Active across 7+ calendar days.",                         unlocked: true },
   ];
 
   return { stats, regions: regionRows, bands, badges };
@@ -265,8 +276,20 @@ export default function StatsPage() {
                   : "border-rule bg-bg-elev opacity-50"
               }`}
             >
-              <div className="text-base font-semibold text-fg">{b.label}</div>
-              <p className="mt-1 text-xs text-fg-muted">{b.description}</p>
+              <div className="flex items-center gap-2">
+                <span
+                  aria-hidden="true"
+                  className={`inline-flex h-8 w-8 items-center justify-center rounded-md border ${
+                    b.unlocked
+                      ? "border-accent/40 bg-accent/10 text-accent"
+                      : "border-rule bg-bg-card text-fg-dim"
+                  }`}
+                >
+                  <b.Icon className="h-4 w-4" strokeWidth={1.75} />
+                </span>
+                <div className="text-base font-semibold text-fg">{b.label}</div>
+              </div>
+              <p className="mt-2 text-xs text-fg-muted">{b.description}</p>
               <p className="mt-2 font-mono text-[10px] uppercase tracking-wider">
                 {b.unlocked ? <span className="text-accent">unlocked</span> : <span className="text-fg-dim">locked</span>}
               </p>
