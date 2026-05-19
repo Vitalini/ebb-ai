@@ -122,7 +122,7 @@ right now."
 | `@ebb-ai/core` | TypeScript core library (v0.2). `defer()` API, `AnthropicAdapter`, `OpenAIAdapter`, opt-in SQLite-backed durable queue. |
 | `@ebb-ai/mcp` | Model Context Protocol server (v0.2). Drop-in for Claude Desktop, Claude Code, OpenClaw, Cursor. |
 | `ebb-ai` (Python) | Python 3.11+ port. `asyncio` scheduler, `aiosqlite` persistence, Anthropic + OpenAI adapters. |
-| `apps/dashboard` | Next.js 15 dashboard. Live carbon-intensity map, 72-hour forecast, planner, queue viewer. |
+| `apps/web` | Next.js 15 dashboard. Live carbon-intensity map, 72-hour forecast, planner, queue viewer. |
 | `apps/site` | Static landing site: hero, components, integrations, install paths, architecture, roadmap, docs. |
 | `docs/spec` | Upstream MCP spec proposal for `priority`, `deadline`, `carbon_budget` fields. |
 
@@ -261,7 +261,7 @@ asyncio.run(defer(
 ### Dashboard
 
 ```bash
-pnpm --filter @ebb-ai/dashboard dev
+pnpm --filter @ebb-ai/web dev
 # → http://localhost:3000
 ```
 

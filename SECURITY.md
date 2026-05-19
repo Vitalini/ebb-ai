@@ -36,7 +36,7 @@ In scope:
 
 - The `@ebb-ai/core`, `@ebb-ai/mcp`, `@ebb-ai/cli` packages.
 - The `ebb_ai` Python package.
-- The `apps/dashboard` Next.js app.
+- The `apps/web` Next.js app.
 
 Out of scope:
 

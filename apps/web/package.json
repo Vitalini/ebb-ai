@@ -1,8 +1,8 @@
 {
-  "name": "@ebb-ai/dashboard",
+  "name": "@ebb-ai/web",
   "version": "0.2.0",
   "private": true,
-  "description": "ebb-ai public dashboard — live AI-compute carbon-intensity map and best-window finder.",
+  "description": "ebb-ai public website — install launcher, live carbon-intensity map, best-window finder, docs.",
   "license": "Apache-2.0",
   "author": "Vitalii Borovyk",
   "scripts": {

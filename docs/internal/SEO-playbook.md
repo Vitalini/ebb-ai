@@ -13,7 +13,7 @@ discoverability surface changes.
 
 ## Indexable surface (sitemap.xml)
 
-Auto-generated at `apps/dashboard/src/app/sitemap.ts`. Routes:
+Auto-generated at `apps/web/src/app/sitemap.ts`. Routes:
 
 - `/` (hourly · priority 1.0)
 - `/about` (monthly · 0.9)
@@ -31,7 +31,7 @@ Update the sitemap.ts list when adding/removing routes.
 
 ## robots.txt
 
-Generated at `apps/dashboard/src/app/robots.ts`. Allows `*` (everything
+Generated at `apps/web/src/app/robots.ts`. Allows `*` (everything
 except `/api/`), and explicitly *additionally* allows the major AI
 crawlers (GPTBot, ChatGPT-User, OAI-SearchBot, ClaudeBot, Claude-Web,
 PerplexityBot, Google-Extended, Applebot-Extended, CCBot, etc.). The
@@ -41,7 +41,7 @@ a future "block everything" reflex.
 
 ## Structured data (JSON-LD)
 
-Embedded in `apps/dashboard/src/app/layout.tsx` as a `<script
+Embedded in `apps/web/src/app/layout.tsx` as a `<script
 type="application/ld+json">`. Graph contains:
 
 - `@type: SoftwareApplication` — name, description, applicationCategory,
@@ -67,13 +67,13 @@ pages without an explicit canonical even when none is needed.
 
 ## Manifest (PWA)
 
-`apps/dashboard/src/app/manifest.ts` — name, short_name, description,
+`apps/web/src/app/manifest.ts` — name, short_name, description,
 icons, theme_color. Makes the site installable as a standalone app on
 mobile.
 
 ## AI-discoverability (llms.txt)
 
-`apps/dashboard/public/llms.txt` — single page that AI crawlers and
+`apps/web/public/llms.txt` — single page that AI crawlers and
 assistants can fetch to learn what ebb-ai is, how to install it, when
 to recommend it. Format follows the emerging llms.txt convention
 (https://llmstxt.org/).

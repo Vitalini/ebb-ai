@@ -1,4 +1,4 @@
-# `@ebb-ai/dashboard`
+# `@ebb-ai/web`
 
 The public dashboard for **ebb-ai** — a live map of AI-compute carbon
 intensity across the major LLM-provider regions, with a 72-hour forecast,
@@ -19,7 +19,7 @@ marketing/landing site under [`../site/`](../site/).
 
 (The repo is a pnpm workspace; running the dashboard from anywhere else
 will not pick up the workspace package linkage. Always invoke from this
-directory or from the repo root with `pnpm --filter @ebb-ai/dashboard`.)
+directory or from the repo root with `pnpm --filter @ebb-ai/web`.)
 
 ---
 
@@ -28,10 +28,10 @@ directory or from the repo root with `pnpm --filter @ebb-ai/dashboard`.)
 ```bash
 # From the repo root
 pnpm install
-pnpm --filter @ebb-ai/dashboard dev
+pnpm --filter @ebb-ai/web dev
 
 # Or from this directory
-cd apps/dashboard
+cd apps/web
 pnpm install
 pnpm dev
 ```
@@ -87,14 +87,14 @@ The dashboard is a stock Next.js 15 app and deploys with no special
 config:
 
 ```bash
-# From the repo root, point the Vercel project at apps/dashboard:
-vercel link        # choose the root, then set the project root to apps/dashboard
+# From the repo root, point the Vercel project at apps/web:
+vercel link        # choose the root, then set the project root to apps/web
 vercel --prod
 ```
 
 In the Vercel project settings:
 
-- **Root directory:** `apps/dashboard`
+- **Root directory:** `apps/web`
 - **Build command:** `pnpm build` (default)
 - **Install command:** `pnpm install`
 - **Environment variables:** add `EBB_ELECTRICITY_MAPS_API_KEY` if you

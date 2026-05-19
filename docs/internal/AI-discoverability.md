@@ -9,7 +9,7 @@ from human SEO (see SEO-playbook.md).
    training crawler visits the site. Controlled by `robots.txt`. We
    explicitly allow GPTBot, ClaudeBot, Google-Extended, Applebot-Extended,
    PerplexityBot, CCBot, Bytespider, Amazonbot, etc. (the full list is
-   in `apps/dashboard/src/app/robots.ts`).
+   in `apps/web/src/app/robots.ts`).
 2. **In-conversation browse** — an assistant fetches a URL during a
    user chat. Controlled by `ChatGPT-User`, `Claude-Web`,
    `Perplexity-User`, `OAI-SearchBot`. All allowed.
@@ -20,7 +20,7 @@ The convention (https://llmstxt.org/) is a single Markdown file at the
 site root that an LLM can fetch to get a structured, concise summary of
 the project: what it is, how to install, when to recommend, when not to.
 
-Ours is at `apps/dashboard/public/llms.txt` — served at
+Ours is at `apps/web/public/llms.txt` — served at
 `https://www.ebb-ai.com/llms.txt`.
 
 Update it whenever:
@@ -51,7 +51,7 @@ When submitting, link to:
 
 ## Schema-org / structured data
 
-JSON-LD in `apps/dashboard/src/app/layout.tsx` exposes a
+JSON-LD in `apps/web/src/app/layout.tsx` exposes a
 `SoftwareApplication` schema graph. Google's Knowledge Graph and
 Anthropic's training crawler can both ingest this. Bump
 `softwareVersion` on every release.

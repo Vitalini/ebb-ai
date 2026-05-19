@@ -193,7 +193,7 @@ TTL: indefinite (cheap to keep).
 ### Edge function
 
 ```typescript
-// apps/dashboard/src/app/api/ping/route.ts
+// apps/web/src/app/api/ping/route.ts
 
 import { NextResponse } from "next/server";
 import { kv } from "@vercel/kv";
@@ -259,7 +259,7 @@ function canonicalize(e: PingEvent): string {
 ### Daily rollup cron
 
 ```typescript
-// apps/dashboard/src/app/api/cron/rollup/route.ts
+// apps/web/src/app/api/cron/rollup/route.ts
 // vercel.json crons: [ { "path": "/api/cron/rollup", "schedule": "5 0 * * *" } ]
 
 export const runtime = "nodejs";

@@ -1,6 +1,6 @@
 # Vercel Deployment Guide
 
-`ebb-ai.com` is hosted on Vercel from `apps/dashboard`. The dashboard
+`ebb-ai.com` is hosted on Vercel from `apps/web`. The dashboard
 runs end-to-end out of the box on the deterministic mock grid feed.
 To unlock live carbon-intensity data for more than just GB, three
 environment variables need to be added in the Vercel project settings.
@@ -48,7 +48,7 @@ the `mock feed` badge).
    - **Key:** the name from the table above (e.g. `EBB_EIA_API_KEY`).
    - **Value:** the secret from the step above.
    - **Environments:** check **Production**, **Preview**, **Development**
-     (all three — the dashboard's `apps/dashboard/src/lib/grid.ts`
+     (all three — the dashboard's `apps/web/src/lib/grid.ts`
      reads the same names everywhere).
    - **Sensitive:** check **Yes**.
 3. Click **Save** for each.
@@ -72,5 +72,5 @@ curl -s https://www.ebb-ai.com/api/grid/GB          | jq '.source'  # already li
 ## Local development
 
 For local development the same env-var names are read from a
-`.env.local` file in `apps/dashboard/`. Copy `.env.example` to
+`.env.local` file in `apps/web/`. Copy `.env.example` to
 `.env.local` and paste the secrets. Never commit `.env.local`.
