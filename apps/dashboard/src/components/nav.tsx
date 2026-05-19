@@ -1,11 +1,10 @@
 import Link from "next/link";
 
 const LINKS: Array<{ href: string; label: string }> = [
-  { href: "/", label: "Map" },
-  { href: "/forecast", label: "Forecast" },
+  { href: "/map", label: "Map" },
   { href: "/plan", label: "Plan" },
-  { href: "/queue", label: "Queue" },
-  { href: "/about", label: "About" },
+  { href: "/stats", label: "Stats" },
+  { href: "/docs", label: "Docs" },
 ];
 
 export function Nav() {

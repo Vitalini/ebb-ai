@@ -1,223 +1,182 @@
-import { RegionCard } from "@/components/region-card";
-import { fetchGridForecast } from "@/lib/grid";
-import { REGIONS } from "@/lib/regions";
-import type { GridForecast } from "@/lib/types";
+import type { Metadata } from "next";
+import Link from "next/link";
+import { InstallPicker } from "@/components/install-picker";
 
-// Don't pre-render at build time: we want the displayed intensities to be
-// fresh on each request. (In production this still benefits from edge caching
-// in /api/grid/[region]; the home page itself is rendered per request.)
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+export const metadata: Metadata = {
+  title: "Carbon-aware scheduling for AI workflows",
+  description:
+    "Open-source MCP server that defers non-urgent AI tasks to the cleanest electricity-grid window inside your deadline. One-line install in Claude Code, Cursor, Claude Desktop, and any MCP host.",
+  alternates: { canonical: "https://www.ebb-ai.com" },
+};
 
-async function loadForecast(zone: string): Promise<GridForecast | null> {
-  try {
-    return await fetchGridForecast(zone, 24);
-  } catch {
-    return null;
-  }
-}
+const TILES: Array<{
+  href: string;
+  emoji: string;
+  title: string;
+  body: string;
+  external?: boolean;
+}> = [
+  {
+    href: "/map",
+    emoji: "🌍",
+    title: "Live carbon map",
+    body: "Seven LLM-provider grid regions, real-time data. Click any region for the 72-hour forecast.",
+  },
+  {
+    href: "/plan",
+    emoji: "📅",
+    title: "Plan a task",
+    body: "Pick a region + deadline. See the cleanest hour and the carbon you'd save vs running now.",
+  },
+  {
+    href: "/stats",
+    emoji: "📊",
+    title: "My impact",
+    body: "Personal carbon-receipt summary from your local ebb-ai queue. CLI-parity in the browser.",
+  },
+  {
+    href: "/docs",
+    emoji: "📜",
+    title: "Docs & commands",
+    body: "All 8 /ebb-ai:* slash commands, 9 MCP tools, install matrix for every host. Architecture deep-dive.",
+  },
+];
 
-export default async function HomePage() {
-  const forecasts = await Promise.all(
-    REGIONS.map(async (r) => ({
-      region: r,
-      forecast: await loadForecast(r.zone),
-    })),
-  );
-
-  const live = forecasts.filter(
-    (f) =>
-      f.forecast?.source === "electricityMaps" ||
-      f.forecast?.source === "ukCarbonIntensity" ||
-      f.forecast?.source === "eia" ||
-      f.forecast?.source === "entsoe",
-  ).length;
-  const total = forecasts.length;
-  const cleanCount = forecasts.filter(
-    (f) =>
-      f.forecast?.entries[0] &&
-      (f.forecast.entries[0].band === "clean" ||
-        f.forecast.entries[0].band === "very_clean"),
-  ).length;
-
+export default function HomePage() {
   return (
-    <div className="space-y-12">
-      <Hero live={live} total={total} cleanCount={cleanCount} />
-
-      <section>
-        <SectionHeader
-          eyebrow="live map"
-          title="Grid intensity where AI compute runs"
-          subtitle="Seven regions hosting the major LLM providers' inference workloads. Click any card for the 72-hour forecast and a cost-and-carbon best-window finder."
-        />
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {forecasts.map(({ region, forecast }) => (
-            <RegionCard key={region.zone} region={region} forecast={forecast} />
-          ))}
-        </div>
-      </section>
-
-      <Methodology />
+    <div className="space-y-14">
+      <Hero />
+      <InstallBlock />
+      <TilesBlock />
+      <ValueRow />
     </div>
   );
 }
 
-function Hero({
-  live,
-  total,
-  cleanCount,
-}: {
-  live: number;
-  total: number;
-  cleanCount: number;
-}) {
+function Hero() {
   return (
-    <section className="space-y-6">
+    <section className="space-y-5 pt-2">
       <div className="inline-flex items-center gap-2 rounded-md border border-accent/40 bg-accent/5 px-3 py-1 font-mono text-xs uppercase tracking-wider text-accent">
         <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
         v0.8.2 · operator preview
       </div>
-      <h1 className="max-w-3xl text-4xl font-extrabold leading-[1.05] tracking-tight text-fg sm:text-5xl">
-        Cheaper inference, smoother grid.
+      <h1 className="max-w-4xl text-4xl font-extrabold leading-[1.05] tracking-tight text-fg sm:text-6xl">
+        Defer AI work to the
+        <br />
+        <span className="text-accent">cleanest hour</span> of the grid.
       </h1>
-      <p className="max-w-2xl text-base text-fg-muted">
-        US data-center electricity demand is projected to hit 6.7–12% of
-        national grid load by 2028. ebb-ai schedules non-urgent LLM workloads
-        into cheap, off-peak windows — ~50% cost reduction via Batch APIs,
-        smoother data-center load curves, auditable carbon receipts. Live
-        grid data for the seven regions where the major LLM providers run.
+      <p className="max-w-2xl text-base leading-relaxed text-fg-muted sm:text-lg">
+        ebb-ai is an open-source MCP scheduler. Hand it any deferrable LLM
+        task with a deadline, and it routes the dispatch to the hour with
+        the lowest electricity-grid carbon intensity — typically 40–70 %
+        cleaner than running right now. Per-task carbon receipts. Free,
+        Apache-2.0.
       </p>
-      <dl className="grid max-w-2xl grid-cols-3 gap-4 pt-2 sm:gap-8">
-        <Kpi label="regions tracked" value={total.toString()} />
-        <Kpi
-          label="feeds live"
-          value={live > 0 ? `${live} / ${total}` : "mock"}
-          hint={
-            live === 0
-              ? "GB is always live via UK National Grid ESO; add EIA / ENTSO-E keys for the rest"
-              : undefined
-          }
-        />
-        <Kpi
-          label="clean right now"
-          value={cleanCount.toString()}
-          hint="bands clean or very_clean"
-        />
-      </dl>
     </section>
   );
 }
 
-function Kpi({
-  label,
-  value,
-  hint,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-}) {
+function InstallBlock() {
   return (
-    <div>
-      <dt className="font-mono text-[10px] uppercase tracking-wider text-fg-dim">
-        {label}
-      </dt>
-      <dd className="mt-1 font-mono text-2xl font-semibold text-fg">{value}</dd>
-      {hint ? <p className="mt-0.5 text-[11px] text-fg-muted">{hint}</p> : null}
-    </div>
-  );
-}
+    <section
+      id="install"
+      className="rounded-xl border border-accent/30 bg-accent/[0.03] p-5 sm:p-7"
+    >
+      <header className="space-y-1">
+        <p className="font-mono text-[11px] uppercase tracking-wider text-accent">
+          install — 30 seconds
+        </p>
+        <h2 className="text-2xl font-semibold tracking-tight text-fg">
+          One line. Any host.
+        </h2>
+        <p className="mt-1 text-sm text-fg-muted">
+          Pick your AI host — copy the command. Default is the universal MCP
+          install; switch the dropdown for Claude Code, Cursor, Claude Desktop,
+          Windsurf, Continue, Cline, Zed, Goose, OpenClaw, or use the library
+          directly.
+        </p>
+      </header>
 
-function SectionHeader({
-  eyebrow,
-  title,
-  subtitle,
-}: {
-  eyebrow: string;
-  title: string;
-  subtitle?: string;
-}) {
-  return (
-    <header className="space-y-2">
-      <p className="font-mono text-[11px] uppercase tracking-wider text-accent">
-        {eyebrow}
-      </p>
-      <h2 className="text-xl font-semibold tracking-tight text-fg sm:text-2xl">
-        {title}
-      </h2>
-      {subtitle ? (
-        <p className="max-w-2xl text-sm text-fg-muted">{subtitle}</p>
-      ) : null}
-    </header>
-  );
-}
-
-function Methodology() {
-  return (
-    <section className="rounded-xl border border-rule bg-bg-elev p-6">
-      <SectionHeader
-        eyebrow="how it works"
-        title="Methodology and source data"
-      />
-      <div className="mt-5 grid grid-cols-1 gap-5 text-sm text-fg-muted sm:grid-cols-3">
-        <div>
-          <h3 className="font-mono text-xs uppercase tracking-wider text-accent">
-            grid feeds
-          </h3>
-          <p className="mt-1">
-            Multi-source, free-public-data first:{" "}
-            <a
-              href="https://carbonintensity.org.uk/"
-              className="text-fg hover:text-accent"
-              target="_blank"
-              rel="noreferrer"
-            >
-              UK National Grid ESO
-            </a>{" "}
-            (GB),{" "}
-            <a
-              href="https://www.eia.gov/opendata/"
-              className="text-fg hover:text-accent"
-              target="_blank"
-              rel="noreferrer"
-            >
-              US EIA
-            </a>{" "}
-            (US ISOs),{" "}
-            <a
-              href="https://transparency.entsoe.eu/"
-              className="text-fg hover:text-accent"
-              target="_blank"
-              rel="noreferrer"
-            >
-              ENTSO-E Transparency Platform
-            </a>{" "}
-            (EU). Electricity Maps as universal fallback when a key is
-            set; deterministic mock otherwise.
-          </p>
-        </div>
-        <div>
-          <h3 className="font-mono text-xs uppercase tracking-wider text-accent">
-            scoring
-          </h3>
-          <p className="mt-1">
-            Each candidate hour is scored on grams CO2e per LLM call assuming{" "}
-            <span className="font-mono text-fg">0.0015 kWh</span> end-to-end
-            energy (data-center + PUE 1.5). The cleanest hour inside the
-            user-supplied deadline wins.
-          </p>
-        </div>
-        <div>
-          <h3 className="font-mono text-xs uppercase tracking-wider text-accent">
-            fallback
-          </h3>
-          <p className="mt-1">
-            When no API key is configured, the dashboard serves a deterministic
-            UTC-aligned synthetic curve so demos and CI runs are reproducible.
-            Bands are identical to the production thresholds.
-          </p>
-        </div>
+      <div className="mt-5">
+        <InstallPicker />
       </div>
+
+      <p className="mt-5 text-sm text-fg-muted">
+        Once installed, your assistant can call{" "}
+        <code className="rounded bg-bg-elev px-1 font-mono text-xs">
+          /ebb-ai:defer &quot;summarize this&quot; --by tomorrow 6pm
+        </code>{" "}
+        and the task lands at the cleanest grid hour inside the deadline.{" "}
+        <Link href="/docs" className="text-accent hover:underline">
+          See all commands →
+        </Link>
+      </p>
+    </section>
+  );
+}
+
+function TilesBlock() {
+  return (
+    <section className="space-y-4">
+      <header className="space-y-1">
+        <p className="font-mono text-[11px] uppercase tracking-wider text-accent">
+          dashboard
+        </p>
+        <h2 className="text-2xl font-semibold tracking-tight text-fg">
+          Live data + tools.
+        </h2>
+      </header>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {TILES.map((t) => (
+          <Link
+            key={t.href}
+            href={t.href}
+            className="group rounded-xl border border-rule bg-bg-card p-5 transition-all hover:border-accent/40 hover:bg-accent/5"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-2xl">{t.emoji}</p>
+                <h3 className="mt-2 text-lg font-semibold tracking-tight text-fg">
+                  {t.title}
+                </h3>
+                <p className="mt-1 text-sm leading-relaxed text-fg-muted">
+                  {t.body}
+                </p>
+              </div>
+              <span
+                aria-hidden="true"
+                className="mt-1 text-fg-muted transition-transform group-hover:translate-x-1 group-hover:text-accent"
+              >
+                →
+              </span>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ValueRow() {
+  const items: Array<{ label: string; value: string }> = [
+    { label: "regions live", value: "7" },
+    { label: "tests passing", value: "204" },
+    { label: "MCP tools", value: "9" },
+    { label: "languages", value: "TS + Py" },
+    { label: "license", value: "Apache-2.0" },
+  ];
+  return (
+    <section className="grid grid-cols-2 gap-3 rounded-xl border border-rule bg-bg-elev px-5 py-5 sm:grid-cols-5">
+      {items.map((it) => (
+        <div key={it.label} className="text-center sm:text-left">
+          <dt className="font-mono text-[10px] uppercase tracking-wider text-fg-dim">
+            {it.label}
+          </dt>
+          <dd className="mt-1 font-mono text-base font-semibold text-fg sm:text-lg">
+            {it.value}
+          </dd>
+        </div>
+      ))}
     </section>
   );
 }

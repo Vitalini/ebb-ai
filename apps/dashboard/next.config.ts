@@ -16,8 +16,9 @@ const config: NextConfig = {
   // www.ebb-ai.com that the global test pass found.
   async rewrites() {
     return [
+      // /docs is now a real Next.js route (real docs + command reference).
+      // /architecture and /roadmap stay as static .html pages in public/.
       { source: "/architecture", destination: "/architecture.html" },
-      { source: "/docs",         destination: "/docs.html" },
       { source: "/roadmap",      destination: "/roadmap.html" },
     ];
   },
