@@ -1,216 +1,187 @@
-import { TaskRow } from "@/components/task-row";
-import { intensityToGrams } from "@/lib/grid";
-import type { TaskRecord } from "@/lib/types";
+/**
+ * /queue — scheduler-queue explainer.
+ *
+ * The site is read-only and doesn't have access to your local
+ * SQLite ledger. This page explains the queue lifecycle, the status
+ * vocabulary, and how to inspect it from the CLI. No synthetic
+ * counters, no fake task list.
+ */
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+import type { Metadata } from "next";
+import Link from "next/link";
 
-interface QueuePayload {
-  tasks: TaskRecord[];
-  generatedAt: string;
-  stub: boolean;
-}
+export const metadata: Metadata = {
+  title: "Scheduler queue",
+  description:
+    "How ebb-ai's task queue works — six statuses, one SQLite file, inspectable from the CLI. No telemetry; your queue is your queue.",
+  alternates: { canonical: "https://www.ebb-ai.com/queue" },
+};
 
-async function loadQueue(): Promise<QueuePayload> {
-  // The /api/queue route is on this same Next.js server. We use a relative
-  // call via the headers() URL pattern only on the edge; on Node we can call
-  // the route handler logic, but to keep one source of truth we use fetch.
-  // In dev/production this resolves through Next's internal fetcher.
-  const base =
-    process.env.NEXT_PUBLIC_BASE_URL ??
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
-  try {
-    const res = await fetch(`${base}/api/queue`, { cache: "no-store" });
-    if (!res.ok) throw new Error(`queue endpoint ${res.status}`);
-    return (await res.json()) as QueuePayload;
-  } catch {
-    // Hard fallback — shouldn't happen, but a dashboard that goes blank on a
-    // backend wobble is worse than one that says "no data".
-    return { tasks: [], generatedAt: new Date().toISOString(), stub: true };
-  }
-}
+const STATUSES: Array<{ name: string; description: string }> = [
+  {
+    name: "queued",
+    description:
+      "Just created; the scheduler hasn't picked a window yet (rare race window — usually fills within 1s).",
+  },
+  {
+    name: "scheduled",
+    description:
+      "Window picked. Will dispatch at the chosen UTC hour inside the deadline. Sits here until the tick daemon fires.",
+  },
+  {
+    name: "running",
+    description:
+      "The provider call is in-flight. For Batch-API tasks this can be hours; for sync tasks it's seconds.",
+  },
+  {
+    name: "completed",
+    description:
+      "Provider returned. A carbon receipt is written: actual intensity, tokens in/out, dispatched_at timestamp.",
+  },
+  {
+    name: "failed",
+    description:
+      "Provider returned an error. The reason is persisted; `ebb retry <id>` re-dispatches.",
+  },
+  {
+    name: "cancelled",
+    description:
+      "Manually cancelled. Idempotent — already-completed tasks return their existing status if you cancel them.",
+  },
+];
 
-export default async function QueuePage() {
-  const { tasks, generatedAt, stub } = await loadQueue();
-
-  const counts = countByStatus(tasks);
-  const totalGrams = tasks
-    .filter((t) => t.receipt)
-    .reduce((acc, t) => acc + (t.receipt?.estimatedCarbonGCo2 ?? 0), 0);
-  const counterfactualGrams = tasks
-    .filter((t) => t.receipt)
-    .reduce((acc) => acc + intensityToGrams(450), 0); // assume avg grid as counterfactual
-  const saved = Math.max(0, counterfactualGrams - totalGrams);
-  const savedPct =
-    counterfactualGrams > 0 ? Math.round((saved / counterfactualGrams) * 100) : 0;
-
+export default function QueuePage() {
   return (
-    <div className="space-y-10">
+    <article className="mx-auto max-w-3xl space-y-12 text-fg">
       <header className="space-y-3">
         <p className="font-mono text-xs uppercase tracking-wider text-accent">
           scheduler queue
         </p>
-        <h1 className="text-3xl font-bold tracking-tight text-fg sm:text-4xl">
-          Pending and recent tasks
+        <h1 className="text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-5xl">
+          One SQLite file. Inspectable from anywhere.
         </h1>
-        <p className="max-w-2xl text-sm text-fg-muted">
-          Snapshot of the in-process scheduler. Completed tasks carry a carbon
-          receipt — the exact intensity the scheduler scored against when it
-          picked the window.
-        </p>
-        <p className="text-xs text-fg-dim">
-          {stub ? "demo data" : "live"}
-          {" · "}
-          updated{" "}
-          {new Date(generatedAt).toLocaleString(undefined, {
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-          })}
+        <p className="max-w-2xl text-base leading-relaxed text-fg-muted">
+          Every task — pending, scheduled, completed, failed,
+          cancelled — lives in{" "}
+          <code className="rounded bg-bg-elev px-1 font-mono text-sm">~/.ebb-ai/queue.db</code>
+          . The Claude Code plugin, the OpenClaw plugin, the MCP
+          server, and the CLI all read and write this same file.
+          Inspect it however you like.
         </p>
       </header>
 
-      {stub ? (
-        <aside className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 text-sm text-fg-muted">
-          <p className="mb-1 font-mono text-xs uppercase tracking-wider text-amber-500">
-            demo mode
-          </p>
-          <p>
-            The numbers below are a deterministic synthetic snapshot —
-            useful for screenshots and for understanding the queue UI
-            shape, not a reflection of any running scheduler. The
-            dashboard does not yet talk to <code className="font-mono text-fg">ebb-mcp</code>;
-            a scheduler HTTP control plane is on the v0.9 roadmap. For
-            real personal data today, run <code className="font-mono text-fg">npx -y @ebb-ai/cli@latest stats</code> against
-            your local <code className="font-mono text-fg">~/.ebb-ai/queue.db</code>.
-          </p>
-        </aside>
-      ) : null}
-
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        <Stat label="queued" value={counts.queued} />
-        <Stat label="scheduled" value={counts.scheduled} tone="accent" />
-        <Stat label="running" value={counts.running} tone="warn" />
-        <Stat label="completed" value={counts.completed} tone="good" />
-        <Stat label="failed" value={counts.failed} tone="bad" />
+      <section className="space-y-3">
+        <h2 className="text-2xl font-bold tracking-tight">Status vocabulary</h2>
+        <ul className="space-y-2 leading-relaxed text-fg-muted">
+          {STATUSES.map((s) => (
+            <li key={s.name}>
+              <code className="rounded bg-bg-elev px-1.5 py-0.5 font-mono text-sm font-semibold text-fg">
+                {s.name}
+              </code>
+              <span className="ml-2">— {s.description}</span>
+            </li>
+          ))}
+        </ul>
       </section>
 
-      <section className="rounded-xl border border-rule bg-bg-elev p-5">
-        <h2 className="text-sm font-semibold text-fg">
-          Cumulative carbon receipts (this snapshot)
+      <section className="space-y-3">
+        <h2 className="text-2xl font-bold tracking-tight">Inspect from the CLI</h2>
+        <CodeBlock>
+{`# All tasks (any status)
+ebb queue list
+
+# Filter
+ebb queue list --status scheduled
+ebb queue list --region US-CAL-CISO --since 2026-05-01
+
+# One task in detail (prompt, region, schedule, receipt if completed)
+ebb queue show <task_id>
+
+# JSON for piping
+ebb queue list --json | jq '.[] | select(.status == "failed")'
+
+# Receipts only (completed tasks)
+ebb receipts list
+ebb receipts show <task_id>`}
+        </CodeBlock>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-2xl font-bold tracking-tight">From the agent (any MCP host)</h2>
+        <p className="leading-relaxed text-fg-muted">
+          The same queue is reachable through the MCP{" "}
+          <code className="rounded bg-bg-elev px-1 font-mono text-sm">check_queue_status</code>{" "}
+          tool. Your agent can answer {`"what's queued?"`} or{" "}
+          {`"did that task run?"`} inline:
+        </p>
+        <CodeBlock>
+{`> /ebb-ai:check
+Total tasks: 3
+  scheduled: 1 · completed: 2
+
+> /ebb-ai:check 7f3a2b9e
+status     completed
+region     US-CAL-CISO
+scheduled  22:15 UTC (4h ago)
+completed  22:15:08 UTC
+estimated  0.34 g CO2e
+actual     0.31 g CO2e   (-9 %)
+result     <the LLM response>`}
+        </CodeBlock>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-2xl font-bold tracking-tight">
+          Why not show a live queue here?
         </h2>
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <BigStat
-            value={totalGrams.toFixed(1)}
-            unit="gCO2e"
-            label="dispatched"
-          />
-          <BigStat
-            value={saved.toFixed(1)}
-            unit="gCO2e"
-            label="saved vs. avg grid"
-            tone="good"
-          />
-          <BigStat
-            value={`${savedPct}%`}
-            unit=""
-            label="reduction"
-            tone="good"
-          />
-        </div>
-        <p className="mt-3 text-[11px] text-fg-muted">
-          Counterfactual: the same tasks dispatched at 450 g/kWh (US 2024
-          fleet-wide average per EIA short-term outlook). Actual savings depend
-          on region and deadline.
+        <p className="leading-relaxed text-fg-muted">
+          The site is read-only and doesn&apos;t have a back-channel to
+          your machine. Surfacing a {`"live"`} queue on a public
+          dashboard means
+          either centralizing the queue server-side (privacy-bad) or
+          fabricating a demo (honesty-bad). v0.9 will add an{" "}
+          <em>opt-in</em> HTTP control plane the dashboard can talk to;
+          until then the queue is local-first by design.
         </p>
       </section>
 
-      <section>
-        <div className="overflow-hidden rounded-xl border border-rule bg-bg-elev">
-          <div className="grid grid-cols-12 gap-3 border-b border-rule-hi bg-bg px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-fg-dim">
-            <div className="col-span-3">task / region</div>
-            <div className="col-span-2">status</div>
-            <div className="col-span-2">enqueued</div>
-            <div className="col-span-2">scheduled / done</div>
-            <div className="col-span-3">receipt</div>
-          </div>
-          {tasks.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-fg-muted">
-              No tasks in queue. Try the planner to enqueue one.
-            </p>
-          ) : (
-            tasks.map((t) => <TaskRow key={t.taskId} task={t} />)
-          )}
-        </div>
-      </section>
-    </div>
+      <footer className="rounded-xl border border-rule bg-bg-elev p-5 text-sm text-fg-muted">
+        <p className="mb-2 font-mono text-xs uppercase tracking-wider text-accent">
+          related
+        </p>
+        <ul className="space-y-1">
+          <li>
+            <Link href="/stats" className="text-accent hover:underline">
+              /stats
+            </Link>{" "}
+            — personal carbon-impact summary (same ledger).
+          </li>
+          <li>
+            <Link href="/docs#commands" className="text-accent hover:underline">
+              /docs · slash commands
+            </Link>{" "}
+            — the eight{" "}
+            <code className="rounded bg-bg-elev px-1 font-mono text-xs">
+              /ebb-ai:*
+            </code>{" "}
+            commands.
+          </li>
+          <li>
+            <Link href="/docs#tools" className="text-accent hover:underline">
+              /docs · MCP tools
+            </Link>{" "}
+            — nine MCP tools (every host).
+          </li>
+        </ul>
+      </footer>
+    </article>
   );
 }
 
-function countByStatus(tasks: TaskRecord[]): Record<TaskRecord["status"], number> {
-  const out: Record<TaskRecord["status"], number> = {
-    queued: 0,
-    scheduled: 0,
-    running: 0,
-    completed: 0,
-    failed: 0,
-  };
-  for (const t of tasks) out[t.status] += 1;
-  return out;
-}
-
-function Stat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone?: "good" | "bad" | "warn" | "accent";
-}) {
-  const toneClass =
-    tone === "good"
-      ? "text-band-very-clean"
-      : tone === "bad"
-        ? "text-danger"
-        : tone === "warn"
-          ? "text-warn"
-          : tone === "accent"
-            ? "text-accent"
-            : "text-fg";
+function CodeBlock({ children }: { children: string }) {
   return (
-    <div className="rounded-xl border border-rule bg-bg-elev p-4">
-      <p className="font-mono text-[10px] uppercase tracking-wider text-fg-dim">
-        {label}
-      </p>
-      <p className={`mt-1 font-mono text-2xl font-semibold ${toneClass}`}>
-        {value}
-      </p>
-    </div>
-  );
-}
-
-function BigStat({
-  value,
-  unit,
-  label,
-  tone,
-}: {
-  value: string;
-  unit: string;
-  label: string;
-  tone?: "good";
-}) {
-  const toneClass = tone === "good" ? "text-band-very-clean" : "text-fg";
-  return (
-    <div>
-      <p className="font-mono text-[10px] uppercase tracking-wider text-fg-dim">
-        {label}
-      </p>
-      <p className={`mt-1 font-mono text-3xl font-semibold ${toneClass}`}>
-        {value}
-        {unit ? <span className="ml-1 text-base font-normal text-fg-muted">{unit}</span> : null}
-      </p>
-    </div>
+    <pre className="overflow-x-auto rounded-md border border-rule bg-bg-elev p-4 font-mono text-[13px] leading-relaxed text-fg">
+      <code>{children}</code>
+    </pre>
   );
 }
