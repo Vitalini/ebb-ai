@@ -5,6 +5,7 @@ const LINKS: Array<{ href: string; label: string }> = [
   { href: "/forecast", label: "Forecast" },
   { href: "/plan", label: "Plan" },
   { href: "/queue", label: "Queue" },
+  { href: "/about", label: "About" },
 ];
 
 export function Nav() {
