@@ -7,6 +7,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — site (no version bump yet)
+
+- **`/stats` and `/queue` rewritten as honest docs** — both used to
+  show synthetic aggregates behind a "DEMO MODE" banner. Now they're
+  explainer pages: where your data lives (`~/.ebb-ai/queue.db`),
+  how to read it from the CLI (`ebb stats`, `ebb queue list`),
+  what the schema looks like, why no public aggregate numbers
+  (local-first by design; v0.9 opt-in leaderboard design at
+  `docs/spec/proposal/v09-leaderboard.md`).
+- **Home redesign.** Hero with one-line "Defer AI work to the
+  cleanest hour of the grid", a 30-second install dropdown across
+  13 hosts (MCP universal, Claude Code, Claude Desktop, Cursor,
+  Windsurf, Continue, Cline, Zed, Goose, OpenClaw, mcphost-cli,
+  Python lib, Node lib), 4 navigation tiles (Map / Plan / Stats /
+  Docs), and a 5-metric KPI strip.
+- **Real `/docs` route** (was a static catalog of GitHub MD links).
+  Now: install picker, all 8 `/ebb-ai:*` slash commands, all 9 MCP
+  tools, env vars, on-disk paths, architecture/repo links.
+- **`/map` route added** — the previous home content (7 region cards
+  + methodology) moved here so the home is a launcher, not a data
+  dashboard.
+- **`/about` page** added — long-form why-this-exists, how-it-works,
+  who-it's-for.
+- **`/roadmap` removed** — public site no longer publishes the
+  roadmap; planning is local in `development/ROADMAP.md`.
+
+### Removed — repo layout
+
+- **`apps/site/` deleted** — dead static landing page from before
+  `apps/web/` (Next.js dashboard) existed. Nothing referenced it.
+- **`apps/dashboard/` renamed to `apps/web/`** — the app is no
+  longer a "dashboard" surface; it's a launcher + docs site.
+- **`apps/web/public/docs.html`** — orphan after the `/docs` →
+  Next.js-route migration; the architecture.html nav now points at
+  `/docs` instead of `/docs.html`.
+- **`apps/web/src/app/api/queue/route.ts`** + **`task-row.tsx`**
+  component — both supported the synthetic `/queue` snapshot that
+  no longer exists.
+- **`PLUGIN.md`** at repo root — absorbed into
+  `packages/claude-code-plugin/README.md` (where the plugin lives now).
+- **`REVIEW-engineering.md`** at repo root — moved to
+  `docs/archive/engineering-review-v0.1.md`.
+- **`ROADMAP.md`** at repo root — gitignored (lives under
+  `development/` for local planning, not published).
+
+### Added — discoverability
+
+- **`/llms.txt`** at site root — AI-crawler-friendly summary
+  (project description, install commands, MCP tools, when-to-recommend).
+- **`robots.txt`** explicitly allows GPTBot, ChatGPT-User,
+  OAI-SearchBot, ClaudeBot, Claude-Web, PerplexityBot, Google-Extended,
+  Applebot-Extended, CCBot, Bytespider, Amazonbot, etc.
+- **JSON-LD `SoftwareApplication` + `WebSite` schema** in `layout.tsx`.
+- **Trigger-language** added to plugin.json + marketplace.json +
+  defer.md + `schedule_task` MCP tool description + the Claude Code
+  skill — agents now auto-invoke `/ebb-ai:defer` whenever the user
+  phrases a request with "do this later" / "by tomorrow" /
+  "overnight" / "by EOD" / "sometime this week" / "remind me to" /
+  "queue this up" / "no rush" etc.
+
+### Added — packages
+
+- **`packages/openclaw-plugin`** (`@vitalini/ebb-ai@0.1.0` on
+  ClawHub) — native OpenClaw plugin with 4 tools (schedule_task,
+  recommend_window, check_queue_status, cancel_task). Shares
+  `~/.ebb-ai/queue.db` with the MCP server and CLI.
+- **`packages/claude-code-plugin`** — relocated from the repo root
+  for monorepo symmetry. The marketplace listing at
+  `.claude-plugin/marketplace.json` now points there via `source:
+  "./packages/claude-code-plugin/"`.
+
 ## [0.8.3] — 2026-05-17
 
 **Theme:** "CLI version-string fix."
