@@ -1,7 +1,25 @@
 {
   "id": "ebb",
   "name": "ebb-ai — carbon-aware deferral",
-  "description": "Auto-defer \"do it later\" tasks. Invoke when the user signals deferral (\"by tomorrow\", \"tonight\", \"overnight\", \"by EOD\", \"sometime this week\", \"when you have a moment\", \"remind me to\", \"queue this up\", \"no rush\"). Routes the LLM dispatch to the cleanest electricity-grid hour inside the deadline — 40-70% lower carbon vs running now, 50% cheaper via Anthropic/OpenAI Batch APIs.",
+  "description": "Auto-defer \"do it later\" tasks to the cleanest electricity-grid hour inside the deadline.",
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "dbPath": {
+        "type": "string",
+        "description": "Override the SQLite queue path. Defaults to ~/.ebb-ai/queue.db (shared with the @ebb-ai/mcp server and @ebb-ai/cli)."
+      },
+      "defaultRegion": {
+        "type": "string",
+        "description": "Default electricity-grid region when a tool call omits one. Examples: GB, US-CAL-CISO, FR. Defaults to GB (always-live data, no API key needed)."
+      }
+    },
+    "additionalProperties": false
+  },
+  "version": "0.1.1",
   "contracts": {
     "tools": [
       "ebb_schedule_task",
@@ -9,22 +27,5 @@
       "ebb_check_queue_status",
       "ebb_cancel_task"
     ]
-  },
-  "activation": {
-    "onStartup": true
-  },
-  "configSchema": {
-    "type": "object",
-    "additionalProperties": false,
-    "properties": {
-      "dbPath": {
-        "type": "string",
-        "description": "Override the SQLite queue path. Defaults to ~/.ebb-ai/queue.db (shared with the @ebb-ai/mcp MCP server and @ebb-ai/cli)."
-      },
-      "defaultRegion": {
-        "type": "string",
-        "description": "Default electricity-grid region for scheduling when the agent does not specify one. Examples: GB, US-CAL-CISO, FR. Defaults to GB (always live data, no API key needed)."
-      }
-    }
   }
 }
