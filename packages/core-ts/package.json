@@ -24,7 +24,7 @@
     "test": "vitest run",
     "clean": "rm -rf dist"
   },
-  "dependencies": {
+  "optionalDependencies": {
     "better-sqlite3": "^11.5.0"
   },
   "peerDependencies": {

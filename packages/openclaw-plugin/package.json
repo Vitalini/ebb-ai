@@ -32,14 +32,14 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "rm -rf dist && tsc --noEmit -p tsconfig.json && esbuild src/index.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/index.js --external:openclaw/* --external:better-sqlite3",
     "clean": "rm -rf dist"
   },
-  "dependencies": {
-    "@ebb-ai/core": "^0.8.2",
-    "typebox": "^1.1.38"
-  },
+  "dependencies": {},
   "devDependencies": {
+    "@ebb-ai/core": "workspace:*",
+    "typebox": "^1.1.38",
+    "esbuild": "^0.25.0",
     "typescript": "^5.6.3",
     "@types/node": "^22.10.0"
   },

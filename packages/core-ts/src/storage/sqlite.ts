@@ -6,8 +6,10 @@
  * { dbPath } to the Scheduler and queued / completed records survive
  * a restart and remain auditable as a carbon ledger.
  *
- * We use better-sqlite3 because it is synchronous, single-binary, and
- * has zero spin-up cost — appropriate for an in-process queue store.
+ * The backend is Node's built-in synchronous SQLite (node:sqlite, Node
+ * >= 22.5) — no native module to install or compile, which matters in
+ * environments that install dependencies without running build scripts.
+ * better-sqlite3 is used as a fallback on older Node if it is installed.
  *
  * Schema is intentionally narrow:
  *   - task_id           PRIMARY KEY
@@ -39,7 +41,10 @@ interface SqliteDatabase {
 }
 
 interface SqlitePreparedStatement {
-  run(...params: unknown[]): { changes: number; lastInsertRowid: number | bigint };
+  run(...params: unknown[]): {
+    changes: number | bigint;
+    lastInsertRowid: number | bigint;
+  };
   get(...params: unknown[]): Record<string, unknown> | undefined;
   all(...params: unknown[]): Record<string, unknown>[];
 }
@@ -101,7 +106,7 @@ function safeParse(s: string | null | undefined): unknown {
 export interface TaskStoreOptions {
   /** Absolute path to a SQLite file. Use ":memory:" for ephemeral storage (tests). */
   dbPath: string;
-  /** Inject a pre-opened better-sqlite3 instance (useful for tests). */
+  /** Inject a pre-opened SQLite database — node:sqlite or better-sqlite3 (useful for tests). */
   db?: SqliteDatabase;
 }
 
@@ -191,7 +196,7 @@ export class TaskStore {
       `UPDATE tasks SET status = 'running' WHERE task_id = ? AND status = 'scheduled'`,
     );
     const res = stmt.run(taskId);
-    return res.changes === 1;
+    return Number(res.changes) === 1;
   }
 
   close(): void {
@@ -224,18 +229,39 @@ function rowToRecord(row: Record<string, unknown>): TaskRecord<unknown> {
   };
 }
 
-function openSqliteSync(path: string): SqliteDatabase {
-  // better-sqlite3 is a CommonJS module. The top-of-file
-  // createRequire(import.meta.url) gives us a working `require` from
-  // within ESM emit, without bundler interference.
-  type Ctor = new (path: string) => SqliteDatabase;
-  let Database: Ctor;
+type SqliteCtor = new (path: string) => SqliteDatabase;
+
+/** Load Node's built-in SQLite (node:sqlite, Node >= 22.5), if available. */
+function loadNodeSqlite(): SqliteCtor | undefined {
   try {
-    Database = requireFn("better-sqlite3") as Ctor;
+    const mod = requireFn("node:sqlite") as { DatabaseSync: SqliteCtor };
+    return mod.DatabaseSync;
   } catch {
+    return undefined;
+  }
+}
+
+/** Load the optional better-sqlite3 fallback, if it is installed. */
+function loadBetterSqlite(): SqliteCtor | undefined {
+  try {
+    return requireFn("better-sqlite3") as SqliteCtor;
+  } catch {
+    return undefined;
+  }
+}
+
+function openSqliteSync(path: string): SqliteDatabase {
+  // Prefer Node's built-in SQLite — no native module to install or compile,
+  // which matters where dependencies are installed without build scripts
+  // (e.g. OpenClaw plugin installs). better-sqlite3 stays as a fallback for
+  // Node < 22.5. createRequire gives a working `require` from ESM emit.
+  const Ctor = loadNodeSqlite() ?? loadBetterSqlite();
+  if (!Ctor) {
     throw new Error(
-      "TaskStore: `better-sqlite3` is not installed. It is a regular dependency of @ebb-ai/core; reinstall with `pnpm install`.",
+      "TaskStore: no SQLite backend available. This build uses Node's " +
+        "built-in node:sqlite (Node >= 22.5). Upgrade Node, or install the " +
+        "optional better-sqlite3 dependency as a fallback.",
     );
   }
-  return new Database(path);
+  return new Ctor(path);
 }
