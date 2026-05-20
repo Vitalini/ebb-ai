@@ -1,23 +1,26 @@
 /**
  * ebb-ai OpenClaw plugin — auto-defer "do it later" tasks to the cleanest
  * electricity-grid hour. Native OpenClaw tool plugin built with
- * `defineToolPlugin`, which registers the four tools so they reach agent
+ * `defineToolPlugin`, which registers the tools so they reach agent
  * sessions.
  *
  * Verify a build with `openclaw plugins inspect ebb --runtime --json` — it
- * lists the four tools. Note: plain `openclaw plugins inspect ebb` reports
- * `Shape: non-capability` for tool plugins in OpenClaw 2026.5.18; that is the
- * expected label for this plugin kind, not an error.
+ * lists every tool. Note: plain `openclaw plugins inspect ebb` reports
+ * `Shape: non-capability` for tool plugins in OpenClaw 2026.5.18; that is
+ * the expected label for this plugin kind, not an error.
  *
  * Shares the SQLite ledger at ~/.ebb-ai/queue.db with the @ebb-ai/mcp MCP
  * server and the @ebb-ai/cli CLI — a task deferred in OpenClaw shows up in
- * `ebb stats` and vice versa.
+ * `ebb stats` and vice versa. Tool names match the MCP server surface.
  *
  * Tools:
- *   - ebb_schedule_task       — queue a task at the cleanest hour
- *   - ebb_recommend_window    — preview the cleanest hour (read-only, no DB)
- *   - ebb_check_queue_status  — list all tasks / detail one (read-only)
- *   - ebb_cancel_task         — cancel a queued task (idempotent)
+ *   - schedule_task       — queue a task at the cleanest hour
+ *   - recommend_window    — preview the cleanest hour (read-only, no DB)
+ *   - check_queue_status  — list all tasks / detail one (read-only)
+ *   - cancel_task         — cancel a queued task (idempotent)
+ *   - get_grid_forecast   — hourly carbon-intensity forecast (read-only, no DB)
+ *   - update_deadline     — move a queued task's deadline
+ *   - cancel_all          — cancel every queued/scheduled task
  */
 
 import { Type, type TSchema } from "typebox";
@@ -27,6 +30,7 @@ import { defineToolPlugin } from "openclaw/plugin-sdk/tool-plugin";
 import {
   buildDefaultGridFeed,
   recommendWindow,
+  resolveRegion,
   Scheduler,
   TaskStore,
 } from "@ebb-ai/core";
@@ -50,68 +54,9 @@ type ToolDefinition = {
 };
 type ToolFactory = (def: ToolDefinition) => unknown;
 
-const DEFAULT_REGION = "GB";
-
-/**
- * Best-effort IANA-timezone → grid-region map. Only timezones whose
- * dominant grid is unambiguous are listed; anything else falls back to
- * GB. An explicit `defaultRegion` in the plugin config always wins, and
- * any tool call can pass its own `region`.
- */
-const TIMEZONE_REGION: Record<string, string> = {
-  "Europe/London": "GB",
-  "Europe/Paris": "FR",
-  "Europe/Berlin": "DE",
-  "Europe/Busingen": "DE",
-  "America/Los_Angeles": "US-CAL-CISO",
-  "America/New_York": "US-MIDA-PJM",
-  "America/Detroit": "US-MIDA-PJM",
-};
-
-/** Map an IANA timezone to a supported grid region, or undefined. */
-export function regionForTimezone(timeZone: string): string | undefined {
-  return TIMEZONE_REGION[timeZone];
-}
-
-/** Guess the grid region from the host machine's IANA timezone. */
-function detectRegionFromTimezone(): string | undefined {
-  try {
-    return regionForTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
-  } catch {
-    return undefined;
-  }
-}
-
-export type RegionResolution = {
-  region: string;
-  /** How `region` was chosen — lets a tool show the user what was applied. */
-  source: "request" | "config" | "timezone" | "default";
-};
-
-/**
- * Resolve the grid region for a tool call. Precedence:
- *   1. an explicit `region` argument on the tool call,
- *   2. the plugin's configured `defaultRegion`,
- *   3. a guess from the host machine's timezone,
- *   4. GB — always-live data, no API key needed.
- */
-export function resolveRegion(
-  requested: string | undefined,
-  config: PluginConfig,
-): RegionResolution {
-  if (requested) return { region: requested, source: "request" };
-  if (config.defaultRegion) {
-    return { region: config.defaultRegion, source: "config" };
-  }
-  const detected = detectRegionFromTimezone();
-  if (detected) return { region: detected, source: "timezone" };
-  return { region: DEFAULT_REGION, source: "default" };
-}
-
 // ── Grid feed (no SQLite) ───────────────────────────────────────────────────
-// The grid feed has no database dependency, so `ebb_recommend_window` keeps
-// working even when the SQLite queue cannot be opened (e.g. a fresh plugin
-// install whose better-sqlite3 native binding was not built).
+// The grid feed has no database dependency, so `recommend_window` and
+// `get_grid_forecast` keep working even when the SQLite queue cannot open.
 let cachedGridFeed: ReturnType<typeof buildDefaultGridFeed> | undefined;
 
 function getGridFeed(): ReturnType<typeof buildDefaultGridFeed> {
@@ -121,8 +66,7 @@ function getGridFeed(): ReturnType<typeof buildDefaultGridFeed> {
 
 // ── Queue runtime (SQLite-backed) ───────────────────────────────────────────
 // Built lazily on the first queue-tool call. Constructing TaskStore here (not
-// at module load) keeps plugin import side-effect free, and lets a missing
-// native binding surface as a precise, actionable error instead of a crash.
+// at module load) keeps plugin import side-effect free.
 type QueueRuntime = {
   store: TaskStore;
   scheduler: Scheduler;
@@ -148,24 +92,19 @@ function getQueueRuntime(config: PluginConfig): QueueRuntime {
   try {
     store = new TaskStore({ dbPath });
   } catch (err) {
-    // TaskStore lazy-loads the better-sqlite3 native binding. OpenClaw
-    // installs plugin dependencies without running install scripts, so a
-    // fresh ClawHub install may not have the prebuilt binary.
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(
-      `ebb-ai: could not open the task queue at ${dbPath}. The better-sqlite3 ` +
-        `native binding is missing — OpenClaw installs plugin dependencies ` +
-        `without build scripts. Build it once with:\n` +
-        `  cd ~/.openclaw/extensions/ebb && npm rebuild better-sqlite3\n` +
-        `then restart the gateway. (ebb_recommend_window works without this.) ` +
-        `Original error: ${msg}`,
+      `ebb-ai: could not open the task queue at ${dbPath} (${msg}). The queue ` +
+        `uses Node's built-in node:sqlite — make sure the OpenClaw gateway runs ` +
+        `on Node 22.5 or newer. (recommend_window and get_grid_forecast work ` +
+        `without the queue.)`,
     );
   }
 
   const scheduler = new Scheduler({
     feed: getGridFeed(),
     store,
-    defaultRegion: resolveRegion(undefined, config).region,
+    defaultRegion: resolveRegion(undefined, config.defaultRegion).region,
     eager: false,
   });
   cachedQueueRuntime = { store, scheduler, dbPath };
@@ -195,9 +134,9 @@ export default defineToolPlugin({
     { additionalProperties: false },
   ),
   tools: (tool: ToolFactory) => [
-    // ── ebb_schedule_task ─────────────────────────────────────────────────
+    // ── schedule_task ─────────────────────────────────────────────────────
     tool({
-      name: "ebb_schedule_task",
+      name: "schedule_task",
       label: "Schedule task at cleanest grid hour",
       description:
         "Queue an AI task to dispatch at the cleanest grid hour inside the given deadline. " +
@@ -223,7 +162,7 @@ export default defineToolPlugin({
         region: Type.Optional(
           Type.String({
             description:
-              "Optional grid-region override. Defaults to the plugin's configured defaultRegion (GB if unset).",
+              "Optional grid-region override. Defaults to the configured defaultRegion, else a timezone guess, else GB.",
           }),
         ),
         carbon_budget_g: Type.Optional(
@@ -250,7 +189,7 @@ export default defineToolPlugin({
         config: PluginConfig,
       ) {
         const { scheduler, dbPath } = getQueueRuntime(config);
-        const { region, source } = resolveRegion(params.region, config);
+        const { region, source } = resolveRegion(params.region, config.defaultRegion);
         const task = await scheduler.enqueueProviderCall(
           {
             type: "provider_call",
@@ -275,9 +214,9 @@ export default defineToolPlugin({
       },
     }),
 
-    // ── ebb_recommend_window ──────────────────────────────────────────────
+    // ── recommend_window ──────────────────────────────────────────────────
     tool({
-      name: "ebb_recommend_window",
+      name: "recommend_window",
       label: "Preview cleanest dispatch window",
       description:
         "Preview the cleanest in-deadline window WITHOUT queueing the task. Returns the chosen " +
@@ -296,7 +235,7 @@ export default defineToolPlugin({
         params: { deadline: string; region?: string; carbon_budget_g?: number },
         config: PluginConfig,
       ) {
-        const { region } = resolveRegion(params.region, config);
+        const { region } = resolveRegion(params.region, config.defaultRegion);
         return await recommendWindow(
           {
             deadline: new Date(params.deadline),
@@ -308,9 +247,9 @@ export default defineToolPlugin({
       },
     }),
 
-    // ── ebb_check_queue_status ────────────────────────────────────────────
+    // ── check_queue_status ────────────────────────────────────────────────
     tool({
-      name: "ebb_check_queue_status",
+      name: "check_queue_status",
       label: "Check ebb-ai queue status",
       description:
         "List all ebb-ai tasks (no args) or fetch detail + carbon receipt for one task (pass " +
@@ -346,9 +285,9 @@ export default defineToolPlugin({
       },
     }),
 
-    // ── ebb_cancel_task ───────────────────────────────────────────────────
+    // ── cancel_task ───────────────────────────────────────────────────────
     tool({
-      name: "ebb_cancel_task",
+      name: "cancel_task",
       label: "Cancel an ebb-ai task",
       description:
         "Cancel a queued or scheduled ebb-ai task. Idempotent — calling it on a task that is " +
@@ -366,6 +305,119 @@ export default defineToolPlugin({
           status: result.status,
           completed_at: result.completedAt ?? null,
         };
+      },
+    }),
+
+    // ── get_grid_forecast ─────────────────────────────────────────────────
+    tool({
+      name: "get_grid_forecast",
+      label: "Forecast grid carbon intensity",
+      description:
+        "Return the projected electricity-grid carbon intensity for a region, hour by hour. " +
+        "Use this when deciding whether to run an expensive AI task now or defer it — intensity " +
+        "is grams CO2e per kWh with a categorical band (very_clean / clean / average / dirty / " +
+        "very_dirty). Read-only; does not touch the task queue.",
+      parameters: Type.Object({
+        region: Type.Optional(
+          Type.String({
+            description:
+              "Grid region (e.g. GB, US-CAL-CISO, FR). Defaults to the configured defaultRegion, else a timezone guess, else GB.",
+          }),
+        ),
+        hours: Type.Optional(
+          Type.Number({
+            description: "How many hours ahead to forecast. Defaults to 24.",
+          }),
+        ),
+      }),
+      async execute(
+        params: { region?: string; hours?: number },
+        config: PluginConfig,
+      ) {
+        const { region } = resolveRegion(params.region, config.defaultRegion);
+        const forecast = await getGridFeed().fetchForecast(
+          region,
+          params.hours ?? 24,
+        );
+        return forecast;
+      },
+    }),
+
+    // ── update_deadline ───────────────────────────────────────────────────
+    tool({
+      name: "update_deadline",
+      label: "Move a task's deadline",
+      description:
+        "Move the deadline of a queued or scheduled ebb-ai task; the scheduler re-picks the " +
+        "cleanest window inside the new deadline. Only queued/scheduled tasks can change — " +
+        "running/completed/failed/cancelled tasks throw. Use when the user says 'I need that " +
+        "sooner' or 'push that task to next week'.",
+      parameters: Type.Object({
+        task_id: Type.String({ description: "The id of the task to reschedule." }),
+        deadline: Type.String({
+          description: "New ISO-8601 deadline for the task.",
+          format: "date-time",
+        }),
+      }),
+      async execute(
+        params: { task_id: string; deadline: string },
+        config: PluginConfig,
+      ) {
+        const { scheduler } = getQueueRuntime(config);
+        const record = await scheduler.updateDeadline(
+          params.task_id,
+          new Date(params.deadline),
+        );
+        return {
+          task_id: params.task_id,
+          status: record.status,
+          scheduled_for: record.scheduledFor ?? null,
+          new_deadline: params.deadline,
+        };
+      },
+    }),
+
+    // ── cancel_all ────────────────────────────────────────────────────────
+    tool({
+      name: "cancel_all",
+      label: "Cancel all queued tasks",
+      description:
+        "Cancel every queued and scheduled ebb-ai task at once, optionally filtered to one " +
+        "status. Use when the user says 'clear my queue', 'cancel everything', 'drop all my " +
+        "pending tasks'. Already-terminal tasks (completed/failed/cancelled) are left untouched.",
+      parameters: Type.Object({
+        status: Type.Optional(
+          Type.Union([Type.Literal("queued"), Type.Literal("scheduled")], {
+            description: "Optional — cancel only tasks in this status.",
+          }),
+        ),
+      }),
+      async execute(
+        params: { status?: "queued" | "scheduled" },
+        config: PluginConfig,
+      ) {
+        const { scheduler } = getQueueRuntime(config);
+        const targets = scheduler
+          .listPersistedTasks()
+          .filter(
+            (t) =>
+              (t.status === "queued" || t.status === "scheduled") &&
+              (!params.status || t.status === params.status),
+          );
+        let cancelled = 0;
+        const errors: Array<{ task_id: string; error: string }> = [];
+        for (const t of targets) {
+          try {
+            scheduler.cancelTask(t.taskId);
+            cancelled++;
+          } catch (err) {
+            errors.push({
+              task_id: t.taskId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+        return { matched: targets.length, cancelled, errors };
       },
     }),
   ],

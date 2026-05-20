@@ -10,6 +10,7 @@
 import {
   AnthropicAdapter,
   OpenAIAdapter,
+  resolveRegion,
   Scheduler,
   type ProviderAdapter,
 } from "@ebb-ai/core";
@@ -77,7 +78,10 @@ export async function runTickOnce(
     };
   }
   const dbPath = opts.db ?? defaultDbPath();
-  const scheduler = new Scheduler({ dbPath, defaultRegion: opts.region });
+  const scheduler = new Scheduler({
+    dbPath,
+    defaultRegion: resolveRegion(undefined, opts.region).region,
+  });
   try {
     const result = await scheduler.tick(adapters);
     const msg = `tick: ${result.inspected} inspected, ${result.dispatched} dispatched, ${result.failed} failed`;

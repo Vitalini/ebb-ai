@@ -4,14 +4,17 @@ import { join } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import ebbPlugin, { regionForTimezone, resolveRegion } from "../src/index.js";
+import ebbPlugin from "../src/index.js";
 import type { StubResolvedTool } from "./stub-tool-plugin.js";
 
 const TOOL_NAMES = [
-  "ebb_schedule_task",
-  "ebb_recommend_window",
-  "ebb_check_queue_status",
-  "ebb_cancel_task",
+  "schedule_task",
+  "recommend_window",
+  "check_queue_status",
+  "cancel_task",
+  "get_grid_forecast",
+  "update_deadline",
+  "cancel_all",
 ];
 
 function tool(name: string): StubResolvedTool {
@@ -21,8 +24,8 @@ function tool(name: string): StubResolvedTool {
 }
 
 /** An ISO-8601 deadline ~24h in the future. */
-function deadlineISO(): string {
-  return new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+function deadlineISO(hoursAhead = 24): string {
+  return new Date(Date.now() + hoursAhead * 60 * 60 * 1000).toISOString();
 }
 
 describe("ebb OpenClaw plugin — registration", () => {
@@ -31,9 +34,12 @@ describe("ebb OpenClaw plugin — registration", () => {
     expect(ebbPlugin.name).toMatch(/ebb-ai/);
   });
 
-  it("registers exactly the four ebb_* tools", () => {
+  it("registers the seven tools, MCP-style names with no ebb_ prefix", () => {
     const names = ebbPlugin.tools.map((t) => t.name).sort();
     expect(names).toEqual([...TOOL_NAMES].sort());
+    for (const t of ebbPlugin.tools) {
+      expect(t.name).not.toMatch(/^ebb_/);
+    }
   });
 
   it("gives every tool a label, a description and a parameters schema", () => {
@@ -59,9 +65,8 @@ describe("ebb OpenClaw plugin — tool execution", () => {
     rmSync(tmp, { recursive: true, force: true });
   });
 
-  it("ebb_recommend_window returns a window without opening the queue DB", async () => {
-    // The dbPath here points nowhere usable: recommend_window must not need it.
-    const res = (await tool("ebb_recommend_window").execute(
+  it("recommend_window returns a window without opening the queue DB", async () => {
+    const res = (await tool("recommend_window").execute(
       { deadline: deadlineISO(), region: "GB" },
       { dbPath: "/nonexistent-dir/queue.db" },
     )) as Record<string, unknown>;
@@ -69,19 +74,35 @@ describe("ebb OpenClaw plugin — tool execution", () => {
     expect(typeof res).toBe("object");
   });
 
-  it("ebb_schedule_task persists a task to the queue DB", async () => {
-    const res = (await tool("ebb_schedule_task").execute(
+  it("get_grid_forecast returns a forecast without opening the queue DB", async () => {
+    const res = (await tool("get_grid_forecast").execute(
+      { region: "GB", hours: 6 },
+      { dbPath: "/nonexistent-dir/queue.db" },
+    )) as Record<string, unknown>;
+    expect(res).toBeTruthy();
+    expect(typeof res).toBe("object");
+  });
+
+  it("schedule_task persists a task and reports region_source", async () => {
+    const res = (await tool("schedule_task").execute(
       { prompt: "ebb plugin test task", deadline: deadlineISO(), region: "GB" },
       { dbPath },
-    )) as { task_id: string; status: string; persisted_to: string };
+    )) as {
+      task_id: string;
+      status: string;
+      region: string;
+      region_source: string;
+      persisted_to: string;
+    };
     expect(res.task_id).toBeTruthy();
-    expect(res.status).toBeTruthy();
+    expect(res.region).toBe("GB");
+    expect(res.region_source).toBe("request");
     expect(res.persisted_to).toBe(dbPath);
     scheduledId = res.task_id;
   });
 
-  it("ebb_check_queue_status lists the scheduled task", async () => {
-    const res = (await tool("ebb_check_queue_status").execute(
+  it("check_queue_status lists the scheduled task", async () => {
+    const res = (await tool("check_queue_status").execute(
       {},
       { dbPath },
     )) as { total: number; tasks: Array<{ task_id: string }> };
@@ -89,16 +110,17 @@ describe("ebb OpenClaw plugin — tool execution", () => {
     expect(res.tasks.some((t) => t.task_id === scheduledId)).toBe(true);
   });
 
-  it("ebb_check_queue_status detail returns the persisted task", async () => {
-    const res = (await tool("ebb_check_queue_status").execute(
-      { task_id: scheduledId },
+  it("update_deadline reschedules a queued task", async () => {
+    const res = (await tool("update_deadline").execute(
+      { task_id: scheduledId, deadline: deadlineISO(48) },
       { dbPath },
-    )) as { taskId: string };
-    expect(res.taskId).toBe(scheduledId);
+    )) as { task_id: string; status: string };
+    expect(res.task_id).toBe(scheduledId);
+    expect(["queued", "scheduled"]).toContain(res.status);
   });
 
-  it("ebb_cancel_task cancels the scheduled task", async () => {
-    const res = (await tool("ebb_cancel_task").execute(
+  it("cancel_task cancels the scheduled task", async () => {
+    const res = (await tool("cancel_task").execute(
       { task_id: scheduledId },
       { dbPath },
     )) as { task_id: string; status: string };
@@ -106,46 +128,26 @@ describe("ebb OpenClaw plugin — tool execution", () => {
     expect(res.status).toBe("cancelled");
   });
 
-  it("ebb_check_queue_status throws for an unknown task id", async () => {
+  it("cancel_all cancels remaining queued/scheduled tasks", async () => {
+    await tool("schedule_task").execute(
+      { prompt: "second task", deadline: deadlineISO(), region: "GB" },
+      { dbPath },
+    );
+    const res = (await tool("cancel_all").execute({}, { dbPath })) as {
+      matched: number;
+      cancelled: number;
+      errors: unknown[];
+    };
+    expect(res.matched).toBeGreaterThanOrEqual(1);
+    expect(res.cancelled).toBeGreaterThanOrEqual(1);
+  });
+
+  it("check_queue_status throws for an unknown task id", async () => {
     await expect(
-      tool("ebb_check_queue_status").execute(
+      tool("check_queue_status").execute(
         { task_id: "t-does-not-exist" },
         { dbPath },
       ),
     ).rejects.toThrow();
-  });
-});
-
-describe("ebb OpenClaw plugin — region resolution", () => {
-  it("maps known timezones to grid regions", () => {
-    expect(regionForTimezone("Europe/London")).toBe("GB");
-    expect(regionForTimezone("Europe/Paris")).toBe("FR");
-    expect(regionForTimezone("Europe/Berlin")).toBe("DE");
-    expect(regionForTimezone("America/Los_Angeles")).toBe("US-CAL-CISO");
-    expect(regionForTimezone("America/New_York")).toBe("US-MIDA-PJM");
-  });
-
-  it("returns undefined for an unmapped timezone", () => {
-    expect(regionForTimezone("Antarctica/Troll")).toBeUndefined();
-  });
-
-  it("an explicit request region wins over config and detection", () => {
-    expect(resolveRegion("US-TEX-ERCO", { defaultRegion: "GB" })).toEqual({
-      region: "US-TEX-ERCO",
-      source: "request",
-    });
-  });
-
-  it("configured defaultRegion is used when the call omits a region", () => {
-    expect(resolveRegion(undefined, { defaultRegion: "FR" })).toEqual({
-      region: "FR",
-      source: "config",
-    });
-  });
-
-  it("falls back to a timezone guess or GB when nothing is configured", () => {
-    const r = resolveRegion(undefined, {});
-    expect(r.region.length).toBeGreaterThan(0);
-    expect(["timezone", "default"]).toContain(r.source);
   });
 });

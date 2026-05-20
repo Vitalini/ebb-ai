@@ -6,18 +6,23 @@ is `ebb`.
 
 When a user says "do this later", "by tomorrow", "tonight", "overnight",
 "by EOD", "remind me to", or any other deferral phrase, this plugin's
-`ebb_schedule_task` tool gets invoked automatically — the LLM dispatch
-is routed to the cleanest electricity-grid hour inside the deadline,
+`schedule_task` tool gets invoked automatically — the LLM dispatch is
+routed to the cleanest electricity-grid hour inside the deadline,
 40-70 % lower carbon vs running immediately.
 
 ## Tools registered
 
-| Tool                       | Purpose                                                         |
-|----------------------------|-----------------------------------------------------------------|
-| `ebb_schedule_task`        | Queue a task at the cleanest hour. The deferral trigger.        |
-| `ebb_recommend_window`     | Preview the cleanest hour without queueing. Read-only.          |
-| `ebb_check_queue_status`   | List all tasks / detail one (with carbon receipt). Read-only.   |
-| `ebb_cancel_task`          | Cancel a queued task. Idempotent.                                |
+Tool names match the `@ebb-ai/mcp` MCP-server surface (no `ebb_` prefix).
+
+| Tool                  | Purpose                                                       |
+|-----------------------|---------------------------------------------------------------|
+| `schedule_task`       | Queue a task at the cleanest hour. The deferral trigger.      |
+| `recommend_window`    | Preview the cleanest hour without queueing. Read-only.        |
+| `check_queue_status`  | List all tasks / detail one (with carbon receipt). Read-only. |
+| `cancel_task`         | Cancel a queued task. Idempotent.                             |
+| `get_grid_forecast`   | Hourly grid carbon-intensity forecast. Read-only.             |
+| `update_deadline`     | Move a queued/scheduled task's deadline.                      |
+| `cancel_all`          | Cancel every queued/scheduled task at once.                   |
 
 ## Install
 
@@ -38,10 +43,11 @@ After installing and restarting the gateway:
    openclaw plugins inspect ebb --runtime --json
    ```
 
-   The `tools` array contains `ebb_schedule_task`, `ebb_recommend_window`,
-   `ebb_check_queue_status`, `ebb_cancel_task`. (`Shape: non-capability`
-   in the plain `inspect` output is the normal label OpenClaw gives tool
-   plugins — it is not an error.)
+   The `tools` array contains `schedule_task`, `recommend_window`,
+   `check_queue_status`, `cancel_task`, `get_grid_forecast`,
+   `update_deadline`, `cancel_all`. (`Shape: non-capability` in the plain
+   `inspect` output is the normal label OpenClaw gives tool plugins — it
+   is not an error.)
 
 2. **Validate** the installed package:
 

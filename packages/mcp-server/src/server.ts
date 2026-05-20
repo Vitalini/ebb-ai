@@ -29,6 +29,7 @@ import {
   buildDefaultGridFeed,
   OpenAIAdapter,
   recommendWindow,
+  resolveRegion,
   Scheduler,
   type ProviderAdapter,
   type ProviderCallSpec,
@@ -39,7 +40,13 @@ import { z } from "zod";
  *  both the MCP `serverInfo` field and the stderr ready banner. */
 const SERVER_VERSION = "0.8.2";
 
-const DEFAULT_REGION = process.env.EBB_DEFAULT_REGION ?? "US-CAL-CISO";
+// When EBB_DEFAULT_REGION is unset, guess the region from the host
+// timezone (shared with the CLI and the OpenClaw plugin) instead of
+// hard-coding one — falls back to GB.
+const DEFAULT_REGION = resolveRegion(
+  undefined,
+  process.env.EBB_DEFAULT_REGION,
+).region;
 
 /**
  * Resolve where the scheduler should store its persistent queue. v0.7.1

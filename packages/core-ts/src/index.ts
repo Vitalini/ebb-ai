@@ -76,3 +76,11 @@ export type {
 } from "./providers/index.js";
 export { TaskStore } from "./storage/sqlite.js";
 export type { TaskStoreOptions } from "./storage/sqlite.js";
+export {
+  FALLBACK_REGION,
+  TIMEZONE_REGION,
+  regionForTimezone,
+  detectRegionFromTimezone,
+  resolveRegion,
+} from "./region.js";
+export type { RegionResolution, RegionSource } from "./region.js";

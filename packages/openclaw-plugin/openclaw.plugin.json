@@ -19,13 +19,16 @@
     },
     "additionalProperties": false
   },
-  "version": "0.1.3",
+  "version": "0.1.4",
   "contracts": {
     "tools": [
-      "ebb_schedule_task",
-      "ebb_recommend_window",
-      "ebb_check_queue_status",
-      "ebb_cancel_task"
+      "schedule_task",
+      "recommend_window",
+      "check_queue_status",
+      "cancel_task",
+      "get_grid_forecast",
+      "update_deadline",
+      "cancel_all"
     ]
   }
 }
