@@ -142,8 +142,8 @@ const HOSTS: Host[] = [
     id: "openclaw",
     label: "OpenClaw (plugin via ClawHub)",
     group: "agent",
-    desc: "Native OpenClaw plugin that registers four ebb-ai tools (ebb_schedule_task, ebb_recommend_window, ebb_check_queue_status, ebb_cancel_task). Page: https://clawhub.ai/plugins/@vitalini/ebb-ai",
-    command: "openclaw plugins install clawhub:@vitalini/ebb-ai",
+    desc: "Native OpenClaw plugin that registers four ebb-ai tools (ebb_schedule_task, ebb_recommend_window, ebb_check_queue_status, ebb_cancel_task). Page: https://clawhub.ai/plugins/@vitalini/ebb",
+    command: "openclaw plugins install clawhub:@vitalini/ebb",
     lang: "bash",
     followup:
       'Restart the OpenClaw gateway. Then say "do this later" / "by tomorrow" / "overnight" in any session — ebb_schedule_task fires automatically.',

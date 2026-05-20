@@ -213,7 +213,7 @@ export default function AboutPage() {
             </p>
           </Link>
           <a
-            href="https://clawhub.ai/plugins/@vitalini/ebb-ai-mcp"
+            href="https://clawhub.ai/plugins/@vitalini/ebb"
             target="_blank"
             rel="noreferrer"
             className="rounded-md border border-rule bg-bg-card p-4 transition-colors hover:border-accent/40 hover:bg-accent/5"
@@ -221,11 +221,11 @@ export default function AboutPage() {
             <p className="font-mono text-xs uppercase tracking-wider text-accent">
               openclaw
             </p>
-            <p className="mt-1 font-semibold text-fg">@vitalini/ebb-ai-mcp on ClawHub</p>
+            <p className="mt-1 font-semibold text-fg">@vitalini/ebb on ClawHub</p>
             <p className="mt-1 text-sm text-fg-muted">
               Native OpenClaw plugin. Install with{" "}
               <code className="font-mono">openclaw plugins install
-              clawhub:@vitalini/ebb-ai-mcp</code>.
+              clawhub:@vitalini/ebb</code>.
             </p>
           </a>
           <a

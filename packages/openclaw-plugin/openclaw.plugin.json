@@ -1,5 +1,5 @@
 {
-  "id": "ebb-ai",
+  "id": "ebb",
   "name": "ebb-ai — carbon-aware deferral",
   "description": "Auto-defer \"do it later\" tasks. Invoke when the user signals deferral (\"by tomorrow\", \"tonight\", \"overnight\", \"by EOD\", \"sometime this week\", \"when you have a moment\", \"remind me to\", \"queue this up\", \"no rush\"). Routes the LLM dispatch to the cleanest electricity-grid hour inside the deadline — 40-70% lower carbon vs running now, 50% cheaper via Anthropic/OpenAI Batch APIs.",
   "contracts": {
