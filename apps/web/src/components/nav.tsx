@@ -3,8 +3,8 @@ import Link from "next/link";
 const LINKS: Array<{ href: string; label: string }> = [
   { href: "/map", label: "Map" },
   { href: "/plan", label: "Plan" },
-  { href: "/stats", label: "Stats" },
   { href: "/docs", label: "Docs" },
+  { href: "/about", label: "About" },
 ];
 
 export function Nav() {

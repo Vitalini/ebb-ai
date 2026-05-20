@@ -57,33 +57,41 @@ export default function AboutPage() {
         <h2 className="text-2xl font-bold tracking-tight">How it works</h2>
         <ol className="ml-5 list-decimal space-y-2 leading-relaxed text-fg-muted">
           <li>
-            Your agent (Claude Code, Claude Desktop, Cursor, OpenAI o1 / Codex,
-            any MCP host) calls one of ebb-ai&apos;s nine MCP tools — for example,{" "}
+            Your agent (Claude Code, Claude Desktop, Cursor, Windsurf,
+            Continue, Cline, Zed, Goose, OpenClaw, or any MCP host) calls
+            one of ebb-ai&apos;s nine MCP tools — for example,{" "}
             <code className="rounded bg-bg-elev px-1 font-mono text-sm">schedule_task</code>{" "}
             with a prompt, region, and deadline.
           </li>
           <li>
-            ebb-ai fetches the live carbon-intensity forecast for that region from
-            the appropriate source — UK National Grid ESO, U.S. EIA, ENTSO-E for
-            Europe, or Electricity Maps as fallback.
+            ebb-ai fetches the live carbon-intensity forecast for that
+            region — UK National Grid ESO (key-less), U.S. EIA, ENTSO-E
+            for Europe, or Electricity Maps as universal fallback.
           </li>
           <li>
-            It scores every hour inside the deadline and picks the cleanest one
-            (with a 15 % tolerance band + jitter so the global fleet doesn&apos;t
-            converge on a single hour).
+            It scores every hour inside the deadline and picks the
+            cleanest one — with a 15 % tolerance band plus randomized
+            tie-break so the global fleet doesn&apos;t converge on a
+            single UTC hour (the &quot;everyone at 03:00 UTC&quot;
+            pathology).
           </li>
           <li>
-            The task is persisted to a local SQLite queue. When the chosen hour
-            arrives, the <code className="rounded bg-bg-elev px-1 font-mono text-sm">ebb tick</code>{" "}
-            daemon dispatches via the provider&apos;s Batch API (50 % discount on
-            the bill, same answer) when the deadline allows.
+            The task is persisted to a local SQLite queue at{" "}
+            <code className="rounded bg-bg-elev px-1 font-mono text-sm">~/.ebb-ai/queue.db</code>
+            . When the chosen hour arrives, the{" "}
+            <code className="rounded bg-bg-elev px-1 font-mono text-sm">ebb tick</code>{" "}
+            daemon dispatches via the provider&apos;s Batch API
+            (50 % discount on the bill, same answer) when the deadline
+            allows.
           </li>
           <li>
-            A carbon receipt is written: timestamp, region, exact intensity used
-            for scoring, tokens in/out, dollar cost vs peak. Inspectable via{" "}
+            A carbon receipt is written: timestamp, region, exact intensity
+            used for scoring, tokens in/out, dollar cost vs peak.
+            Inspectable via{" "}
             <code className="rounded bg-bg-elev px-1 font-mono text-sm">ebb stats</code>{" "}
-            on the CLI or the <Link href="/stats" className="text-accent hover:underline">/stats</Link>{" "}
-            dashboard view.
+            on the CLI. The Claude Code plugin, the OpenClaw plugin, the
+            MCP server, and the CLI all read and write this same file —
+            defer in one host, check in another.
           </li>
         </ol>
       </section>
@@ -129,7 +137,7 @@ export default function AboutPage() {
         <h2 className="text-2xl font-bold tracking-tight">What you can do right now</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           <Link
-            href="/"
+            href="/map"
             className="rounded-md border border-rule bg-bg-card p-4 transition-colors hover:border-accent/40 hover:bg-accent/5"
           >
             <p className="font-mono text-xs uppercase tracking-wider text-accent">
@@ -153,19 +161,34 @@ export default function AboutPage() {
               CO<sub>2</sub>e savings vs dispatching now.
             </p>
           </Link>
+          <Link
+            href="/docs"
+            className="rounded-md border border-rule bg-bg-card p-4 transition-colors hover:border-accent/40 hover:bg-accent/5"
+          >
+            <p className="font-mono text-xs uppercase tracking-wider text-accent">
+              install — 30 seconds
+            </p>
+            <p className="mt-1 font-semibold text-fg">Pick your host</p>
+            <p className="mt-1 text-sm text-fg-muted">
+              One-line install picker for 13 hosts: Claude Code, Cursor,
+              Claude Desktop, Windsurf, Continue, Cline, Zed, Goose,
+              OpenClaw, mcphost, Python lib, Node lib.
+            </p>
+          </Link>
           <a
-            href="https://github.com/Vitalini/ebb-ai#install"
+            href="https://clawhub.ai/plugins/@vitalini/ebb-ai"
             target="_blank"
             rel="noreferrer"
             className="rounded-md border border-rule bg-bg-card p-4 transition-colors hover:border-accent/40 hover:bg-accent/5"
           >
             <p className="font-mono text-xs uppercase tracking-wider text-accent">
-              install
+              openclaw
             </p>
-            <p className="mt-1 font-semibold text-fg">Claude Code plugin</p>
+            <p className="mt-1 font-semibold text-fg">@vitalini/ebb-ai on ClawHub</p>
             <p className="mt-1 text-sm text-fg-muted">
-              Eight <code className="font-mono">/ebb-ai:*</code> slash commands.
-              One-line install in any MCP host.
+              Native OpenClaw plugin. Install with{" "}
+              <code className="font-mono">openclaw plugins install
+              clawhub:@vitalini/ebb-ai</code>.
             </p>
           </a>
           <a
@@ -182,17 +205,35 @@ export default function AboutPage() {
               Apache-2.0. TypeScript + Python ports. 204 tests. PRs welcome.
             </p>
           </a>
+          <a
+            href="https://mcp.so/server/ebb-ai"
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-md border border-rule bg-bg-card p-4 transition-colors hover:border-accent/40 hover:bg-accent/5"
+          >
+            <p className="font-mono text-xs uppercase tracking-wider text-accent">
+              mcp directory
+            </p>
+            <p className="mt-1 font-semibold text-fg">mcp.so/server/ebb-ai</p>
+            <p className="mt-1 text-sm text-fg-muted">
+              Listing in the largest community MCP-server catalog.
+            </p>
+          </a>
         </div>
       </section>
 
       <section className="space-y-3">
         <h2 className="text-2xl font-bold tracking-tight">Status</h2>
         <p className="leading-relaxed text-fg-muted">
-          v0.8.2 (operator preview). The scheduler is production-grade — the
+          v0.8.x (operator preview). The scheduler is production-grade — the
           even-distribution simulation routes 10 000 synthetic tasks across seven
           regions with under 11 % max-bucket concentration, the SQLite ledger
-          survives process restart, and per-region routing is auto-wired. The
-          public surface is still pre-1.0: API shapes can change in minor
+          survives process restart, and per-region routing is auto-wired. Live
+          carbon feeds (UK National Grid ESO, US EIA, ENTSO-E, Electricity
+          Maps) run on 7 of 7 regions; no region falls back to the mock curve.
+        </p>
+        <p className="leading-relaxed text-fg-muted">
+          The public surface is still pre-1.0: API shapes can change in minor
           versions. Deferred for v0.9: upstream MCP spec PR, opt-in aggregate
           leaderboard, WattTime marginal-emissions feed, cross-provider
           routing. v1.0 will freeze the API surface.
