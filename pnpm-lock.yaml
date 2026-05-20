@@ -142,8 +142,8 @@ importers:
   packages/openclaw-plugin:
     dependencies:
       '@ebb-ai/core':
-        specifier: workspace:*
-        version: link:../core-ts
+        specifier: ^0.8.2
+        version: 0.8.2(@anthropic-ai/sdk@0.96.0(zod@3.25.76))(openai@4.104.0(zod@3.25.76))
       typebox:
         specifier: '>=0.32.0'
         version: 1.1.38
@@ -176,6 +176,17 @@ packages:
   '@babel/runtime@7.29.2':
     resolution: {integrity: sha512-JiDShH45zKHWyGe4ZNVRrCjBz8Nh9TMmZG1kh4QTK8hCBTWBi8Da+i7s1fJw7/lYpM4ccepSNfqzZ/QvABBi5g==}
     engines: {node: '>=6.9.0'}
+
+  '@ebb-ai/core@0.8.2':
+    resolution: {integrity: sha512-X4RNaFRoDkI7mIVF7kf0zaTXxsusilAXGw+Oshan3JOLsT4siZTtrOpM/5BMKeqK5cxqummyvGuzE1W0mOah1Q==}
+    peerDependencies:
+      '@anthropic-ai/sdk': '>=0.32.0'
+      openai: '>=4.70.0'
+    peerDependenciesMeta:
+      '@anthropic-ai/sdk':
+        optional: true
+      openai:
+        optional: true
 
   '@emnapi/core@1.10.0':
     resolution: {integrity: sha512-yq6OkJ4p82CAfPl0u9mQebQHKPJkY7WrIuk205cTYnYe+k2Z8YBh11FrbRG/H6ihirqcacOgl2BIO8oyMQLeXw==}
@@ -3150,6 +3161,13 @@ snapshots:
       zod: 3.25.76
 
   '@babel/runtime@7.29.2': {}
+
+  '@ebb-ai/core@0.8.2(@anthropic-ai/sdk@0.96.0(zod@3.25.76))(openai@4.104.0(zod@3.25.76))':
+    dependencies:
+      better-sqlite3: 11.10.0
+    optionalDependencies:
+      '@anthropic-ai/sdk': 0.96.0(zod@3.25.76)
+      openai: 4.104.0(zod@3.25.76)
 
   '@emnapi/core@1.10.0':
     dependencies:
