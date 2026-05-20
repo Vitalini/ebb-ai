@@ -22,7 +22,7 @@ Each row: `YYYY-MM-DD | platform | action | URL | status | notes`.
 |---|---|---|---|---|---|
 | 2026-05-19 | GitHub topics | Set 20 topics | https://github.com/Vitalini/ebb-ai | done | `claude-code` + `python` added in the last 2 slots |
 | - | modelcontextprotocol/servers | PR to README community list | https://github.com/modelcontextprotocol/servers | not started | One-line entry per the existing format |
-| - | mcp.so | Submit via web form | https://mcp.so/submit | not started | Form-based |
+| 2026-05-19 | mcp.so | Submitted via web form | https://mcp.so/server/ebb-ai | **LIVE** — public listing under `ebb-ai` slug, Overview/Tools/Comments structure populated | Form takes Name + URL + Server Config JSON; second step (Edit Server) adds Title + Description + Tags. No moderation queue visible — published immediately. |
 | - | smithery.ai | Submit via web form / GitHub | https://smithery.ai | not started | One-click install model |
 | - | glama.ai/mcp | Auto-indexed? Check | https://glama.ai/mcp/servers | not started | Aggregator, may auto-detect |
 | - | mcp-get.com | Auto-index of `@ebb-ai/mcp` on npm? | https://mcp-get.com | not started | Indexes npm scoped packages |
