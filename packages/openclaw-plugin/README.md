@@ -28,6 +28,53 @@ openclaw plugins install clawhub:@vitalini/ebb
 Restart the OpenClaw gateway. To update later:
 `openclaw plugins update @vitalini/ebb`.
 
+## Verify the install (smoke test)
+
+After installing and restarting the gateway:
+
+1. **Inspect** — all four tools should be listed:
+
+   ```bash
+   openclaw plugins inspect ebb --runtime --json
+   ```
+
+   The `tools` array contains `ebb_schedule_task`, `ebb_recommend_window`,
+   `ebb_check_queue_status`, `ebb_cancel_task`. (`Shape: non-capability`
+   in the plain `inspect` output is the normal label OpenClaw gives tool
+   plugins — it is not an error.)
+
+2. **Validate** the installed package:
+
+   ```bash
+   openclaw plugins validate --root ~/.openclaw/extensions/ebb --entry ./dist/index.js
+   ```
+
+3. **Exercise the tools** in any OpenClaw session:
+   - "preview the cleanest window for a task due tomorrow 6pm in GB"
+     → `ebb_recommend_window`
+   - "do this overnight: summarise today's commits" → `ebb_schedule_task`
+   - "what's in my ebb queue?" → `ebb_check_queue_status`
+
+The queue is a SQLite ledger opened through Node's built-in `node:sqlite`
+(Node ≥ 22.5) — there is no native module to compile, so a fresh install
+needs no extra build step.
+
+### Building from source
+
+```bash
+pnpm --filter @vitalini/ebb build          # bundle to dist/index.js
+openclaw plugins build    --root packages/openclaw-plugin --entry ./dist/index.js
+openclaw plugins validate --root packages/openclaw-plugin --entry ./dist/index.js
+pnpm --filter @vitalini/ebb test           # run the plugin test suite
+```
+
+Pack and install the tarball directly (no ClawHub round-trip):
+
+```bash
+cd packages/openclaw-plugin && npm pack
+openclaw plugins install ./vitalini-ebb-<version>.tgz
+```
+
 ## Configuration
 
 Optional config schema:
