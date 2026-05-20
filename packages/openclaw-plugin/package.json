@@ -41,7 +41,7 @@
   "devDependencies": {
     "@ebb-ai/core": "workspace:*",
     "typebox": "^1.1.38",
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.28.0",
     "typescript": "^5.6.3",
     "vitest": "^2.1.5",
     "@types/node": "^22.10.0"
