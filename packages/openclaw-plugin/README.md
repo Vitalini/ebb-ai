@@ -1,6 +1,8 @@
-# @ebb-ai/openclaw-plugin
+# @vitalini/ebb
 
 OpenClaw plugin that exposes ebb-ai as native OpenClaw tools.
+Published on ClawHub as `@vitalini/ebb`; its runtime id in the gateway
+is `ebb`.
 
 When a user says "do this later", "by tomorrow", "tonight", "overnight",
 "by EOD", "remind me to", or any other deferral phrase, this plugin's
@@ -20,10 +22,11 @@ is routed to the cleanest electricity-grid hour inside the deadline,
 ## Install
 
 ```bash
-npm install @ebb-ai/openclaw-plugin
+openclaw plugins install clawhub:@vitalini/ebb
 ```
 
-Then enable in your OpenClaw gateway config (see OpenClaw plugin docs).
+Restart the OpenClaw gateway. To update later:
+`openclaw plugins update @vitalini/ebb`.
 
 ## Configuration
 
