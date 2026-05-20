@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import { BarChart3, BookOpen, CalendarClock, Globe } from "lucide-react";
+import { HowItWorksViz } from "@/components/how-it-works-viz";
 import { InstallPicker } from "@/components/install-picker";
 
 export const metadata: Metadata = {
@@ -49,6 +50,7 @@ export default function HomePage() {
     <div className="space-y-14">
       <Hero />
       <InstallBlock />
+      <HowItWorksViz />
       <TilesBlock />
       <ValueRow />
     </div>
