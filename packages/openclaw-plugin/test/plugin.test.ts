@@ -2,12 +2,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { TaskStore } from "@ebb-ai/core";
 
 import ebbPlugin, { runDispatchTick } from "../src/index.js";
-import { buildAdapters } from "../src/dispatch.js";
+import { buildAdapters, setLlmBridgeForTest } from "../src/dispatch.js";
 import type { StubResolvedTool } from "./stub-tool-plugin.js";
 
 const TOOL_NAMES = [
@@ -186,9 +186,54 @@ describe("ebb OpenClaw plugin — tool execution", () => {
     )) as { status: string };
     expect(after.status).toBe("completed");
   });
+
+  it("dispatches an overdue task through the captured OpenClaw runtime bridge", async () => {
+    let bridgeCalls = 0;
+    // Simulate OpenClaw's api.runtime.llm.complete.
+    setLlmBridgeForTest(async () => {
+      bridgeCalls += 1;
+      return {
+        text: "PASS — dispatched via the OpenClaw runtime bridge",
+        provider: "anthropic",
+        model: "claude-sonnet-4-6",
+        usage: { totalTokens: 9 },
+      };
+    });
+    try {
+      const sched = (await tool("schedule_task").execute(
+        { prompt: "bridge dispatch test", deadline: deadlineISO(), region: "GB" },
+        { dbPath },
+      )) as { task_id: string; dispatch: string };
+      // With the bridge captured, schedule_task reports it.
+      expect(sched.dispatch).toBe("openclaw-runtime");
+
+      const store = new TaskStore({ dbPath });
+      const rec = store.get(sched.task_id);
+      if (!rec) throw new Error("task was not persisted");
+      rec.status = "scheduled";
+      rec.scheduledFor = new Date(Date.now() - 60_000).toISOString();
+      store.upsert(rec);
+      store.close();
+
+      // No adapter override — runDispatchTick must build the bridge adapter.
+      const result = await runDispatchTick({ dbPath });
+      expect(bridgeCalls).toBeGreaterThanOrEqual(1);
+      expect(result.dispatched).toBeGreaterThanOrEqual(1);
+
+      const after = (await tool("check_queue_status").execute(
+        { task_id: sched.task_id },
+        { dbPath },
+      )) as { status: string };
+      expect(after.status).toBe("completed");
+    } finally {
+      setLlmBridgeForTest(undefined);
+    }
+  });
 });
 
 describe("ebb OpenClaw plugin — dispatch adapters", () => {
+  beforeEach(() => setLlmBridgeForTest(undefined));
+
   it("buildAdapters is empty when no provider keys are set", () => {
     expect(buildAdapters({})).toEqual({});
   });

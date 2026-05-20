@@ -9,6 +9,12 @@
  * `Shape: non-capability` for tool plugins in OpenClaw 2026.5.18; that is
  * the expected label for this plugin kind, not an error.
  *
+ * Scheduled provider-call tasks are executed in-process: a background loop
+ * runs `Scheduler.tick`, dispatching due tasks through OpenClaw's own model
+ * runtime (`api.runtime.llm.complete`, captured from a tool-call context) —
+ * no separate API key required — or through `ANTHROPIC_API_KEY` /
+ * `OPENAI_API_KEY` as a fallback.
+ *
  * Shares the SQLite ledger at ~/.ebb-ai/queue.db with the @ebb-ai/mcp MCP
  * server and the @ebb-ai/cli CLI — a task deferred in OpenClaw shows up in
  * `ebb stats` and vice versa. Tool names match the MCP server surface.
@@ -37,7 +43,12 @@ import {
   type TickResult,
 } from "@ebb-ai/core";
 
-import { buildAdapters, type DispatchAdapters } from "./dispatch.js";
+import {
+  buildAdapters,
+  captureOpenClawRuntime,
+  dispatchCapability,
+  type DispatchAdapters,
+} from "./dispatch.js";
 
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -129,7 +140,7 @@ let dispatcherStarted = false;
 /**
  * Drain every due scheduled task once. Exported so tests and the smoke
  * script can run a single deterministic sweep. `adaptersOverride` lets a
- * test inject a stub instead of the env-key HTTP adapters.
+ * test inject a stub instead of the runtime-bridge / HTTP adapters.
  */
 export async function runDispatchTick(
   config: PluginConfig,
@@ -235,7 +246,9 @@ export default defineToolPlugin({
           model?: string;
         },
         config: PluginConfig,
+        context?: unknown,
       ) {
+        captureOpenClawRuntime(context);
         const { scheduler, dbPath } = getQueueRuntime(config);
         const { region, source } = resolveRegion(params.region, config.defaultRegion);
         const task = await scheduler.enqueueProviderCall(
@@ -258,6 +271,9 @@ export default defineToolPlugin({
           region_source: source,
           scheduled_for: task.scheduledFor ?? null,
           persisted_to: dbPath,
+          // How this task will execute when due: "openclaw-runtime"
+          // (gateway model, no key), "api-key", or "unconfigured".
+          dispatch: dispatchCapability(),
         };
       },
     }),
@@ -282,7 +298,9 @@ export default defineToolPlugin({
       async execute(
         params: { deadline: string; region?: string; carbon_budget_g?: number },
         config: PluginConfig,
+        context?: unknown,
       ) {
+        captureOpenClawRuntime(context);
         const { region } = resolveRegion(params.region, config.defaultRegion);
         return await recommendWindow(
           {
@@ -308,7 +326,12 @@ export default defineToolPlugin({
           Type.String({ description: "Optional — the id of one task to detail." }),
         ),
       }),
-      async execute(params: { task_id?: string }, config: PluginConfig) {
+      async execute(
+        params: { task_id?: string },
+        config: PluginConfig,
+        context?: unknown,
+      ) {
+        captureOpenClawRuntime(context);
         const { scheduler } = getQueueRuntime(config);
         const tasks = scheduler.listPersistedTasks();
         if (params.task_id) {
@@ -345,7 +368,12 @@ export default defineToolPlugin({
       parameters: Type.Object({
         task_id: Type.String({ description: "The id of the task to cancel." }),
       }),
-      async execute(params: { task_id: string }, config: PluginConfig) {
+      async execute(
+        params: { task_id: string },
+        config: PluginConfig,
+        context?: unknown,
+      ) {
+        captureOpenClawRuntime(context);
         const { scheduler } = getQueueRuntime(config);
         const result = scheduler.cancelTask(params.task_id);
         return {
@@ -381,7 +409,9 @@ export default defineToolPlugin({
       async execute(
         params: { region?: string; hours?: number },
         config: PluginConfig,
+        context?: unknown,
       ) {
+        captureOpenClawRuntime(context);
         const { region } = resolveRegion(params.region, config.defaultRegion);
         const forecast = await getGridFeed().fetchForecast(
           region,
@@ -410,7 +440,9 @@ export default defineToolPlugin({
       async execute(
         params: { task_id: string; deadline: string },
         config: PluginConfig,
+        context?: unknown,
       ) {
+        captureOpenClawRuntime(context);
         const { scheduler } = getQueueRuntime(config);
         const record = await scheduler.updateDeadline(
           params.task_id,
@@ -443,7 +475,9 @@ export default defineToolPlugin({
       async execute(
         params: { status?: "queued" | "scheduled" },
         config: PluginConfig,
+        context?: unknown,
       ) {
+        captureOpenClawRuntime(context);
         const { scheduler } = getQueueRuntime(config);
         const targets = scheduler
           .listPersistedTasks()
