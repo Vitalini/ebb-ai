@@ -1,6 +1,6 @@
 {
   "name": "@vitalini/ebb",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "OpenClaw plugin: auto-defer \"do it later\" / \"by tomorrow\" / \"overnight\" tasks to the cleanest electricity-grid hour inside a deadline. Native OpenClaw tools for carbon-aware AI workflow scheduling. Shares ~/.ebb-ai/queue.db with the ebb-ai MCP server and CLI.",
   "license": "Apache-2.0",
   "author": "Vitalii Borovyk",
