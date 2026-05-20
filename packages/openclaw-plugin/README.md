@@ -91,10 +91,18 @@ Optional config schema:
 one ledger, so deferring a task in OpenClaw and listing it from
 `ebb stats` Just Works.
 
-`defaultRegion` defaults to `GB` — always-live data via UK National
-Grid ESO, no API key required. Set to `US-CAL-CISO`, `FR`, etc. for
-other regions (may need `EBB_*_API_KEY` env vars for live data; falls
-back to a deterministic mock otherwise).
+`defaultRegion` — the grid region used when a tool call doesn't name
+one. **Leave it unset and ebb-ai auto-detects the region from the host
+machine's timezone:** `Europe/London`→`GB`,
+`America/Los_Angeles`→`US-CAL-CISO`, `America/New_York`→`US-MIDA-PJM`,
+`Europe/Paris`→`FR`, `Europe/Berlin`→`DE`. Timezones it can't map fall
+back to `GB` (always-live data via UK National Grid ESO, no API key).
+Set `defaultRegion` explicitly for any other region (`US-TEX-ERCO`,
+`US-NE-ISNE`, …). Each tool call may also pass its own `region`, which
+overrides everything; `ebb_schedule_task` reports a `region_source`
+(`request` / `config` / `timezone` / `default`) so you can see which
+rule applied. Non-GB regions may need `EBB_*_API_KEY` env vars for live
+data, otherwise a deterministic mock is used.
 
 ## When does the plugin auto-invoke?
 

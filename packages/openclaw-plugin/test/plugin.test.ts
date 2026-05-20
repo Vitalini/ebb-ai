@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import ebbPlugin from "../src/index.js";
+import ebbPlugin, { regionForTimezone, resolveRegion } from "../src/index.js";
 import type { StubResolvedTool } from "./stub-tool-plugin.js";
 
 const TOOL_NAMES = [
@@ -113,5 +113,39 @@ describe("ebb OpenClaw plugin — tool execution", () => {
         { dbPath },
       ),
     ).rejects.toThrow();
+  });
+});
+
+describe("ebb OpenClaw plugin — region resolution", () => {
+  it("maps known timezones to grid regions", () => {
+    expect(regionForTimezone("Europe/London")).toBe("GB");
+    expect(regionForTimezone("Europe/Paris")).toBe("FR");
+    expect(regionForTimezone("Europe/Berlin")).toBe("DE");
+    expect(regionForTimezone("America/Los_Angeles")).toBe("US-CAL-CISO");
+    expect(regionForTimezone("America/New_York")).toBe("US-MIDA-PJM");
+  });
+
+  it("returns undefined for an unmapped timezone", () => {
+    expect(regionForTimezone("Antarctica/Troll")).toBeUndefined();
+  });
+
+  it("an explicit request region wins over config and detection", () => {
+    expect(resolveRegion("US-TEX-ERCO", { defaultRegion: "GB" })).toEqual({
+      region: "US-TEX-ERCO",
+      source: "request",
+    });
+  });
+
+  it("configured defaultRegion is used when the call omits a region", () => {
+    expect(resolveRegion(undefined, { defaultRegion: "FR" })).toEqual({
+      region: "FR",
+      source: "config",
+    });
+  });
+
+  it("falls back to a timezone guess or GB when nothing is configured", () => {
+    const r = resolveRegion(undefined, {});
+    expect(r.region.length).toBeGreaterThan(0);
+    expect(["timezone", "default"]).toContain(r.source);
   });
 });

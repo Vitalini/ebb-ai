@@ -52,8 +52,60 @@ type ToolFactory = (def: ToolDefinition) => unknown;
 
 const DEFAULT_REGION = "GB";
 
-function resolveDefaultRegion(config: PluginConfig): string {
-  return config.defaultRegion ?? DEFAULT_REGION;
+/**
+ * Best-effort IANA-timezone → grid-region map. Only timezones whose
+ * dominant grid is unambiguous are listed; anything else falls back to
+ * GB. An explicit `defaultRegion` in the plugin config always wins, and
+ * any tool call can pass its own `region`.
+ */
+const TIMEZONE_REGION: Record<string, string> = {
+  "Europe/London": "GB",
+  "Europe/Paris": "FR",
+  "Europe/Berlin": "DE",
+  "Europe/Busingen": "DE",
+  "America/Los_Angeles": "US-CAL-CISO",
+  "America/New_York": "US-MIDA-PJM",
+  "America/Detroit": "US-MIDA-PJM",
+};
+
+/** Map an IANA timezone to a supported grid region, or undefined. */
+export function regionForTimezone(timeZone: string): string | undefined {
+  return TIMEZONE_REGION[timeZone];
+}
+
+/** Guess the grid region from the host machine's IANA timezone. */
+function detectRegionFromTimezone(): string | undefined {
+  try {
+    return regionForTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  } catch {
+    return undefined;
+  }
+}
+
+export type RegionResolution = {
+  region: string;
+  /** How `region` was chosen — lets a tool show the user what was applied. */
+  source: "request" | "config" | "timezone" | "default";
+};
+
+/**
+ * Resolve the grid region for a tool call. Precedence:
+ *   1. an explicit `region` argument on the tool call,
+ *   2. the plugin's configured `defaultRegion`,
+ *   3. a guess from the host machine's timezone,
+ *   4. GB — always-live data, no API key needed.
+ */
+export function resolveRegion(
+  requested: string | undefined,
+  config: PluginConfig,
+): RegionResolution {
+  if (requested) return { region: requested, source: "request" };
+  if (config.defaultRegion) {
+    return { region: config.defaultRegion, source: "config" };
+  }
+  const detected = detectRegionFromTimezone();
+  if (detected) return { region: detected, source: "timezone" };
+  return { region: DEFAULT_REGION, source: "default" };
 }
 
 // ── Grid feed (no SQLite) ───────────────────────────────────────────────────
@@ -113,7 +165,7 @@ function getQueueRuntime(config: PluginConfig): QueueRuntime {
   const scheduler = new Scheduler({
     feed: getGridFeed(),
     store,
-    defaultRegion: resolveDefaultRegion(config),
+    defaultRegion: resolveRegion(undefined, config).region,
     eager: false,
   });
   cachedQueueRuntime = { store, scheduler, dbPath };
@@ -136,7 +188,7 @@ export default defineToolPlugin({
       defaultRegion: Type.Optional(
         Type.String({
           description:
-            "Default electricity-grid region when a tool call omits one. Examples: GB, US-CAL-CISO, FR. Defaults to GB (always-live data, no API key needed).",
+            "Default electricity-grid region when a tool call omits one. Examples: GB, US-CAL-CISO, US-TEX-ERCO, US-NE-ISNE, US-MIDA-PJM, FR, DE. When unset, ebb-ai guesses from the host machine's timezone (London→GB, Paris→FR, Berlin→DE, US Pacific→US-CAL-CISO, US Eastern→US-MIDA-PJM) and otherwise falls back to GB. Set this explicitly for precise control.",
         }),
       ),
     },
@@ -198,6 +250,7 @@ export default defineToolPlugin({
         config: PluginConfig,
       ) {
         const { scheduler, dbPath } = getQueueRuntime(config);
+        const { region, source } = resolveRegion(params.region, config);
         const task = await scheduler.enqueueProviderCall(
           {
             type: "provider_call",
@@ -207,7 +260,7 @@ export default defineToolPlugin({
           },
           {
             deadline: new Date(params.deadline),
-            region: params.region ?? resolveDefaultRegion(config),
+            region,
             carbonBudgetG: params.carbon_budget_g,
           },
         );
@@ -215,6 +268,7 @@ export default defineToolPlugin({
           task_id: task.taskId,
           status: task.status,
           region: task.region,
+          region_source: source,
           scheduled_for: task.scheduledFor ?? null,
           persisted_to: dbPath,
         };
@@ -242,10 +296,11 @@ export default defineToolPlugin({
         params: { deadline: string; region?: string; carbon_budget_g?: number },
         config: PluginConfig,
       ) {
+        const { region } = resolveRegion(params.region, config);
         return await recommendWindow(
           {
             deadline: new Date(params.deadline),
-            region: params.region ?? resolveDefaultRegion(config),
+            region,
             carbonBudgetG: params.carbon_budget_g,
           },
           { feed: getGridFeed() },

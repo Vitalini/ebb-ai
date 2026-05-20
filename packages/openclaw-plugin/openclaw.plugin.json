@@ -14,12 +14,12 @@
       },
       "defaultRegion": {
         "type": "string",
-        "description": "Default electricity-grid region when a tool call omits one. Examples: GB, US-CAL-CISO, FR. Defaults to GB (always-live data, no API key needed)."
+        "description": "Default electricity-grid region when a tool call omits one. Examples: GB, US-CAL-CISO, US-TEX-ERCO, US-NE-ISNE, US-MIDA-PJM, FR, DE. When unset, ebb-ai guesses from the host machine's timezone (London→GB, Paris→FR, Berlin→DE, US Pacific→US-CAL-CISO, US Eastern→US-MIDA-PJM) and otherwise falls back to GB. Set this explicitly for precise control."
       }
     },
     "additionalProperties": false
   },
-  "version": "0.1.2",
+  "version": "0.1.3",
   "contracts": {
     "tools": [
       "ebb_schedule_task",
