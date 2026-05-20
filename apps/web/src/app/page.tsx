@@ -63,14 +63,15 @@ function Hero() {
         v0.8.2 · operator preview
       </div>
       <h1 className="text-balance text-3xl font-extrabold leading-[1.1] tracking-tight text-fg sm:text-4xl">
-        Defer AI work to the <span className="text-accent">cleanest hour</span> of the grid.
+        Defer AI work to <span className="text-accent">balance the grid</span> — cheaper, faster, lower-carbon.
       </h1>
       <p className="max-w-2xl text-base leading-relaxed text-fg-muted sm:text-lg">
-        ebb-ai is an open-source MCP scheduler. Hand it any deferrable LLM
-        task with a deadline, and it routes the dispatch to the hour with
-        the lowest electricity-grid carbon intensity — typically 40–70 %
-        cleaner than running right now. Per-task carbon receipts. Free,
-        Apache-2.0.
+        US AI compute is projected to reach 6.7–12 % of national grid load
+        by 2028 (DOE 2024). ebb-ai is an open-source MCP scheduler that
+        defers non-urgent LLM tasks to off-peak hours — 50 % cheaper via
+        Anthropic/OpenAI Batch APIs, faster during providers&apos; expanded
+        off-peak capacity, and 40–70 % lower carbon. Per-task receipts to a
+        local SQLite ledger. Apache-2.0.
       </p>
     </section>
   );

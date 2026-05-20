@@ -145,6 +145,25 @@
         </p>
       </section>
 
+      <section class="block">
+        <h2>Data sources</h2>
+        <p class="block-lede">
+          Grid intensity feeds come from government / TSO authorities — the
+          same sources that ISO/RTO grid operators and DOE energy-usage
+          studies cite. ebb-ai does no data collection of its own; it routes
+          dispatch decisions through public-sector telemetry.
+        </p>
+        <ul class="reasons">
+          <li><strong>U.S. Energy Information Administration (EIA).</strong> Hourly carbon-intensity for the six major US ISOs: CAISO, ERCOT, ISO-NE, PJM, NY-ISO, MISO. Free, key-required.</li>
+          <li><strong>UK National Grid ESO Carbon Intensity API.</strong> Key-less. Always live for GB region. The reference for UK demand-response programs.</li>
+          <li><strong>ENTSO-E Transparency Platform.</strong> European zones (FR, DE, ES, IT, NL). Operated by European Network of Transmission System Operators for Electricity. Free, key-required.</li>
+          <li><strong>Electricity Maps.</strong> Universal fallback for any other zone. Free tier sufficient for a single-user dashboard.</li>
+        </ul>
+        <p class="note" style="margin-top: 16px;">
+          Every per-task carbon receipt carries the exact intensity value (and source identifier) used at scoring time, so the audit trail is reproducible — operators can later verify any individual dispatch against the public data feed it relied on.
+        </p>
+      </section>
+
       <section class="block alt">
         <h2>Data flow, end to end</h2>
         <ol class="steps">

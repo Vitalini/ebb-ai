@@ -21,35 +21,61 @@ export default function AboutPage() {
       <header className="space-y-4">
         <p className="font-mono text-xs uppercase tracking-wider text-accent">about</p>
         <h1 className="text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-5xl">
-          A scheduler for AI that picks the cleanest hour.
+          Smarter scheduling for AI workloads.
         </h1>
         <p className="text-lg leading-relaxed text-fg-muted">
-          ebb-ai is an open-source carbon-aware scheduler for agentic AI workflows.
-          Give it a deadline and any LLM task that doesn&apos;t need to run
-          <em> right now</em>, and it will defer the dispatch to the hour with the
-          lowest grid carbon-intensity inside your window — typically saving 40-70 %
-          of the per-task CO<sub>2</sub>e versus dispatching immediately.
+          ebb-ai is an open-source MCP scheduler. Give it any LLM task with a
+          deadline, and it routes the dispatch to off-peak hours — when the
+          electricity grid is less loaded, providers&apos; APIs are cheaper and
+          faster, and per-task carbon is lower. A single shift with four
+          parallel wins.
         </p>
       </header>
 
       <section className="space-y-3">
         <h2 className="text-2xl font-bold tracking-tight">Why this exists</h2>
         <p className="leading-relaxed text-fg-muted">
-          The electricity grid is not a constant. Carbon-intensity in any given
-          region swings 5-10× across a single day as solar / wind / hydro come on
-          and off line. A prompt dispatched at noon in California can be six times
-          dirtier than the same prompt dispatched at 4 AM. For instant chat the
-          tradeoff isn&apos;t available — the user is waiting. But a huge fraction
-          of agent work is genuinely deferrable: nightly summaries, evaluator
-          sweeps, batch enrichment, long-horizon research. Today nothing automates
-          the deferral. ebb-ai does.
+          <strong className="text-fg">Grid load.</strong> US data centers are
+          projected to consume 6.7–12 % of national electricity grid load by
+          2028 (
+          <a
+            href="https://www.energy.gov/eere/buildings/articles/2024-united-states-data-center-energy-usage-report"
+            target="_blank"
+            rel="noreferrer"
+            className="text-accent hover:underline"
+          >
+            DOE 2024
+          </a>
+          ), driven primarily by AI compute. Today, agent code dispatches
+          synchronously by default — every &quot;summarize this overnight&quot;
+          and &quot;analyze by Friday&quot; request piles onto peak hours.
+          ebb-ai automates the deferral: a huge fraction of agent work
+          (nightly digests, evaluator sweeps, batch enrichment, long-horizon
+          research) doesn&apos;t need to run right now and shouldn&apos;t.
         </p>
         <p className="leading-relaxed text-fg-muted">
-          A second motivation is honest accounting. Most &quot;green AI&quot;
-          dashboards show monthly aggregates with assumed grid mixes. ebb-ai
-          writes a per-task carbon receipt against the actual grid intensity at
-          the moment of dispatch — auditable, region-aware, and reproducible from
-          the persistent SQLite ledger.
+          <strong className="text-fg">Cost.</strong> Anthropic and OpenAI
+          Batch APIs are priced 50 % below their sync siblings in exchange
+          for a 24-hour SLA. ebb-ai auto-routes through Batch when the
+          deadline allows. The same prompt, half the bill.
+        </p>
+        <p className="leading-relaxed text-fg-muted">
+          <strong className="text-fg">Latency.</strong> Provider servers
+          have variable queueing latency depending on global request volume.
+          Anthropic explicitly expanded off-peak capacity in 2026 — doubling
+          usage limits before 8 a.m. ET, after 2 p.m. ET on weekdays, and
+          all weekend — citing smoothed demand as the goal. The implication
+          for sync calls: shorter queues at off-peak, faster observed
+          first-token times.
+        </p>
+        <p className="leading-relaxed text-fg-muted">
+          <strong className="text-fg">Carbon.</strong> Carbon-intensity in
+          any given grid region swings 5-10× across a single day as solar /
+          wind / hydro come on- and off-line. A prompt dispatched at noon
+          in California can be six times dirtier than the same prompt at
+          4 AM. ebb-ai writes a per-task carbon receipt against the actual
+          grid intensity at the moment of dispatch — auditable, region-aware,
+          reproducible from the persistent SQLite ledger.
         </p>
       </section>
 
@@ -106,6 +132,17 @@ export default function AboutPage() {
             generation).
           </li>
           <li>
+            <strong className="text-fg">Compute infrastructure operators</strong>{" "}
+            — anyone managing inference fleets where grid load and off-peak
+            capacity shape provisioning decisions. ebb-ai gives them per-task
+            telemetry about when their tasks actually run.
+          </li>
+          <li>
+            <strong className="text-fg">Cost-sensitive engineering teams</strong>{" "}
+            — anyone spending non-trivial money on Anthropic / OpenAI calls.
+            Automatic Batch-API routing pays for itself in days.
+          </li>
+          <li>
             <strong className="text-fg">Engineering teams with carbon
             commitments</strong> — companies with internal CO<sub>2</sub>e
             budgets or external ESG reporting that need defensible per-job
@@ -118,8 +155,8 @@ export default function AboutPage() {
           </li>
           <li>
             <strong className="text-fg">MCP host implementers</strong> — ebb-ai
-            is a reference implementation of carbon-aware extensions to the
-            Model Context Protocol; the{" "}
+            is a reference implementation of load-aware scheduling extensions to
+            the Model Context Protocol; the{" "}
             <a
               href="https://github.com/Vitalini/ebb-ai/blob/main/docs/spec/proposal/UPSTREAM-PR.md"
               target="_blank"

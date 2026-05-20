@@ -15,14 +15,30 @@ a one-command Claude Code plugin.*
 [![Hosts](https://img.shields.io/badge/MCP%20hosts-13-5eead4)](https://www.ebb-ai.com/docs#install)
 [![Website](https://img.shields.io/badge/website-ebb--ai.com-5eead4)](https://www.ebb-ai.com)
 
-AI inference is on track to consume 6.7–12% of US grid load by 2028
-([DOE projections](https://www.energy.gov/eere/buildings/articles/2024-united-states-data-center-energy-usage-report)).
-A lot of agentic-AI workload is *deferrable* (overnight summaries,
-batch analysis, scheduled compliance scans, document processing) but
-agent code dispatches it synchronously by default. `ebb-ai` makes the
-choice automatic: the same code that would have fired a sync LLM call
-now defers to a cheap, off-peak grid window — and writes an auditable
-receipt (cost + carbon + provider + duration) for every dispatch.
+## Why defer non-urgent AI work?
+
+US AI compute is projected to consume 6.7–12% of national electricity
+grid load by 2028 ([DOE 2024](https://www.energy.gov/eere/buildings/articles/2024-united-states-data-center-energy-usage-report)).
+Most agent workload that lands on that load is *deferrable* (overnight
+summaries, batch analyses, scheduled compliance scans, multi-step
+report generation) — agent code just dispatches it synchronously by
+default. `ebb-ai` makes the choice automatic. Four parallel wins:
+
+1. **Lighter on the grid.** Spreads load away from peak hours, which is
+   what ISOs and grid operators want from large compute users.
+2. **50% cheaper.** Auto-routes through Anthropic and OpenAI Batch APIs
+   (24-hour SLA) when the deadline allows. Same prompt, half the bill.
+3. **Faster at off-peak.** Anthropic explicitly expanded off-peak
+   capacity in 2026 ([rate-limit policy](https://docs.claude.com/en/api/rate-limits))
+   — doubled usage limits outside peak hours, citing smoothed demand.
+   Sync calls observe shorter queues.
+4. **40–70% lower carbon.** Per-task carbon receipts against the actual
+   grid intensity used at dispatch, persisted to a local SQLite ledger.
+   Auditable, region-aware, reproducible.
+
+`ebb-ai` is the same code that would have fired a sync LLM call —
+now deferred to the cleanest, cheapest, fastest hour inside the
+deadline. Apache-2.0.
 
 ```typescript
 import { recommendWindow } from "@ebb-ai/core";
