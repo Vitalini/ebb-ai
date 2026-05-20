@@ -33,7 +33,11 @@ import {
   resolveRegion,
   Scheduler,
   TaskStore,
+  type ProviderAdapter,
+  type TickResult,
 } from "@ebb-ai/core";
+
+import { buildAdapters, type DispatchAdapters } from "./dispatch.js";
 
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -108,7 +112,51 @@ function getQueueRuntime(config: PluginConfig): QueueRuntime {
     eager: false,
   });
   cachedQueueRuntime = { store, scheduler, dbPath };
+  ensureDispatcher(config);
   return cachedQueueRuntime;
+}
+
+// ── In-process dispatcher ───────────────────────────────────────────────────
+// Provider-call tasks only *execute* when Scheduler.tick runs. The OpenClaw
+// gateway is long-lived, so the plugin drains due tasks on a background
+// interval, started lazily on the first queue-tool call. Without this a
+// scheduled task would sit in `scheduled` forever (the CLI's `ebb tick` is
+// the other dispatcher, for non-gateway setups).
+
+const DISPATCH_INTERVAL_MS = 60_000;
+let dispatcherStarted = false;
+
+/**
+ * Drain every due scheduled task once. Exported so tests and the smoke
+ * script can run a single deterministic sweep. `adaptersOverride` lets a
+ * test inject a stub instead of the env-key HTTP adapters.
+ */
+export async function runDispatchTick(
+  config: PluginConfig,
+  adaptersOverride?: DispatchAdapters,
+): Promise<TickResult> {
+  const { scheduler } = getQueueRuntime(config);
+  const adapters = adaptersOverride ?? buildAdapters();
+  // DispatchAdapter omits dispatchBatch on purpose — Scheduler.tick guards
+  // `typeof adapter.dispatchBatch === "function"`, so dispatch stays
+  // synchronous. The cast is safe under that runtime guard.
+  return scheduler.tick(
+    adapters as { anthropic?: ProviderAdapter; openai?: ProviderAdapter },
+  );
+}
+
+/** Start the background dispatch loop — once per process. */
+function ensureDispatcher(config: PluginConfig): void {
+  if (dispatcherStarted) return;
+  dispatcherStarted = true;
+  const sweep = (): void => {
+    // A failing sweep must never crash the gateway; per-task failures are
+    // recorded on the task records by Scheduler.tick.
+    void runDispatchTick(config).catch(() => {});
+  };
+  // First sweep shortly after start — catches already-overdue tasks.
+  setTimeout(sweep, 4000).unref?.();
+  setInterval(sweep, DISPATCH_INTERVAL_MS).unref?.();
 }
 
 export default defineToolPlugin({

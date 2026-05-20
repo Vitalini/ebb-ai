@@ -4,7 +4,10 @@ import { join } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import ebbPlugin from "../src/index.js";
+import { TaskStore } from "@ebb-ai/core";
+
+import ebbPlugin, { runDispatchTick } from "../src/index.js";
+import { buildAdapters } from "../src/dispatch.js";
 import type { StubResolvedTool } from "./stub-tool-plugin.js";
 
 const TOOL_NAMES = [
@@ -149,5 +152,54 @@ describe("ebb OpenClaw plugin — tool execution", () => {
         { dbPath },
       ),
     ).rejects.toThrow();
+  });
+
+  it("runDispatchTick dispatches an overdue scheduled task", async () => {
+    const sched = (await tool("schedule_task").execute(
+      { prompt: "dispatch me", deadline: deadlineISO(), region: "GB" },
+      { dbPath },
+    )) as { task_id: string };
+
+    // Force the chosen window into the past via the shared store — the
+    // task is now overdue and must be picked up by the next sweep.
+    const store = new TaskStore({ dbPath });
+    const rec = store.get(sched.task_id);
+    if (!rec) throw new Error("scheduled task was not persisted");
+    rec.status = "scheduled";
+    rec.scheduledFor = new Date(Date.now() - 60_000).toISOString();
+    store.upsert(rec);
+    store.close();
+
+    const stub = {
+      provider: "anthropic" as const,
+      ready: true,
+      async dispatch(model: string, prompt: string) {
+        return { text: `stub:${prompt}`, model, provider: "anthropic", raw: {} };
+      },
+    };
+    const result = await runDispatchTick({ dbPath }, { anthropic: stub });
+    expect(result.dispatched).toBeGreaterThanOrEqual(1);
+
+    const after = (await tool("check_queue_status").execute(
+      { task_id: sched.task_id },
+      { dbPath },
+    )) as { status: string };
+    expect(after.status).toBe("completed");
+  });
+});
+
+describe("ebb OpenClaw plugin — dispatch adapters", () => {
+  it("buildAdapters is empty when no provider keys are set", () => {
+    expect(buildAdapters({})).toEqual({});
+  });
+
+  it("buildAdapters exposes an adapter per configured API key", () => {
+    const adapters = buildAdapters({
+      ANTHROPIC_API_KEY: "sk-ant-test",
+      OPENAI_API_KEY: "sk-openai-test",
+    });
+    expect(adapters.anthropic?.provider).toBe("anthropic");
+    expect(adapters.openai?.provider).toBe("openai");
+    expect(typeof adapters.anthropic?.dispatch).toBe("function");
   });
 });

@@ -281,9 +281,28 @@ export class Scheduler {
     };
   }
 
+  /**
+   * Look up a task by id. Returns the in-process record if present;
+   * otherwise hydrates it from the durable store, so cancel / update /
+   * retry / dispatch keep working after the enqueuing process has exited
+   * (e.g. an OpenClaw gateway restart). The store is the source of truth
+   * for persisted tasks — `this.tasks` is a write-through cache, not the
+   * sole index.
+   */
+  private resolveTask(taskId: string): TaskRecord<unknown> | undefined {
+    const inMemory = this.tasks.get(taskId);
+    if (inMemory) return inMemory;
+    const persisted = this.store?.get(taskId);
+    if (persisted) {
+      this.tasks.set(taskId, persisted);
+      return persisted;
+    }
+    return undefined;
+  }
+
   /** Snapshot the current state of one task. */
   getTask<T>(taskId: string): TaskRecord<T> | undefined {
-    return this.tasks.get(taskId) as TaskRecord<T> | undefined;
+    return this.resolveTask(taskId) as TaskRecord<T> | undefined;
   }
 
   /**
@@ -297,7 +316,7 @@ export class Scheduler {
    * locally and not written to the ledger).
    */
   cancelTask(taskId: string): TaskRecord<unknown> {
-    const record = this.tasks.get(taskId);
+    const record = this.resolveTask(taskId);
     if (!record) {
       throw new Error(`cancelTask: task ${JSON.stringify(taskId)} not found`);
     }
@@ -333,7 +352,7 @@ export class Scheduler {
     taskId: string,
     adapters: { anthropic?: ProviderAdapter; openai?: ProviderAdapter },
   ): Promise<TickResultEntry> {
-    const record = this.tasks.get(taskId);
+    const record = this.resolveTask(taskId);
     if (!record) {
       throw new Error(`expediteTask: task ${JSON.stringify(taskId)} not found`);
     }
@@ -377,7 +396,7 @@ export class Scheduler {
     taskId: string,
     newDeadline: string | Date,
   ): Promise<TaskRecord<unknown>> {
-    const record = this.tasks.get(taskId);
+    const record = this.resolveTask(taskId);
     if (!record) {
       throw new Error(`updateDeadline: task ${JSON.stringify(taskId)} not found`);
     }
@@ -415,7 +434,7 @@ export class Scheduler {
     taskId: string,
     adapters: { anthropic?: ProviderAdapter; openai?: ProviderAdapter },
   ): Promise<TickResultEntry> {
-    const record = this.tasks.get(taskId);
+    const record = this.resolveTask(taskId);
     if (!record) {
       throw new Error(`retryTask: task ${JSON.stringify(taskId)} not found`);
     }
