@@ -120,10 +120,35 @@ describe("recommendWindow — happy path", () => {
     const deadline = new Date(now.getTime() + 2 * 60 * 60 * 1000);
     const r = await recommendWindow(
       { deadline, region: "US-CAL-CISO" },
-      { feed, now: () => now },
+      // rng 0 → pick the strict cheapest, so the wording is deterministic.
+      { feed, now: () => now, rng: () => 0 },
     );
     expect(r.reasoning).not.toMatch(/cleaner than dispatching now/);
     expect(r.reasoning).toMatch(/cleanest in-deadline window/);
+  });
+
+  it("does not claim 'cleanest' when the band tie-break picks a non-minimum window", async () => {
+    const now = new Date("2026-05-12T10:00:00Z");
+    const feed = staticFeed(now, [
+      [0, 500], // now — dirty
+      [1, 100], // strict minimum
+      [2, 110], // within tolerance — band tie-break may pick this
+    ]);
+    const deadline = new Date(now.getTime() + 3 * 60 * 60 * 1000);
+    const r = await recommendWindow(
+      { deadline, region: "US-CAL-CISO" },
+      // rng 0.99 → pick the last entry of the cleanest band (the 110 one),
+      // i.e. NOT the strict minimum.
+      { feed, now: () => now, rng: () => 0.99 },
+    );
+    expect(r.intensityGCo2PerKwh).toBe(110);
+    // The reasoning must own up to being a band pick, not "the cleanest".
+    expect(r.reasoning).toMatch(/cleanest band/);
+    expect(r.reasoning).toMatch(/spread grid load/);
+    expect(r.reasoning).not.toMatch(/cleanest in-deadline window/);
+    // …and the lower-intensity window it skipped is visible as an alternative,
+    // so the recommendation no longer reads as self-contradictory.
+    expect(r.alternatives[0]?.intensityGCo2PerKwh).toBe(100);
   });
 });
 

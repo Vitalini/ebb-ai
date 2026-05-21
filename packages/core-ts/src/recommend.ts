@@ -191,6 +191,12 @@ export async function recommendWindow(
       batchEligible,
       budgetG,
       survivorCount: survivors.length,
+      // `chosen` is picked at random from the cleanest-tolerance band to
+      // spread grid load, so it is not always the strict minimum. The
+      // reasoning string must say which case it is — otherwise it reads
+      // as "cleanest" while the alternatives list shows a lower figure.
+      isStrictCheapest: chosen === sorted[0],
+      cleanBandSize: equallyClean.length,
     }),
   };
 }
@@ -231,16 +237,33 @@ function buildReasoning(args: {
   batchEligible: boolean;
   budgetG: number | undefined;
   survivorCount: number;
+  isStrictCheapest: boolean;
+  cleanBandSize: number;
 }): string {
-  const { chosen, savingsPct, batchEligible, budgetG, survivorCount } = args;
+  const {
+    chosen,
+    savingsPct,
+    batchEligible,
+    budgetG,
+    survivorCount,
+    isStrictCheapest,
+    cleanBandSize,
+  } = args;
   const hour = formatHour(chosen.datetime);
+  const mix = chosen.band.replace("_", " ");
+  const savingsTail =
+    savingsPct > 30 ? `; ~${savingsPct}% cleaner than dispatching now` : "";
   let base: string;
   if (budgetG !== undefined && survivorCount === 1) {
     base = `only one window meets the carbon budget of ${budgetG}g; falls at ${hour} UTC`;
-  } else if (savingsPct > 30) {
-    base = `cleanest in-deadline window is ${hour} UTC (${chosen.band.replace("_", " ")} mix); ~${savingsPct}% cleaner than dispatching now`;
+  } else if (isStrictCheapest) {
+    base = `cleanest in-deadline window is ${hour} UTC (${mix} mix)${savingsTail}`;
   } else {
-    base = `cleanest in-deadline window is ${hour} UTC`;
+    // Chosen from the cleanest-tolerance band, not the strict minimum:
+    // be explicit so the wording does not contradict the alternatives.
+    base =
+      `${hour} UTC sits in the cleanest band (${mix} mix; one of ${cleanBandSize} ` +
+      `near-equal low-carbon windows, picked to spread grid load)${savingsTail}`;
   }
   if (batchEligible) {
     return `${base}; Batch API saves an additional 50% on cost (24h SLA)`;
