@@ -34,6 +34,12 @@ export type DeliveryConfig = {
   format?: ReportFormat;
 };
 
+/** A stored delivery entry — the config plus the last delivery's outcomes. */
+export type DeliveryRecord = DeliveryConfig & {
+  deliveredAt?: string;
+  outcomes?: DeliveryOutcome[];
+};
+
 export type DeliveryOption = {
   mode: DeliveryMode;
   available: boolean;
@@ -79,13 +85,15 @@ export function scanDeliveryOptions(openclawConfig: unknown): DeliveryOption[] {
       mode: "chat",
       available: !!tg,
       detail: tg
-        ? "deliver into your active OpenClaw chat (Telegram)"
+        ? "deliver to your default OpenClaw chat — currently the Telegram DM (not group threads/topics yet)"
         : "no chat channel configured",
     },
     {
       mode: "telegram",
       available: !!tg,
-      detail: tg ? "Telegram direct message" : "Telegram channel not configured",
+      detail: tg
+        ? "explicit Telegram direct message (same target as chat for now)"
+        : "Telegram channel not configured",
     },
     {
       mode: "webhook",
@@ -114,27 +122,44 @@ function sidecarPath(): string {
   );
 }
 
-async function readSidecar(): Promise<Record<string, DeliveryConfig>> {
+async function readSidecar(): Promise<Record<string, DeliveryRecord>> {
   try {
     return JSON.parse(await readFile(sidecarPath(), "utf8")) as Record<
       string,
-      DeliveryConfig
+      DeliveryRecord
     >;
   } catch {
     return {};
   }
 }
 
-/** Persist the delivery preference for one task. */
+async function writeSidecar(
+  all: Record<string, DeliveryRecord>,
+): Promise<void> {
+  const path = sidecarPath();
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, JSON.stringify(all, null, 2));
+}
+
+/** Persist the delivery preference for one task (keeps recorded outcomes). */
 export async function setDeliveryConfig(
   taskId: string,
   config: DeliveryConfig,
 ): Promise<void> {
   const all = await readSidecar();
-  all[taskId] = config;
-  const path = sidecarPath();
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, JSON.stringify(all, null, 2));
+  all[taskId] = { ...all[taskId], ...config };
+  await writeSidecar(all);
+}
+
+/** Record the outcomes of a delivery attempt so they are auditable later. */
+export async function recordDeliveryOutcomes(
+  taskId: string,
+  config: DeliveryConfig,
+  outcomes: DeliveryOutcome[],
+): Promise<void> {
+  const all = await readSidecar();
+  all[taskId] = { ...config, deliveredAt: new Date().toISOString(), outcomes };
+  await writeSidecar(all);
 }
 
 /** Read the delivery preference for one task; defaults to chat-or-queue. */
@@ -143,9 +168,14 @@ export async function getDeliveryConfig(
   fallbackChatAvailable: boolean,
 ): Promise<DeliveryConfig> {
   const all = await readSidecar();
-  return (
-    all[taskId] ?? { modes: [fallbackChatAvailable ? "chat" : "queue"] }
-  );
+  return all[taskId] ?? { modes: [fallbackChatAvailable ? "chat" : "queue"] };
+}
+
+/** Read the full delivery record (config + last outcomes) for one task. */
+export async function readDeliveryRecord(
+  taskId: string,
+): Promise<DeliveryRecord | undefined> {
+  return (await readSidecar())[taskId];
 }
 
 /** Validate a requested delivery config; returns an error string or null. */

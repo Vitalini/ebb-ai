@@ -58,6 +58,8 @@ import {
 import {
   deliverResult,
   getDeliveryConfig,
+  readDeliveryRecord,
+  recordDeliveryOutcomes,
   scanDeliveryOptions,
   setDeliveryConfig,
   telegramTarget,
@@ -195,7 +197,10 @@ async function deliverCompletedTask(
     const openclawConfig = getCapturedOpenClawConfig();
     const chatAvailable = telegramTarget(openclawConfig) !== undefined;
     const cfg = await getDeliveryConfig(taskId, chatAvailable);
-    await deliverResult(task, cfg, openclawConfig);
+    const outcomes = await deliverResult(task, cfg, openclawConfig);
+    // Persist the per-mode outcomes so delivery is auditable afterwards
+    // via check_queue_status (the `delivery` field).
+    await recordDeliveryOutcomes(taskId, cfg, outcomes);
   } catch {
     // best-effort: the result stays retrievable via check_queue_status
   }
@@ -464,7 +469,14 @@ export default defineToolPlugin({
                 "Call this tool with no arguments to list every task.",
             );
           }
-          return task;
+          // Omit bodyJson — it is the internal serialized request spec and
+          // is misleading as a status field: it shows the requested model,
+          // not the model that actually ran. The receipt records what ran.
+          const { bodyJson: _bodyJson, ...view } = task;
+          return {
+            ...view,
+            delivery: (await readDeliveryRecord(params.task_id)) ?? null,
+          };
         }
         return {
           total: tasks.length,

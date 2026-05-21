@@ -12,6 +12,8 @@ import {
   deliverResult,
   formatReport,
   getDeliveryConfig,
+  readDeliveryRecord,
+  recordDeliveryOutcomes,
   scanDeliveryOptions,
   setDeliveryConfig,
   validateDeliveryConfig,
@@ -385,6 +387,25 @@ describe("ebb OpenClaw plugin — result delivery", () => {
       expect((await getDeliveryConfig("t-z", true)).modes).toEqual(["chat", "file"]);
       // an unknown task falls back to the chat default
       expect((await getDeliveryConfig("t-unknown", true)).modes).toEqual(["chat"]);
+    } finally {
+      delete process.env.EBB_DELIVERY_FILE;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("recordDeliveryOutcomes persists per-mode outcomes for later audit", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "ebb-outcomes-"));
+    process.env.EBB_DELIVERY_FILE = join(dir, "delivery.json");
+    try {
+      await recordDeliveryOutcomes("t-o", { modes: ["chat", "webhook"] }, [
+        { mode: "chat", ok: true, detail: "Telegram DM → 1" },
+        { mode: "webhook", ok: false, detail: "HTTP 500" },
+      ]);
+      const rec = await readDeliveryRecord("t-o");
+      expect(rec?.deliveredAt).toBeTruthy();
+      expect(rec?.outcomes?.find((o) => o.mode === "chat")?.ok).toBe(true);
+      expect(rec?.outcomes?.find((o) => o.mode === "webhook")?.ok).toBe(false);
+      expect(await readDeliveryRecord("t-none")).toBeUndefined();
     } finally {
       delete process.env.EBB_DELIVERY_FILE;
       rmSync(dir, { recursive: true, force: true });
