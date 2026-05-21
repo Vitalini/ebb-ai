@@ -251,11 +251,15 @@ export default defineToolPlugin({
         captureOpenClawRuntime(context);
         const { scheduler, dbPath } = getQueueRuntime(config);
         const { region, source } = resolveRegion(params.region, config.defaultRegion);
+        const explicitModel = params.model?.trim();
         const task = await scheduler.enqueueProviderCall(
           {
             type: "provider_call",
             provider: "anthropic",
-            model: params.model ?? "claude-sonnet-4-6",
+            // A concrete model is stored for the direct-API-key path and for
+            // the audit record; the OpenClaw runtime bridge ignores it and
+            // uses the gateway agent's own model.
+            model: explicitModel || "claude-sonnet-4-6",
             prompt: params.prompt,
           },
           {
@@ -264,6 +268,9 @@ export default defineToolPlugin({
             carbonBudgetG: params.carbon_budget_g,
           },
         );
+        // How this task will execute when due: "openclaw-runtime" (gateway
+        // model, no key), "api-key", or "unconfigured".
+        const dispatch = dispatchCapability();
         return {
           task_id: task.taskId,
           status: task.status,
@@ -271,9 +278,15 @@ export default defineToolPlugin({
           region_source: source,
           scheduled_for: task.scheduledFor ?? null,
           persisted_to: dbPath,
-          // How this task will execute when due: "openclaw-runtime"
-          // (gateway model, no key), "api-key", or "unconfigured".
-          dispatch: dispatchCapability(),
+          dispatch,
+          ...(explicitModel && dispatch === "openclaw-runtime"
+            ? {
+                note:
+                  `model "${explicitModel}" is honoured only on the direct ` +
+                  `API-key dispatch path; via the OpenClaw runtime bridge the ` +
+                  `task runs on the gateway agent's configured model.`,
+              }
+            : {}),
         };
       },
     }),

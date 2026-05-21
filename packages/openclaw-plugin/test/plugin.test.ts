@@ -187,25 +187,24 @@ describe("ebb OpenClaw plugin — tool execution", () => {
     expect(after.status).toBe("completed");
   });
 
-  it("dispatches an overdue task through the captured OpenClaw runtime bridge", async () => {
-    let bridgeCalls = 0;
-    // Simulate OpenClaw's api.runtime.llm.complete.
-    setLlmBridgeForTest(async () => {
-      bridgeCalls += 1;
+  it("bridge dispatch (no model): the runtime bridge is called WITHOUT a model override", async () => {
+    const bridgeRequests: Array<Record<string, unknown>> = [];
+    setLlmBridgeForTest(async (req) => {
+      bridgeRequests.push(req as Record<string, unknown>);
       return {
-        text: "PASS — dispatched via the OpenClaw runtime bridge",
+        text: "PASS via the OpenClaw runtime bridge",
         provider: "anthropic",
-        model: "claude-sonnet-4-6",
+        model: "gateway-agent-model",
         usage: { totalTokens: 9 },
       };
     });
     try {
       const sched = (await tool("schedule_task").execute(
-        { prompt: "bridge dispatch test", deadline: deadlineISO(), region: "GB" },
+        { prompt: "bridge default-model test", deadline: deadlineISO(), region: "GB" },
         { dbPath },
-      )) as { task_id: string; dispatch: string };
-      // With the bridge captured, schedule_task reports it.
+      )) as { task_id: string; dispatch: string; note?: string };
       expect(sched.dispatch).toBe("openclaw-runtime");
+      expect(sched.note).toBeUndefined();
 
       const store = new TaskStore({ dbPath });
       const rec = store.get(sched.task_id);
@@ -215,10 +214,55 @@ describe("ebb OpenClaw plugin — tool execution", () => {
       store.upsert(rec);
       store.close();
 
-      // No adapter override — runDispatchTick must build the bridge adapter.
       const result = await runDispatchTick({ dbPath });
-      expect(bridgeCalls).toBeGreaterThanOrEqual(1);
       expect(result.dispatched).toBeGreaterThanOrEqual(1);
+      // The 0.1.6 bug: any `model` param triggers OpenClaw's override-policy
+      // denial. The bridge must never send one.
+      expect(bridgeRequests.length).toBeGreaterThanOrEqual(1);
+      expect(bridgeRequests[0]).not.toHaveProperty("model");
+
+      const after = (await tool("check_queue_status").execute(
+        { task_id: sched.task_id },
+        { dbPath },
+      )) as { status: string };
+      expect(after.status).toBe("completed");
+    } finally {
+      setLlmBridgeForTest(undefined);
+    }
+  });
+
+  it("bridge dispatch (explicit model): still no model override; schedule_task notes it", async () => {
+    const bridgeRequests: Array<Record<string, unknown>> = [];
+    setLlmBridgeForTest(async (req) => {
+      bridgeRequests.push(req as Record<string, unknown>);
+      return { text: "PASS", provider: "anthropic", model: "gateway-agent-model" };
+    });
+    try {
+      const sched = (await tool("schedule_task").execute(
+        {
+          prompt: "bridge explicit-model test",
+          deadline: deadlineISO(),
+          region: "GB",
+          model: "claude-opus-4-1",
+        },
+        { dbPath },
+      )) as { task_id: string; dispatch: string; note?: string };
+      expect(sched.dispatch).toBe("openclaw-runtime");
+      // The user is told the explicit model is not applied via the bridge.
+      expect(sched.note).toMatch(/model/i);
+
+      const store = new TaskStore({ dbPath });
+      const rec = store.get(sched.task_id);
+      if (!rec) throw new Error("task was not persisted");
+      rec.status = "scheduled";
+      rec.scheduledFor = new Date(Date.now() - 60_000).toISOString();
+      store.upsert(rec);
+      store.close();
+
+      const result = await runDispatchTick({ dbPath });
+      expect(result.dispatched).toBeGreaterThanOrEqual(1);
+      // Even with an explicit model the bridge must not send a model override.
+      expect(bridgeRequests[0]).not.toHaveProperty("model");
 
       const after = (await tool("check_queue_status").execute(
         { task_id: sched.task_id },

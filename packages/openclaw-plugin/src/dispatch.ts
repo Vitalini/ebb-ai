@@ -94,9 +94,15 @@ function bridgeAdapter(provider: "anthropic" | "openai"): DispatchAdapter {
       if (!bridgeComplete) {
         throw new Error("ebb-ai: the OpenClaw runtime LLM bridge is not available");
       }
+      // Deliberately DO NOT pass `model`. OpenClaw treats any `model` on a
+      // plugin LLM completion as a model-override and rejects it unless the
+      // gateway grants the plugin override policy ("Plugin LLM completion
+      // cannot override the target model"). A deferred task runs fine on the
+      // gateway agent's configured model — the carbon win is in the timing,
+      // not the model. The requested model is honoured only on the
+      // direct-API-key path (the HTTP adapters below).
       const result = await bridgeComplete({
         messages: [{ role: "user", content: prompt }],
-        model: `${provider}/${model}`,
         ...(options?.maxTokens !== undefined ? { maxTokens: options.maxTokens } : {}),
         ...(options?.temperature !== undefined
           ? { temperature: options.temperature }
