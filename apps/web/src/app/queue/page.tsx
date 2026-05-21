@@ -139,7 +139,7 @@ result     <the LLM response>`}
           your machine. Surfacing a {`"live"`} queue on a public
           dashboard means
           either centralizing the queue server-side (privacy-bad) or
-          fabricating a demo (honesty-bad). v0.9 will add an{" "}
+          fabricating a demo (honesty-bad). A later release will add an{" "}
           <em>opt-in</em> HTTP control plane the dashboard can talk to;
           until then the queue is local-first by design.
         </p>

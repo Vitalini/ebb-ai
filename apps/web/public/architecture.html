@@ -11,7 +11,7 @@
       <div class="brand">
         <span class="logo">~</span>
         <span class="brand-name">ebb-ai</span>
-        <span class="brand-version">v0.8.2</span>
+        <span class="brand-version">v0.9.0</span>
       </div>
       <nav>
         <a href="/">Home</a>
@@ -179,13 +179,13 @@
       </section>
 
       <section class="block">
-        <h2>What's deliberately not in v0.8</h2>
+        <h2>What's deliberately not in v0.9</h2>
         <ul class="reasons">
-          <li><strong>Cross-provider routing.</strong> ebb-ai picks the cheapest carbon window inside one provider. It doesn't yet weigh "Anthropic vs OpenAI vs Gemini" on a per-task basis. Planned for v0.9+ once the per-provider adapters have stabilized.</li>
-          <li><strong>WattTime marginal-emissions feed.</strong> The honest climate signal for time-shifting is marginal emissions, not average. Electricity Maps / EIA / ENTSO-E give average intensity today; WattTime integration is queued for v0.9.</li>
-          <li><strong>Local hardware routing.</strong> "If your laptop is plugged in and the grid is clean, use Ollama" is a real product idea, deferred to v0.9+.</li>
-          <li><strong>Multi-region failover.</strong> If your default region's grid is unusually dirty for a sustained window, ebb-ai could route through a different provider region. v0.9+.</li>
-          <li><strong>Global aggregate leaderboard.</strong> Per-user impact is local-only today (privacy-by-default). A signed opt-in telemetry endpoint and aggregate counters are designed for v0.9 — see <code>docs/spec/proposal/v09-leaderboard.md</code>.</li>
+          <li><strong>Cross-provider routing.</strong> ebb-ai picks the cheapest carbon window inside one provider. It doesn't yet weigh "Anthropic vs OpenAI vs Gemini" on a per-task basis. On the roadmap, once the per-provider adapters have stabilized.</li>
+          <li><strong>WattTime marginal-emissions feed.</strong> The honest climate signal for time-shifting is marginal emissions, not average. Electricity Maps / EIA / ENTSO-E give average intensity today; WattTime integration is on the roadmap.</li>
+          <li><strong>Local hardware routing.</strong> "If your laptop is plugged in and the grid is clean, use Ollama" is a real product idea, deferred to a later release.</li>
+          <li><strong>Multi-region failover.</strong> If your default region's grid is unusually dirty for a sustained window, ebb-ai could route through a different provider region. On the roadmap.</li>
+          <li><strong>Global aggregate leaderboard.</strong> Per-user impact is local-only today (privacy-by-default). A signed opt-in telemetry endpoint and aggregate counters are designed — see <code>docs/spec/proposal/v09-leaderboard.md</code>.</li>
         </ul>
       </section>
 

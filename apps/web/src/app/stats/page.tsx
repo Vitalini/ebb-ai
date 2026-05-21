@@ -5,9 +5,9 @@
  * SQLite ledger (~/.ebb-ai/queue.db); this page explains where your
  * numbers live, how to read them, and what the schema looks like.
  *
- * v0.9 will optionally surface aggregate community totals here (opt-in
- * telemetry; design at docs/spec/proposal/v09-leaderboard.md). Today
- * it's local-first and that's the whole point.
+ * A later release will optionally surface aggregate community totals
+ * here (opt-in telemetry; design at docs/spec/proposal/v09-leaderboard.md).
+ * Today it's local-first and that's the whole point.
  */
 
 import type { Metadata } from "next";
@@ -154,12 +154,12 @@ ebb receipts show <task_id>`}
         <p className="leading-relaxed text-fg-muted">
           Every public dashboard that summarizes user impact has to
           either (a) phone home with telemetry — which we explicitly
-          decided against in v0.8 — or (b) fabricate aggregate numbers
+          decided against in v0.9 — or (b) fabricate aggregate numbers
           that look real but aren&apos;t. Both are bad. Local-first is
           honest.
         </p>
         <p className="leading-relaxed text-fg-muted">
-          v0.9 will add an{" "}
+          A later release will add an{" "}
           <em>opt-in</em>, signed-anonymous-event aggregate counter
           that the site can read (no per-user identifying data). Design
           is at{" "}

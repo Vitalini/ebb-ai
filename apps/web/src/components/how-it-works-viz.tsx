@@ -1,472 +1,404 @@
 /**
- * How it works — animated SVG story.
+ * How it works — the signature animated infographic.
  *
- * A deferrable task arrives while the power grid is at PEAK (red, dirty,
- * expensive). ebb-ai parks it in the queue. As the grid swings to
- * OFF-PEAK the plant turns green, the wires light up, the task is
- * dispatched, and a result comes back — cheaper, faster, cleaner.
+ * A deferrable AI task lands on the dirty PEAK of the grid's 24-hour
+ * carbon curve. ebb-ai rides it down the curve — the "ebb" — into the
+ * clean overnight TROUGH and dispatches it there. The moment it lands,
+ * four wins charge up together: carbon, cost, latency, grid load.
  *
- * Pure SVG + CSS keyframes on one shared 14s loop — no JS, no client
- * component. Honours prefers-reduced-motion with a coherent still frame.
+ * Pure SVG + CSS keyframes on one shared 13s loop — no JS, no client
+ * component. The four win-cards animate on the same loop, so they all
+ * "land" at the dispatch beat — the four parallel wins, made visible.
+ * Honours prefers-reduced-motion with a coherent, fully-resolved still.
  */
+
+import { Activity, Coins, Leaf, Zap, type LucideIcon } from "lucide-react";
+
+type Hue = "emerald" | "amber" | "sky" | "violet";
+
+const WINS: Array<{
+  idx: number;
+  label: string;
+  value: string;
+  caption: string;
+  Icon: LucideIcon;
+  hue: Hue;
+}> = [
+  { idx: 0, label: "Carbon", value: "−80%", caption: "vs dispatching at peak", Icon: Leaf, hue: "emerald" },
+  { idx: 1, label: "Cost", value: "−50%", caption: "Batch-API window", Icon: Coins, hue: "amber" },
+  { idx: 2, label: "Latency", value: "Faster", caption: "off-peak capacity", Icon: Zap, hue: "sky" },
+  { idx: 3, label: "Grid load", value: "−83%", caption: "demand time-shifted", Icon: Activity, hue: "violet" },
+];
+
+const HUE: Record<Hue, { ring: string; icon: string; value: string }> = {
+  emerald: {
+    ring: "border-emerald-400/25 hover:border-emerald-400/50",
+    icon: "text-emerald-300",
+    value: "text-emerald-200",
+  },
+  amber: {
+    ring: "border-amber-400/25 hover:border-amber-400/50",
+    icon: "text-amber-300",
+    value: "text-amber-200",
+  },
+  sky: {
+    ring: "border-sky-400/25 hover:border-sky-400/50",
+    icon: "text-sky-300",
+    value: "text-sky-200",
+  },
+  violet: {
+    ring: "border-violet-400/25 hover:border-violet-400/50",
+    icon: "text-violet-300",
+    value: "text-violet-200",
+  },
+};
 
 export function HowItWorksViz() {
   return (
-    <section className="space-y-5 rounded-xl border border-rule bg-bg-elev p-5 sm:p-7">
-      <header className="space-y-1">
-        <p className="font-mono text-[11px] uppercase tracking-wider text-accent">
+    <section className="space-y-6 rounded-2xl border border-rule bg-bg-elev p-5 sm:p-8">
+      <header className="space-y-2">
+        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-accent">
           how it works
         </p>
-        <h2 className="text-2xl font-semibold tracking-tight text-fg">
+        <h2 className="text-2xl font-semibold tracking-tight text-fg sm:text-[1.7rem]">
           One scheduled task, four parallel wins.
         </h2>
         <p className="max-w-2xl text-sm leading-relaxed text-fg-muted">
-          A task lands while the grid is at peak — dirty, strained,
-          expensive. ebb-ai holds it in the queue and dispatches it once
-          the grid swings off-peak: lower-carbon, cheaper via Batch
-          pricing, and through faster off-peak capacity.
+          A task arrives while the grid is at peak — dirty, strained,
+          expensive. ebb-ai rides it down the carbon curve and dispatches it
+          at the clean off-peak trough inside its deadline. Carbon, cost,
+          latency and grid load all move together, because they all track
+          the same thing: grid demand.
         </p>
       </header>
 
-      <div className="overflow-hidden rounded-lg border border-rule bg-bg p-3 sm:p-5">
+      {/* ── the signature animation ─────────────────────────────────────── */}
+      <div className="relative overflow-hidden rounded-xl border border-rule bg-[#0a0e13] p-2 sm:p-4">
         <svg
           role="img"
-          aria-label="A deferrable task arrives while the electricity grid is at peak load (red). ebb-ai queues it, waits for the grid to go off-peak (green), then dispatches it — cleaner, cheaper and faster."
-          viewBox="0 0 800 300"
+          aria-label="A deferrable AI task arrives at the dirty peak of the grid's 24-hour carbon-intensity curve. ebb-ai rides it down the curve to the clean overnight trough and dispatches it there — lower carbon, lower cost, lower latency, lower grid load."
+          viewBox="0 0 880 300"
           xmlns="http://www.w3.org/2000/svg"
           className="ebb-viz w-full"
           preserveAspectRatio="xMidYMid meet"
         >
           <defs>
-            <pattern
-              id="ebbDots"
-              width="22"
-              height="22"
-              patternUnits="userSpaceOnUse"
-            >
-              <circle cx="1" cy="1" r="1" fill="#161d28" />
+            <pattern id="ebbDots" width="26" height="26" patternUnits="userSpaceOnUse">
+              <circle cx="1.5" cy="1.5" r="1" fill="#141b26" />
             </pattern>
+
+            {/* curve gradient — dirty rose at the peak, clean emerald at the trough */}
+            <linearGradient id="ebbCurve" x1="50" y1="0" x2="830" y2="0" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stopColor="#fb7185" />
+              <stop offset="0.26" stopColor="#fb7185" />
+              <stop offset="0.44" stopColor="#fbbf24" />
+              <stop offset="0.62" stopColor="#34d399" />
+              <stop offset="1" stopColor="#22d3ee" />
+            </linearGradient>
+            <linearGradient id="ebbArea" x1="50" y1="0" x2="830" y2="0" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stopColor="#fb7185" stopOpacity="0.16" />
+              <stop offset="0.44" stopColor="#fbbf24" stopOpacity="0.10" />
+              <stop offset="0.66" stopColor="#34d399" stopOpacity="0.16" />
+              <stop offset="1" stopColor="#22d3ee" stopOpacity="0.05" />
+            </linearGradient>
+            <linearGradient id="ebbAreaFade" x1="0" y1="60" x2="0" y2="270" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stopColor="#0a0e13" stopOpacity="0" />
+              <stop offset="1" stopColor="#0a0e13" stopOpacity="0.9" />
+            </linearGradient>
+            <radialGradient id="ebbTroughHalo">
+              <stop offset="0" stopColor="#34d399" stopOpacity="0.55" />
+              <stop offset="1" stopColor="#34d399" stopOpacity="0" />
+            </radialGradient>
+
+            <filter id="ebbGlow" x="-60%" y="-60%" width="220%" height="220%">
+              <feGaussianBlur stdDeviation="7" />
+            </filter>
+            <filter id="ebbSoft" x="-60%" y="-60%" width="220%" height="220%">
+              <feGaussianBlur stdDeviation="3.4" />
+            </filter>
           </defs>
 
-          <rect width="800" height="300" fill="url(#ebbDots)" />
+          <rect width="880" height="300" fill="url(#ebbDots)" />
 
-          {/* ── wires (under everything) ─────────────────────────────── */}
-          <line
-            className="ebb-wire ebb-wire-a"
-            x1="138"
-            y1="168"
-            x2="332"
-            y2="168"
-            strokeWidth="3"
+          {/* faint hour grid */}
+          <g stroke="#1c2533" strokeWidth="1">
+            <line x1="180" y1="54" x2="180" y2="252" />
+            <line x1="310" y1="54" x2="310" y2="252" />
+            <line x1="440" y1="54" x2="440" y2="252" />
+            <line x1="570" y1="54" x2="570" y2="252" />
+            <line x1="700" y1="54" x2="700" y2="252" />
+          </g>
+
+          {/* area under the carbon curve */}
+          <path
+            d="M50 150 C 120 140 185 78 255 70 C 335 61 388 150 448 166 C 506 181 516 200 560 205 C 645 215 745 160 830 116 L830 252 L50 252 Z"
+            fill="url(#ebbArea)"
+          />
+          <rect x="50" y="60" width="780" height="192" fill="url(#ebbAreaFade)" />
+
+          {/* the carbon curve — glow copy + crisp copy */}
+          <path
+            className="ebb-curve-glow"
+            d="M50 150 C 120 140 185 78 255 70 C 335 61 388 150 448 166 C 506 181 516 200 560 205 C 645 215 745 160 830 116"
+            fill="none"
+            stroke="url(#ebbCurve)"
+            strokeWidth="4"
+            strokeLinecap="round"
+            filter="url(#ebbGlow)"
+          />
+          <path
+            d="M50 150 C 120 140 185 78 255 70 C 335 61 388 150 448 166 C 506 181 516 200 560 205 C 645 215 745 160 830 116"
+            fill="none"
+            stroke="url(#ebbCurve)"
+            strokeWidth="2.5"
             strokeLinecap="round"
           />
-          <line
-            className="ebb-wire ebb-wire-b"
-            x1="528"
-            y1="168"
-            x2="606"
-            y2="168"
-            strokeWidth="3"
-            strokeLinecap="round"
-          />
 
-          {/* signal pulses travelling the wires */}
-          <circle className="ebb-pulse ebb-pulse-a" cx="0" cy="168" r="4" />
-          <circle className="ebb-pulse ebb-pulse-b" cx="0" cy="168" r="4" />
+          {/* axis labels */}
+          <text className="ebb-axis" x="255" y="244" textAnchor="middle">peak demand · dirty</text>
+          <text className="ebb-axis ebb-axis-clean" x="560" y="240" textAnchor="middle">off-peak trough · clean</text>
 
-          {/* ── power plant ──────────────────────────────────────────── */}
+          {/* peak marker */}
+          <circle className="ebb-peak-pulse" cx="255" cy="70" r="9" fill="#fb7185" fillOpacity="0.22" />
+          <circle cx="255" cy="70" r="4.5" fill="#fb7185" />
+
+          {/* trough marker + halo */}
+          <circle className="ebb-trough-halo" cx="560" cy="205" r="46" fill="url(#ebbTroughHalo)" />
+          <circle cx="560" cy="205" r="5" fill="#34d399" />
+
+          {/* dispatch burst rings */}
+          <circle className="ebb-burst ebb-burst-1" cx="560" cy="205" r="6" fill="none" stroke="#34d399" strokeWidth="2.5" />
+          <circle className="ebb-burst ebb-burst-2" cx="560" cy="205" r="6" fill="none" stroke="#5eead4" strokeWidth="2" />
+
+          {/* grid-status pill */}
           <g>
-            <rect
-              className="ebb-aura"
-              x="44"
-              y="104"
-              width="118"
-              height="116"
-              rx="16"
-            />
-            {/* emission puffs — only while the grid is at peak */}
-            <g className="ebb-emissions">
-              <circle className="ebb-puff" cx="86" cy="112" r="5" style={{ animationDelay: "0s" }} />
-              <circle className="ebb-puff" cx="86" cy="112" r="4" style={{ animationDelay: "0.8s" }} />
-              <circle className="ebb-puff" cx="117" cy="112" r="5" style={{ animationDelay: "1.5s" }} />
-            </g>
-            {/* chimneys */}
-            <rect x="80" y="118" width="11" height="30" rx="2" fill="#28323f" />
-            <rect x="111" y="118" width="11" height="30" rx="2" fill="#28323f" />
-            {/* building */}
-            <rect
-              x="62"
-              y="144"
-              width="78"
-              height="58"
-              rx="5"
-              fill="#161d28"
-              stroke="#3a4453"
-              strokeWidth="1.5"
-            />
-            {/* a glowing core that cycles red → amber → green */}
-            <circle className="ebb-core" cx="101" cy="174" r="13" />
-            <text
-              x="101"
-              y="220"
-              textAnchor="middle"
-              fontFamily="ui-monospace, SFMono-Regular, monospace"
-              fontSize="10"
-              fill="#9aa4b2"
-              letterSpacing="1"
-            >
-              power grid
-            </text>
-
-            {/* grid-status pill above the plant */}
-            <g>
-              <rect x="48" y="74" width="106" height="22" rx="6" fill="#0c1014" stroke="#222b38" />
-              <text
-                className="ebb-status-peak"
-                x="101"
-                y="89"
-                textAnchor="middle"
-                fontFamily="ui-monospace, SFMono-Regular, monospace"
-                fontSize="10"
-                fill="#fb7185"
-                letterSpacing="0.5"
-              >
-                ● PEAK · dirty
-              </text>
-              <text
-                className="ebb-status-clean"
-                x="101"
-                y="89"
-                textAnchor="middle"
-                fontFamily="ui-monospace, SFMono-Regular, monospace"
-                fontSize="10"
-                fill="#34d399"
-                letterSpacing="0.5"
-              >
-                ● OFF-PEAK · clean
-              </text>
-            </g>
+            <rect x="386" y="34" width="118" height="24" rx="12" fill="#0c1014" stroke="#222b38" />
+            <circle className="ebb-status-led" cx="404" cy="46" r="3.5" />
+            <text className="ebb-status ebb-status-peak" x="420" y="47">PEAK · dirty</text>
+            <text className="ebb-status ebb-status-clean" x="416" y="47">CLEAN · off-peak</text>
           </g>
 
-          {/* ── queue box ────────────────────────────────────────────── */}
-          <g>
-            <rect
-              x="332"
-              y="118"
-              width="196"
-              height="100"
-              rx="10"
-              fill="#0e141b"
-              stroke="#2c3441"
-              strokeWidth="1.5"
-            />
-            <text
-              x="430"
-              y="138"
-              textAnchor="middle"
-              fontFamily="ui-monospace, SFMono-Regular, monospace"
-              fontSize="10"
-              fill="#7c8696"
-              letterSpacing="1"
-            >
-              ebb-ai queue
-            </text>
-            {/* parking slot the task waits in */}
-            <rect
-              x="398"
-              y="153"
-              width="64"
-              height="30"
-              rx="6"
-              fill="none"
-              stroke="#2c3441"
-              strokeDasharray="3 3"
-            />
-          </g>
-
-          {/* ── dispatch node ────────────────────────────────────────── */}
-          <g>
-            <circle
-              className="ebb-fire"
-              cx="620"
-              cy="168"
-              r="9"
-              fill="none"
-              stroke="#34d399"
-              strokeWidth="2"
-            />
-            <circle cx="620" cy="168" r="9" fill="#0e141b" stroke="#3a4453" strokeWidth="1.5" />
-            <circle className="ebb-dispatch-dot" cx="620" cy="168" r="4" />
-            <text
-              x="620"
-              y="196"
-              textAnchor="middle"
-              fontFamily="ui-monospace, SFMono-Regular, monospace"
-              fontSize="9"
-              fill="#7c8696"
-              letterSpacing="1"
-            >
-              dispatch
-            </text>
-          </g>
-
-          {/* ── result ───────────────────────────────────────────────── */}
-          <g className="ebb-result">
-            <circle r="18" fill="#34d399" fillOpacity="0.14" stroke="#34d399" strokeWidth="2" />
-            <path
-              d="M -7 0 L -2 6 L 8 -6"
-              fill="none"
-              stroke="#34d399"
-              strokeWidth="3"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <text
-              x="0"
-              y="40"
-              textAnchor="middle"
-              fontFamily="ui-monospace, SFMono-Regular, monospace"
-              fontSize="10"
-              fill="#34d399"
-              letterSpacing="1"
-            >
-              result
-            </text>
-          </g>
-
-          {/* ── the task card (travels plant → queue → dispatch) ─────── */}
+          {/* the task chip — rides the curve from peak to trough */}
           <g className="ebb-task">
-            <rect x="-33" y="-16" width="66" height="32" rx="7" fill="#11161c" className="ebb-task-box" />
-            <circle className="ebb-task-dot" cx="-18" cy="0" r="4.5" />
-            <text
-              x="2"
-              y="4"
-              textAnchor="middle"
-              fontFamily="ui-sans-serif, system-ui, sans-serif"
-              fontSize="11"
-              fill="#e6e8ee"
-            >
-              task
-            </text>
+            <rect className="ebb-chip-shadow" x="-40" y="-17" width="80" height="34" rx="9" filter="url(#ebbSoft)" />
+            <rect className="ebb-chip" x="-40" y="-17" width="80" height="34" rx="9" fill="#0e151d" />
+            <circle className="ebb-chip-dot" cx="-25" cy="0" r="4.5" />
+            <text className="ebb-chip-label" x="6" y="1" textAnchor="middle">AI task</text>
           </g>
 
-          {/* ── the three wins (appear with the result) ──────────────── */}
-          <g className="ebb-wins">
-            <text
-              x="640"
-              y="232"
-              textAnchor="middle"
-              fontFamily="ui-monospace, SFMono-Regular, monospace"
-              fontSize="11"
-              fill="#34d399"
-              letterSpacing="0.5"
-            >
-              ✓ cleaner   ✓ cheaper   ✓ faster
-            </text>
+          {/* result check — pops at the trough after dispatch */}
+          <g className="ebb-result">
+            <circle r="15" fill="#34d399" fillOpacity="0.16" stroke="#34d399" strokeWidth="2" />
+            <path d="M -6 0 L -1.5 5 L 7 -5.5" fill="none" stroke="#5eead4" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
           </g>
 
           <style>{`
-            .ebb-viz text { dominant-baseline: middle; }
+            .ebb-viz text { font-family: ui-monospace, SFMono-Regular, monospace; dominant-baseline: middle; }
+            .ebb-axis { font-size: 10px; letter-spacing: 0.5px; fill: #5b6675; }
+            .ebb-axis-clean { fill: #5b6675; animation: ebbAxisClean 13s ease-in-out infinite; }
+            @keyframes ebbAxisClean { 0%,40%{fill:#5b6675;} 56%,90%{fill:#34d399;} 100%{fill:#5b6675;} }
 
-            /* wires — dim by default, green while the grid is off-peak */
-            .ebb-wire { stroke: #2c3441; animation: ebbWire 14s infinite; }
-            @keyframes ebbWire {
-              0%, 44%   { stroke: #2c3441; }
-              56%, 86%  { stroke: #34d399; }
-              96%, 100% { stroke: #2c3441; }
-            }
+            .ebb-status { font-size: 10px; letter-spacing: 0.6px; }
+            .ebb-status-peak  { fill: #fb7185; animation: ebbFadePeak 13s infinite; }
+            .ebb-status-clean { fill: #34d399; opacity: 0; animation: ebbFadeClean 13s infinite; }
+            .ebb-status-led   { fill: #fb7185; animation: ebbLed 13s infinite; }
+            @keyframes ebbFadePeak  { 0%,40%{opacity:1;} 50%,94%{opacity:0;} 100%{opacity:1;} }
+            @keyframes ebbFadeClean { 0%,40%{opacity:0;} 50%,94%{opacity:1;} 100%{opacity:0;} }
+            @keyframes ebbLed { 0%,40%{fill:#fb7185;} 52%,94%{fill:#34d399;} 100%{fill:#fb7185;} }
 
-            /* plant aura + core cycle red → amber → green */
-            .ebb-aura {
-              fill: #fb7185; opacity: 0.12;
-              animation: ebbCycle 14s infinite;
-            }
-            .ebb-core {
-              fill: #fb7185;
-              animation: ebbCycle 14s infinite, ebbCorePulse 2.2s ease-in-out infinite;
-            }
-            @keyframes ebbCycle {
-              0%, 20%   { fill: #fb7185; }
-              42%       { fill: #fbbf24; }
-              58%, 82%  { fill: #34d399; }
-              100%      { fill: #fb7185; }
-            }
-            @keyframes ebbCorePulse {
-              0%, 100% { r: 13px; }
-              50%      { r: 16px; }
+            .ebb-curve-glow { opacity: 0.32; animation: ebbCurveGlow 13s ease-in-out infinite; }
+            @keyframes ebbCurveGlow { 0%,42%{opacity:0.26;} 60%,88%{opacity:0.6;} 100%{opacity:0.26;} }
+
+            .ebb-peak-pulse { animation: ebbPeakPulse 2.6s ease-in-out infinite; }
+            @keyframes ebbPeakPulse { 0%,100%{r:9px;opacity:0.5;} 50%{r:15px;opacity:0.05;} }
+
+            .ebb-trough-halo { opacity: 0; animation: ebbTroughHalo 13s ease-in-out infinite; }
+            @keyframes ebbTroughHalo {
+              0%,46%{opacity:0;} 56%{opacity:0.95;} 62%{opacity:0.5;}
+              70%,88%{opacity:0.7;} 100%{opacity:0;}
             }
 
-            /* emission puffs — gated to the peak phase */
-            .ebb-emissions { animation: ebbEmitGate 14s infinite; }
-            @keyframes ebbEmitGate {
-              0%, 26%  { opacity: 1; }
-              42%, 100%{ opacity: 0; }
-            }
-            .ebb-puff {
-              fill: #fb7185;
-              animation: ebbPuff 2.4s ease-out infinite;
-            }
-            @keyframes ebbPuff {
-              0%   { transform: translateY(0) scale(0.5); opacity: 0; }
-              25%  { opacity: 0.5; }
-              100% { transform: translateY(-30px) scale(1.2); opacity: 0; }
+            /* dispatch burst */
+            .ebb-burst { opacity: 0; }
+            .ebb-burst-1 { animation: ebbBurst 13s ease-out infinite; }
+            .ebb-burst-2 { animation: ebbBurst 13s ease-out infinite; animation-delay: 0.32s; }
+            @keyframes ebbBurst {
+              0%,50%   { r: 6px;  opacity: 0; }
+              54%      { r: 6px;  opacity: 0.9; }
+              63%      { r: 60px; opacity: 0; }
+              100%     { r: 60px; opacity: 0; }
             }
 
-            /* grid-status pill cross-fade */
-            .ebb-status-peak  { animation: ebbPeak 14s infinite; }
-            .ebb-status-clean { opacity: 0; animation: ebbClean 14s infinite; }
-            @keyframes ebbPeak {
-              0%, 44%   { opacity: 1; }
-              52%, 94%  { opacity: 0; }
-              100%      { opacity: 1; }
-            }
-            @keyframes ebbClean {
-              0%, 44%   { opacity: 0; }
-              52%, 94%  { opacity: 1; }
-              100%      { opacity: 0; }
-            }
-
-            /* the task card travels plant → queue → dispatch */
+            /* the task chip — translate waypoints trace the curve, peak → trough */
             .ebb-task {
-              transform: translate(430px, 168px);
-              animation: ebbTask 14s ease-in-out infinite;
+              transform: translate(255px, 70px);
+              animation: ebbTask 13s cubic-bezier(0.65,0,0.35,1) infinite;
             }
             @keyframes ebbTask {
-              0%, 3%   { transform: translate(150px,168px) scale(0.5); opacity: 0; }
-              8%       { transform: translate(150px,168px) scale(1);   opacity: 1; }
-              24%, 58% { transform: translate(430px,168px) scale(1);   opacity: 1; }
-              78%      { transform: translate(620px,168px) scale(1);   opacity: 1; }
-              84%      { transform: translate(620px,168px) scale(0.4); opacity: 0; }
-              100%     { transform: translate(150px,168px) scale(0.5); opacity: 0; }
+              0%      { transform: translate(255px,70px) scale(0.55); opacity: 0; }
+              4%      { transform: translate(255px,70px) scale(1);    opacity: 1; }
+              16%     { transform: translate(255px,70px) scale(1);    opacity: 1; }
+              22%     { transform: translate(310px,79px)  scale(1);   opacity: 1; }
+              28%     { transform: translate(359px,109px) scale(1);   opacity: 1; }
+              34%     { transform: translate(404px,143px) scale(1);   opacity: 1; }
+              40%     { transform: translate(448px,166px) scale(1);   opacity: 1; }
+              45%     { transform: translate(493px,182px) scale(1);   opacity: 1; }
+              49%     { transform: translate(524px,196px) scale(1);   opacity: 1; }
+              52%     { transform: translate(560px,205px) scale(1);   opacity: 1; }
+              56%     { transform: translate(560px,205px) scale(1.06);opacity: 1; }
+              59%     { transform: translate(560px,205px) scale(0.4); opacity: 0; }
+              100%    { transform: translate(255px,70px) scale(0.55); opacity: 0; }
             }
-            /* card accent: amber while waiting, green once running */
-            .ebb-task-box {
-              stroke: #fbbf24; stroke-width: 1.5;
-              animation: ebbTaskTint 14s infinite;
-            }
-            .ebb-task-dot {
-              fill: #fbbf24;
-              animation: ebbTaskTint 14s infinite;
-            }
-            @keyframes ebbTaskTint {
-              0%, 52%  { stroke: #fbbf24; fill: #fbbf24; }
-              62%,100% { stroke: #34d399; fill: #34d399; }
-            }
+            .ebb-chip       { stroke: #fbbf24; stroke-width: 1.6; animation: ebbChipStroke 13s infinite; }
+            .ebb-chip-shadow{ fill: #fbbf24; opacity: 0.22; animation: ebbChipShadow 13s infinite; }
+            .ebb-chip-dot   { fill: #fbbf24; animation: ebbChipFill 13s infinite; }
+            .ebb-chip-label { font-size: 11.5px; fill: #e6e8ee; }
+            @keyframes ebbChipStroke { 0%,30%{stroke:#fbbf24;} 48%,100%{stroke:#34d399;} }
+            @keyframes ebbChipFill   { 0%,30%{fill:#fbbf24;}   48%,100%{fill:#34d399;} }
+            @keyframes ebbChipShadow { 0%,30%{fill:#fbbf24;}   48%,100%{fill:#34d399;} }
 
-            /* signal pulses along the wires */
-            .ebb-pulse { fill: #34d399; opacity: 0; }
-            .ebb-pulse-a { animation: ebbPulseA 14s linear infinite; }
-            .ebb-pulse-b { animation: ebbPulseB 14s linear infinite; }
-            @keyframes ebbPulseA {
-              0%, 6%   { transform: translateX(150px); opacity: 0; }
-              9%       { opacity: 1; }
-              21%      { transform: translateX(330px); opacity: 1; }
-              24%,100% { transform: translateX(330px); opacity: 0; }
-            }
-            @keyframes ebbPulseB {
-              0%, 63%  { transform: translateX(528px); opacity: 0; }
-              67%      { opacity: 1; }
-              78%      { transform: translateX(606px); opacity: 1; }
-              81%,100% { transform: translateX(606px); opacity: 0; }
-            }
-
-            /* dispatch node fires when the task arrives */
-            .ebb-fire { opacity: 0; animation: ebbFire 14s ease-out infinite; }
-            @keyframes ebbFire {
-              0%, 79%  { r: 9px;  opacity: 0; }
-              82%      { r: 9px;  opacity: 0.8; }
-              90%      { r: 34px; opacity: 0; }
-              100%     { r: 34px; opacity: 0; }
-            }
-            .ebb-dispatch-dot {
-              fill: #3a4453;
-              animation: ebbDispatchDot 14s infinite;
-            }
-            @keyframes ebbDispatchDot {
-              0%, 79%  { fill: #3a4453; }
-              82%, 92% { fill: #34d399; }
-              100%     { fill: #3a4453; }
-            }
-
-            /* result + wins pop in after dispatch */
+            /* result check */
             .ebb-result {
               opacity: 0;
-              transform: translate(676px,168px) scale(0.4);
-              animation: ebbResult 14s ease-out infinite;
+              transform: translate(560px,205px) scale(0.3);
+              animation: ebbResult 13s ease-out infinite;
             }
             @keyframes ebbResult {
-              0%, 80%   { opacity: 0; transform: translate(676px,168px) scale(0.4); }
-              86%       { opacity: 1; transform: translate(676px,168px) scale(1.15); }
-              89%, 95%  { opacity: 1; transform: translate(676px,168px) scale(1); }
-              100%      { opacity: 0; transform: translate(676px,168px) scale(0.4); }
-            }
-            .ebb-wins { opacity: 0; animation: ebbWins 14s ease-out infinite; }
-            @keyframes ebbWins {
-              0%, 83%  { opacity: 0; }
-              90%, 95% { opacity: 1; }
-              100%     { opacity: 0; }
+              0%,57%  { opacity: 0; transform: translate(560px,205px) scale(0.3); }
+              62%     { opacity: 1; transform: translate(560px,205px) scale(1.18); }
+              66%,88% { opacity: 1; transform: translate(560px,205px) scale(1); }
+              96%,100%{ opacity: 0; transform: translate(560px,205px) scale(1); }
             }
 
-            /* a coherent still frame for reduced-motion users */
+            /* the four win-cards charge up together at the dispatch beat */
+            .ebb-card-bar { transform: scaleX(0); transform-origin: left; }
+            .ebb-card-0 .ebb-card-bar { animation: ebbCharge 13s ease-out infinite; }
+            .ebb-card-1 .ebb-card-bar { animation: ebbCharge 13s ease-out infinite; animation-delay: 0.07s; }
+            .ebb-card-2 .ebb-card-bar { animation: ebbCharge 13s ease-out infinite; animation-delay: 0.14s; }
+            .ebb-card-3 .ebb-card-bar { animation: ebbCharge 13s ease-out infinite; animation-delay: 0.21s; }
+            @keyframes ebbCharge {
+              0%,52%   { transform: scaleX(0); }
+              68%,93%  { transform: scaleX(1); }
+              100%     { transform: scaleX(0); }
+            }
+            .ebb-card-0 { animation: ebbCardLift 13s ease-out infinite; }
+            .ebb-card-1 { animation: ebbCardLift 13s ease-out infinite; animation-delay: 0.07s; }
+            .ebb-card-2 { animation: ebbCardLift 13s ease-out infinite; animation-delay: 0.14s; }
+            .ebb-card-3 { animation: ebbCardLift 13s ease-out infinite; animation-delay: 0.21s; }
+            @keyframes ebbCardLift {
+              0%,52%  { transform: translateY(0); }
+              60%     { transform: translateY(-5px); }
+              72%,93% { transform: translateY(-2px); }
+              100%    { transform: translateY(0); }
+            }
+            .ebb-card-glow { opacity: 0; }
+            .ebb-card-0 .ebb-card-glow,
+            .ebb-card-1 .ebb-card-glow,
+            .ebb-card-2 .ebb-card-glow,
+            .ebb-card-3 .ebb-card-glow { animation: ebbCardGlow 13s ease-out infinite; }
+            .ebb-card-1 .ebb-card-glow { animation-delay: 0.07s; }
+            .ebb-card-2 .ebb-card-glow { animation-delay: 0.14s; }
+            .ebb-card-3 .ebb-card-glow { animation-delay: 0.21s; }
+            @keyframes ebbCardGlow {
+              0%,53%  { opacity: 0; }
+              62%     { opacity: 1; }
+              74%,90% { opacity: 0.55; }
+              100%    { opacity: 0; }
+            }
+
             @media (prefers-reduced-motion: reduce) {
-              .ebb-viz * { animation: none !important; }
-              .ebb-task { transform: translate(430px,168px); opacity: 1; }
-              .ebb-task-box { stroke: #fbbf24; }
-              .ebb-task-dot { fill: #fbbf24; }
-              .ebb-aura, .ebb-core { fill: #fbbf24; }
-              .ebb-status-peak { opacity: 1; }
-              .ebb-status-clean { opacity: 0; }
-              .ebb-result, .ebb-wins, .ebb-pulse, .ebb-fire { opacity: 0; }
+              .ebb-viz *, .ebb-card-0, .ebb-card-1, .ebb-card-2, .ebb-card-3,
+              .ebb-card-bar, .ebb-card-glow { animation: none !important; }
+              .ebb-task { transform: translate(560px,205px) scale(1); opacity: 1; }
+              .ebb-chip { stroke: #34d399; }
+              .ebb-chip-dot, .ebb-chip-shadow { fill: #34d399; }
+              .ebb-trough-halo { opacity: 0.7; }
+              .ebb-curve-glow { opacity: 0.5; }
+              .ebb-status-peak { opacity: 0; }
+              .ebb-status-clean { opacity: 1; }
+              .ebb-status-led { fill: #34d399; }
+              .ebb-axis-clean { fill: #34d399; }
+              .ebb-burst, .ebb-result { opacity: 0; }
+              .ebb-card-bar { transform: scaleX(1); }
+              .ebb-card-glow { opacity: 0.55; }
             }
           `}</style>
         </svg>
       </div>
 
+      {/* ── the four parallel wins ──────────────────────────────────────── */}
       <div className="grid gap-3 sm:grid-cols-4">
-        <PillarBadge color="rose" label="grid load" value="−83 %" caption="off peak" />
-        <PillarBadge color="amber" label="cost" value="−50 %" caption="via Batch API" />
-        <PillarBadge color="cyan" label="latency" value="lower" caption="off-peak queues" />
-        <PillarBadge color="teal" label="carbon" value="−80 %" caption="for this hour" />
+        {WINS.map((w) => (
+          <WinCard key={w.idx} {...w} />
+        ))}
       </div>
 
-      <p className="text-xs text-fg-muted">
+      <p className="text-xs leading-relaxed text-fg-muted">
         Illustrative — the loop shows the mechanism, not live data. A
-        deferrable task waits in the queue through the dirty, strained
-        peak hours and is dispatched at the off-peak trough inside its
-        deadline. Carbon, cost and latency all move together because they
-        all track grid demand; the exact figures vary per region per day.
+        deferrable task waits through the dirty, strained peak and is
+        dispatched at the off-peak trough inside its deadline. Carbon, cost
+        and latency move together because they all track grid demand; exact
+        figures vary per region per day.
       </p>
     </section>
   );
 }
 
-function PillarBadge({
-  color,
+function WinCard({
+  idx,
   label,
   value,
   caption,
+  Icon,
+  hue,
 }: {
-  color: "rose" | "amber" | "cyan" | "teal";
+  idx: number;
   label: string;
   value: string;
   caption: string;
+  Icon: LucideIcon;
+  hue: Hue;
 }) {
-  const ring =
-    color === "rose"
-      ? "border-rose-500/40 bg-rose-500/5 text-rose-200"
-      : color === "amber"
-        ? "border-amber-500/40 bg-amber-500/5 text-amber-200"
-        : color === "cyan"
-          ? "border-cyan-500/40 bg-cyan-500/5 text-cyan-200"
-          : "border-teal-500/40 bg-teal-500/5 text-teal-200";
-
+  const h = HUE[hue];
   return (
-    <div className={`rounded-md border ${ring} px-3 py-2`}>
-      <p className="font-mono text-[10px] uppercase tracking-wider opacity-80">
-        {label}
+    <div
+      className={`ebb-card-${idx} group relative overflow-hidden rounded-xl border ${h.ring} bg-bg-card p-4 transition-colors`}
+    >
+      {/* synchronized glow that lands at the dispatch beat */}
+      <div
+        className={`ebb-card-glow pointer-events-none absolute -inset-px rounded-xl`}
+        style={{
+          background: `radial-gradient(120% 90% at 50% 0%, ${HEX[hue]}22, transparent 70%)`,
+        }}
+      />
+      <div className="relative flex items-center gap-2">
+        <span
+          className={`flex h-7 w-7 items-center justify-center rounded-md border ${h.ring} ${h.icon}`}
+        >
+          <Icon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+        </span>
+        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-fg-muted">
+          {label}
+        </p>
+      </div>
+      <p className={`relative mt-3 font-mono text-2xl font-semibold ${h.value}`}>
+        {value}
       </p>
-      <p className="mt-0.5 font-mono text-xl font-semibold">{value}</p>
-      <p className="mt-0.5 text-[11px] opacity-70">{caption}</p>
+      <p className="relative mt-0.5 text-[11px] text-fg-muted">{caption}</p>
+      {/* charge track — fills in sync across all four cards */}
+      <div className="relative mt-3 h-1 overflow-hidden rounded-full bg-white/[0.06]">
+        <div
+          className="ebb-card-bar h-full rounded-full"
+          style={{ background: `linear-gradient(90deg, ${HEX[hue]}55, ${HEX[hue]})` }}
+        />
+      </div>
     </div>
   );
 }
+
+const HEX: Record<Hue, string> = {
+  emerald: "#34d399",
+  amber: "#fbbf24",
+  sky: "#38bdf8",
+  violet: "#a78bfa",
+};

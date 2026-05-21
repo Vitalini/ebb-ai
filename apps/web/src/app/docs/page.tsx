@@ -108,7 +108,7 @@ export default function DocsPage() {
           />
           <PathCard
             path="~/.ebb-ai/telemetry.key"
-            desc="Local-only 256-bit token + Ed25519 keypair for the (v0.9-planned) opt-in leaderboard. Never sent. Not generated until you opt in."
+            desc="Local-only 256-bit token + Ed25519 keypair for the (planned) opt-in leaderboard. Never sent. Not generated until you opt in."
           />
         </div>
       </section>
@@ -155,7 +155,7 @@ export default function DocsPage() {
             <p className="font-semibold text-fg">Architecture</p>
             <p className="mt-1 text-sm text-fg-muted">
               System diagram, ingest→dispatch→receipt flow, what&apos;s
-              deliberately not in v0.8.
+              deliberately not in v0.9.
             </p>
           </Link>
           <a
