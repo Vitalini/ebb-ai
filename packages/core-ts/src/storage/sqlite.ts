@@ -62,26 +62,32 @@ CREATE TABLE IF NOT EXISTS tasks (
   error             TEXT,
   receipt_json      TEXT,
   intensity_source  TEXT,
-  body_json         TEXT
+  body_json         TEXT,
+  estimated_carbon_g REAL
 );
 CREATE INDEX IF NOT EXISTS tasks_status_idx ON tasks(status);
 CREATE INDEX IF NOT EXISTS tasks_enqueued_idx ON tasks(enqueued_at);
 `;
 
 /**
- * v0.4 idempotent migration: `body_json` column added for persistent
- * provider-call task bodies. SQLite allows `ADD COLUMN` on a non-empty
- * table because the new column is nullable. We check
+ * Idempotent column migrations. SQLite allows `ADD COLUMN` on a
+ * non-empty table because each new column is nullable. We check
  * `pragma_table_info` first so re-running on an already-migrated DB
- * (including a freshly created v0.4 DB) is a no-op.
+ * (including a freshly created DB) is a no-op.
+ *   - body_json          (v0.4) persistent provider-call task bodies
+ *   - estimated_carbon_g (v0.9) schedule-time carbon projection, so the
+ *                        receipt can report actual-vs-estimated delta
  */
-function ensureBodyJsonColumn(db: SqliteDatabase): void {
+function ensureColumns(db: SqliteDatabase): void {
   const rows = db
     .prepare(`SELECT name FROM pragma_table_info('tasks')`)
     .all() as Array<{ name: string }>;
-  const hasBodyJson = rows.some((r) => r.name === "body_json");
-  if (!hasBodyJson) {
+  const have = new Set(rows.map((r) => r.name));
+  if (!have.has("body_json")) {
     db.exec(`ALTER TABLE tasks ADD COLUMN body_json TEXT`);
+  }
+  if (!have.has("estimated_carbon_g")) {
+    db.exec(`ALTER TABLE tasks ADD COLUMN estimated_carbon_g REAL`);
   }
 }
 
@@ -120,29 +126,32 @@ export class TaskStore {
       this.db = openSqliteSync(opts.dbPath);
     }
     this.db.exec(SCHEMA);
-    ensureBodyJsonColumn(this.db);
+    ensureColumns(this.db);
   }
 
   upsert(record: TaskRecord<unknown>): void {
     const stmt = this.db.prepare(`
       INSERT INTO tasks (
         task_id, status, enqueued_at, scheduled_for, completed_at,
-        region, carbon_budget_g, result_json, error, receipt_json, intensity_source, body_json
+        region, carbon_budget_g, result_json, error, receipt_json, intensity_source,
+        body_json, estimated_carbon_g
       ) VALUES (
         @task_id, @status, @enqueued_at, @scheduled_for, @completed_at,
-        @region, @carbon_budget_g, @result_json, @error, @receipt_json, @intensity_source, @body_json
+        @region, @carbon_budget_g, @result_json, @error, @receipt_json, @intensity_source,
+        @body_json, @estimated_carbon_g
       )
       ON CONFLICT(task_id) DO UPDATE SET
-        status            = excluded.status,
-        scheduled_for     = excluded.scheduled_for,
-        completed_at      = excluded.completed_at,
-        region            = excluded.region,
-        carbon_budget_g   = excluded.carbon_budget_g,
-        result_json       = excluded.result_json,
-        error             = excluded.error,
-        receipt_json      = excluded.receipt_json,
-        intensity_source  = excluded.intensity_source,
-        body_json         = excluded.body_json
+        status             = excluded.status,
+        scheduled_for      = excluded.scheduled_for,
+        completed_at       = excluded.completed_at,
+        region             = excluded.region,
+        carbon_budget_g    = excluded.carbon_budget_g,
+        result_json        = excluded.result_json,
+        error              = excluded.error,
+        receipt_json       = excluded.receipt_json,
+        intensity_source   = excluded.intensity_source,
+        body_json          = excluded.body_json,
+        estimated_carbon_g = excluded.estimated_carbon_g
     `);
     stmt.run({
       task_id: record.taskId,
@@ -157,6 +166,7 @@ export class TaskStore {
       receipt_json: safeStringify(record.receipt),
       intensity_source: record.intensitySource ?? null,
       body_json: record.bodyJson ?? null,
+      estimated_carbon_g: record.estimatedCarbonGCo2 ?? null,
     });
   }
 
@@ -226,6 +236,8 @@ function rowToRecord(row: Record<string, unknown>): TaskRecord<unknown> {
         | "current"
         | null) ?? undefined,
     bodyJson: (row.body_json as string | null) ?? undefined,
+    estimatedCarbonGCo2:
+      (row.estimated_carbon_g as number | null) ?? undefined,
   };
 }
 

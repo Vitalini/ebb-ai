@@ -53,7 +53,16 @@ export interface CarbonReceipt {
   taskId: string;
   ranAt: string;
   region: string;
+  /** Carbon the scheduler projected for the chosen window at schedule
+   *  time, in grams CO2-equivalent. */
   estimatedCarbonGCo2: number;
+  /** Carbon billed against the grid intensity actually observed at
+   *  dispatch time. Equals `estimatedCarbonGCo2` when there was no
+   *  separate projection step (immediate / expedited dispatch). */
+  actualCarbonGCo2?: number;
+  /** Signed percentage drift of actual vs estimated, rounded to 0.1.
+   *  Negative means the task ran cleaner than projected. */
+  deltaPct?: number;
   provider?: string;
   model?: string;
   /** Wall-clock duration of the dispatched call, in milliseconds. */
@@ -90,6 +99,14 @@ export interface TaskRecord<T = unknown> {
    * (`Scheduler.defer` / `enqueue`) do not populate this field.
    */
   bodyJson?: string;
+  /**
+   * Carbon the scheduler projected for the chosen window when the task
+   * was scheduled, in grams CO2-equivalent. Recorded by
+   * `scheduleProviderCall` so the dispatcher can compute the actual-vs-
+   * estimated delta on the receipt. Absent for immediately-dispatched
+   * tasks, which have no projection step.
+   */
+  estimatedCarbonGCo2?: number;
 }
 
 /**

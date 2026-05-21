@@ -612,22 +612,36 @@ export class Scheduler {
     try {
       const result = await body();
       const durationMs = Date.now() - start;
-      // Prefer the forecast entry the scheduler scored against. If we
-      // dispatched without a forecast (immediate fallback), look up the
-      // current hour from the feed once.
-      let intensityG: number;
+      // The scheduler scored `forecastEntry` when it picked the window —
+      // that is the estimate. `actual` is the intensity observed when the
+      // task actually ran. If we dispatched without a forecast (immediate
+      // fallback) there is no separate estimate, so the two coincide.
       let source: "scored" | "current" = "scored";
+      let estimatedIntensityG: number | undefined;
       if (forecastEntry) {
-        intensityG = forecastEntry.carbonIntensityGCo2PerKwh;
+        estimatedIntensityG = forecastEntry.carbonIntensityGCo2PerKwh;
       } else {
-        intensityG = await this.fetchCurrentIntensity(record.region, ranAt);
         source = "current";
       }
+      const actualIntensityG = await this.fetchCurrentIntensity(record.region, ranAt);
+      const actualCarbonGCo2 = Math.round(intensityToGrams(actualIntensityG) * 10) / 10;
+      const estimatedCarbonGCo2 =
+        estimatedIntensityG !== undefined
+          ? Math.round(intensityToGrams(estimatedIntensityG) * 10) / 10
+          : actualCarbonGCo2;
+      const deltaPct =
+        estimatedCarbonGCo2 > 0
+          ? Math.round(
+              ((actualCarbonGCo2 - estimatedCarbonGCo2) / estimatedCarbonGCo2) * 1000,
+            ) / 10
+          : 0;
       const receipt: CarbonReceipt = {
         taskId,
         ranAt: ranAt.toISOString(),
         region: record.region,
-        estimatedCarbonGCo2: Math.round(intensityToGrams(intensityG) * 10) / 10,
+        estimatedCarbonGCo2,
+        actualCarbonGCo2,
+        deltaPct,
         durationMs,
       };
       record.status = "completed";
@@ -686,6 +700,8 @@ export class Scheduler {
     }
     record.status = "scheduled";
     record.scheduledFor = candidate.datetime;
+    record.estimatedCarbonGCo2 =
+      Math.round(intensityToGrams(candidate.carbonIntensityGCo2PerKwh) * 10) / 10;
     this.store?.upsert(record);
   }
 
@@ -741,6 +757,18 @@ export class Scheduler {
       const durationMs = Date.now() - start;
       const intensityG = await this.intensityForReceipt(record.region, ranAt);
       const source: "scored" | "current" = "scored";
+      // `estimatedCarbonGCo2` was projected at schedule time from the
+      // forecast entry the scheduler scored; `actual` is billed against
+      // the intensity observed when the task actually ran. The delta is
+      // the forecast drift between those two moments.
+      const actualCarbonGCo2 = Math.round(intensityToGrams(intensityG) * 10) / 10;
+      const estimatedCarbonGCo2 = record.estimatedCarbonGCo2 ?? actualCarbonGCo2;
+      const deltaPct =
+        estimatedCarbonGCo2 > 0
+          ? Math.round(
+              ((actualCarbonGCo2 - estimatedCarbonGCo2) / estimatedCarbonGCo2) * 1000,
+            ) / 10
+          : 0;
       const totalTokens =
         typeof (result as { usage?: { totalTokens?: number } }).usage?.totalTokens === "number"
           ? (result as { usage: { totalTokens: number } }).usage.totalTokens
@@ -749,7 +777,9 @@ export class Scheduler {
         taskId: record.taskId,
         ranAt: ranAt.toISOString(),
         region: record.region,
-        estimatedCarbonGCo2: Math.round(intensityToGrams(intensityG) * 10) / 10,
+        estimatedCarbonGCo2,
+        actualCarbonGCo2,
+        deltaPct,
         // Record what actually ran (the adapter's DispatchResult), not just
         // what was requested — the OpenClaw runtime bridge may run a
         // different model than spec.model. The batch path has no model.

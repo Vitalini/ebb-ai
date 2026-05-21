@@ -106,6 +106,42 @@ describe("Scheduler.tick", () => {
     expect(finished?.status).toBe("completed");
     expect(finished?.receipt?.estimatedCarbonGCo2).toBeGreaterThan(0);
     expect(finished?.receipt?.provider).toBe("anthropic");
+    // The receipt carries both the schedule-time projection and the
+    // intensity actually observed at dispatch, plus their drift.
+    expect(finished?.receipt?.actualCarbonGCo2).toBeGreaterThan(0);
+    expect(typeof finished?.receipt?.deltaPct).toBe("number");
+    s.shutdown();
+  });
+
+  it("records the schedule-time estimate and computes the receipt delta", async () => {
+    const s = new Scheduler({ feed: mockGridFeed() });
+    const fake = makeFakeAdapter("anthropic");
+    const rec = await s.enqueueProviderCall(
+      {
+        type: "provider_call",
+        provider: "anthropic",
+        model: "claude-sonnet-4-5",
+        prompt: "hi",
+      },
+      { deadline: new Date(Date.now() + 6 * 60 * 60 * 1000), region: "US-CAL-CISO" },
+    );
+    // The projection is persisted on the record the moment it is scheduled.
+    const scheduled = s.getTask(rec.taskId);
+    expect(scheduled?.estimatedCarbonGCo2).toBeGreaterThan(0);
+    const projected = scheduled!.estimatedCarbonGCo2!;
+
+    await new Promise((r) => setTimeout(r, 50));
+    const stored = s.getTask(rec.taskId);
+    if (stored) stored.scheduledFor = new Date().toISOString();
+    await s.tick({ anthropic: fake });
+
+    const finished = s.getTask(rec.taskId);
+    const rc = finished?.receipt;
+    expect(rc?.estimatedCarbonGCo2).toBe(projected);
+    expect(rc?.actualCarbonGCo2).toBeGreaterThan(0);
+    const expectedDelta =
+      Math.round(((rc!.actualCarbonGCo2! - projected) / projected) * 1000) / 10;
+    expect(rc?.deltaPct).toBe(expectedDelta);
     s.shutdown();
   });
 

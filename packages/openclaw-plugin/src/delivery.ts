@@ -209,15 +209,25 @@ function resultText(task: CompletedTask): string {
 function receiptLine(task: CompletedTask): string {
   const rc = task.receipt;
   if (!rc) return `region ${task.region}`;
-  const g =
-    typeof rc.estimatedCarbonGCo2 === "number"
-      ? `~${rc.estimatedCarbonGCo2} gCO2e`
-      : "";
+  let carbon = "";
+  if (typeof rc.actualCarbonGCo2 === "number") {
+    carbon = `${rc.actualCarbonGCo2} gCO2e actual`;
+    if (
+      typeof rc.estimatedCarbonGCo2 === "number" &&
+      typeof rc.deltaPct === "number"
+    ) {
+      carbon += ` (est ${rc.estimatedCarbonGCo2}, ${
+        rc.deltaPct >= 0 ? "+" : ""
+      }${rc.deltaPct}%)`;
+    }
+  } else if (typeof rc.estimatedCarbonGCo2 === "number") {
+    carbon = `~${rc.estimatedCarbonGCo2} gCO2e`;
+  }
   return [
     `ran ${rc.ranAt ?? task.completedAt ?? "?"}`,
     rc.region ?? task.region,
     rc.model ? `model ${rc.model}` : "",
-    g,
+    carbon,
   ]
     .filter(Boolean)
     .join(" · ");
