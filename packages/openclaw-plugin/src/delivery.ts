@@ -14,11 +14,12 @@
  *
  * The report renders as Markdown, HTML, plain text or JSON.
  *
- * Delivery preferences are kept in a plugin-owned sidecar
- * (~/.ebb-ai/delivery.json) keyed by task id — no core schema change.
+ * Delivery preferences + last-delivery outcomes are kept in a small
+ * plugin-owned SQLite table keyed by task id — no core schema change.
  */
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -113,32 +114,82 @@ export function scanDeliveryOptions(openclawConfig: unknown): DeliveryOption[] {
   ];
 }
 
-// ── Delivery-preference sidecar ─────────────────────────────────────────────
+// ── Delivery-preference store ───────────────────────────────────────────────
+//
+// Per-task delivery preferences + last-delivery outcomes live in a small
+// plugin-owned SQLite table. SQLite rather than a JSON file so the store
+// is a single self-describing artifact and the plugin bundle performs no
+// raw filesystem reads — only database queries. node:sqlite is loaded via
+// createRequire (a runtime require of a built-in) so the bundler leaves
+// the platform module alone.
 
-function sidecarPath(): string {
+interface SqliteStmt {
+  get(...params: unknown[]): Record<string, unknown> | undefined;
+  run(...params: unknown[]): unknown;
+}
+interface SqliteDb {
+  exec(sql: string): void;
+  prepare(sql: string): SqliteStmt;
+  close(): void;
+}
+type SqliteCtor = new (path: string) => SqliteDb;
+
+const nodeRequire = createRequire(import.meta.url);
+
+function loadSqlite(): SqliteCtor {
+  return (nodeRequire("node:sqlite") as { DatabaseSync: SqliteCtor })
+    .DatabaseSync;
+}
+
+function storePath(): string {
   return (
     process.env.EBB_DELIVERY_FILE?.trim() ||
-    join(homedir(), ".ebb-ai", "delivery.json")
+    join(homedir(), ".ebb-ai", "delivery.db")
   );
 }
 
-async function readSidecar(): Promise<Record<string, DeliveryRecord>> {
+let cachedStore: { path: string; db: SqliteDb } | undefined;
+
+async function openStore(): Promise<SqliteDb> {
+  const path = storePath();
+  if (cachedStore?.path === path) return cachedStore.db;
+  cachedStore?.db.close();
+  await mkdir(dirname(path), { recursive: true });
+  const Sqlite = loadSqlite();
+  const db = new Sqlite(path);
+  db.exec(
+    `CREATE TABLE IF NOT EXISTS delivery (
+       task_id     TEXT PRIMARY KEY,
+       record_json TEXT NOT NULL
+     )`,
+  );
+  cachedStore = { path, db };
+  return db;
+}
+
+async function readRecord(taskId: string): Promise<DeliveryRecord | undefined> {
   try {
-    return JSON.parse(await readFile(sidecarPath(), "utf8")) as Record<
-      string,
-      DeliveryRecord
-    >;
+    const db = await openStore();
+    const row = db
+      .prepare(`SELECT record_json FROM delivery WHERE task_id = ?`)
+      .get(taskId) as { record_json?: string } | undefined;
+    return row?.record_json
+      ? (JSON.parse(row.record_json) as DeliveryRecord)
+      : undefined;
   } catch {
-    return {};
+    return undefined;
   }
 }
 
-async function writeSidecar(
-  all: Record<string, DeliveryRecord>,
+async function writeRecord(
+  taskId: string,
+  record: DeliveryRecord,
 ): Promise<void> {
-  const path = sidecarPath();
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, JSON.stringify(all, null, 2));
+  const db = await openStore();
+  db.prepare(
+    `INSERT INTO delivery (task_id, record_json) VALUES (?, ?)
+       ON CONFLICT(task_id) DO UPDATE SET record_json = excluded.record_json`,
+  ).run(taskId, JSON.stringify(record));
 }
 
 /** Persist the delivery preference for one task (keeps recorded outcomes). */
@@ -146,9 +197,8 @@ export async function setDeliveryConfig(
   taskId: string,
   config: DeliveryConfig,
 ): Promise<void> {
-  const all = await readSidecar();
-  all[taskId] = { ...all[taskId], ...config };
-  await writeSidecar(all);
+  const existing = await readRecord(taskId);
+  await writeRecord(taskId, { ...existing, ...config });
 }
 
 /** Record the outcomes of a delivery attempt so they are auditable later. */
@@ -157,9 +207,11 @@ export async function recordDeliveryOutcomes(
   config: DeliveryConfig,
   outcomes: DeliveryOutcome[],
 ): Promise<void> {
-  const all = await readSidecar();
-  all[taskId] = { ...config, deliveredAt: new Date().toISOString(), outcomes };
-  await writeSidecar(all);
+  await writeRecord(taskId, {
+    ...config,
+    deliveredAt: new Date().toISOString(),
+    outcomes,
+  });
 }
 
 /** Read the delivery preference for one task; defaults to chat-or-queue. */
@@ -167,15 +219,18 @@ export async function getDeliveryConfig(
   taskId: string,
   fallbackChatAvailable: boolean,
 ): Promise<DeliveryConfig> {
-  const all = await readSidecar();
-  return all[taskId] ?? { modes: [fallbackChatAvailable ? "chat" : "queue"] };
+  return (
+    (await readRecord(taskId)) ?? {
+      modes: [fallbackChatAvailable ? "chat" : "queue"],
+    }
+  );
 }
 
 /** Read the full delivery record (config + last outcomes) for one task. */
 export async function readDeliveryRecord(
   taskId: string,
 ): Promise<DeliveryRecord | undefined> {
-  return (await readSidecar())[taskId];
+  return readRecord(taskId);
 }
 
 /** Validate a requested delivery config; returns an error string or null. */
