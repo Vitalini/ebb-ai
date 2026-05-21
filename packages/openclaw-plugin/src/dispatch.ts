@@ -53,22 +53,40 @@ type BridgeLlmComplete = (params: {
 }>;
 
 let bridgeComplete: BridgeLlmComplete | undefined;
+let capturedOpenClawConfig: unknown;
 
 /**
- * Capture the OpenClaw runtime's LLM-complete caller from a tool-call
- * context (`context.api.runtime.llm.complete`). Idempotent and fully
- * defensive — does nothing if that surface is absent.
+ * Capture what the plugin needs from a tool-call context: the OpenClaw
+ * runtime's LLM-complete caller (`api.runtime.llm.complete`) for dispatch,
+ * and the gateway config (`api.config`) for result delivery. Idempotent
+ * and fully defensive — does nothing for surfaces that are absent.
  */
 export function captureOpenClawRuntime(context: unknown): void {
-  if (bridgeComplete) return;
-  const llm = (
+  const api = (
     context as
-      | { api?: { runtime?: { llm?: { complete?: unknown } } } }
+      | {
+          api?: {
+            runtime?: { llm?: { complete?: unknown } };
+            config?: unknown;
+          };
+        }
       | undefined
-  )?.api?.runtime?.llm;
-  if (llm && typeof llm.complete === "function") {
-    bridgeComplete = (llm.complete as BridgeLlmComplete).bind(llm);
+  )?.api;
+  if (!api) return;
+  if (!bridgeComplete) {
+    const llm = api.runtime?.llm;
+    if (llm && typeof llm.complete === "function") {
+      bridgeComplete = (llm.complete as BridgeLlmComplete).bind(llm);
+    }
   }
+  if (capturedOpenClawConfig === undefined && api.config !== undefined) {
+    capturedOpenClawConfig = api.config;
+  }
+}
+
+/** The gateway config captured from a tool-call context (for delivery). */
+export function getCapturedOpenClawConfig(): unknown {
+  return capturedOpenClawConfig;
 }
 
 /** Test seam: inject or clear the runtime bridge directly. */

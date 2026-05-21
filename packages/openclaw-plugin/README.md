@@ -23,6 +23,16 @@ Tool names match the `@ebb-ai/mcp` MCP-server surface (no `ebb_` prefix).
 | `get_grid_forecast`   | Hourly grid carbon-intensity forecast. Read-only.             |
 | `update_deadline`     | Move a queued/scheduled task's deadline.                      |
 | `cancel_all`          | Cancel every queued/scheduled task at once.                   |
+| `set_delivery`        | Choose how a task's result is delivered when it completes.    |
+
+## Result delivery
+
+When a deferred task completes, its result is delivered through the
+mode(s) chosen per task — `chat` (the active OpenClaw chat), `telegram`,
+`webhook` (POST to any URL), `file` (a report in md/html/txt/json), or
+`queue` (no push). The result is always kept in the queue too. Call
+`set_delivery` right after `schedule_task`, once you've asked the user how
+they want the result. Default: `chat`.
 
 ## Install
 

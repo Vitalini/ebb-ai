@@ -750,8 +750,12 @@ export class Scheduler {
         ranAt: ranAt.toISOString(),
         region: record.region,
         estimatedCarbonGCo2: Math.round(intensityToGrams(intensityG) * 10) / 10,
-        provider: spec.provider,
-        model: spec.model,
+        // Record what actually ran (the adapter's DispatchResult), not just
+        // what was requested — the OpenClaw runtime bridge may run a
+        // different model than spec.model. The batch path has no model.
+        provider:
+          (result as { provider?: string }).provider ?? spec.provider,
+        model: (result as { model?: string }).model ?? spec.model,
         durationMs,
         prompt: redactPrompt(spec.prompt, spec.redactInReceipt),
         totalTokens,

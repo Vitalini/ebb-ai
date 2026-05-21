@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -8,6 +8,14 @@ import { TaskStore } from "@ebb-ai/core";
 
 import ebbPlugin, { runDispatchTick } from "../src/index.js";
 import { buildAdapters, setLlmBridgeForTest } from "../src/dispatch.js";
+import {
+  deliverResult,
+  formatReport,
+  getDeliveryConfig,
+  scanDeliveryOptions,
+  setDeliveryConfig,
+  validateDeliveryConfig,
+} from "../src/delivery.js";
 import type { StubResolvedTool } from "./stub-tool-plugin.js";
 
 const TOOL_NAMES = [
@@ -18,6 +26,7 @@ const TOOL_NAMES = [
   "get_grid_forecast",
   "update_deadline",
   "cancel_all",
+  "set_delivery",
 ];
 
 function tool(name: string): StubResolvedTool {
@@ -37,7 +46,7 @@ describe("ebb OpenClaw plugin — registration", () => {
     expect(ebbPlugin.name).toMatch(/ebb-ai/);
   });
 
-  it("registers the seven tools, MCP-style names with no ebb_ prefix", () => {
+  it("registers the eight tools, MCP-style names with no ebb_ prefix", () => {
     const names = ebbPlugin.tools.map((t) => t.name).sort();
     expect(names).toEqual([...TOOL_NAMES].sort());
     for (const t of ebbPlugin.tools) {
@@ -290,5 +299,95 @@ describe("ebb OpenClaw plugin — dispatch adapters", () => {
     expect(adapters.anthropic?.provider).toBe("anthropic");
     expect(adapters.openai?.provider).toBe("openai");
     expect(typeof adapters.anthropic?.dispatch).toBe("function");
+  });
+});
+
+describe("ebb OpenClaw plugin — result delivery", () => {
+  const completedTask = {
+    taskId: "t-deliver",
+    status: "completed",
+    region: "GB",
+    enqueuedAt: "2026-05-21T00:00:00Z",
+    completedAt: "2026-05-21T03:00:00Z",
+    result: { text: "the deferred answer" },
+    receipt: {
+      taskId: "t-deliver",
+      ranAt: "2026-05-21T03:00:00Z",
+      region: "GB",
+      estimatedCarbonGCo2: 42,
+      provider: "openai",
+      model: "gpt-5.5",
+      durationMs: 1200,
+      prompt: "x",
+    },
+  } as unknown as Parameters<typeof formatReport>[0];
+
+  it("scanDeliveryOptions reflects whether a chat channel is configured", () => {
+    const withTg = scanDeliveryOptions({
+      channels: { telegram: { enabled: true, botToken: "x", allowFrom: ["1"] } },
+    });
+    expect(withTg.find((o) => o.mode === "chat")?.available).toBe(true);
+    const without = scanDeliveryOptions({});
+    expect(without.find((o) => o.mode === "chat")?.available).toBe(false);
+    expect(without.find((o) => o.mode === "webhook")?.available).toBe(true);
+  });
+
+  it("validateDeliveryConfig requires a target for webhook and file", () => {
+    expect(validateDeliveryConfig({ modes: ["webhook"] })).toMatch(/webhook_url/);
+    expect(validateDeliveryConfig({ modes: ["file"] })).toMatch(/file_path/);
+    expect(validateDeliveryConfig({ modes: [] })).toMatch(/at least one/);
+    expect(validateDeliveryConfig({ modes: ["chat"] })).toBeNull();
+  });
+
+  it("formatReport renders md / html / json", () => {
+    expect(formatReport(completedTask, "md")).toContain("the deferred answer");
+    expect(formatReport(completedTask, "html")).toContain("<html");
+    const json = JSON.parse(formatReport(completedTask, "json")) as {
+      result: string;
+    };
+    expect(json.result).toBe("the deferred answer");
+  });
+
+  it("deliverResult writes a file and POSTs a webhook", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "ebb-deliver-"));
+    const filePath = join(dir, "report.md");
+    let posted: { task_id?: string } | undefined;
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (_url: string, init: { body: string }) => {
+      posted = JSON.parse(init.body) as { task_id?: string };
+      return { ok: true, status: 200 } as Response;
+    }) as unknown as typeof fetch;
+    try {
+      const outcomes = await deliverResult(
+        completedTask,
+        {
+          modes: ["file", "webhook", "queue"],
+          filePath,
+          webhookUrl: "https://example.test/hook",
+          format: "md",
+        },
+        {},
+      );
+      expect(outcomes.every((o) => o.ok)).toBe(true);
+      expect(readFileSync(filePath, "utf8")).toContain("the deferred answer");
+      expect(posted?.task_id).toBe("t-deliver");
+    } finally {
+      globalThis.fetch = realFetch;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("setDeliveryConfig / getDeliveryConfig round-trip via the sidecar", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "ebb-sidecar-"));
+    process.env.EBB_DELIVERY_FILE = join(dir, "delivery.json");
+    try {
+      await setDeliveryConfig("t-z", { modes: ["chat", "file"], filePath: "/tmp/r.md" });
+      expect((await getDeliveryConfig("t-z", true)).modes).toEqual(["chat", "file"]);
+      // an unknown task falls back to the chat default
+      expect((await getDeliveryConfig("t-unknown", true)).modes).toEqual(["chat"]);
+    } finally {
+      delete process.env.EBB_DELIVERY_FILE;
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

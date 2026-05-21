@@ -27,6 +27,10 @@
  *   - get_grid_forecast   — hourly carbon-intensity forecast (read-only, no DB)
  *   - update_deadline     — move a queued task's deadline
  *   - cancel_all          — cancel every queued/scheduled task
+ *   - set_delivery        — choose how a task's result is delivered
+ *
+ * When a task completes, its result is delivered through the chosen modes
+ * (chat / telegram / webhook / file) and is always kept in the queue too.
  */
 
 import { Type, type TSchema } from "typebox";
@@ -47,8 +51,21 @@ import {
   buildAdapters,
   captureOpenClawRuntime,
   dispatchCapability,
+  getCapturedOpenClawConfig,
   type DispatchAdapters,
 } from "./dispatch.js";
+
+import {
+  deliverResult,
+  getDeliveryConfig,
+  scanDeliveryOptions,
+  setDeliveryConfig,
+  telegramTarget,
+  validateDeliveryConfig,
+  type DeliveryConfig,
+  type DeliveryMode,
+  type ReportFormat,
+} from "./delivery.js";
 
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -151,9 +168,37 @@ export async function runDispatchTick(
   // DispatchAdapter omits dispatchBatch on purpose — Scheduler.tick guards
   // `typeof adapter.dispatchBatch === "function"`, so dispatch stays
   // synchronous. The cast is safe under that runtime guard.
-  return scheduler.tick(
+  const result = await scheduler.tick(
     adapters as { anthropic?: ProviderAdapter; openai?: ProviderAdapter },
   );
+  // Deliver the result of every task this sweep just completed.
+  for (const entry of result.results) {
+    if (entry.status === "completed") {
+      await deliverCompletedTask(scheduler, entry.taskId);
+    }
+  }
+  return result;
+}
+
+/**
+ * Deliver one completed task's result through its configured channels.
+ * Never throws — a delivery failure must not disturb the dispatcher; the
+ * result is always retained in the queue regardless.
+ */
+async function deliverCompletedTask(
+  scheduler: Scheduler,
+  taskId: string,
+): Promise<void> {
+  try {
+    const task = scheduler.getTask(taskId);
+    if (!task) return;
+    const openclawConfig = getCapturedOpenClawConfig();
+    const chatAvailable = telegramTarget(openclawConfig) !== undefined;
+    const cfg = await getDeliveryConfig(taskId, chatAvailable);
+    await deliverResult(task, cfg, openclawConfig);
+  } catch {
+    // best-effort: the result stays retrievable via check_queue_status
+  }
 }
 
 /** Start the background dispatch loop — once per process. */
@@ -236,6 +281,38 @@ export default defineToolPlugin({
               "Optional provider model identifier, e.g. 'claude-sonnet-4-6' or 'gpt-4o'.",
           }),
         ),
+        deliver: Type.Optional(
+          Type.Array(
+            Type.Union([
+              Type.Literal("chat"),
+              Type.Literal("telegram"),
+              Type.Literal("webhook"),
+              Type.Literal("file"),
+              Type.Literal("queue"),
+            ]),
+            {
+              description:
+                "How to deliver the result when the task completes — one or more of: chat (the user's active OpenClaw chat), telegram, webhook, file, queue. If omitted, ASK the user (see next_step in the result) then call set_delivery. Default: chat.",
+            },
+          ),
+        ),
+        webhook_url: Type.Optional(
+          Type.String({ description: "Target URL when deliver includes 'webhook'." }),
+        ),
+        file_path: Type.Optional(
+          Type.String({ description: "Output path when deliver includes 'file'." }),
+        ),
+        file_format: Type.Optional(
+          Type.Union(
+            [
+              Type.Literal("md"),
+              Type.Literal("html"),
+              Type.Literal("txt"),
+              Type.Literal("json"),
+            ],
+            { description: "Report format for 'file' delivery. Default: md." },
+          ),
+        ),
       }),
       async execute(
         params: {
@@ -244,6 +321,10 @@ export default defineToolPlugin({
           region?: string;
           carbon_budget_g?: number;
           model?: string;
+          deliver?: string[];
+          webhook_url?: string;
+          file_path?: string;
+          file_format?: string;
         },
         config: PluginConfig,
         context?: unknown,
@@ -271,6 +352,26 @@ export default defineToolPlugin({
         // How this task will execute when due: "openclaw-runtime" (gateway
         // model, no key), "api-key", or "unconfigured".
         const dispatch = dispatchCapability();
+
+        // Result delivery — store the preference if the caller already
+        // provided one; otherwise the result asks the agent to collect it.
+        const deliveryOptions = scanDeliveryOptions(getCapturedOpenClawConfig());
+        let deliverySet: DeliveryConfig | undefined;
+        let deliveryError: string | undefined;
+        if (params.deliver && params.deliver.length > 0) {
+          const cfg: DeliveryConfig = {
+            modes: params.deliver as DeliveryMode[],
+            webhookUrl: params.webhook_url,
+            filePath: params.file_path,
+            format: params.file_format as ReportFormat | undefined,
+          };
+          deliveryError = validateDeliveryConfig(cfg) ?? undefined;
+          if (!deliveryError) {
+            await setDeliveryConfig(task.taskId, cfg);
+            deliverySet = cfg;
+          }
+        }
+
         return {
           task_id: task.taskId,
           status: task.status,
@@ -279,6 +380,14 @@ export default defineToolPlugin({
           scheduled_for: task.scheduledFor ?? null,
           persisted_to: dbPath,
           dispatch,
+          delivery: deliverySet ?? null,
+          delivery_options: deliveryOptions
+            .filter((o) => o.available)
+            .map((o) => `${o.mode} — ${o.detail}`),
+          next_step: deliverySet
+            ? "Result delivery is configured."
+            : "Ask the user how they want this task's result delivered — they may pick several from delivery_options (default: chat). Then call set_delivery with the task_id and their choice.",
+          ...(deliveryError ? { delivery_error: deliveryError } : {}),
           ...(explicitModel && dispatch === "openclaw-runtime"
             ? {
                 note:
@@ -513,6 +622,71 @@ export default defineToolPlugin({
           }
         }
         return { matched: targets.length, cancelled, errors };
+      },
+    }),
+
+    // ── set_delivery ──────────────────────────────────────────────────────
+    tool({
+      name: "set_delivery",
+      label: "Set how a task's result is delivered",
+      description:
+        "Set or change how a scheduled task's result is delivered when it completes. Call this " +
+        "right after schedule_task, once you have ASKED the user how they want the result. The " +
+        "user may pick several modes. Modes: chat (their active OpenClaw chat), telegram, webhook " +
+        "(needs webhook_url), file (needs file_path; format md/html/txt/json), queue (no push — " +
+        "retrievable via check_queue_status). Default if the user is unsure: chat.",
+      parameters: Type.Object({
+        task_id: Type.String({ description: "The id returned by schedule_task." }),
+        deliver: Type.Array(
+          Type.Union([
+            Type.Literal("chat"),
+            Type.Literal("telegram"),
+            Type.Literal("webhook"),
+            Type.Literal("file"),
+            Type.Literal("queue"),
+          ]),
+          { description: "One or more delivery modes the user chose." },
+        ),
+        webhook_url: Type.Optional(
+          Type.String({ description: "Target URL when deliver includes 'webhook'." }),
+        ),
+        file_path: Type.Optional(
+          Type.String({ description: "Output path when deliver includes 'file'." }),
+        ),
+        file_format: Type.Optional(
+          Type.Union(
+            [
+              Type.Literal("md"),
+              Type.Literal("html"),
+              Type.Literal("txt"),
+              Type.Literal("json"),
+            ],
+            { description: "Report format for 'file' delivery. Default: md." },
+          ),
+        ),
+      }),
+      async execute(
+        params: {
+          task_id: string;
+          deliver: string[];
+          webhook_url?: string;
+          file_path?: string;
+          file_format?: string;
+        },
+        _config: PluginConfig,
+        context?: unknown,
+      ) {
+        captureOpenClawRuntime(context);
+        const cfg: DeliveryConfig = {
+          modes: params.deliver as DeliveryMode[],
+          webhookUrl: params.webhook_url,
+          filePath: params.file_path,
+          format: params.file_format as ReportFormat | undefined,
+        };
+        const error = validateDeliveryConfig(cfg);
+        if (error) throw new Error(`set_delivery: ${error}`);
+        await setDeliveryConfig(params.task_id, cfg);
+        return { task_id: params.task_id, delivery: cfg };
       },
     }),
   ],
