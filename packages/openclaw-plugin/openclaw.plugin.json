@@ -19,7 +19,7 @@
     },
     "additionalProperties": false
   },
-  "version": "0.1.12",
+  "version": "0.1.13",
   "contracts": {
     "tools": [
       "schedule_task",
@@ -29,7 +29,9 @@
       "get_grid_forecast",
       "update_deadline",
       "cancel_all",
-      "set_delivery"
+      "set_delivery",
+      "expedite_task",
+      "retry_task"
     ]
   }
 }

@@ -28,6 +28,8 @@
  *   - update_deadline     — move a queued task's deadline
  *   - cancel_all          — cancel every queued/scheduled task
  *   - set_delivery        — choose how a task's result is delivered
+ *   - expedite_task       — dispatch a task now, skipping the clean window
+ *   - retry_task          — re-dispatch a failed task
  *
  * When a task completes, its result is delivered through the chosen modes
  * (chat / telegram / webhook / file) and is always kept in the queue too.
@@ -699,6 +701,89 @@ export default defineToolPlugin({
         if (error) throw new Error(`set_delivery: ${error}`);
         await setDeliveryConfig(params.task_id, cfg);
         return { task_id: params.task_id, delivery: cfg };
+      },
+    }),
+
+    // ── expedite_task ─────────────────────────────────────────────────────
+    tool({
+      name: "expedite_task",
+      label: "Dispatch a task immediately",
+      description:
+        "Dispatch a queued or scheduled ebb-ai task RIGHT NOW, bypassing the scheduler's chosen " +
+        "clean-grid window. Use when the user says 'run it now', 'don't wait', 'I need that " +
+        "immediately'. This forgoes the carbon saving — the receipt records " +
+        "intensitySource='expedited'. Only provider-call tasks still queued/scheduled can be " +
+        "expedited; running or terminal (completed/failed/cancelled) tasks throw.",
+      parameters: Type.Object({
+        task_id: Type.String({ description: "The id of the task to dispatch now." }),
+      }),
+      async execute(
+        params: { task_id: string },
+        config: PluginConfig,
+        context?: unknown,
+      ) {
+        captureOpenClawRuntime(context);
+        const { scheduler } = getQueueRuntime(config);
+        const entry = await scheduler.expediteTask(
+          params.task_id,
+          buildAdapters() as {
+            anthropic?: ProviderAdapter;
+            openai?: ProviderAdapter;
+          },
+        );
+        if (entry.status === "completed") {
+          await deliverCompletedTask(scheduler, params.task_id);
+        }
+        const task = scheduler.getTask(params.task_id);
+        return {
+          task_id: params.task_id,
+          status: entry.status,
+          ...(entry.error ? { error: entry.error } : {}),
+          receipt: task?.receipt ?? null,
+          result: task?.result ?? null,
+          delivery: (await readDeliveryRecord(params.task_id)) ?? null,
+        };
+      },
+    }),
+
+    // ── retry_task ────────────────────────────────────────────────────────
+    tool({
+      name: "retry_task",
+      label: "Retry a failed task",
+      description:
+        "Re-dispatch an ebb-ai task that previously FAILED. Only valid when the task's current " +
+        "status is 'failed' — queued/scheduled/running/completed tasks throw. The new run " +
+        "overwrites the old receipt. Use when the user says 'try that again', 'retry that task', " +
+        "'that one errored — run it once more'.",
+      parameters: Type.Object({
+        task_id: Type.String({ description: "The id of the failed task to retry." }),
+      }),
+      async execute(
+        params: { task_id: string },
+        config: PluginConfig,
+        context?: unknown,
+      ) {
+        captureOpenClawRuntime(context);
+        const { scheduler } = getQueueRuntime(config);
+        const entry = await scheduler.retryTask(
+          params.task_id,
+          buildAdapters() as {
+            anthropic?: ProviderAdapter;
+            openai?: ProviderAdapter;
+          },
+        );
+        if (entry.status === "completed") {
+          await deliverCompletedTask(scheduler, params.task_id);
+        }
+        const task = scheduler.getTask(params.task_id);
+        return {
+          task_id: params.task_id,
+          status: entry.status,
+          ...(entry.error ? { error: entry.error } : {}),
+          receipt: task?.receipt ?? null,
+          result: task?.result ?? null,
+          delivery: (await readDeliveryRecord(params.task_id)) ?? null,
+        };
       },
     }),
   ],

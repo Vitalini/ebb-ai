@@ -24,6 +24,8 @@ Tool names match the `@ebb-ai/mcp` MCP-server surface (no `ebb_` prefix).
 | `update_deadline`     | Move a queued/scheduled task's deadline.                      |
 | `cancel_all`          | Cancel every queued/scheduled task at once.                   |
 | `set_delivery`        | Choose how a task's result is delivered when it completes.    |
+| `expedite_task`       | Dispatch a queued/scheduled task now, skipping the window.    |
+| `retry_task`          | Re-dispatch a failed task.                                    |
 
 ## Result delivery
 
@@ -47,7 +49,7 @@ Restart the OpenClaw gateway. To update later:
 
 After installing and restarting the gateway:
 
-1. **Inspect** — all four tools should be listed:
+1. **Inspect** — all ten tools should be listed:
 
    ```bash
    openclaw plugins inspect ebb --runtime --json
@@ -55,7 +57,8 @@ After installing and restarting the gateway:
 
    The `tools` array contains `schedule_task`, `recommend_window`,
    `check_queue_status`, `cancel_task`, `get_grid_forecast`,
-   `update_deadline`, `cancel_all`. (`Shape: non-capability` in the plain
+   `update_deadline`, `cancel_all`, `set_delivery`, `expedite_task`,
+   `retry_task`. (`Shape: non-capability` in the plain
    `inspect` output is the normal label OpenClaw gives tool plugins — it
    is not an error.)
 
@@ -67,9 +70,9 @@ After installing and restarting the gateway:
 
 3. **Exercise the tools** in any OpenClaw session:
    - "preview the cleanest window for a task due tomorrow 6pm in GB"
-     → `ebb_recommend_window`
-   - "do this overnight: summarise today's commits" → `ebb_schedule_task`
-   - "what's in my ebb queue?" → `ebb_check_queue_status`
+     → `recommend_window`
+   - "do this overnight: summarise today's commits" → `schedule_task`
+   - "what's in my ebb queue?" → `check_queue_status`
 
 The queue is a SQLite ledger opened through Node's built-in `node:sqlite`
 (Node ≥ 22.5) — there is no native module to compile, so a fresh install
@@ -115,14 +118,14 @@ machine's timezone:** `Europe/London`→`GB`,
 back to `GB` (always-live data via UK National Grid ESO, no API key).
 Set `defaultRegion` explicitly for any other region (`US-TEX-ERCO`,
 `US-NE-ISNE`, …). Each tool call may also pass its own `region`, which
-overrides everything; `ebb_schedule_task` reports a `region_source`
+overrides everything; `schedule_task` reports a `region_source`
 (`request` / `config` / `timezone` / `default`) so you can see which
 rule applied. Non-GB regions may need `EBB_*_API_KEY` env vars for live
 data, otherwise a deterministic mock is used.
 
 ## When does the plugin auto-invoke?
 
-The `ebb_schedule_task` tool description tells the LLM to invoke when
+The `schedule_task` tool description tells the LLM to invoke when
 the user's phrasing signals deferral:
 
 - "do this later" / "by tomorrow" / "tonight" / "overnight"

@@ -29,6 +29,8 @@ const TOOL_NAMES = [
   "update_deadline",
   "cancel_all",
   "set_delivery",
+  "expedite_task",
+  "retry_task",
 ];
 
 function tool(name: string): StubResolvedTool {
@@ -48,7 +50,7 @@ describe("ebb OpenClaw plugin — registration", () => {
     expect(ebbPlugin.name).toMatch(/ebb-ai/);
   });
 
-  it("registers the eight tools, MCP-style names with no ebb_ prefix", () => {
+  it("registers the ten tools, MCP-style names with no ebb_ prefix", () => {
     const names = ebbPlugin.tools.map((t) => t.name).sort();
     expect(names).toEqual([...TOOL_NAMES].sort());
     for (const t of ebbPlugin.tools) {
@@ -280,6 +282,72 @@ describe("ebb OpenClaw plugin — tool execution", () => {
         { dbPath },
       )) as { status: string };
       expect(after.status).toBe("completed");
+    } finally {
+      setLlmBridgeForTest(undefined);
+    }
+  });
+
+  it("expedite_task dispatches a scheduled task immediately", async () => {
+    setLlmBridgeForTest(async () => ({
+      text: "expedited result",
+      provider: "anthropic",
+      model: "gateway-agent-model",
+    }));
+    try {
+      const sched = (await tool("schedule_task").execute(
+        { prompt: "expedite me", deadline: deadlineISO(), region: "GB" },
+        { dbPath },
+      )) as { task_id: string };
+
+      const res = (await tool("expedite_task").execute(
+        { task_id: sched.task_id },
+        { dbPath },
+      )) as { status: string };
+      expect(res.status).toBe("completed");
+
+      const after = (await tool("check_queue_status").execute(
+        { task_id: sched.task_id },
+        { dbPath },
+      )) as { status: string; intensitySource?: string };
+      expect(after.status).toBe("completed");
+      expect(after.intensitySource).toBe("expedited");
+    } finally {
+      setLlmBridgeForTest(undefined);
+    }
+  });
+
+  it("retry_task re-dispatches a failed task", async () => {
+    const sched = (await tool("schedule_task").execute(
+      { prompt: "retry me", deadline: deadlineISO(), region: "GB" },
+      { dbPath },
+    )) as { task_id: string };
+
+    // Drive the task to `failed`: expedite it through a throwing bridge.
+    setLlmBridgeForTest(async () => {
+      throw new Error("simulated dispatch failure");
+    });
+    try {
+      const failedRes = (await tool("expedite_task").execute(
+        { task_id: sched.task_id },
+        { dbPath },
+      )) as { status: string };
+      expect(failedRes.status).toBe("failed");
+    } finally {
+      setLlmBridgeForTest(undefined);
+    }
+
+    // retry_task on a failed task re-dispatches it; a working bridge completes it.
+    setLlmBridgeForTest(async () => ({
+      text: "retry succeeded",
+      provider: "anthropic",
+      model: "gateway-agent-model",
+    }));
+    try {
+      const res = (await tool("retry_task").execute(
+        { task_id: sched.task_id },
+        { dbPath },
+      )) as { status: string };
+      expect(res.status).toBe("completed");
     } finally {
       setLlmBridgeForTest(undefined);
     }
