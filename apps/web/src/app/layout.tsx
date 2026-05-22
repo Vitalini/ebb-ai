@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     template: "%s · ebb-ai",
   },
   description:
-    "Open-source MCP server and CLI that defer non-urgent AI tasks to the cleanest electricity-grid window inside your deadline. Live carbon-intensity map for 7 LLM-provider regions. Apache-2.0.",
+    "Open-source MCP server and CLI that defer non-urgent AI tasks to the cleanest electricity-grid window inside your deadline. Live carbon-intensity map of grid regions across North America, Europe and Asia-Pacific. Apache-2.0.",
   metadataBase: new URL("https://www.ebb-ai.com"),
   alternates: {
     canonical: "https://www.ebb-ai.com",

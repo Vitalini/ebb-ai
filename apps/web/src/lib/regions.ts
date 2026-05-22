@@ -1,24 +1,9 @@
 /**
- * Curated list of regions the dashboard surfaces.
- *
- * The selection mirrors the regions where major US/EU LLM providers run
- * inference workloads:
- *   - US-CAL-CISO   — California ISO, heart of West-Coast cloud
- *                     (us-west-2 AWS, us-central1 GCP variant)
- *   - US-TEX-ERCO   — ERCOT, growing share of AI training capacity
- *   - US-NE-ISNE    — ISO New England, host to several Azure regions
- *   - US-MIDA-PJM   — PJM (mid-Atlantic / Virginia), the biggest US-East
- *                     data-center cluster, where Anthropic + OpenAI lean
- *   - GB            — Great Britain. London is a major EU cloud hub
- *                     (AWS eu-west-2, Azure UK South). Powered by the free
- *                     UK National Grid ESO Carbon Intensity API — the only
- *                     zone with real data when no Electricity Maps key is set.
- *   - FR            — France, nuclear-heavy, where Anthropic Europe and
- *                     Mistral run
- *   - DE            — Germany, large data-center hub, dirtier grid
- *
- * Zone codes match Electricity Maps. Updating this list automatically
- * updates the homepage grid.
+ * Curated list of grid regions the site surfaces — the electricity
+ * grids behind the major US / EU / Asia-Pacific cloud + AI-inference
+ * regions. Zone codes match the Electricity Maps API. The homepage map,
+ * the forecast/plan pickers and visitor geo-detection all derive from
+ * this list, so adding a region here lights it up everywhere.
  */
 
 export interface Region {
@@ -83,6 +68,83 @@ export const REGIONS: Region[] = [
     longName: "Germany (50Hertz / TenneT)",
     provider: "AWS eu-central-1 · Azure West Europe",
     utcOffset: 1,
+  },
+  {
+    zone: "IE",
+    name: "Ireland",
+    longName: "Ireland (EirGrid)",
+    provider: "AWS eu-west-1 · Azure North Europe",
+    utcOffset: 0,
+  },
+  {
+    zone: "NL",
+    name: "Netherlands",
+    longName: "Netherlands (TenneT NL)",
+    provider: "Google europe-west4 · Azure West Europe",
+    utcOffset: 1,
+  },
+  {
+    zone: "ES",
+    name: "Spain",
+    longName: "Spain (Red Eléctrica)",
+    provider: "AWS eu-south-2 · GCP europe-southwest1",
+    utcOffset: 1,
+  },
+  {
+    zone: "BE",
+    name: "Belgium",
+    longName: "Belgium (Elia)",
+    provider: "Google europe-west1",
+    utcOffset: 1,
+  },
+  {
+    zone: "AT",
+    name: "Austria",
+    longName: "Austria (APG)",
+    provider: "Central-EU low-carbon grid",
+    utcOffset: 1,
+  },
+  {
+    zone: "PL",
+    name: "Poland",
+    longName: "Poland (PSE)",
+    provider: "Google europe-central2 · Azure Poland Central",
+    utcOffset: 1,
+  },
+  {
+    zone: "JP-TK",
+    name: "Japan · Tokyo",
+    longName: "Japan — Tokyo (TEPCO)",
+    provider: "AWS ap-northeast-1 · Azure Japan East",
+    utcOffset: 9,
+  },
+  {
+    zone: "KR",
+    name: "South Korea",
+    longName: "South Korea (KPX)",
+    provider: "AWS ap-northeast-2 · Azure Korea Central",
+    utcOffset: 9,
+  },
+  {
+    zone: "SG",
+    name: "Singapore",
+    longName: "Singapore (EMA)",
+    provider: "AWS ap-southeast-1 · GCP asia-southeast1",
+    utcOffset: 8,
+  },
+  {
+    zone: "AU-NSW",
+    name: "Australia · NSW",
+    longName: "Australia — New South Wales (AEMO)",
+    provider: "AWS ap-southeast-2 · Azure Australia East",
+    utcOffset: 10,
+  },
+  {
+    zone: "CA-ON",
+    name: "Canada · Ontario",
+    longName: "Canada — Ontario (IESO)",
+    provider: "Azure Canada Central · GCP nA-northeast2",
+    utcOffset: -5,
   },
 ];
 

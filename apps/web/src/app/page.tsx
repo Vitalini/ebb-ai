@@ -25,7 +25,7 @@ const TILES: Array<{
     href: "/map",
     Icon: Globe,
     title: "Live carbon map",
-    body: "Seven LLM-provider grid regions, real-time data. Click any region for the 72-hour forecast.",
+    body: "Grid regions across North America, Europe and Asia-Pacific, real-time data. Click any region for the 72-hour forecast.",
   },
   {
     href: "/plan",
@@ -172,7 +172,7 @@ function TilesBlock() {
 
 function ValueRow() {
   const items: Array<{ label: string; value: string }> = [
-    { label: "grid regions", value: "7" },
+    { label: "grid regions", value: "18" },
     { label: "live carbon feeds", value: "4" },
     { label: "carbon forecast", value: "72h" },
     { label: "intensity bands", value: "5" },

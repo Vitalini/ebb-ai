@@ -182,7 +182,7 @@ export default function AboutPage() {
             </p>
             <p className="mt-1 font-semibold text-fg">Carbon-intensity map</p>
             <p className="mt-1 text-sm text-fg-muted">
-              Real numbers for 7 grid regions, updated every few minutes.
+              Real numbers for 18 grid regions, updated every few minutes.
             </p>
           </Link>
           <Link
@@ -267,7 +267,8 @@ export default function AboutPage() {
           regions with under 11 % max-bucket concentration, the SQLite ledger
           survives process restart, and per-region routing is auto-wired. Live
           carbon feeds (UK National Grid ESO, US EIA, ENTSO-E, Electricity
-          Maps) run on 7 of 7 regions; no region falls back to the mock curve.
+          Maps) back every region on the map; a feed outage falls back to a
+          clearly-labelled mock, never a silent one.
         </p>
         <p className="leading-relaxed text-fg-muted">
           The public surface is still pre-1.0: API shapes can change in minor

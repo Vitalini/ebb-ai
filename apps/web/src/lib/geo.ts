@@ -28,12 +28,32 @@ const US_STATE_ZONE: Record<string, string> = {
   // every other US state falls through to PJM (the largest US-East grid)
 };
 
-/** Non-US country → nearest covered grid. */
+/** Non-US country → nearest covered grid zone. */
 const COUNTRY_ZONE: Record<string, string> = {
-  GB: "GB", IE: "GB",
-  FR: "FR", BE: "FR", LU: "FR", ES: "FR", PT: "FR", IT: "FR", MC: "FR",
-  DE: "DE", AT: "DE", CH: "DE", NL: "DE", PL: "DE", CZ: "DE", DK: "DE", SE: "DE",
-  CA: "US-MIDA-PJM", MX: "US-TEX-ERCO",
+  // British Isles
+  GB: "GB", IE: "IE",
+  // France · Italy (no IT zone yet → nearest is FR)
+  FR: "FR", MC: "FR", IT: "FR",
+  // Germany & Alpine
+  DE: "DE", AT: "AT", CH: "AT", LI: "AT",
+  // Low Countries
+  NL: "NL", BE: "BE", LU: "BE",
+  // Iberia
+  ES: "ES", PT: "ES", AD: "ES",
+  // Central & Eastern Europe → Poland
+  PL: "PL", CZ: "PL", SK: "PL", HU: "PL", SI: "PL", HR: "PL", RO: "PL",
+  BG: "PL", RS: "PL", LT: "PL", LV: "PL", EE: "PL", UA: "PL", GR: "PL",
+  // Nordics → Netherlands (nearest North-Sea grid we cover)
+  SE: "NL", NO: "NL", DK: "NL", FI: "NL", IS: "NL",
+  // East Asia
+  JP: "JP-TK", TW: "JP-TK", KR: "KR",
+  // South & South-East Asia → Singapore
+  SG: "SG", MY: "SG", ID: "SG", TH: "SG", VN: "SG", PH: "SG", HK: "SG",
+  IN: "SG", BD: "SG", PK: "SG", CN: "SG",
+  // Oceania
+  AU: "AU-NSW", NZ: "AU-NSW",
+  // North America (non-US)
+  CA: "CA-ON", MX: "US-TEX-ERCO",
 };
 
 function pick(zone: string): Region {

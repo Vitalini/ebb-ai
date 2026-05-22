@@ -196,7 +196,7 @@ ebb receipts show <task_id>`}
             <Link href="/map" className="text-accent hover:underline">
               /map
             </Link>{" "}
-            — live carbon-intensity map (7 regions).
+            — live carbon-intensity map (18 regions).
           </li>
         </ul>
       </footer>

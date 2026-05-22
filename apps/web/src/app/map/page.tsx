@@ -53,9 +53,10 @@ export default async function MapPage() {
           Grid carbon-intensity where AI compute runs.
         </h1>
         <p className="max-w-2xl text-base text-fg-muted">
-          Seven regions hosting the major LLM providers&apos; inference
-          workloads. Click any card for the 72-hour forecast and a
-          cost-and-carbon best-window finder.
+          Grid regions across North America, Europe and Asia-Pacific that
+          host the major LLM providers&apos; inference workloads. Click any
+          card for the 72-hour forecast and a cost-and-carbon best-window
+          finder.
         </p>
         <dl className="grid max-w-xl grid-cols-3 gap-4 pt-2 sm:gap-8">
           <Kpi label="regions tracked" value={total.toString()} />
