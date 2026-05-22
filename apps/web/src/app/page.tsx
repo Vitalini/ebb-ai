@@ -1,8 +1,10 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import { BarChart3, BookOpen, CalendarClock, Globe } from "lucide-react";
 import { HowItWorksViz } from "@/components/how-it-works-viz";
+import { GridGreeting, GridGreetingSkeleton } from "@/components/grid-greeting";
 import { InstallPicker } from "@/components/install-picker";
 
 export const metadata: Metadata = {
@@ -49,6 +51,9 @@ export default function HomePage() {
   return (
     <div className="space-y-14">
       <Hero />
+      <Suspense fallback={<GridGreetingSkeleton />}>
+        <GridGreeting />
+      </Suspense>
       <InstallBlock />
       <HowItWorksViz />
       <TilesBlock />
