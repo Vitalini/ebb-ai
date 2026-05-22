@@ -239,132 +239,136 @@ export function HowItWorksViz() {
           </g>
 
           <style>{`
+            /* One 15s loop with two deliberate dwells:
+               · 5%–22%   — task RECEIVED, parked at the dirty peak (~2.5s)
+               · ~52%–88% — task EXECUTED, the four wins held (~5.4s)
+               The ride and reset bridge the two pauses. */
             .ebb-viz text { font-family: ui-monospace, SFMono-Regular, monospace; dominant-baseline: middle; }
             .ebb-axis { font-size: 10px; letter-spacing: 0.5px; fill: #5b6675; }
-            .ebb-axis-clean { animation: ebbAxisClean 13s ease-in-out infinite; }
-            @keyframes ebbAxisClean { 0%,40%{fill:#5b6675;} 56%,90%{fill:#34d399;} 100%{fill:#5b6675;} }
+            .ebb-axis-clean { animation: ebbAxisClean 15s ease-in-out infinite; }
+            @keyframes ebbAxisClean { 0%,44%{fill:#5b6675;} 54%,86%{fill:#34d399;} 100%{fill:#5b6675;} }
 
             .ebb-status { font-size: 10px; letter-spacing: 0.6px; }
-            .ebb-status-peak  { fill: #fb7185; animation: ebbFadePeak 13s infinite; }
-            .ebb-status-clean { fill: #34d399; opacity: 0; animation: ebbFadeClean 13s infinite; }
-            .ebb-status-led   { fill: #fb7185; animation: ebbLed 13s infinite; }
-            @keyframes ebbFadePeak  { 0%,40%{opacity:1;} 50%,94%{opacity:0;} 100%{opacity:1;} }
-            @keyframes ebbFadeClean { 0%,40%{opacity:0;} 50%,94%{opacity:1;} 100%{opacity:0;} }
-            @keyframes ebbLed { 0%,40%{fill:#fb7185;} 52%,94%{fill:#34d399;} 100%{fill:#fb7185;} }
+            .ebb-status-peak  { fill: #fb7185; animation: ebbFadePeak 15s infinite; }
+            .ebb-status-clean { fill: #34d399; opacity: 0; animation: ebbFadeClean 15s infinite; }
+            .ebb-status-led   { fill: #fb7185; animation: ebbLed 15s infinite; }
+            @keyframes ebbFadePeak  { 0%,40%{opacity:1;} 47%,92%{opacity:0;} 100%{opacity:1;} }
+            @keyframes ebbFadeClean { 0%,40%{opacity:0;} 47%,92%{opacity:1;} 100%{opacity:0;} }
+            @keyframes ebbLed { 0%,40%{fill:#fb7185;} 47%,92%{fill:#34d399;} 100%{fill:#fb7185;} }
 
-            .ebb-curve-glow { opacity: 0.3; animation: ebbCurveGlow 13s ease-in-out infinite; }
-            @keyframes ebbCurveGlow { 0%,42%{opacity:0.24;} 60%,88%{opacity:0.58;} 100%{opacity:0.24;} }
+            .ebb-curve-glow { opacity: 0.3; animation: ebbCurveGlow 15s ease-in-out infinite; }
+            @keyframes ebbCurveGlow { 0%,44%{opacity:0.24;} 56%,86%{opacity:0.58;} 100%{opacity:0.24;} }
 
             .ebb-peak-pulse { animation: ebbPeakPulse 2.6s ease-in-out infinite; }
             @keyframes ebbPeakPulse { 0%,100%{r:9px;opacity:0.5;} 50%{r:15px;opacity:0.05;} }
 
-            .ebb-trough-halo { opacity: 0; animation: ebbTroughHalo 13s ease-in-out infinite; }
+            .ebb-trough-halo { opacity: 0; animation: ebbTroughHalo 15s ease-in-out infinite; }
             @keyframes ebbTroughHalo {
-              0%,46%{opacity:0;} 56%{opacity:0.95;} 64%{opacity:0.5;}
-              72%,88%{opacity:0.7;} 100%{opacity:0;}
+              0%,47%{opacity:0;} 52%{opacity:0.95;} 58%{opacity:0.55;}
+              64%,86%{opacity:0.7;} 92%,100%{opacity:0;}
             }
             .ebb-burst { opacity: 0; }
-            .ebb-burst-1 { animation: ebbBurst 13s ease-out infinite; }
-            .ebb-burst-2 { animation: ebbBurst 13s ease-out infinite; animation-delay: 0.3s; }
+            .ebb-burst-1 { animation: ebbBurst 15s ease-out infinite; }
+            .ebb-burst-2 { animation: ebbBurst 15s ease-out infinite; animation-delay: 0.3s; }
             @keyframes ebbBurst {
-              0%,50%{r:6px;opacity:0;} 54%{r:6px;opacity:0.9;}
-              63%{r:58px;opacity:0;} 100%{r:58px;opacity:0;}
+              0%,48%{r:6px;opacity:0;} 52%{r:6px;opacity:0.9;}
+              60%{r:58px;opacity:0;} 100%{r:58px;opacity:0;}
             }
 
-            /* connectors — dim base, lit overlay gated to the post-dispatch phase */
+            /* connectors — dim base, lit overlay held through the executed dwell */
             .ebb-conn { opacity: 0.16; }
-            .ebb-conn-lit { opacity: 0; animation: ebbConnLit 13s ease-out infinite; }
+            .ebb-conn-lit { opacity: 0; animation: ebbConnLit 15s ease-out infinite; }
             @keyframes ebbConnLit {
-              0%,50%{opacity:0;} 56%{opacity:0.5;} 72%,90%{opacity:0.34;} 100%{opacity:0;}
+              0%,49%{opacity:0;} 54%{opacity:0.5;} 62%,86%{opacity:0.34;} 92%,100%{opacity:0;}
             }
 
             /* flowing particles ride the connector via offset-path */
             .ebb-dot {
               offset-distance: 0%;
-              animation: ebbFlow 1.65s linear infinite, ebbDotGate 13s infinite;
+              animation: ebbFlow 1.65s linear infinite, ebbDotGate 15s infinite;
             }
             @keyframes ebbFlow { to { offset-distance: 100%; } }
             @keyframes ebbDotGate {
-              0%,50%{opacity:0;} 54%,88%{opacity:1;} 93%,100%{opacity:0;}
+              0%,50%{opacity:0;} 54%,86%{opacity:1;} 90%,100%{opacity:0;}
             }
 
             /* landing nodes */
-            .ebb-node-halo { opacity: 0; animation: ebbNodeHalo 13s ease-out infinite; }
-            .ebb-node-ring { opacity: 0.2; animation: ebbNodeRing 13s ease-out infinite; }
-            .ebb-node-core { opacity: 0.25; animation: ebbNodeCore 13s ease-out infinite; }
+            .ebb-node-halo { opacity: 0; animation: ebbNodeHalo 15s ease-out infinite; }
+            .ebb-node-ring { opacity: 0.2; animation: ebbNodeRing 15s ease-out infinite; }
+            .ebb-node-core { opacity: 0.25; animation: ebbNodeCore 15s ease-out infinite; }
             @keyframes ebbNodeHalo {
-              0%,58%{opacity:0;} 66%{opacity:0.4;} 78%,90%{opacity:0.26;} 100%{opacity:0;}
+              0%,53%{opacity:0;} 61%{opacity:0.4;} 72%,86%{opacity:0.26;} 92%,100%{opacity:0;}
             }
             @keyframes ebbNodeRing {
-              0%,58%{opacity:0.2;} 66%{opacity:1;} 90%{opacity:0.85;} 100%{opacity:0.2;}
+              0%,52%{opacity:0.2;} 60%{opacity:1;} 86%{opacity:0.85;} 92%,100%{opacity:0.2;}
             }
             @keyframes ebbNodeCore {
-              0%,58%{opacity:0.25;r:3.6px;} 65%{opacity:1;r:5px;}
-              78%,90%{opacity:1;r:3.9px;} 100%{opacity:0.25;r:3.6px;}
+              0%,52%{opacity:0.25;r:3.6px;} 59%{opacity:1;r:5px;}
+              70%,86%{opacity:1;r:3.9px;} 92%,100%{opacity:0.25;r:3.6px;}
             }
 
-            /* the task chip — glides the real curve via CSS Motion Path,
-               so the ride is one continuous bezier sweep, never stepped */
+            /* the task chip — glides the real curve via CSS Motion Path
+               (one continuous bezier sweep), and dwells at peak then trough */
             .ebb-task {
               offset-path: path("M220 74 C 300 65 370 195 440 210");
               offset-rotate: 0deg;
               offset-distance: 0%;
-              animation: ebbTask 13s linear infinite;
+              animation: ebbTask 15s linear infinite;
             }
             @keyframes ebbTask {
               0%   { offset-distance: 0%;   opacity: 0; transform: scale(0.55); }
-              4%   { offset-distance: 0%;   opacity: 1; transform: scale(1); }
-              16%  { offset-distance: 0%;   opacity: 1; transform: scale(1);
+              5%   { offset-distance: 0%;   opacity: 1; transform: scale(1); }
+              22%  { offset-distance: 0%;   opacity: 1; transform: scale(1);
                      animation-timing-function: cubic-bezier(0.45,0,0.55,1); }
-              52%  { offset-distance: 100%; opacity: 1; transform: scale(1); }
-              56%  { offset-distance: 100%; opacity: 1; transform: scale(1.08); }
-              59%  { offset-distance: 100%; opacity: 0; transform: scale(0.4); }
+              48%  { offset-distance: 100%; opacity: 1; transform: scale(1); }
+              52%  { offset-distance: 100%; opacity: 1; transform: scale(1.08); }
+              56%  { offset-distance: 100%; opacity: 0; transform: scale(0.4); }
               100% { offset-distance: 100%; opacity: 0; transform: scale(0.55); }
             }
-            .ebb-chip       { stroke: #fbbf24; stroke-width: 1.6; animation: ebbChipStroke 13s infinite; }
-            .ebb-chip-shadow{ fill: #fbbf24; opacity: 0.22; animation: ebbChipStroke 13s infinite; }
-            .ebb-chip-dot   { fill: #fbbf24; animation: ebbChipStroke 13s infinite; }
+            .ebb-chip       { stroke: #fbbf24; stroke-width: 1.6; animation: ebbChipStroke 15s infinite; }
+            .ebb-chip-shadow{ fill: #fbbf24; opacity: 0.22; animation: ebbChipStroke 15s infinite; }
+            .ebb-chip-dot   { fill: #fbbf24; animation: ebbChipStroke 15s infinite; }
             .ebb-chip-label { font-size: 11.5px; fill: #e6e8ee; }
             @keyframes ebbChipStroke {
               0%,30%   { stroke: #fbbf24; fill: #fbbf24; }
-              48%,100% { stroke: #34d399; fill: #34d399; }
+              46%,100% { stroke: #34d399; fill: #34d399; }
             }
 
             .ebb-result {
               opacity: 0;
               transform: translate(440px,210px) scale(0.3);
-              animation: ebbResult 13s ease-out infinite;
+              animation: ebbResult 15s ease-out infinite;
             }
             @keyframes ebbResult {
-              0%,57%  { opacity: 0; transform: translate(440px,210px) scale(0.3); }
-              62%     { opacity: 1; transform: translate(440px,210px) scale(1.16); }
-              66%,88% { opacity: 1; transform: translate(440px,210px) scale(1); }
-              96%,100%{ opacity: 0; transform: translate(440px,210px) scale(1); }
+              0%,52%  { opacity: 0; transform: translate(440px,210px) scale(0.3); }
+              57%     { opacity: 1; transform: translate(440px,210px) scale(1.16); }
+              61%,86% { opacity: 1; transform: translate(440px,210px) scale(1); }
+              93%,100%{ opacity: 0; transform: translate(440px,210px) scale(1); }
             }
 
-            /* the four win-cards charge + glow as the streams land */
+            /* the four win-cards charge + glow, held through the executed dwell */
             .ebb-card-bar { transform: scaleX(0); transform-origin: left; }
-            .ebb-card-0 .ebb-card-bar { animation: ebbCharge 13s ease-out infinite; }
-            .ebb-card-1 .ebb-card-bar { animation: ebbCharge 13s ease-out infinite; animation-delay: 0.05s; }
-            .ebb-card-2 .ebb-card-bar { animation: ebbCharge 13s ease-out infinite; animation-delay: 0.1s; }
-            .ebb-card-3 .ebb-card-bar { animation: ebbCharge 13s ease-out infinite; animation-delay: 0.15s; }
+            .ebb-card-0 .ebb-card-bar { animation: ebbCharge 15s ease-out infinite; }
+            .ebb-card-1 .ebb-card-bar { animation: ebbCharge 15s ease-out infinite; animation-delay: 0.05s; }
+            .ebb-card-2 .ebb-card-bar { animation: ebbCharge 15s ease-out infinite; animation-delay: 0.1s; }
+            .ebb-card-3 .ebb-card-bar { animation: ebbCharge 15s ease-out infinite; animation-delay: 0.15s; }
             @keyframes ebbCharge {
-              0%,58%  { transform: scaleX(0); }
-              72%,93% { transform: scaleX(1); }
+              0%,54%  { transform: scaleX(0); }
+              66%,88% { transform: scaleX(1); }
               100%    { transform: scaleX(0); }
             }
             .ebb-card-glow { opacity: 0; }
             .ebb-card-0 .ebb-card-glow,
             .ebb-card-1 .ebb-card-glow,
             .ebb-card-2 .ebb-card-glow,
-            .ebb-card-3 .ebb-card-glow { animation: ebbCardGlow 13s ease-out infinite; }
+            .ebb-card-3 .ebb-card-glow { animation: ebbCardGlow 15s ease-out infinite; }
             .ebb-card-1 .ebb-card-glow { animation-delay: 0.05s; }
             .ebb-card-2 .ebb-card-glow { animation-delay: 0.1s; }
             .ebb-card-3 .ebb-card-glow { animation-delay: 0.15s; }
             @keyframes ebbCardGlow {
-              0%,59%  { opacity: 0; }
-              67%     { opacity: 1; }
-              80%,90% { opacity: 0.5; }
+              0%,55%  { opacity: 0; }
+              63%     { opacity: 1; }
+              74%,86% { opacity: 0.5; }
               100%    { opacity: 0; }
             }
 
