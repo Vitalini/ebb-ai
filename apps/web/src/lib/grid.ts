@@ -12,6 +12,8 @@
  *     Electricity Maps (when key is set) → mock fallback.
  */
 
+import { unstable_cache } from "next/cache";
+
 import type {
   CarbonBand,
   GridForecast,
@@ -552,6 +554,19 @@ export async function fetchGridForecast(
   }
   return mockGridForecast(region, hours);
 }
+
+/**
+ * Cached `fetchGridForecast` — keyed by (zone, hours), refreshed every
+ * 5 minutes. Grid data is hourly-granularity, so a 5-min cache is
+ * imperceptible while it caps upstream feed calls (Electricity Maps /
+ * EIA) regardless of page traffic. Use this on pages rendered per
+ * request — the home greeting and the multi-region map.
+ */
+export const getGridForecast = unstable_cache(
+  (region: string, hours: number) => fetchGridForecast(region, hours),
+  ["grid-forecast-v1"],
+  { revalidate: 300 },
+);
 
 export interface BestWindow {
   entry: GridForecastEntry;

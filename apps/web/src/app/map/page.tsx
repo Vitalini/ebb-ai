@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { RegionCard } from "@/components/region-card";
-import { fetchGridForecast } from "@/lib/grid";
+import { getGridForecast } from "@/lib/grid";
 import { REGIONS } from "@/lib/regions";
 import type { GridForecast } from "@/lib/types";
 
@@ -16,7 +16,7 @@ export const revalidate = 0;
 
 async function loadForecast(zone: string): Promise<GridForecast | null> {
   try {
-    return await fetchGridForecast(zone, 24);
+    return await getGridForecast(zone, 24);
   } catch {
     return null;
   }

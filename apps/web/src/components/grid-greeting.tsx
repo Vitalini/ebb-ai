@@ -11,7 +11,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { ArrowRight, MapPin } from "lucide-react";
 
-import { fetchGridForecast } from "@/lib/grid";
+import { getGridForecast } from "@/lib/grid";
 import { resolveVisitorRegion } from "@/lib/geo";
 import type { CarbonBand } from "@/lib/types";
 
@@ -31,7 +31,7 @@ export function GridGreetingSkeleton() {
 
 export async function GridGreeting() {
   const { region, source } = resolveVisitorRegion(await headers());
-  const forecast = await fetchGridForecast(region.zone, 24).catch(() => null);
+  const forecast = await getGridForecast(region.zone, 24).catch(() => null);
   const live =
     forecast && forecast.source !== "mock" && forecast.entries.length > 0
       ? forecast
