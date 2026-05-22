@@ -303,23 +303,23 @@ export function HowItWorksViz() {
               78%,90%{opacity:1;r:3.9px;} 100%{opacity:0.25;r:3.6px;}
             }
 
-            /* the task chip — translate waypoints trace the curve, peak → trough */
+            /* the task chip — glides the real curve via CSS Motion Path,
+               so the ride is one continuous bezier sweep, never stepped */
             .ebb-task {
-              transform: translate(220px,74px);
-              animation: ebbTask 13s cubic-bezier(0.65,0,0.35,1) infinite;
+              offset-path: path("M220 74 C 300 65 370 195 440 210");
+              offset-rotate: 0deg;
+              offset-distance: 0%;
+              animation: ebbTask 13s linear infinite;
             }
             @keyframes ebbTask {
-              0%   { transform: translate(220px,74px) scale(0.55); opacity: 0; }
-              4%   { transform: translate(220px,74px) scale(1);    opacity: 1; }
-              16%  { transform: translate(220px,74px) scale(1);    opacity: 1; }
-              23%  { transform: translate(267px,83px) scale(1);    opacity: 1; }
-              30%  { transform: translate(312px,114px) scale(1);   opacity: 1; }
-              38%  { transform: translate(355px,153px) scale(1);   opacity: 1; }
-              45%  { transform: translate(398px,189px) scale(1);   opacity: 1; }
-              52%  { transform: translate(440px,210px) scale(1);   opacity: 1; }
-              56%  { transform: translate(440px,210px) scale(1.06);opacity: 1; }
-              59%  { transform: translate(440px,210px) scale(0.4); opacity: 0; }
-              100% { transform: translate(220px,74px) scale(0.55); opacity: 0; }
+              0%   { offset-distance: 0%;   opacity: 0; transform: scale(0.55); }
+              4%   { offset-distance: 0%;   opacity: 1; transform: scale(1); }
+              16%  { offset-distance: 0%;   opacity: 1; transform: scale(1);
+                     animation-timing-function: cubic-bezier(0.45,0,0.55,1); }
+              52%  { offset-distance: 100%; opacity: 1; transform: scale(1); }
+              56%  { offset-distance: 100%; opacity: 1; transform: scale(1.08); }
+              59%  { offset-distance: 100%; opacity: 0; transform: scale(0.4); }
+              100% { offset-distance: 100%; opacity: 0; transform: scale(0.55); }
             }
             .ebb-chip       { stroke: #fbbf24; stroke-width: 1.6; animation: ebbChipStroke 13s infinite; }
             .ebb-chip-shadow{ fill: #fbbf24; opacity: 0.22; animation: ebbChipStroke 13s infinite; }
@@ -371,7 +371,7 @@ export function HowItWorksViz() {
             @media (prefers-reduced-motion: reduce) {
               .ebb-viz *, .ebb-card-0, .ebb-card-1, .ebb-card-2, .ebb-card-3,
               .ebb-card-bar, .ebb-card-glow { animation: none !important; }
-              .ebb-task { transform: translate(440px,210px) scale(1); opacity: 1; }
+              .ebb-task { offset-distance: 100%; transform: scale(1); opacity: 1; }
               .ebb-chip, .ebb-chip-dot, .ebb-chip-shadow { stroke: #34d399; fill: #34d399; }
               .ebb-trough-halo { opacity: 0.6; }
               .ebb-curve-glow { opacity: 0.5; }
