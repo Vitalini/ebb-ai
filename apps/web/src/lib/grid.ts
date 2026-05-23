@@ -225,6 +225,10 @@ const EIA_RESPONDENT_BY_ZONE: Record<string, string> = {
   "US-TEX-ERCO": "ERCO",
   "US-NE-ISNE": "ISNE",
   "US-MIDA-PJM": "PJM",
+  "US-NY-NYIS": "NYIS",
+  "US-MIDW-MISO": "MISO",
+  "US-NW-BPAT": "BPAT",
+  "US-FLA-FPL": "FPL",
 };
 
 const EIA_FUEL_FACTORS: Record<string, number> = {

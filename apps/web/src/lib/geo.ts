@@ -18,13 +18,27 @@ export type VisitorRegion = {
   country?: string;
 };
 
-/** US state / subdivision code → nearest ISO ebb-ai covers. */
+/** US state / subdivision code → nearest covered grid zone. */
 const US_STATE_ZONE: Record<string, string> = {
-  CA: "US-CAL-CISO", NV: "US-CAL-CISO", OR: "US-CAL-CISO", WA: "US-CAL-CISO",
-  AZ: "US-CAL-CISO", ID: "US-CAL-CISO", UT: "US-CAL-CISO", HI: "US-CAL-CISO",
+  // CAISO (West / desert)
+  CA: "US-CAL-CISO", NV: "US-CAL-CISO", AZ: "US-CAL-CISO", UT: "US-CAL-CISO", HI: "US-CAL-CISO",
+  // BPAT (Pacific Northwest)
+  OR: "US-NW-BPAT", WA: "US-NW-BPAT", ID: "US-NW-BPAT", MT: "US-NW-BPAT", WY: "US-NW-BPAT",
+  // ERCOT
   TX: "US-TEX-ERCO",
+  // ISO New England
   ME: "US-NE-ISNE", NH: "US-NE-ISNE", VT: "US-NE-ISNE", MA: "US-NE-ISNE",
   RI: "US-NE-ISNE", CT: "US-NE-ISNE",
+  // NYISO
+  NY: "US-NY-NYIS",
+  // MISO (Midwest)
+  IL: "US-MIDW-MISO", IN: "US-MIDW-MISO", IA: "US-MIDW-MISO", MN: "US-MIDW-MISO",
+  MO: "US-MIDW-MISO", WI: "US-MIDW-MISO", MI: "US-MIDW-MISO", AR: "US-MIDW-MISO",
+  MS: "US-MIDW-MISO", LA: "US-MIDW-MISO", ND: "US-MIDW-MISO", SD: "US-MIDW-MISO",
+  KY: "US-MIDW-MISO",
+  // FPL / Southeast
+  FL: "US-FLA-FPL", GA: "US-FLA-FPL", SC: "US-FLA-FPL", AL: "US-FLA-FPL",
+  NC: "US-FLA-FPL", TN: "US-FLA-FPL",
   // every other US state falls through to PJM (the largest US-East grid)
 };
 
@@ -32,8 +46,10 @@ const US_STATE_ZONE: Record<string, string> = {
 const COUNTRY_ZONE: Record<string, string> = {
   // British Isles
   GB: "GB", IE: "IE",
-  // France · Italy (no IT zone yet → nearest is FR)
-  FR: "FR", MC: "FR", IT: "FR",
+  // France
+  FR: "FR", MC: "FR",
+  // Italy
+  IT: "IT-NO", SM: "IT-NO", VA: "IT-NO", MT: "IT-NO",
   // Germany & Alpine
   DE: "DE", AT: "AT", CH: "AT", LI: "AT",
   // Low Countries
@@ -43,17 +59,24 @@ const COUNTRY_ZONE: Record<string, string> = {
   // Central & Eastern Europe → Poland
   PL: "PL", CZ: "PL", SK: "PL", HU: "PL", SI: "PL", HR: "PL", RO: "PL",
   BG: "PL", RS: "PL", LT: "PL", LV: "PL", EE: "PL", UA: "PL", GR: "PL",
-  // Nordics → Netherlands (nearest North-Sea grid we cover)
-  SE: "NL", NO: "NL", DK: "NL", FI: "NL", IS: "NL",
+  // Nordics (own zones now)
+  SE: "SE-SE3", NO: "NO-NO1", DK: "DK-DK1", FI: "FI", IS: "SE-SE3",
   // East Asia
   JP: "JP-TK", TW: "JP-TK", KR: "KR",
-  // South & South-East Asia → Singapore
+  // South Asia → India (Mumbai)
+  IN: "IN-WE", BD: "IN-WE", PK: "IN-WE", LK: "IN-WE", NP: "IN-WE",
+  // South-East Asia & Greater China → Singapore
   SG: "SG", MY: "SG", ID: "SG", TH: "SG", VN: "SG", PH: "SG", HK: "SG",
-  IN: "SG", BD: "SG", PK: "SG", CN: "SG",
+  CN: "SG", MO: "SG", BN: "SG", KH: "SG", LA: "SG", MM: "SG",
   // Oceania
-  AU: "AU-NSW", NZ: "AU-NSW",
+  AU: "AU-NSW", NZ: "NZ", FJ: "NZ", PG: "AU-NSW",
   // North America (non-US)
   CA: "CA-ON", MX: "US-TEX-ERCO",
+  // Sub-Saharan Africa → South Africa
+  ZA: "ZA", NA: "ZA", BW: "ZA", ZW: "ZA", MZ: "ZA", SZ: "ZA", LS: "ZA",
+  // Middle East & North Africa → UAE
+  AE: "AE", SA: "AE", QA: "AE", KW: "AE", OM: "AE", BH: "AE",
+  IL: "AE", JO: "AE", LB: "AE", EG: "AE", TR: "AE",
 };
 
 function pick(zone: string): Region {

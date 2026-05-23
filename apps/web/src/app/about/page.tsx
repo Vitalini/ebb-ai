@@ -182,7 +182,7 @@ export default function AboutPage() {
             </p>
             <p className="mt-1 font-semibold text-fg">Carbon-intensity map</p>
             <p className="mt-1 text-sm text-fg-muted">
-              Real numbers for 18 grid regions, updated every few minutes.
+              Real numbers for 31 grid regions, updated every few minutes.
             </p>
           </Link>
           <Link

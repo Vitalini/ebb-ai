@@ -172,7 +172,7 @@ function TilesBlock() {
 
 function ValueRow() {
   const items: Array<{ label: string; value: string }> = [
-    { label: "grid regions", value: "18" },
+    { label: "grid regions", value: "31" },
     { label: "live carbon feeds", value: "4" },
     { label: "carbon forecast", value: "72h" },
     { label: "intensity bands", value: "5" },
