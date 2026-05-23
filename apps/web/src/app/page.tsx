@@ -178,7 +178,7 @@ function ValueRow() {
     { label: "intensity bands", value: "5" },
   ];
   return (
-    <section className="grid grid-cols-2 gap-3 rounded-xl border border-rule bg-bg-elev px-5 py-5 sm:grid-cols-4">
+    <dl className="grid grid-cols-2 gap-3 rounded-xl border border-rule bg-bg-elev px-5 py-5 sm:grid-cols-4">
       {items.map((it) => (
         <div key={it.label} className="text-center sm:text-left">
           <dt className="font-mono text-[10px] uppercase tracking-wider text-fg-dim">
@@ -189,6 +189,6 @@ function ValueRow() {
           </dd>
         </div>
       ))}
-    </section>
+    </dl>
   );
 }
