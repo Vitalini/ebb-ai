@@ -1,7 +1,8 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
-import { RegionCard } from "@/components/region-card";
+import { RegionCard, RegionCardSkeleton } from "@/components/region-card";
 import { getGridForecast } from "@/lib/grid";
-import { REGIONS } from "@/lib/regions";
+import { REGIONS, type Region } from "@/lib/regions";
 import type { GridForecast } from "@/lib/types";
 
 export const metadata: Metadata = {
@@ -11,8 +12,12 @@ export const metadata: Metadata = {
   alternates: { canonical: "https://www.ebb-ai.com/map" },
 };
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+// ISR: regenerate at most every 5 min. The inner grid feeds are
+// shielded by unstable_cache (in @/lib/grid), so the page render is
+// no longer perceived as containing a `no-store` fetch — ISR is
+// compatible. Per-card data is also streamed with <Suspense>, so a
+// cold-cache visit still paints the shell + skeletons instantly.
+export const revalidate = 300;
 
 async function loadForecast(zone: string): Promise<GridForecast | null> {
   try {
@@ -22,14 +27,61 @@ async function loadForecast(zone: string): Promise<GridForecast | null> {
   }
 }
 
-export default async function MapPage() {
-  const forecasts = await Promise.all(
-    REGIONS.map(async (r) => ({
-      region: r,
-      forecast: await loadForecast(r.zone),
-    })),
-  );
+export default function MapPage() {
+  return (
+    <div className="space-y-12">
+      <section className="space-y-4">
+        <p className="font-mono text-xs uppercase tracking-wider text-accent">live map</p>
+        <h1 className="max-w-3xl text-3xl font-extrabold leading-[1.1] tracking-tight text-fg sm:text-4xl">
+          Grid carbon-intensity where AI compute runs.
+        </h1>
+        <p className="max-w-2xl text-base text-fg-muted">
+          Grid regions across North America, Europe and Asia-Pacific that
+          host the major LLM providers&apos; inference workloads. Click any
+          card for the 72-hour forecast and a cost-and-carbon best-window
+          finder.
+        </p>
+        <Suspense fallback={<KpiStripSkeleton />}>
+          <KpiStrip />
+        </Suspense>
+      </section>
 
+      <section>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {REGIONS.map((region) => (
+            <Suspense
+              key={region.zone}
+              fallback={<RegionCardSkeleton region={region} />}
+            >
+              <RegionCardAsync region={region} />
+            </Suspense>
+          ))}
+        </div>
+      </section>
+
+      <Methodology />
+    </div>
+  );
+}
+
+/**
+ * Per-region async server component. Each card fetches its own forecast
+ * independently — the slowest region never blocks the page or the
+ * other cards.
+ */
+async function RegionCardAsync({ region }: { region: Region }) {
+  const forecast = await loadForecast(region.zone);
+  return <RegionCard region={region} forecast={forecast} />;
+}
+
+/**
+ * Live KPI strip — needs every region's forecast, so it streams in
+ * inside its own <Suspense> boundary instead of blocking the page.
+ */
+async function KpiStrip() {
+  const forecasts = await Promise.all(
+    REGIONS.map(async (r) => ({ region: r, forecast: await loadForecast(r.zone) })),
+  );
   const live = forecasts.filter(
     (f) =>
       f.forecast?.source === "electricityMaps" ||
@@ -46,47 +98,39 @@ export default async function MapPage() {
   ).length;
 
   return (
-    <div className="space-y-12">
-      <section className="space-y-4">
-        <p className="font-mono text-xs uppercase tracking-wider text-accent">live map</p>
-        <h1 className="max-w-3xl text-3xl font-extrabold leading-[1.1] tracking-tight text-fg sm:text-4xl">
-          Grid carbon-intensity where AI compute runs.
-        </h1>
-        <p className="max-w-2xl text-base text-fg-muted">
-          Grid regions across North America, Europe and Asia-Pacific that
-          host the major LLM providers&apos; inference workloads. Click any
-          card for the 72-hour forecast and a cost-and-carbon best-window
-          finder.
-        </p>
-        <dl className="grid max-w-xl grid-cols-3 gap-4 pt-2 sm:gap-8">
-          <Kpi label="regions tracked" value={total.toString()} />
-          <Kpi
-            label="feeds live"
-            value={live > 0 ? `${live} / ${total}` : "mock"}
-            hint={
-              live === 0
-                ? "GB is always live; add EIA / ENTSO-E keys for the rest"
-                : undefined
-            }
-          />
-          <Kpi
-            label="clean right now"
-            value={cleanCount.toString()}
-            hint="bands clean or very_clean"
-          />
-        </dl>
-      </section>
+    <dl className="grid max-w-xl grid-cols-3 gap-4 pt-2 sm:gap-8">
+      <Kpi label="regions tracked" value={total.toString()} />
+      <Kpi
+        label="feeds live"
+        value={live > 0 ? `${live} / ${total}` : "mock"}
+        hint={
+          live === 0
+            ? "GB is always live; add EIA / ENTSO-E keys for the rest"
+            : undefined
+        }
+      />
+      <Kpi
+        label="clean right now"
+        value={cleanCount.toString()}
+        hint="bands clean or very_clean"
+      />
+    </dl>
+  );
+}
 
-      <section>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {forecasts.map(({ region, forecast }) => (
-            <RegionCard key={region.zone} region={region} forecast={forecast} />
-          ))}
+function KpiStripSkeleton() {
+  return (
+    <dl
+      aria-hidden="true"
+      className="grid max-w-xl animate-pulse grid-cols-3 gap-4 pt-2 sm:gap-8"
+    >
+      {[0, 1, 2].map((i) => (
+        <div key={i}>
+          <div className="h-3 w-24 rounded bg-rule" />
+          <div className="mt-2 h-8 w-16 rounded bg-rule" />
         </div>
-      </section>
-
-      <Methodology />
-    </div>
+      ))}
+    </dl>
   );
 }
 

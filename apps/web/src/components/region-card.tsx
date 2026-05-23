@@ -74,3 +74,35 @@ export function RegionCard({ region, forecast }: RegionCardProps) {
     </Link>
   );
 }
+
+/**
+ * Placeholder card shown while the region's forecast is streaming in.
+ * Mirrors the real card's footprint so the grid layout doesn't jump.
+ */
+export function RegionCardSkeleton({ region }: { region: Region }) {
+  return (
+    <div
+      aria-hidden="true"
+      className="flex animate-pulse flex-col gap-4 rounded-xl border border-rule bg-bg-elev p-5"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="font-mono text-xs text-fg-dim">{region.zone}</p>
+          <h3 className="mt-0.5 text-base font-semibold tracking-tight text-fg">
+            {region.name}
+          </h3>
+          <p className="mt-1 truncate text-xs text-fg-muted">{region.provider}</p>
+        </div>
+        <div className="h-6 w-16 rounded bg-rule" />
+      </div>
+      <div className="flex items-baseline justify-between gap-2">
+        <div className="h-9 w-24 rounded bg-rule" />
+        <div className="h-3 w-28 rounded bg-rule" />
+      </div>
+      <div className="h-12 w-full rounded bg-rule" />
+      <div className="flex items-center justify-between pt-1 text-xs text-fg-dim">
+        <span>next 24 h</span>
+      </div>
+    </div>
+  );
+}
