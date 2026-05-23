@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
+import { AutoRefresh } from "@/components/auto-refresh";
 import { RegionCard, RegionCardSkeleton } from "@/components/region-card";
 import { getGridForecast } from "@/lib/grid";
 import { REGIONS, type Region } from "@/lib/regions";
@@ -30,8 +31,14 @@ async function loadForecast(zone: string): Promise<GridForecast | null> {
 export default function MapPage() {
   return (
     <div className="space-y-12">
+      {/* Silently re-fetches the route's server data every 5 min so the
+          intensity values update in the user's open tab — pauses when
+          the tab is hidden, catches up on visibility return. */}
+      <AutoRefresh intervalMs={300_000} />
       <section className="space-y-4">
-        <p className="font-mono text-xs uppercase tracking-wider text-accent">live map</p>
+        <p className="font-mono text-xs uppercase tracking-wider text-accent">
+          live map · auto-refresh 5m
+        </p>
         <h1 className="max-w-3xl text-3xl font-extrabold leading-[1.1] tracking-tight text-fg sm:text-4xl">
           Grid carbon-intensity where AI compute runs.
         </h1>
