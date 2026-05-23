@@ -38,7 +38,7 @@ import { z } from "zod";
 
 /** Server version — keep in sync with `package.json`. Sole source of truth for
  *  both the MCP `serverInfo` field and the stderr ready banner. */
-const SERVER_VERSION = "0.8.2";
+const SERVER_VERSION = "0.9.0";
 
 // When EBB_DEFAULT_REGION is unset, guess the region from the host
 // timezone (shared with the CLI and the OpenClaw plugin) instead of
