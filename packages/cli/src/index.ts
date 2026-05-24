@@ -20,7 +20,7 @@ import { runTick } from "./commands/tick.js";
 
 /** CLI version — keep in sync with `package.json`. Sole source of truth for
  * what `ebb --version` prints. */
-const CLI_VERSION = "0.8.3";
+const CLI_VERSION = "0.10.0";
 
 export function buildProgram(): Command {
   const program = new Command();

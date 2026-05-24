@@ -7,6 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — `@ebb-ai/core` 0.10.0 + `ebb_ai` 0.6.0 (per-model energy)
+
+- **`packages/core-ts/src/energy.ts`** and Python mirror
+  **`packages/core-py/src/ebb_ai/energy.py`** — new module replacing
+  the v0.1–v0.9 placeholder `ENERGY_KWH_PER_TASK = 0.0015` with a
+  cited per-model Wh/token lookup table.
+- **Public API.** `estimateEnergyKwh({ model, inputTokens, outputTokens, pue })`,
+  `gramsForIntensity(g, opts)`, `lookupModelEnergy(model)`,
+  `normalizeModelName(name)` plus `MODEL_ENERGY_COEFFICIENTS`,
+  `DEFAULT_PUE = 1.15`, `LEGACY_KWH_PER_TASK = 0.0015`, and
+  `ENERGY_SOURCES` (citation metadata). Python mirror uses snake_case.
+- **Coefficient table.** 37 entries spanning Anthropic Claude
+  (opus/sonnet/haiku, 3.x and 4.x), OpenAI (gpt-4, gpt-4o,
+  gpt-4o-mini, gpt-3.5-turbo, o1/o1-mini, o3/o3-mini), Google
+  Gemini (1.5 pro/flash, 2.0 pro/flash), and open-weight Llama /
+  Mistral / Mixtral families. Each entry carries a `source`
+  confidence tier: `measured` (HF AI Energy Score / Luccioni 2024
+  benchmarks), `estimated` (inferred from public parameter-count
+  disclosures + Luccioni scaling), `fallback` (the legacy flat).
+- **Wiring.** `recommend.ts` and `scheduler.ts` now thread the
+  model identifier through every `intensityToGrams` call site that
+  has one in scope:
+  - `recommendWindow(opts)` uses `opts.model` for budget filtering
+    + estimated grams + alternatives.
+  - `scheduler.previewProviderCall(spec)` uses `spec.model`.
+  - `scheduler.scheduleProviderCall(record)` parses `spec.model`
+    out of `record.bodyJson` for both budget filtering and the
+    `record.estimatedCarbonGCo2` projection.
+  - `scheduler.dispatchProviderCall(record)` re-estimates with the
+    real `usage.inputTokens` / `usage.outputTokens` the provider
+    reports for the receipt's `actualCarbonGCo2` field, turning the
+    receipt from "typical task at this model" into "this specific
+    call at this model".
+- **Backwards compatibility.** `estimateEnergyKwh()` with no args
+  returns the legacy `0.0015` bit-exactly; unknown model names with
+  no token counts also map to the same legacy value. Closure-based
+  `Scheduler.defer` (no model in scope) continues to use the legacy
+  estimate. All 134 existing TypeScript tests + 75 existing Python
+  tests pass without modification.
+- **Tests.** `packages/core-ts/test/energy.test.ts` adds 22 new
+  cases (normalization, lookup, backwards-compat, per-model math,
+  PUE override, linearity, table sanity, citations). Python mirror
+  in `packages/core-py/tests/test_energy.py` adds 22 more.
+- **Sources.** Patterson et al. 2021 ("Carbon Emissions and Large
+  Neural Network Training", arXiv:2104.10350), Luccioni, Jernite,
+  Strubell 2024 ("Power Hungry Processing", FAccT 2024,
+  arXiv:2311.16863), Hugging Face AI Energy Score (2024–).
+- **README touchup.** `packages/core-py/README.md` carbon-receipt
+  section no longer references the v0.2 `ENERGY_KWH_PER_TASK = 0.0015`
+  placeholder.
+
+### Changed — version bumps (lockstep)
+
+- `@ebb-ai/core` 0.9.0 → 0.10.0
+- `@ebb-ai/cli` 0.9.0 → 0.10.0 (CLI_VERSION constant also fixed —
+  was lagging at 0.8.3 since v0.8.3 publish)
+- `@ebb-ai/mcp` 0.9.0 → 0.10.0 (SERVER_VERSION constant synced)
+- Claude Code plugin manifest + marketplace 0.8.2 → 0.10.0
+- `ebb_ai` PyPI 0.5.0 → 0.6.0
+- OpenClaw plugin (`@vitalini/ebb`) unchanged at 0.1.13 — separate
+  semver track per ClawHub convention.
+
 ### Changed — site (no version bump yet)
 
 - **`/stats` and `/queue` rewritten as honest docs** — both used to

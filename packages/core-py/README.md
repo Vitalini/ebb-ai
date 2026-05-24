@@ -229,11 +229,15 @@ receipt used the forecast entry the scheduler chose against,
 `"current"` if we had to fall back to a freshly-fetched current-hour
 intensity at dispatch time.
 
-The receipt's `estimated_carbon_g_co2` is computed as
-`ENERGY_KWH_PER_TASK * grid_intensity_g_co2_per_kwh`, where
-`ENERGY_KWH_PER_TASK = 0.0015` for v0.2. v0.3 will replace this with
-per-model coefficients drawn from the published research
-(Patterson et al. 2021, Luccioni et al. 2023).
+The receipt's `estimated_carbon_g_co2` is computed via
+`estimate_energy_kwh(model=..., input_tokens=..., output_tokens=...)
+* grid_intensity_g_co2_per_kwh`. As of v0.6 the energy module ships
+per-model Wh/token coefficients from the published research
+(Patterson et al. 2021; Luccioni, Jernite, Strubell 2024; Hugging
+Face AI Energy Score). When no model is specified the function
+returns the pre-v0.6 flat `0.0015` kWh estimate to preserve
+backwards compatibility. See `ebb_ai.energy` for the table and
+citation metadata.
 
 ### Grid feeds
 

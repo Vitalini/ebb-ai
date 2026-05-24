@@ -30,6 +30,18 @@ See ``packages/core-py/README.md`` for the full API reference.
 
 from __future__ import annotations
 
+from .energy import (
+    DEFAULT_PUE,
+    ENERGY_SOURCES,
+    LEGACY_KWH_PER_TASK,
+    MODEL_ENERGY_COEFFICIENTS,
+    EnergySourceTier,
+    ModelEnergyCoefficients,
+    estimate_energy_kwh,
+    grams_for_intensity,
+    lookup_model_energy,
+    normalize_model_name,
+)
 from .errors import CarbonBudgetExceededError, InvalidDeadlineError
 from .grid import GridFeed, electricity_maps_feed, mock_grid_feed
 from .recommend import (
@@ -63,23 +75,29 @@ from .types import (
     TickResultEntry,
 )
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 __all__ = [
+    "DEFAULT_PUE",
     "DEFAULT_REGION",
     "ENERGY_KWH_PER_TASK",
+    "ENERGY_SOURCES",
+    "LEGACY_KWH_PER_TASK",
     "MAX_HORIZON_HOURS",
+    "MODEL_ENERGY_COEFFICIENTS",
     "Band",
     "CarbonBudgetExceededError",
     "CarbonReceipt",
     "DeferOptions",
     "DeferrableTask",
+    "EnergySourceTier",
     "GridFeed",
     "GridForecast",
     "GridForecastEntry",
     "GridSource",
     "IntensitySource",
     "InvalidDeadlineError",
+    "ModelEnergyCoefficients",
     "Provider",
     "ProviderCallSpec",
     "RecommendAlternative",
@@ -92,8 +110,12 @@ __all__ = [
     "__version__",
     "defer",
     "electricity_maps_feed",
+    "estimate_energy_kwh",
+    "grams_for_intensity",
+    "lookup_model_energy",
     "mock_grid_feed",
     "normalize_deadline",
+    "normalize_model_name",
     "pick_best_window",
     "recommend_window",
 ]

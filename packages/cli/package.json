@@ -1,6 +1,6 @@
 {
   "name": "@ebb-ai/cli",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "CLI for ebb-ai \u2014 cron-tick drain, launchd install, and sleep-prevention for the carbon-aware scheduler.",
   "license": "Apache-2.0",
   "author": "Vitalii Borovyk",

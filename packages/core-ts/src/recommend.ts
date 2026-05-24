@@ -19,6 +19,7 @@
  *   7. Generate a one-line `reasoning` string tailored to the situation.
  */
 
+import { gramsForIntensity } from "./energy.js";
 import { mockGridFeed } from "./grid.js";
 import {
   CarbonBudgetExceededError,
@@ -32,8 +33,6 @@ import type {
   RecommendResult,
 } from "./types.js";
 
-/** Same constant the Scheduler uses — kept in sync deliberately. */
-const ENERGY_KWH_PER_TASK = 0.0015;
 const MAX_HORIZON_HOURS = 72;
 /** Batch API SLA threshold — Anthropic & OpenAI both promise 24h. */
 const BATCH_ELIGIBLE_HOURS = 24;
@@ -105,7 +104,7 @@ export async function recommendWindow(
   const survivors =
     budgetG !== undefined
       ? inDeadline.filter(
-          (e) => intensityToGrams(e.carbonIntensityGCo2PerKwh) <= budgetG,
+          (e) => intensityToGrams(e.carbonIntensityGCo2PerKwh, opts.model) <= budgetG,
         )
       : inDeadline;
 
@@ -116,7 +115,7 @@ export async function recommendWindow(
       a.carbonIntensityGCo2PerKwh <= b.carbonIntensityGCo2PerKwh ? a : b,
     );
     throw new CarbonBudgetExceededError(
-      intensityToGrams(cheapest.carbonIntensityGCo2PerKwh),
+      intensityToGrams(cheapest.carbonIntensityGCo2PerKwh, opts.model),
       budgetG!,
     );
   }
@@ -159,7 +158,7 @@ export async function recommendWindow(
     chosen.carbonIntensityGCo2PerKwh,
   );
   const chosenGrams = roundTenth(
-    intensityToGrams(chosen.carbonIntensityGCo2PerKwh),
+    intensityToGrams(chosen.carbonIntensityGCo2PerKwh, opts.model),
   );
 
   const batchEligible = isBatchEligible(now, deadline);
@@ -169,7 +168,7 @@ export async function recommendWindow(
     intensityGCo2PerKwh: e.carbonIntensityGCo2PerKwh,
     band: e.band,
     estimatedCarbonGCo2: roundTenth(
-      intensityToGrams(e.carbonIntensityGCo2PerKwh),
+      intensityToGrams(e.carbonIntensityGCo2PerKwh, opts.model),
     ),
     estimatedSavingsVsNowPct: computeSavingsPct(
       nowIntensity,
@@ -208,11 +207,11 @@ function buildResultFromSingle(
   head: GridForecastEntry,
   _entries: GridForecastEntry[],
   _deadline: Date,
-  _opts: RecommendOptions,
+  opts: RecommendOptions,
   _now: Date,
   _survivorCount: number,
 ): RecommendResult {
-  const grams = roundTenth(intensityToGrams(head.carbonIntensityGCo2PerKwh));
+  const grams = roundTenth(intensityToGrams(head.carbonIntensityGCo2PerKwh, opts.model));
   return {
     scheduledFor: head.datetime,
     intensityGCo2PerKwh: head.carbonIntensityGCo2PerKwh,
@@ -286,8 +285,8 @@ function computeSavingsPct(nowIntensity: number, chosenIntensity: number): numbe
   return Math.max(0, Math.round(raw));
 }
 
-function intensityToGrams(gCo2PerKwh: number): number {
-  return ENERGY_KWH_PER_TASK * gCo2PerKwh;
+function intensityToGrams(gCo2PerKwh: number, model?: string): number {
+  return gramsForIntensity(gCo2PerKwh, { model });
 }
 
 function roundTenth(v: number): number {

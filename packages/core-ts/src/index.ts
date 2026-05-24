@@ -84,3 +84,18 @@ export {
   resolveRegion,
 } from "./region.js";
 export type { RegionResolution, RegionSource } from "./region.js";
+export {
+  DEFAULT_PUE,
+  LEGACY_KWH_PER_TASK,
+  MODEL_ENERGY_COEFFICIENTS,
+  ENERGY_SOURCES,
+  normalizeModelName,
+  lookupModelEnergy,
+  estimateEnergyKwh,
+  gramsForIntensity,
+} from "./energy.js";
+export type {
+  EnergySourceTier,
+  ModelEnergyCoefficients,
+  EstimateEnergyOpts,
+} from "./energy.js";

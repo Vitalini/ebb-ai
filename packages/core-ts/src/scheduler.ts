@@ -15,6 +15,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { gramsForIntensity } from "./energy.js";
 import { mockGridFeed } from "./grid.js";
 import type { ProviderAdapter } from "./providers/base.js";
 import { TaskStore } from "./storage/sqlite.js";
@@ -32,13 +33,6 @@ import type {
 
 const DEFAULT_REGION = "US-CAL-CISO";
 const MAX_HORIZON_HOURS = 72;
-/**
- * Rough estimate: a single moderate LLM call consumes around 0.001 kWh of
- * data-center energy. With a typical PUE of 1.5 we use 0.0015 kWh end-to-end.
- * This is a placeholder; the v0.2 receipt should learn per-model coefficients
- * from published research (Patterson et al. 2021, Luccioni et al. 2023).
- */
-const ENERGY_KWH_PER_TASK = 0.0015;
 
 /** Thrown when no candidate window meets the user-supplied carbon budget. */
 export class CarbonBudgetExceededError extends Error {
@@ -486,7 +480,7 @@ export class Scheduler {
     const budgetG = opts.carbonBudgetG;
     const survivors =
       budgetG !== undefined
-        ? forecast.entries.filter((e) => intensityToGrams(e.carbonIntensityGCo2PerKwh) <= budgetG)
+        ? forecast.entries.filter((e) => intensityToGrams(e.carbonIntensityGCo2PerKwh, spec.model) <= budgetG)
         : forecast.entries;
     const candidate = pickBestWindow(survivors, deadline);
     if (!candidate) {
@@ -494,7 +488,7 @@ export class Scheduler {
         const cheapest = forecast.entries.reduce((a, b) =>
           a.carbonIntensityGCo2PerKwh <= b.carbonIntensityGCo2PerKwh ? a : b,
         );
-        const cheapestG = intensityToGrams(cheapest.carbonIntensityGCo2PerKwh);
+        const cheapestG = intensityToGrams(cheapest.carbonIntensityGCo2PerKwh, spec.model);
         if (cheapestG > budgetG) {
           throw new CarbonBudgetExceededError(cheapestG, budgetG);
         }
@@ -505,10 +499,9 @@ export class Scheduler {
     // that Batch API (24h SLA) is still a viable route, not whether the
     // chosen window itself is more than 24h away.
     const batchEligible = deadline.getTime() - Date.now() > 24 * 60 * 60 * 1000;
-    void spec;
     return {
       scheduledFor: candidate.datetime,
-      estimatedCarbonGCo2: Math.round(intensityToGrams(candidate.carbonIntensityGCo2PerKwh) * 10) / 10,
+      estimatedCarbonGCo2: Math.round(intensityToGrams(candidate.carbonIntensityGCo2PerKwh, spec.model) * 10) / 10,
       intensityGCo2PerKwh: candidate.carbonIntensityGCo2PerKwh,
       band: candidate.band,
       batchEligible,
@@ -666,6 +659,19 @@ export class Scheduler {
   private async scheduleProviderCall(taskId: string, deadline: Date): Promise<void> {
     const record = this.tasks.get(taskId);
     if (!record) return;
+    // Parse spec.model out of the persisted body so the per-model energy
+    // coefficients (v0.10) factor into both the budget filter and the
+    // estimated-carbon receipt.
+    let specModel: string | undefined;
+    if (record.bodyJson) {
+      try {
+        const parsed = JSON.parse(record.bodyJson) as Partial<ProviderCallSpec>;
+        if (typeof parsed.model === "string") specModel = parsed.model;
+      } catch {
+        // Corrupt body; downstream dispatch will fail it. Fall back to
+        // the legacy flat estimate here.
+      }
+    }
     const horizonH = Math.max(
       1,
       Math.min(
@@ -677,7 +683,7 @@ export class Scheduler {
     const budgetG = record.carbonBudgetG;
     const survivors =
       budgetG !== undefined
-        ? forecast.entries.filter((e) => intensityToGrams(e.carbonIntensityGCo2PerKwh) <= budgetG)
+        ? forecast.entries.filter((e) => intensityToGrams(e.carbonIntensityGCo2PerKwh, specModel) <= budgetG)
         : forecast.entries;
     const candidate = pickBestWindow(survivors, deadline);
     if (!candidate) {
@@ -685,7 +691,7 @@ export class Scheduler {
         const cheapest = forecast.entries.reduce((a, b) =>
           a.carbonIntensityGCo2PerKwh <= b.carbonIntensityGCo2PerKwh ? a : b,
         );
-        const cheapestG = intensityToGrams(cheapest.carbonIntensityGCo2PerKwh);
+        const cheapestG = intensityToGrams(cheapest.carbonIntensityGCo2PerKwh, specModel);
         if (cheapestG > budgetG) {
           this.failTask(taskId, new CarbonBudgetExceededError(cheapestG, budgetG));
           return;
@@ -701,7 +707,7 @@ export class Scheduler {
     record.status = "scheduled";
     record.scheduledFor = candidate.datetime;
     record.estimatedCarbonGCo2 =
-      Math.round(intensityToGrams(candidate.carbonIntensityGCo2PerKwh) * 10) / 10;
+      Math.round(intensityToGrams(candidate.carbonIntensityGCo2PerKwh, specModel) * 10) / 10;
     this.store?.upsert(record);
   }
 
@@ -760,8 +766,22 @@ export class Scheduler {
       // `estimatedCarbonGCo2` was projected at schedule time from the
       // forecast entry the scheduler scored; `actual` is billed against
       // the intensity observed when the task actually ran. The delta is
-      // the forecast drift between those two moments.
-      const actualCarbonGCo2 = Math.round(intensityToGrams(intensityG) * 10) / 10;
+      // the forecast drift between those two moments. For the actual side
+      // we re-estimate energy with the real token counts the provider
+      // reported (when available) — that turns the receipt from "typical
+      // task at this model" into "this specific call at this model".
+      const usage = (result as { usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number } }).usage;
+      const inputTokens = typeof usage?.inputTokens === "number" ? usage.inputTokens : undefined;
+      const outputTokens = typeof usage?.outputTokens === "number" ? usage.outputTokens : undefined;
+      const actualModel = (result as { model?: string }).model ?? spec.model;
+      const actualCarbonGCo2 =
+        Math.round(
+          gramsForIntensity(intensityG, {
+            model: actualModel,
+            inputTokens,
+            outputTokens,
+          }) * 10,
+        ) / 10;
       const estimatedCarbonGCo2 = record.estimatedCarbonGCo2 ?? actualCarbonGCo2;
       const deltaPct =
         estimatedCarbonGCo2 > 0
@@ -769,10 +789,7 @@ export class Scheduler {
               ((actualCarbonGCo2 - estimatedCarbonGCo2) / estimatedCarbonGCo2) * 1000,
             ) / 10
           : 0;
-      const totalTokens =
-        typeof (result as { usage?: { totalTokens?: number } }).usage?.totalTokens === "number"
-          ? (result as { usage: { totalTokens: number } }).usage.totalTokens
-          : undefined;
+      const totalTokens = typeof usage?.totalTokens === "number" ? usage.totalTokens : undefined;
       const receipt: CarbonReceipt = {
         taskId: record.taskId,
         ranAt: ranAt.toISOString(),
@@ -835,8 +852,8 @@ export class Scheduler {
   }
 }
 
-function intensityToGrams(gCo2PerKwh: number): number {
-  return ENERGY_KWH_PER_TASK * gCo2PerKwh;
+function intensityToGrams(gCo2PerKwh: number, model?: string): number {
+  return gramsForIntensity(gCo2PerKwh, { model });
 }
 
 /**
