@@ -14,14 +14,19 @@
 
 import { unstable_cache } from "next/cache";
 
+import { gramsForIntensity, LEGACY_KWH_PER_TASK } from "./energy";
 import type {
   CarbonBand,
   GridForecast,
   GridForecastEntry,
 } from "./types";
 
-/** Energy use per "typical" deferrable LLM call (kWh, including PUE). */
-export const ENERGY_KWH_PER_TASK = 0.0015;
+/**
+ * Backwards-compat alias. Real ebb-ai dispatches use per-model
+ * coefficients from `./energy` (v0.10+); the map cards stick with the
+ * legacy flat estimate for a single visualizable number per region.
+ */
+export const ENERGY_KWH_PER_TASK = LEGACY_KWH_PER_TASK;
 
 export const BAND_THRESHOLDS: Record<CarbonBand, number> = {
   very_clean: 100,
@@ -608,12 +613,18 @@ export function pickBestWindow(
     entry: best.entry,
     hourOffset: best.idx,
     projectedGramsCo2:
-      Math.round(
-        ENERGY_KWH_PER_TASK * best.entry.carbonIntensityGCo2PerKwh * 10,
-      ) / 10,
+      intensityToGrams(best.entry.carbonIntensityGCo2PerKwh),
   };
 }
 
-export function intensityToGrams(gCo2PerKwh: number): number {
-  return Math.round(ENERGY_KWH_PER_TASK * gCo2PerKwh * 10) / 10;
+/**
+ * Grams CO2-equivalent for a single inference call.
+ *
+ * `model` is optional — without it, the function returns the legacy
+ * flat-task estimate (matches v0.1-v0.9 behaviour and the per-region
+ * map cards). With a model, it uses the per-model Wh/token table from
+ * `./energy` (mirrors `@ebb-ai/core` v0.10+).
+ */
+export function intensityToGrams(gCo2PerKwh: number, model?: string): number {
+  return Math.round(gramsForIntensity(gCo2PerKwh, { model }) * 10) / 10;
 }

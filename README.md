@@ -34,7 +34,10 @@ default. `ebb-ai` makes the choice automatic. Four parallel wins:
    Sync calls observe shorter queues.
 4. **40–70% lower carbon.** Per-task carbon receipts against the actual
    grid intensity used at dispatch, persisted to a local SQLite ledger.
-   Auditable, region-aware, reproducible.
+   Auditable, region-aware, reproducible. v0.10+ uses per-model Wh/token
+   coefficients (Patterson 2021, Luccioni 2024, Hugging Face AI Energy
+   Score) so receipts reflect what the agent actually ran — not a flat
+   placeholder.
 
 `ebb-ai` is the same code that would have fired a sync LLM call —
 now deferred to the cleanest, cheapest, fastest hour inside the
@@ -137,9 +140,9 @@ right now."
 
 | Package | Purpose |
 |---|---|
-| `@ebb-ai/core` | TypeScript core library (v0.2). `defer()` API, `AnthropicAdapter`, `OpenAIAdapter`, opt-in SQLite-backed durable queue. |
-| `@ebb-ai/mcp` | Model Context Protocol server (v0.2). Drop-in for Claude Desktop, Claude Code, OpenClaw, Cursor. |
-| `ebb-ai` (Python) | Python 3.11+ port. `asyncio` scheduler, `aiosqlite` persistence, Anthropic + OpenAI adapters. |
+| `@ebb-ai/core` | TypeScript core library. `defer()` API, `AnthropicAdapter`, `OpenAIAdapter`, opt-in SQLite-backed durable queue, per-model energy coefficients (`estimateEnergyKwh`, `MODEL_ENERGY_COEFFICIENTS`). |
+| `@ebb-ai/mcp` | Model Context Protocol server. Drop-in for Claude Desktop, Claude Code, OpenClaw, Cursor. |
+| `ebb-ai` (Python) | Python 3.11+ port. `asyncio` scheduler, `aiosqlite` persistence, Anthropic + OpenAI adapters, mirrored `ebb_ai.energy` module. |
 | `apps/web` | Next.js 15 website at https://www.ebb-ai.com — install picker (13 hosts), live carbon-intensity map, best-window planner, docs. |
 | `packages/claude-code-plugin` | Claude Code plugin tree (8 `/ebb-ai:*` slash commands + auto-invocation skill + MCP wiring). |
 | `packages/openclaw-plugin` | OpenClaw plugin (`@vitalini/ebb-ai` on ClawHub). Native OpenClaw tools mirroring the MCP surface. |

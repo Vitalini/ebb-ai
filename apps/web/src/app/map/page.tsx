@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { RegionCard, RegionCardSkeleton } from "@/components/region-card";
 import { getGridForecast } from "@/lib/grid";
@@ -214,10 +215,16 @@ function Methodology() {
             scoring
           </h3>
           <p className="mt-1">
-            Each candidate hour is scored on grams CO2e per LLM call assuming{" "}
-            <span className="font-mono text-fg">0.0015 kWh</span> end-to-end
-            energy (data-center + PUE 1.5). The cleanest hour inside the
-            user-supplied deadline wins.
+            The map cards show a single number per region using a flat
+            typical-task estimate (<span className="font-mono text-fg">~0.0015 kWh</span>,
+            PUE 1.15). Actual ebb-ai dispatches (v0.10+) use{" "}
+            <strong className="text-fg">per-model coefficients</strong>
+            {" "}from Patterson 2021, Luccioni 2024, and the Hugging Face AI
+            Energy Score — e.g. claude-sonnet-4 ≈ 3 Wh/call (500 in + 500
+            out), claude-opus ≈ 9 Wh, claude-haiku ≈ 0.9 Wh, llama-3.1-8b
+            ≈ 0.6 Wh. The cleanest hour inside the deadline still wins;
+            now grams scale with which model the agent actually runs.
+            See <Link href="/docs#energy" className="text-accent hover:underline">/docs &rarr; energy</Link>.
           </p>
         </div>
         <div>

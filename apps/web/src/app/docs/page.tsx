@@ -94,6 +94,112 @@ export default function DocsPage() {
         </ul>
       </section>
 
+      <section id="energy" className="space-y-6">
+        <header className="space-y-1">
+          <p className="font-mono text-[11px] uppercase tracking-wider text-accent">
+            energy estimation
+          </p>
+          <h2 className="text-2xl font-semibold tracking-tight">
+            Per-model Wh/token coefficients (v0.10+)
+          </h2>
+          <p className="text-sm text-fg-muted">
+            Carbon receipts are computed from real per-model energy data —
+            not a flat placeholder. Sources: Patterson et al. 2021
+            (arXiv:2104.10350), Luccioni, Jernite, Strubell 2024
+            &ldquo;Power Hungry Processing&rdquo; (FAccT 2024, arXiv:2311.16863),
+            and the Hugging Face AI Energy Score.
+          </p>
+        </header>
+
+        <div className="overflow-x-auto rounded-md border border-rule bg-bg-card">
+          <table className="min-w-full text-sm">
+            <thead className="bg-bg-elev text-left font-mono text-[11px] uppercase tracking-wider text-fg-dim">
+              <tr>
+                <th className="px-4 py-2 font-normal">Model class</th>
+                <th className="px-4 py-2 font-normal">Wh/input&nbsp;tok</th>
+                <th className="px-4 py-2 font-normal">Wh/output&nbsp;tok</th>
+                <th className="px-4 py-2 font-normal">Typical&nbsp;call*</th>
+                <th className="px-4 py-2 font-normal">Source</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-rule font-mono text-xs text-fg-muted">
+              <tr>
+                <td className="px-4 py-2 text-fg">claude-opus-4 · gpt-4-turbo · o1 · gemini-1.5-pro</td>
+                <td className="px-4 py-2">0.003</td>
+                <td className="px-4 py-2">0.015</td>
+                <td className="px-4 py-2">~10.4 Wh</td>
+                <td className="px-4 py-2">estimated</td>
+              </tr>
+              <tr>
+                <td className="px-4 py-2 text-fg">claude-sonnet-4 · llama-3.1-70b</td>
+                <td className="px-4 py-2">0.001</td>
+                <td className="px-4 py-2">0.005</td>
+                <td className="px-4 py-2">~3.5 Wh</td>
+                <td className="px-4 py-2">estimated / measured</td>
+              </tr>
+              <tr>
+                <td className="px-4 py-2 text-fg">claude-haiku · gpt-4o-mini · gemini-flash · o1-mini</td>
+                <td className="px-4 py-2">0.0003 – 0.0006</td>
+                <td className="px-4 py-2">0.0015 – 0.003</td>
+                <td className="px-4 py-2">~1.0 – 2.1 Wh</td>
+                <td className="px-4 py-2">estimated</td>
+              </tr>
+              <tr>
+                <td className="px-4 py-2 text-fg">llama-3.1-8b · mistral-7b</td>
+                <td className="px-4 py-2">0.0002</td>
+                <td className="px-4 py-2">0.001</td>
+                <td className="px-4 py-2">~0.7 Wh</td>
+                <td className="px-4 py-2">measured</td>
+              </tr>
+              <tr>
+                <td className="px-4 py-2 text-fg">llama-3.1-405b · gpt-4</td>
+                <td className="px-4 py-2">0.005</td>
+                <td className="px-4 py-2">0.025</td>
+                <td className="px-4 py-2">~17 Wh</td>
+                <td className="px-4 py-2">measured / estimated</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="text-xs text-fg-dim">
+          * Typical = 500 input + 500 output tokens × <code>DEFAULT_PUE = 1.15</code>.
+          Closed-model coefficients are inferred from public parameter-count
+          disclosures and the Luccioni scaling curve; may be off by ±50%.
+          Each entry in <code>MODEL_ENERGY_COEFFICIENTS</code> carries a
+          <code>source</code> field of <code>&quot;measured&quot;</code>,{" "}
+          <code>&quot;estimated&quot;</code>, or <code>&quot;fallback&quot;</code> so
+          dashboards can render confidence alongside numbers.
+        </p>
+
+        <div className="rounded-md border border-rule bg-bg-card p-4 font-mono text-xs leading-relaxed text-fg-muted">
+          <p className="mb-2 text-fg">Public API (<code>@ebb-ai/core</code> 0.10+, <code>ebb_ai</code> 0.6+)</p>
+          <pre className="overflow-x-auto whitespace-pre text-fg">
+{`import {
+  estimateEnergyKwh,
+  gramsForIntensity,
+  lookupModelEnergy,
+  MODEL_ENERGY_COEFFICIENTS,
+  ENERGY_SOURCES,
+  DEFAULT_PUE,
+  LEGACY_KWH_PER_TASK,
+} from "@ebb-ai/core";
+
+estimateEnergyKwh({
+  model: "claude-sonnet-4",
+  inputTokens: 1000,
+  outputTokens: 2000,
+});
+// => 0.01265 kWh (1.0 in + 10.0 out Wh chip × 1.15 PUE)
+
+gramsForIntensity(400, { model: "claude-haiku-4-5" });
+// => 0.41 g CO2e (haiku at 400 g/kWh grid)
+
+estimateEnergyKwh();
+// => 0.0015 kWh (v0.1-v0.9 flat fallback, bit-exact)`}
+          </pre>
+        </div>
+      </section>
+
       <section id="paths" className="space-y-4">
         <header className="space-y-1">
           <p className="font-mono text-[11px] uppercase tracking-wider text-accent">
