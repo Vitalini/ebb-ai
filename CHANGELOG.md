@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added — `@ebb-ai/core` 0.10.0 + `ebb_ai` 0.6.0 (per-model energy)
+### Added — `@ebb-ai/core` 0.10.0 + `ebb_ai` 0.10.0 (per-model energy)
 
 - **`packages/core-ts/src/energy.ts`** and Python mirror
   **`packages/core-py/src/ebb_ai/energy.py`** — new module replacing
@@ -65,7 +65,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   was lagging at 0.8.3 since v0.8.3 publish)
 - `@ebb-ai/mcp` 0.9.0 → 0.10.0 (SERVER_VERSION constant synced)
 - Claude Code plugin manifest + marketplace 0.8.2 → 0.10.0
-- `ebb_ai` PyPI 0.5.0 → 0.6.0
+- `ebb_ai` PyPI — first publish at 0.6.0, then jumped to 0.10.0 to
+  align with the TS lockstep. Skipping 0.7-0.9 on PyPI is intentional:
+  the project versions across languages now share a single semver
+  track. Both 0.6.0 and 0.10.0 remain installable from PyPI; latest
+  resolves to 0.10.0.
 - OpenClaw plugin (`@vitalini/ebb`) unchanged at 0.1.13 — separate
   semver track per ClawHub convention.
 
