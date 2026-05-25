@@ -262,19 +262,22 @@ export default function AboutPage() {
       <section className="space-y-3">
         <h2 className="text-2xl font-bold tracking-tight">Status</h2>
         <p className="leading-relaxed text-fg-muted">
-          v0.9.x (operator preview). The scheduler is production-grade — the
+          v0.10.x (operator preview). The scheduler is production-grade — the
           even-distribution simulation routes 10 000 synthetic tasks across seven
           regions with under 11 % max-bucket concentration, the SQLite ledger
           survives process restart, and per-region routing is auto-wired. Live
           carbon feeds (UK National Grid ESO, US EIA, ENTSO-E, Electricity
           Maps) back every region on the map; a feed outage falls back to a
-          clearly-labelled mock, never a silent one.
+          clearly-labelled mock, never a silent one. As of v0.10, per-task
+          carbon receipts use per-model Wh/token coefficients (Patterson 2021,
+          Luccioni 2024, Hugging Face AI Energy Score) instead of a flat
+          placeholder.
         </p>
         <p className="leading-relaxed text-fg-muted">
           The public surface is still pre-1.0: API shapes can change in minor
           versions. Still on the roadmap: upstream MCP spec PR, opt-in aggregate
           leaderboard, WattTime marginal-emissions feed, cross-provider
-          routing. v1.0 will freeze the API surface.
+          routing, Ed25519-signed receipts. v1.0 will freeze the API surface.
         </p>
       </section>
 

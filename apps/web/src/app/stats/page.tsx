@@ -154,9 +154,9 @@ ebb receipts show <task_id>`}
         <p className="leading-relaxed text-fg-muted">
           Every public dashboard that summarizes user impact has to
           either (a) phone home with telemetry — which we explicitly
-          decided against in v0.9 — or (b) fabricate aggregate numbers
-          that look real but aren&apos;t. Both are bad. Local-first is
-          honest.
+          decided against through v0.10 — or (b) fabricate aggregate
+          numbers that look real but aren&apos;t. Both are bad.
+          Local-first is honest.
         </p>
         <p className="leading-relaxed text-fg-muted">
           A later release will add an{" "}

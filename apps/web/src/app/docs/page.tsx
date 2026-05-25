@@ -155,7 +155,7 @@ export default function DocsPage() {
             <p className="font-semibold text-fg">Architecture</p>
             <p className="mt-1 text-sm text-fg-muted">
               System diagram, ingest→dispatch→receipt flow, what&apos;s
-              deliberately not in v0.9.
+              deliberately not in v0.10.
             </p>
           </Link>
           <a
