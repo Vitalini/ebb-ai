@@ -225,9 +225,9 @@ def grams_for_intensity(
 __all__ = [
     "DEFAULT_PUE",
     "ENERGY_SOURCES",
-    "EnergySourceTier",
     "LEGACY_KWH_PER_TASK",
     "MODEL_ENERGY_COEFFICIENTS",
+    "EnergySourceTier",
     "ModelEnergyCoefficients",
     "estimate_energy_kwh",
     "grams_for_intensity",
