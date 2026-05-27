@@ -1,0 +1,147 @@
+/**
+ * `ebb verify <task-id | --file path>` — verify the Ed25519 signature
+ * on a carbon receipt.
+ *
+ *   - From the local ledger:   `ebb verify <task_id>` (looks up
+ *     `~/.ebb-ai/queue.db`, or `--db` if set).
+ *   - From a JSON receipt:     `ebb verify --file ./receipt.json`.
+ *
+ * Exit code reflects the outcome so CI / batch jobs can branch:
+ *   0 = valid; 1 = tampered; 2 = legacy-unsigned; 3 = key-mismatch;
+ *   4 = not-found / parse error.
+ */
+
+import { readFileSync } from "node:fs";
+
+import { TaskStore, verifyReceipt } from "@ebb-ai/core";
+import type { CarbonReceipt, TaskRecord } from "@ebb-ai/core";
+
+import { defaultDbPath } from "./tick.js";
+
+export interface VerifyOptions {
+  taskId?: string;
+  file?: string;
+  db?: string;
+  trustedPublicKey?: string;
+  json?: boolean;
+}
+
+export interface VerifyResult {
+  exitCode: number;
+  rendered: string;
+  /** Structured payload returned when `--json` is set. */
+  payload: {
+    taskId?: string;
+    outcome: string;
+    signerPublicKey?: string;
+    reason: string;
+  };
+}
+
+export async function runVerify(opts: VerifyOptions): Promise<VerifyResult> {
+  const receipt = loadReceipt(opts);
+  if (!receipt) {
+    const reason = opts.file
+      ? `verify: file ${opts.file} did not contain a valid CarbonReceipt JSON object`
+      : `verify: no receipt found for task ${opts.taskId ?? "<missing>"} in ${opts.db ?? defaultDbPath()}`;
+    return {
+      exitCode: 4,
+      rendered: reason,
+      payload: { taskId: opts.taskId, outcome: "not-found", reason },
+    };
+  }
+
+  const res = verifyReceipt(receipt, {
+    trustedPublicKey: opts.trustedPublicKey,
+  });
+
+  const exitCode =
+    res.outcome === "valid"
+      ? 0
+      : res.outcome === "tampered"
+        ? 1
+        : res.outcome === "legacy-unsigned"
+          ? 2
+          : /* key-mismatch */ 3;
+
+  const payload = {
+    taskId: receipt.taskId,
+    outcome: res.outcome,
+    signerPublicKey: res.signerPublicKey,
+    reason: res.reason,
+  };
+
+  if (opts.json) {
+    return {
+      exitCode,
+      rendered: JSON.stringify(payload, null, 2),
+      payload,
+    };
+  }
+
+  const rendered = renderHuman(receipt, res);
+  return { exitCode, rendered, payload };
+}
+
+function loadReceipt(opts: VerifyOptions): CarbonReceipt | undefined {
+  if (opts.file) {
+    try {
+      const raw = readFileSync(opts.file, "utf8");
+      const parsed = JSON.parse(raw);
+      // Accept either a bare receipt or a wrapper {receipt: ...} shape
+      // (matches what `writeOutputFile` emits in the scheduler).
+      const receipt: CarbonReceipt | undefined =
+        parsed && typeof parsed === "object" && "receipt" in parsed
+          ? (parsed.receipt as CarbonReceipt)
+          : (parsed as CarbonReceipt);
+      if (!receipt || typeof receipt.taskId !== "string") return undefined;
+      return receipt;
+    } catch {
+      return undefined;
+    }
+  }
+  if (!opts.taskId) return undefined;
+  const store = new TaskStore({ dbPath: opts.db ?? defaultDbPath() });
+  try {
+    const record = store.get(opts.taskId) as TaskRecord<unknown> | undefined;
+    return record?.receipt;
+  } finally {
+    store.close();
+  }
+}
+
+function renderHuman(receipt: CarbonReceipt, res: ReturnType<typeof verifyReceipt>): string {
+  const status =
+    res.outcome === "valid"
+      ? "✓ VALID"
+      : res.outcome === "tampered"
+        ? "✗ TAMPERED"
+        : res.outcome === "key-mismatch"
+          ? "✗ KEY MISMATCH"
+          : "○ LEGACY UNSIGNED";
+
+  const lines: string[] = [
+    status,
+    "",
+    `task_id           ${receipt.taskId}`,
+    `region            ${receipt.region}`,
+    `ran_at            ${receipt.ranAt}`,
+  ];
+  if (receipt.actualCarbonGCo2 !== undefined) {
+    lines.push(`actual_g_co2      ${receipt.actualCarbonGCo2}`);
+  }
+  if (receipt.estimatedCarbonGCo2 !== undefined) {
+    lines.push(`estimated_g_co2   ${receipt.estimatedCarbonGCo2}`);
+  }
+  if (receipt.deltaPct !== undefined) {
+    lines.push(`delta_pct         ${receipt.deltaPct >= 0 ? "+" : ""}${receipt.deltaPct}`);
+  }
+  if (receipt.model) lines.push(`model             ${receipt.model}`);
+  if (receipt.provider) lines.push(`provider          ${receipt.provider}`);
+  if (res.signerPublicKey) {
+    lines.push("", `signer_public_key ${res.signerPublicKey}`);
+  }
+  if (receipt.signedAt) lines.push(`signed_at         ${receipt.signedAt}`);
+  lines.push("", res.reason);
+  return lines.join("\n");
+}

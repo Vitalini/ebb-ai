@@ -99,3 +99,16 @@ export type {
   ModelEnergyCoefficients,
   EstimateEnergyOpts,
 } from "./energy.js";
+export {
+  canonicalize,
+  defaultSigningKeyPath,
+  loadOrCreateSigningKey,
+  signReceipt,
+  verifyReceipt,
+} from "./sign.js";
+export type {
+  SigningKeyOptions,
+  SigningKeyPair,
+  VerifyOutcome,
+  VerifyResult,
+} from "./sign.js";

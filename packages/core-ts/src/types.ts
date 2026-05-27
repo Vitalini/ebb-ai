@@ -71,6 +71,23 @@ export interface CarbonReceipt {
   prompt?: string;
   /** Total tokens (input + output) reported by the provider, if any. */
   totalTokens?: number;
+  /**
+   * Ed25519 signature over the canonical JSON encoding of every other
+   * field on this receipt. Base64-encoded raw 64-byte signature. v0.11+.
+   * Pre-v0.11 receipts (and unsigned-by-config dispatches) leave this
+   * undefined; the verifier flags those as "LEGACY-UNSIGNED".
+   */
+  signature?: string;
+  /**
+   * Base64-encoded Ed25519 public key (32 bytes) that produced
+   * `signature`. Bundled on every signed receipt so any consumer can
+   * verify without out-of-band key distribution; the absolute trust
+   * anchor is whoever owns `~/.ebb-ai/signing.key.pub`.
+   */
+  signerPublicKey?: string;
+  /** ISO-8601 timestamp the signature was produced. Helps with replay
+   *  defence when a receipt is re-presented out of context. */
+  signedAt?: string;
 }
 
 export interface TaskRecord<T = unknown> {

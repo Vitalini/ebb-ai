@@ -17,10 +17,11 @@ import { runReceiptsList } from "./commands/receipts.js";
 import { runRegisterWake } from "./commands/register-wake.js";
 import { runStats } from "./commands/stats.js";
 import { runTick } from "./commands/tick.js";
+import { runVerify } from "./commands/verify.js";
 
 /** CLI version — keep in sync with `package.json`. Sole source of truth for
  * what `ebb --version` prints. */
-const CLI_VERSION = "0.10.0";
+const CLI_VERSION = "0.11.0";
 
 export function buildProgram(): Command {
   const program = new Command();
@@ -121,6 +122,43 @@ export function buildProgram(): Command {
         // eslint-disable-next-line no-console
         console.error((err as Error).message);
         process.exit(1);
+      }
+    });
+
+  program
+    .command("verify [task-id]")
+    .description(
+      "Verify the Ed25519 signature on a carbon receipt — from the ledger by task_id, or from a JSON file via --file",
+    )
+    .option("--db <path>", "SQLite queue path", undefined)
+    .option("--file <path>", "Path to a receipt JSON file (alternative to task_id)", undefined)
+    .option(
+      "--trusted-public-key <b64>",
+      "Pin the expected signer's public key (base64); fail if the receipt was signed by anyone else",
+      undefined,
+    )
+    .option("--json", "Emit JSON instead of the human-readable summary")
+    .action(async (taskId: string | undefined, opts: {
+      db?: string;
+      file?: string;
+      trustedPublicKey?: string;
+      json?: boolean;
+    }) => {
+      try {
+        const res = await runVerify({
+          taskId,
+          db: opts.db,
+          file: opts.file,
+          trustedPublicKey: opts.trustedPublicKey,
+          json: opts.json === true,
+        });
+        // eslint-disable-next-line no-console
+        console.log(res.rendered);
+        process.exit(res.exitCode);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error((err as Error).message);
+        process.exit(4);
       }
     });
 

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ebb-ai"
-version = "0.10.0"
+version = "0.11.0"
 description = "Carbon-aware scheduling for agentic AI workflows."
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -41,12 +41,14 @@ dependencies = [
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.39"]
 openai = ["openai>=1.50"]
+signing = ["cryptography>=42"]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.24",
     "ruff>=0.7",
     "anthropic>=0.39",
     "openai>=1.50",
+    "cryptography>=42",
 ]
 
 [project.urls]

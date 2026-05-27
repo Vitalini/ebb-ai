@@ -59,6 +59,17 @@ from .scheduler import (
     normalize_deadline,
     pick_best_window,
 )
+from .sign import (
+    SigningKeyPair,
+    SigningNotInstalled,
+    VerifyOutcome,
+    VerifyResult,
+    default_signing_key_path,
+    is_signing_available,
+    load_or_create_signing_key,
+    sign_receipt,
+    verify_receipt,
+)
 from .types import (
     Band,
     CarbonReceipt,
@@ -75,7 +86,7 @@ from .types import (
     TickResultEntry,
 )
 
-__version__ = "0.10.0"
+__version__ = "0.11.0"
 
 __all__ = [
     "DEFAULT_PUE",
@@ -103,19 +114,28 @@ __all__ = [
     "RecommendAlternative",
     "RecommendResult",
     "Scheduler",
+    "SigningKeyPair",
+    "SigningNotInstalled",
     "TaskRecord",
     "TaskStatus",
     "TickResult",
     "TickResultEntry",
+    "VerifyOutcome",
+    "VerifyResult",
     "__version__",
+    "default_signing_key_path",
     "defer",
     "electricity_maps_feed",
     "estimate_energy_kwh",
     "grams_for_intensity",
+    "is_signing_available",
+    "load_or_create_signing_key",
     "lookup_model_energy",
     "mock_grid_feed",
     "normalize_deadline",
     "normalize_model_name",
     "pick_best_window",
     "recommend_window",
+    "sign_receipt",
+    "verify_receipt",
 ]

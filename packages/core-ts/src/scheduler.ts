@@ -18,6 +18,11 @@ import { randomUUID } from "node:crypto";
 import { gramsForIntensity } from "./energy.js";
 import { mockGridFeed } from "./grid.js";
 import type { ProviderAdapter } from "./providers/base.js";
+import {
+  loadOrCreateSigningKey,
+  signReceipt,
+  type SigningKeyPair,
+} from "./sign.js";
 import { TaskStore } from "./storage/sqlite.js";
 import type {
   CarbonReceipt,
@@ -69,6 +74,18 @@ export interface SchedulerOptions {
   dbPath?: string;
   /** Inject a pre-built TaskStore. Mostly for tests. */
   store?: TaskStore;
+  /**
+   * Ed25519 receipt-signing configuration. By default the scheduler
+   * signs every receipt with a per-installation keypair at
+   * `~/.ebb-ai/signing.key` (lazily created on first dispatch). Pass:
+   *   - `false` to disable signing entirely (receipts shipped without
+   *     signature/signerPublicKey/signedAt fields — back to v0.10 shape).
+   *   - `{ keyPath: "..." }` to override the keypair location (mostly
+   *     for tests so each scheduler instance gets a fresh key).
+   *
+   * v0.11+.
+   */
+  signing?: false | { keyPath?: string };
 }
 
 export class Scheduler {
@@ -83,6 +100,10 @@ export class Scheduler {
   private readonly bodies = new Map<string, DeferrableTask<unknown>>();
   private readonly store: TaskStore | undefined;
   private nextSerial = 1;
+  // Mutable: a single load failure disables signing for the rest of
+  // this scheduler instance (see `getSigningKey`).
+  private signingConfig: false | { keyPath?: string };
+  private signingKey: SigningKeyPair | undefined;
 
   constructor(opts: SchedulerOptions = {}) {
     this.feed = opts.feed ?? mockGridFeed();
@@ -92,6 +113,42 @@ export class Scheduler {
     } else if (opts.dbPath) {
       this.store = new TaskStore({ dbPath: opts.dbPath });
     }
+    this.signingConfig = opts.signing ?? {};
+  }
+
+  /**
+   * Lazy-load the signing keypair the first time a receipt needs to be
+   * signed. Returns undefined when signing is disabled or a fatal error
+   * is encountered while loading; the scheduler then drops back to v0.10
+   * unsigned receipts rather than failing the dispatch.
+   */
+  private getSigningKey(): SigningKeyPair | undefined {
+    if (this.signingConfig === false) return undefined;
+    if (this.signingKey) return this.signingKey;
+    try {
+      this.signingKey = loadOrCreateSigningKey({
+        privateKeyPath: this.signingConfig.keyPath,
+      });
+      return this.signingKey;
+    } catch (err) {
+      // The receipt remains valid — it just goes out unsigned. Log to
+      // stderr once so operators notice without crashing dispatch.
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[ebb-ai/scheduler] failed to load signing key, receipts will go out unsigned: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      this.signingConfig = false;
+      return undefined;
+    }
+  }
+
+  /** Sign a receipt if signing is enabled; otherwise return it unchanged. */
+  private maybeSign(receipt: CarbonReceipt): CarbonReceipt {
+    const key = this.getSigningKey();
+    if (!key) return receipt;
+    return signReceipt(receipt, key);
   }
 
   /** Reload a previously-persisted task by id. */
@@ -628,7 +685,7 @@ export class Scheduler {
               ((actualCarbonGCo2 - estimatedCarbonGCo2) / estimatedCarbonGCo2) * 1000,
             ) / 10
           : 0;
-      const receipt: CarbonReceipt = {
+      const receipt: CarbonReceipt = this.maybeSign({
         taskId,
         ranAt: ranAt.toISOString(),
         region: record.region,
@@ -636,7 +693,7 @@ export class Scheduler {
         actualCarbonGCo2,
         deltaPct,
         durationMs,
-      };
+      });
       record.status = "completed";
       record.completedAt = new Date().toISOString();
       record.result = result;
@@ -790,7 +847,7 @@ export class Scheduler {
             ) / 10
           : 0;
       const totalTokens = typeof usage?.totalTokens === "number" ? usage.totalTokens : undefined;
-      const receipt: CarbonReceipt = {
+      const receipt: CarbonReceipt = this.maybeSign({
         taskId: record.taskId,
         ranAt: ranAt.toISOString(),
         region: record.region,
@@ -806,7 +863,7 @@ export class Scheduler {
         durationMs,
         prompt: redactPrompt(spec.prompt, spec.redactInReceipt),
         totalTokens,
-      };
+      });
       record.status = "completed";
       record.completedAt = new Date().toISOString();
       record.result = result;
