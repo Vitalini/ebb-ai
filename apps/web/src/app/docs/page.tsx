@@ -200,6 +200,115 @@ estimateEnergyKwh();
         </div>
       </section>
 
+      <section id="receipts" className="space-y-6">
+        <header className="space-y-1">
+          <p className="font-mono text-[11px] uppercase tracking-wider text-accent">
+            verifiable receipts
+          </p>
+          <h2 className="text-2xl font-semibold tracking-tight">
+            Ed25519-signed carbon receipts (v0.11+)
+          </h2>
+          <p className="text-sm text-fg-muted">
+            Every dispatched task ships a cryptographic signature so
+            any consumer can verify, offline and asynchronously, that
+            (1) the receipt was produced by an ebb-ai installation
+            holding the matching private key, and (2) none of the
+            receipt&apos;s fields have been tampered with since signing.
+            Direct path to B2B ESG export — receipts are auditable
+            artefacts, not just claims.
+          </p>
+        </header>
+
+        <div className="space-y-3">
+          <p className="text-sm text-fg-muted">
+            Keys live at <code className="rounded bg-bg-elev px-1 font-mono text-xs">~/.ebb-ai/signing.key</code>{" "}
+            (private, <code className="font-mono text-xs">0600</code>) and
+            {" "}<code className="rounded bg-bg-elev px-1 font-mono text-xs">signing.key.pub</code>{" "}
+            (public). Generated lazily on first dispatch — no opt-in
+            friction. They never leave the machine; verification
+            consumers bundle the receipt&apos;s{" "}
+            <code className="rounded bg-bg-elev px-1 font-mono text-xs">signerPublicKey</code>{" "}
+            with the receipt itself, so downstream pipelines can pin
+            the key on first sight.
+          </p>
+        </div>
+
+        <div className="rounded-md border border-rule bg-bg-card p-4 font-mono text-xs leading-relaxed text-fg-muted">
+          <p className="mb-2 text-fg">CLI</p>
+          <pre className="overflow-x-auto whitespace-pre text-fg">
+{`# Verify the receipt for a completed task in the local ledger
+$ ebb verify 1c5b...e0
+
+✓ VALID
+
+task_id           1c5b...e0
+region            US-CAL-CISO
+ran_at            2026-06-01T13:00:00.000Z
+actual_g_co2      2.4
+estimated_g_co2   2.6
+delta_pct         -7.7
+model             claude-sonnet-4-5
+provider          anthropic
+
+signer_public_key OnTm5l9VbQHFv9wD...
+signed_at         2026-06-01T13:00:00.184Z
+
+Ed25519 signature verified against canonical payload (412 bytes)
+
+# Verify a receipt JSON file (e.g. as shipped to outputPath)
+$ ebb verify --file ./out/task-1c5b.json --json
+{ "outcome": "valid", "signerPublicKey": "OnTm5l9VbQHFv9wD...", ... }
+
+# Pin the expected signer for B2B/ESG pipelines
+$ ebb verify --file ./inbox/receipt.json --trusted-public-key OnTm5l9V...
+# exit 0 on match; exit 3 on key-mismatch`}
+          </pre>
+        </div>
+
+        <div className="rounded-md border border-rule bg-bg-card p-4 font-mono text-xs leading-relaxed text-fg-muted">
+          <p className="mb-2 text-fg">Library (TypeScript)</p>
+          <pre className="overflow-x-auto whitespace-pre text-fg">
+{`import {
+  signReceipt,
+  verifyReceipt,
+  loadOrCreateSigningKey,
+} from "@ebb-ai/core";
+
+const keyPair = loadOrCreateSigningKey();
+const signed = signReceipt(receipt, keyPair);
+
+const result = verifyReceipt(signed);
+// { outcome: "valid" | "tampered" | "legacy-unsigned" | "key-mismatch", ... }`}
+          </pre>
+        </div>
+
+        <div className="rounded-md border border-rule bg-bg-card p-4 font-mono text-xs leading-relaxed text-fg-muted">
+          <p className="mb-2 text-fg">Library (Python — opt-in)</p>
+          <pre className="overflow-x-auto whitespace-pre text-fg">
+{`# pip install "ebb-ai[signing]"   (pulls in the cryptography library)
+
+from ebb_ai import (
+    sign_receipt, verify_receipt,
+    load_or_create_signing_key, is_signing_available,
+)
+
+key_pair = load_or_create_signing_key()
+signed = sign_receipt(receipt_dict, key_pair)
+result = verify_receipt(signed)
+# VerifyResult(outcome='valid', signer_public_key=..., reason=...)`}
+          </pre>
+        </div>
+
+        <p className="text-xs text-fg-dim">
+          Verifier outcomes: <code>valid</code>, <code>tampered</code>{" "}
+          (signed but no longer matches), <code>legacy-unsigned</code>{" "}
+          (pre-v0.11 receipt — accept-or-reject is the consumer&apos;s
+          policy), <code>key-mismatch</code> (signed by someone other
+          than the trusted public key). CLI exit codes mirror these:
+          0 / 1 / 2 / 3.
+        </p>
+      </section>
+
       <section id="paths" className="space-y-4">
         <header className="space-y-1">
           <p className="font-mono text-[11px] uppercase tracking-wider text-accent">
@@ -211,6 +320,10 @@ estimateEnergyKwh();
           <PathCard
             path="~/.ebb-ai/queue.db"
             desc="SQLite ledger — queue + carbon receipts. The CLI, MCP server, and dashboard all read this same file. Read-only from your agent; modifiable from the CLI."
+          />
+          <PathCard
+            path="~/.ebb-ai/signing.key"
+            desc="Per-installation Ed25519 private key (0600, with `signing.key.pub` alongside). Lazily generated on first dispatch; signs every carbon receipt so consumers can verify offline via `ebb verify`. Local-only — ebb-ai never sends it anywhere. v0.11+."
           />
           <PathCard
             path="~/.ebb-ai/telemetry.key"

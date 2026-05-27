@@ -7,6 +7,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — v0.11.0 "Auditable receipts" (Ed25519 + WAL)
+
+- **Ed25519-signed carbon receipts.** Every dispatched task ships a
+  cryptographic signature so any consumer can verify, offline and
+  asynchronously, that (1) the receipt was produced by an ebb-ai
+  installation holding the matching private key, and (2) none of the
+  receipt's fields have been tampered with since signing. Direct B2B
+  ESG export path now possible — receipts are auditable artefacts,
+  not just claims.
+- **`packages/core-ts/src/sign.ts`** (new) — Node-native (uses stdlib
+  `crypto`, no deps). Public API: `loadOrCreateSigningKey`,
+  `signReceipt`, `verifyReceipt`, `canonicalize`, plus
+  `defaultSigningKeyPath`. Keys live at `~/.ebb-ai/signing.key` (private,
+  0600) + `signing.key.pub` (public, 0644); generated lazily on first
+  dispatch with no opt-in friction.
+- **`CarbonReceipt`** extended with `signature` (base64 Ed25519 sig),
+  `signerPublicKey` (base64 raw 32-byte key, embedded for offline
+  verify), and `signedAt` (ISO timestamp for replay defence). Pre-v0.11
+  receipts (no signature) verify as `legacy-unsigned`.
+- **`SchedulerOptions.signing`** — pass `false` to disable signing,
+  or `{ keyPath: "..." }` to override the key location (mostly for tests).
+  Default: enabled.
+- **`ebb verify [task-id]`** CLI command — verifies a receipt from the
+  ledger by id or from a JSON file via `--file`. Exit codes: 0=valid,
+  1=tampered, 2=legacy-unsigned, 3=key-mismatch, 4=not-found. Supports
+  `--trusted-public-key` for key pinning and `--json` for structured
+  output. 7 dedicated CLI tests cover every outcome.
+- **Python mirror** `packages/core-py/src/ebb_ai/sign.py` — same API
+  surface (snake_case), opt-in via `pip install "ebb-ai[signing]"`
+  (pulls in `cryptography>=42`). Without the extra, receipts go out
+  unsigned and the scheduler degrades silently (v0.10 shape). 15 tests
+  guarded by `is_signing_available()`.
+- **WAL multi-writer SQLite.** `TaskStore` now flips
+  `journal_mode = WAL` + `synchronous = NORMAL` on first connect for
+  disk-backed stores. Lifts the single-writer-per-DB-file
+  pessimism — the `ebb tick` daemon and an interactive `ebb-mcp` server
+  can hold separate handles over `~/.ebb-ai/queue.db` without
+  `SQLITE_BUSY`. Mirrored in the Python `aiosqlite` store. In-memory
+  stores (`:memory:`) intentionally skip.
+- **`pnpm preflight`** root script — wraps `pnpm typecheck` +
+  `pnpm test` + `pnpm lint:py` (ruff + pytest in core-py). Documented
+  in CONTRIBUTING. Prevents the v0.10.0 main-branch CI red repeat
+  (Python ruff `RUF022` was the missed step).
+
+### Changed — version bumps (lockstep)
+
+- `@ebb-ai/core` 0.10.0 → 0.11.0
+- `@ebb-ai/cli` 0.10.0 → 0.11.0 (`ebb verify` added)
+- `@ebb-ai/mcp` 0.10.0 → 0.11.0 (SERVER_VERSION synced)
+- Claude Code plugin manifest + marketplace 0.10.0 → 0.11.0
+- `ebb_ai` PyPI 0.10.0 → 0.11.0 (`[signing]` extras added)
+- OpenClaw plugin (`@vitalini/ebb`) unchanged at 0.1.13 — separate
+  semver track per ClawHub convention.
+
+### Tests
+
+- TypeScript: 17 new sign tests + 2 new WAL storage tests + 7 new CLI
+  verify tests. Total monorepo: 187 → 213 TS tests.
+- Python: 15 new sign tests guarded by extras availability. Total:
+  97 → 112.
+
 ### Added — `@ebb-ai/core` 0.10.0 + `ebb_ai` 0.10.0 (per-model energy)
 
 - **`packages/core-ts/src/energy.ts`** and Python mirror

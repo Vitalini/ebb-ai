@@ -37,7 +37,8 @@ default. `ebb-ai` makes the choice automatic. Four parallel wins:
    Auditable, region-aware, reproducible. v0.10+ uses per-model Wh/token
    coefficients (Patterson 2021, Luccioni 2024, Hugging Face AI Energy
    Score) so receipts reflect what the agent actually ran — not a flat
-   placeholder.
+   placeholder. v0.11+ signs every receipt with Ed25519 so consumers can
+   verify them offline via `ebb verify` (B2B ESG export path).
 
 `ebb-ai` is the same code that would have fired a sync LLM call —
 now deferred to the cleanest, cheapest, fastest hour inside the

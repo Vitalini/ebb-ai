@@ -86,7 +86,7 @@ const jsonLd = {
       operatingSystem: "macOS, Linux, Windows",
       offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
       license: "https://opensource.org/licenses/Apache-2.0",
-      softwareVersion: "0.10.0",
+      softwareVersion: "0.11.0",
       author: {
         "@type": "Person",
         name: "Vitalii Borovyk",
@@ -140,7 +140,7 @@ export default function RootLayout({
               (mock fallback when no key is configured)
             </p>
             <p className="font-mono text-fg-dim">
-              v0.10.0 · operator preview · UTC-aligned
+              v0.11.0 · operator preview · UTC-aligned
             </p>
           </div>
         </footer>
