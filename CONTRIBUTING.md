@@ -38,8 +38,11 @@ Requirements: Node 20+, pnpm 9+.
    `docs/spec/priority-field`).
 3. Write the change. Add or update tests so they cover the new
    behavior.
-4. Run `pnpm typecheck && pnpm build && pnpm test` locally. Make
-   sure all pass.
+4. Run `pnpm preflight` locally — wraps `pnpm typecheck && pnpm test
+   && pnpm lint:py` (the last runs `ruff check` + `pytest` against
+   `packages/core-py`). Make sure everything is green. The Python
+   lint step is critical: CI runs ruff against `core-py` too, and a
+   missed `RUF022` was the cause of the v0.10.0 main-branch CI red.
 5. Commit. Use a clear subject; mention the package in scope where
    applicable (`feat(core): enforce carbonBudgetG in scheduler`).
 6. Open a PR against `main`. Describe what changed and why, link

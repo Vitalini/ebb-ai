@@ -22,6 +22,8 @@
     "build": "pnpm -r --filter=./packages/* build",
     "test": "pnpm -r --filter=./packages/* test",
     "typecheck": "pnpm -r --filter=./packages/* typecheck",
+    "lint:py": "cd packages/core-py && .venv/bin/ruff check . && .venv/bin/pytest -q",
+    "preflight": "pnpm typecheck && pnpm test && pnpm lint:py",
     "clean": "pnpm -r --filter=./packages/* clean && rm -rf node_modules",
     "release:npm": "pnpm -r --filter=./packages/* build && pnpm --filter @ebb-ai/core --filter @ebb-ai/cli --filter @ebb-ai/mcp publish --access public --no-git-checks"
   },
