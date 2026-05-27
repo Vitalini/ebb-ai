@@ -218,8 +218,10 @@ class _TaskStore:
     in-memory at v0.1). See ``PLAN.md`` section 4.1.
 
     Concurrency: writes are serialized through an :class:`asyncio.Lock`
-    so a single connection is enough; multiple schedulers pointed at
-    the same DB file would need WAL mode (left for v0.3).
+    so a single connection is enough; for cross-process concurrency the
+    store enables SQLite's WAL journal on first connect (v0.11) so a
+    second TaskStore (e.g. ``ebb tick`` daemon + interactive ``ebb-mcp``)
+    can hold a separate handle without ``SQLITE_BUSY`` collisions.
     """
 
     def __init__(self, db_path: str) -> None:
@@ -231,6 +233,19 @@ class _TaskStore:
         if self._conn is not None:
             return
         conn = await aiosqlite.connect(self._db_path)
+        # v0.11: WAL on disk-backed stores so cross-process writers
+        # don't trip SQLITE_BUSY. The pragma is persistent; running on
+        # every open is cheap (~µs) and idempotent. In-memory stores
+        # (``:memory:``) intentionally skip — WAL on ephemeral DBs adds
+        # no value.
+        if self._db_path != ":memory:":
+            try:
+                await conn.execute("PRAGMA journal_mode = WAL")
+                await conn.execute("PRAGMA synchronous = NORMAL")
+            except Exception:
+                # Some FS-level configurations refuse WAL; the store
+                # still works, just back to default DELETE journaling.
+                pass
         await conn.executescript(_SCHEMA)
         await conn.commit()
         await _ensure_body_json_column(conn)

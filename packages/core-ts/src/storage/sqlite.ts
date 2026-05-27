@@ -125,6 +125,26 @@ export class TaskStore {
     } else {
       this.db = openSqliteSync(opts.dbPath);
     }
+    // v0.11: enable WAL on disk-backed stores. WAL lifts SQLite's
+    // single-writer-per-DB-file pessimism so the `ebb tick` daemon and
+    // an interactive process can hold separate `TaskStore` handles
+    // against `~/.ebb-ai/queue.db` without `SQLITE_BUSY`. The PRAGMA
+    // is persistent in the DB header so running once on first open is
+    // enough. In-memory DBs (`:memory:`) intentionally skip — WAL on
+    // ephemeral stores adds no value.
+    if (opts.dbPath !== ":memory:") {
+      try {
+        this.db.exec("PRAGMA journal_mode = WAL");
+        // synchronous=NORMAL is the standard WAL companion — durable
+        // across app crashes, faster than FULL, only loses the very
+        // last transaction on a hard power loss. ebb-ai dispatch is
+        // idempotent over `task_id`, so the worst case re-runs one task.
+        this.db.exec("PRAGMA synchronous = NORMAL");
+      } catch {
+        // Some drivers (or read-only filesystems) refuse the pragma.
+        // The store still works, just without WAL — fall through.
+      }
+    }
     this.db.exec(SCHEMA);
     ensureColumns(this.db);
   }

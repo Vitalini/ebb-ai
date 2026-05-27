@@ -33,6 +33,39 @@ describe("TaskStore (SQLite-backed)", () => {
     store.close();
   });
 
+  it("enables WAL mode on disk-backed stores (v0.11)", () => {
+    const store = new TaskStore({ dbPath });
+    // Cast through `unknown` because TaskStore intentionally hides the
+    // raw db handle from its public surface.
+    const db = (store as unknown as {
+      db: { prepare: (s: string) => { get(): { journal_mode: string } } };
+    }).db;
+    const row = db.prepare("PRAGMA journal_mode").get();
+    expect(row.journal_mode.toLowerCase()).toBe("wal");
+    store.close();
+  });
+
+  it("two TaskStore handles over the same file write concurrently without SQLITE_BUSY", () => {
+    const a = new TaskStore({ dbPath });
+    const b = new TaskStore({ dbPath });
+    // Interleave writes — without WAL this used to throw SQLITE_BUSY
+    // intermittently when the `ebb tick` daemon and the MCP server held
+    // separate connections.
+    for (let i = 0; i < 20; i++) {
+      const writer = i % 2 === 0 ? a : b;
+      writer.upsert({
+        taskId: `t-${i}`,
+        status: "queued",
+        enqueuedAt: new Date(2026, 4, 27, 0, 0, i).toISOString(),
+        region: "US-CAL-CISO",
+      });
+    }
+    expect(a.list()).toHaveLength(20);
+    expect(b.list()).toHaveLength(20);
+    a.close();
+    b.close();
+  });
+
   it("survives a reopen", () => {
     const writer = new TaskStore({ dbPath });
     writer.upsert({
