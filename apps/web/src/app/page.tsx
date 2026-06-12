@@ -99,31 +99,44 @@ function InstallBlock() {
           One line. Any host.
         </h2>
         <p className="mt-1 text-sm text-fg-muted">
-          Pick your AI host — copy the command. Default is the universal MCP
-          install; switch the dropdown for Claude Code, Cursor, Claude Desktop,
-          Windsurf, Continue, Cline, Zed, Goose, OpenClaw, or use the library
-          directly.
+          Paste the prompt below into your agent. It detects the host
+          (Claude Code, Cursor, Claude Desktop, Windsurf, Continue, Cline,
+          Zed, Goose, OpenClaw, or any generic MCP host) and runs the right
+          install path for you.
         </p>
       </header>
 
       <div className="mt-5">
-        <InstallPicker />
+        <AgentPrompt />
       </div>
 
-      <div className="mt-6 border-t border-rule pt-5">
+      <div
+        role="separator"
+        aria-label="or install manually"
+        className="mt-7 mb-6 flex items-center gap-3"
+      >
+        <span className="h-px flex-1 bg-rule" aria-hidden="true" />
+        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-fg-dim">
+          or
+        </span>
+        <span className="h-px flex-1 bg-rule" aria-hidden="true" />
+      </div>
+
+      <div>
         <p className="font-mono text-[11px] uppercase tracking-wider text-accent">
-          or — paste this into your agent
+          install it yourself
         </p>
         <p className="mt-1 text-sm text-fg-muted">
-          One copy. The agent picks the right install path for whichever host
-          it&apos;s running in.
+          Pick your host below and copy the command. Default is the universal
+          MCP install; switch the dropdown for host-specific configs or to use
+          the library directly.
         </p>
-        <div className="mt-3">
-          <AgentPrompt />
+        <div className="mt-4">
+          <InstallPicker />
         </div>
       </div>
 
-      <p className="mt-5 text-sm text-fg-muted">
+      <p className="mt-6 text-sm text-fg-muted">
         Once installed, your assistant can call{" "}
         <code className="rounded bg-bg-elev px-1 font-mono text-xs">
           /ebb-ai:defer &quot;summarize this&quot; --by tomorrow 6pm
