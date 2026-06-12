@@ -2,35 +2,12 @@
 
 import { useState } from "react";
 
-const PROMPT = `Install ebb-ai (carbon-aware MCP scheduler) into the host you're running in.
+const PROMPT = `Please install ebb-ai — open-source carbon-aware MCP scheduler, Apache-2.0.
 
-1. Detect the host: Claude Code, Cursor, Claude Desktop, Windsurf,
-   Continue, Cline, Zed, Goose, or OpenClaw.
+Instructions: https://www.ebb-ai.com/install.md
 
-2. Install:
-   - Claude Code: /plugin marketplace add Vitalini/ebb-ai
-                  /plugin install ebb-ai
-   - OpenClaw:    openclaw plugin add @vitalini/ebb
-   - Any other MCP host: add this server to the host's MCP config
-       command: npx
-       args:    ["-y", "@ebb-ai/mcp"]
-     (Claude Desktop, Cursor, Windsurf, Continue, Cline, Zed, Goose
-     all use the same {command, args} shape — only the config file
-     path differs. See https://www.ebb-ai.com/docs for the exact
-     path for each host.)
-
-3. Restart the host session so the new MCP server is picked up.
-
-4. Confirm by calling the schedule_task tool with a dry_run:
-     { "prompt": "ping",
-       "deadline_iso": "<24h from now in ISO-8601>",
-       "dry_run": true }
-   Expected: a chosen window + estimated carbon, no persistent task.
-
-5. Tell me when done — print only the host you detected and whether
-   step 4 returned a valid window. No other output.
-
-Reference: https://www.ebb-ai.com/docs | License: Apache-2.0`;
+Read that file, then run the install path for whichever host
+you're in and confirm it worked.`;
 
 export function AgentPrompt() {
   const [copied, setCopied] = useState(false);
