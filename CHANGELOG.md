@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added — v0.11.0 "Auditable receipts" (Ed25519 + WAL)
+(Nothing pending — see version sections below.)
+
+## [0.11.0] — 2026-05-30
+
+**Theme:** "Auditable receipts." Ed25519 signing + WAL multi-writer SQLite.
+
+### Added
 
 - **Ed25519-signed carbon receipts.** Every dispatched task ships a
   cryptographic signature so any consumer can verify, offline and
@@ -58,8 +64,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `@ebb-ai/mcp` 0.10.0 → 0.11.0 (SERVER_VERSION synced)
 - Claude Code plugin manifest + marketplace 0.10.0 → 0.11.0
 - `ebb_ai` PyPI 0.10.0 → 0.11.0 (`[signing]` extras added)
-- OpenClaw plugin (`@vitalini/ebb`) unchanged at 0.1.13 — separate
-  semver track per ClawHub convention.
+- OpenClaw plugin (`@vitalini/ebb`) 0.1.13 → 0.11.0 — joined the
+  monorepo lockstep so the queue-sharing surface is single-versioned
+  end to end.
 
 ### Tests
 
@@ -67,6 +74,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   verify tests. Total monorepo: 187 → 213 TS tests.
 - Python: 15 new sign tests guarded by extras availability. Total:
   97 → 112.
+
+## [0.10.0] — 2026-05-24
+
+**Theme:** "Per-model energy." Replaces the v0.1–v0.9 flat
+`0.0015 kWh/task` placeholder with a cited per-model Wh/token table
+across 37 LLMs (Patterson 2021, Luccioni 2024, HF AI Energy Score).
 
 ### Added — `@ebb-ai/core` 0.10.0 + `ebb_ai` 0.10.0 (per-model energy)
 
@@ -132,9 +145,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   track. Both 0.6.0 and 0.10.0 remain installable from PyPI; latest
   resolves to 0.10.0.
 - OpenClaw plugin (`@vitalini/ebb`) unchanged at 0.1.13 — separate
-  semver track per ClawHub convention.
+  semver track at this point (joined lockstep in 0.11.0).
 
-### Changed — site (no version bump yet)
+## [0.9.0] — 2026-05-24
+
+**Theme:** "Actual + estimated + delta carbon receipts." OpenClaw
+plugin reaches MCP parity (expedite/retry, runtime delivery, region
+auto-detect); home-page how-it-works visualizer rebuilt as an
+animated task-flow story.
+
+### Added
+
+- **Actual-vs-estimated carbon receipt.** `CarbonReceipt` now
+  carries both an `estimatedCarbonGCo2` (projected at schedule
+  time) and `actualCarbonGCo2` (re-estimated at dispatch with the
+  provider's reported `usage.inputTokens` / `usage.outputTokens`),
+  plus a signed `deltaPct` drift. The audit trail is honest about
+  what was planned vs. what shipped.
+- **OpenClaw plugin parity.** `expedite_task` + `retry_task` added,
+  bringing the OpenClaw plugin to full feature parity with the
+  TS/Python MCP scheduler.
+- **OpenClaw delivery channels.** `set_delivery` now persists a
+  per-task delivery target (chat / telegram / webhook / file) to
+  the SQLite delivery store and clears the exfiltration flag on
+  dispatch.
+- **Region auto-detection in OpenClaw plugin.** When the host
+  doesn't supply a region, the plugin infers one from the host
+  machine's timezone (London→GB, Paris→FR, Berlin→DE, US
+  Pacific→US-CAL-CISO, US Eastern→US-MIDA-PJM).
+
+### Fixed
+
+- `recommend_window` no longer claims "cleanest" in its reasoning
+  string when it actually picked a band-tied alternative.
+- OpenClaw runtime bridge no longer passes a model override —
+  scheduled tasks now execute in the user's currently-selected
+  OpenClaw model just like an interactive call.
+- Scheduler now correctly dispatches tasks whose
+  `scheduled_for` already elapsed when the daemon woke up
+  (previously these stayed `scheduled` indefinitely).
+- `cancel_task` is store-aware: cancelling a persisted task
+  updates the SQLite row instead of only the in-memory map.
+
+### Changed — site
+
+- **`HowItWorksViz` rewritten** as an animated task-flow story
+  (CSS Motion Path particle streams; dwell on
+  receive + execute; breathing loop).
+- **Roadmap narrative rewritten** alongside the v0.9.0 bump.
+
+### npm
+
+- `@ebb-ai/core` 0.8.2 → 0.9.0
+- `@ebb-ai/cli` 0.8.3 → 0.9.0
+- `@ebb-ai/mcp` 0.8.2 → 0.9.0
+- OpenClaw plugin shipped intermediate point releases (0.1.2 ...
+  0.1.13) tracking the parity work above.
+- Claude Code plugin manifest 0.8.2 → 0.9.0.
+
+### Fixed — release tooling
+
+- Use `pnpm publish` instead of `npm publish` so `workspace:*`
+  protocol resolutions are rewritten to concrete versions in the
+  published tarballs.
+
+## [Inter-release site & infrastructure] — 2026-05-14 → 2026-05-24
+
+**Theme:** Heterogeneous bucket of work that shipped between v0.6 and
+v0.9 without its own package bump — discoverability (llms.txt,
+SEO/JSON-LD), `apps/dashboard/` → `apps/web/` rename, `/stats` and
+`/queue` honesty rewrite, `/map` route, `/about`, the OpenClaw plugin's
+initial creation (`@vitalini/ebb-ai@0.1.0` on ClawHub). Tracked here
+so the changelog isn't silent about it.
+
+### Changed — site
 
 - **`/stats` and `/queue` rewritten as honest docs** — both used to
   show synthetic aggregates behind a "DEMO MODE" banner. Now they're
@@ -751,7 +835,14 @@ their mind, and how to mitigate the operational failure modes
   Batches APIs. Direct Batch routing lands in v0.2.
 - Python port (`ebb-ai` PyPI) is a placeholder. v0.2.
 
-[Unreleased]: https://github.com/Vitalini/ebb-ai/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/Vitalini/ebb-ai/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/Vitalini/ebb-ai/compare/v0.10.0...v0.11.0
+[0.10.0]: https://github.com/Vitalini/ebb-ai/compare/v0.9.0...v0.10.0
+[0.9.0]: https://github.com/Vitalini/ebb-ai/compare/v0.8.3...v0.9.0
+[0.8.3]: https://github.com/Vitalini/ebb-ai/compare/v0.8.2...v0.8.3
+[0.8.2]: https://github.com/Vitalini/ebb-ai/compare/v0.8.1...v0.8.2
+[0.8.1]: https://github.com/Vitalini/ebb-ai/compare/v0.8.0...v0.8.1
+[0.8.0]: https://github.com/Vitalini/ebb-ai/compare/v0.7.1...v0.8.0
 [0.5.0]: https://github.com/Vitalini/ebb-ai/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Vitalini/ebb-ai/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Vitalini/ebb-ai/compare/v0.2.0...v0.3.0

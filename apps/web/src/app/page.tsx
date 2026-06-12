@@ -6,6 +6,7 @@ import { BarChart3, BookOpen, CalendarClock, Globe } from "lucide-react";
 import { HowItWorksViz } from "@/components/how-it-works-viz";
 import { GridGreeting, GridGreetingSkeleton } from "@/components/grid-greeting";
 import { InstallPicker } from "@/components/install-picker";
+import { AgentPrompt } from "@/components/agent-prompt";
 
 export const metadata: Metadata = {
   title: "Carbon-aware scheduling for AI workflows",
@@ -107,6 +108,19 @@ function InstallBlock() {
 
       <div className="mt-5">
         <InstallPicker />
+      </div>
+
+      <div className="mt-6 border-t border-rule pt-5">
+        <p className="font-mono text-[11px] uppercase tracking-wider text-accent">
+          or — paste this into your agent
+        </p>
+        <p className="mt-1 text-sm text-fg-muted">
+          One copy. The agent picks the right install path for whichever host
+          it&apos;s running in.
+        </p>
+        <div className="mt-3">
+          <AgentPrompt />
+        </div>
       </div>
 
       <p className="mt-5 text-sm text-fg-muted">

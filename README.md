@@ -72,20 +72,28 @@ Windsurf, OpenClaw, OpenAI Codex CLI, Pi). The agent asks
 `recommend_window`, sees the plan, then commits via `schedule_task`
 — or doesn't.
 
-> **Status:** v0.7 · 2026-05-14 · `@ebb-ai/{core,mcp,cli}` published
-> to npm under the `@ebb-ai` org. **One-command Claude Code plugin**
-> via `claude plugin install ebb-ai`. **Four real-data grid feeds**:
+> **Status:** v0.11.0 · 2026-05-30 · `@ebb-ai/{core,mcp,cli}` published
+> to npm under the `@ebb-ai` org; `ebb-ai` on PyPI; `@vitalini/ebb`
+> OpenClaw plugin shares the queue. **One-command Claude Code plugin**
+> via `/plugin marketplace add Vitalini/ebb-ai && /plugin install ebb-ai`.
+> **Four real-data grid feeds** across **31 regions** (NA/EU/APAC):
 > UK National Grid ESO Carbon Intensity API (GB, free no key),
 > US EIA Open Data (CAISO / ERCOT / ISO-NE / PJM, free with key),
-> ENTSO-E Transparency Platform (FR / DE, free with token), and
-> Electricity Maps as universal fallback. Anthropic + OpenAI Batch
-> adapters, durable SQLite queue, Python port at parity, live
-> dashboard, `recommend_window` planning endpoint, always-on `ebb
-> tick` CLI with macOS launchd + Linux systemd + pmset/rtcwake wake
-> events, full control surface (`cancel_task` / `expedite_task` /
-> `update_deadline` / `retry_task`), receipt redaction, file output,
-> retry-with-backoff. **88 + Python tests passing across 4 packages
-> and 2 languages.** See [QUICKSTART.md](./QUICKSTART.md).
+> ENTSO-E Transparency Platform (FR / DE / ES / IT / NL / …, free with
+> token), and Electricity Maps as universal fallback. **v0.10:**
+> per-model Wh/token coefficients across 37 LLMs (Patterson 2021,
+> Luccioni 2024, HF AI Energy Score) replace the v0.1–v0.9 flat
+> placeholder. **v0.11:** Ed25519-signed carbon receipts (offline
+> verifiable via `ebb verify`) plus WAL multi-writer SQLite so
+> `ebb tick` and the MCP server can share `~/.ebb-ai/queue.db`.
+> Anthropic + OpenAI Batch adapters, Python port at parity, live
+> dashboard, `recommend_window` planning endpoint, always-on `ebb tick`
+> CLI with macOS launchd + Linux systemd + pmset/rtcwake wake events,
+> full control surface (`cancel_task` / `expedite_task` /
+> `update_deadline` / `retry_task` / `cancel_all`), receipt redaction,
+> file output, retry-with-backoff. **325 tests passing** (213 TS +
+> 112 Python) across 5 packages and 2 languages. See
+> [QUICKSTART.md](./QUICKSTART.md).
 
 ### Live demo
 

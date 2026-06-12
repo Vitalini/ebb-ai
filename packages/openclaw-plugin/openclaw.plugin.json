@@ -19,7 +19,7 @@
     },
     "additionalProperties": false
   },
-  "version": "0.1.13",
+  "version": "0.11.0",
   "contracts": {
     "tools": [
       "schedule_task",
