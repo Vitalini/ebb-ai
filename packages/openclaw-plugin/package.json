@@ -40,11 +40,11 @@
   "dependencies": {},
   "devDependencies": {
     "@ebb-ai/core": "workspace:*",
-    "typebox": "^1.1.38",
-    "esbuild": "^0.28.0",
+    "typebox": "^1.2.14",
+    "esbuild": "^0.28.1",
     "typescript": "^5.6.3",
     "vitest": "^2.1.5",
-    "@types/node": "^22.10.0"
+    "@types/node": "^22.19.21"
   },
   "publishConfig": {
     "access": "public"
