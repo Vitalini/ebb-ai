@@ -7,6 +7,15 @@
 >
 > **Author:** Vitalii Borovyk (`@Vitalini`)
 > **Date drafted:** 2026-05-12
+>
+> **Canonical design reference:** the paste-ready PR body plus the
+> exact schema/spec diff live in
+> [`docs/spec/proposal/UPSTREAM-PR.md`](proposal/UPSTREAM-PR.md).
+> That document is canonical for the field design — fields placed
+> directly in `params`, the budget field named `carbon_budget`
+> (grams CO2e), and `priority` typed as an integer `0–9`. This file
+> is the discussion lead-in; where the two ever diverge,
+> `UPSTREAM-PR.md` wins.
 
 ---
 
@@ -49,11 +58,12 @@ unify these paths without breaking the synchronous default.
 
 ### Proposal
 
-Add three **optional** fields to the MCP `tools/call` request
-envelope's `arguments` object — or, alternatively, to a sibling
-`meta` field that the spec already reserves for transport-level
-metadata. (I'd value maintainer input on which placement they
-prefer; both are workable.)
+Add three **optional** fields directly to the MCP `tools/call`
+request's `params` object, alongside `name` and `arguments` —
+*not* nested inside `arguments` (which is tool-specific) and *not*
+inside `_meta` (which is infrastructure-level transport metadata).
+Scheduling intent is call semantics: what the caller wants the
+server to *do* with the call.
 
 ```jsonc
 {
@@ -63,18 +73,17 @@ prefer; both are workable.)
   "params": {
     "name": "summarize_corpus",
     "arguments": { /* tool-specific input */ },
-    "_meta": {
-      "priority": "background",       // "interactive" | "background" | "now"
-      "deadline": "2026-05-13T08:00:00-04:00",
-      "carbon_budget_g": 5
-    }
+    "priority": 2,                       // integer 0–9; 0 = best-effort, 5 = normal (default), 9 = critical
+    "deadline": "2026-05-13T08:00:00-04:00",
+    "carbon_budget": 5
   }
 }
 ```
 
 Servers that ignore these fields continue to work — they treat
-every call as `priority: "now"`. Servers that support them gain a
-clean way to:
+every call as synchronous and immediate (no deferral budget, the
+behaviour you'd get at the top of the priority range). Servers
+that support them gain a clean way to:
 
 - Queue, batch, or defer the call.
 - Reject the call at the boundary if no satisfiable window exists.
@@ -82,19 +91,21 @@ clean way to:
 
 ### Semantics
 
-- **`priority`**: one of `"interactive"` (default — must respond
-  with normal latency expectations), `"background"` (may be queued
-  for batch processing within the agent's normal SLA), or
-  `"now"` (synonym for `"interactive"`, included for symmetry with
-  some host UIs).
-- **`deadline`**: ISO-8601 timestamp by which the response must be
+- **`priority`**: integer `0–9`. `0` = best-effort / lowest-cost /
+  latest-acceptable dispatch; `5` = normal (the default if
+  omitted); `9` = critical / dispatch immediately regardless of
+  cost. Higher is more urgent. Servers MAY honour this; servers
+  that do not understand it MUST ignore it.
+- **`deadline`**: RFC 3339 timestamp by which the response must be
   available. Servers that cannot guarantee the deadline either
   reject the call at the boundary or return a structured
   `deadline_unmeetable` error in `CallToolResult.isError`.
-- **`carbon_budget_g`**: positive number in grams CO2-equivalent.
-  Servers that cannot keep the call under the budget either reject
-  at the boundary or return a `carbon_budget_exceeded` error. Hosts
-  that do not measure carbon SHOULD ignore the field cleanly.
+- **`carbon_budget`**: positive number in grams CO2-equivalent.
+  If no dispatch window inside the deadline keeps the call under
+  the budget, the server MUST fail the call with a structured error
+  (`code: -32000`, `message: "carbon budget cannot be met inside
+  deadline"`) rather than silently dispatching to a dirtier window.
+  Hosts that do not measure carbon SHOULD ignore the field cleanly.
 
 ### Backward compatibility
 
@@ -116,8 +127,8 @@ do anything.
 2. **A separate `tools/schedule` method.** Could ship a parallel
    method that explicitly says "queue this for later." Cleaner
    semantics, but doubles the protocol surface and forces every
-   server to choose which method it serves. Optional `_meta` fields
-   are lighter touch.
+   server to choose which method it serves. Optional `params`
+   fields are lighter touch.
 
 3. **Provider-specific extensions.** What we have today. Already
    shown not to compose.
@@ -126,7 +137,7 @@ do anything.
 
 I'm building `@ebb-ai/mcp` — a reference MCP server that
 implements these semantics today (`schedule_task` tool that accepts
-`deadline` and `carbon_budget_g`, backed by a carbon-aware
+`deadline` and `carbon_budget`, backed by a carbon-aware
 scheduler with Electricity Maps and a 24-hour batch-API path).
 Source: https://github.com/Vitalini/ebb-ai.
 
@@ -139,8 +150,10 @@ but the interoperability story is materially weaker that way.
 ### Asks for the maintainers
 
 1. Do you see appetite for adding these as optional fields?
-2. If yes — preferred placement: in `arguments`, in `_meta`, or in a
-   new sibling `params.scheduling` object?
+2. If yes — the proposal lands the fields flat in `params` (the
+   placement argued above). Do you prefer that, or a nested
+   `params.scheduling.{priority,deadline,carbonBudget}` object?
+   Happy to nest if maintainers prefer.
 3. Should the carbon-budget concept live in the spec at all, or
    should that be a profile / extension on top? I'd argue
    in-spec because the rest of the agent stack cares about it, but
