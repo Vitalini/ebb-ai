@@ -166,10 +166,10 @@ const HOSTS: Host[] = [
   },
   {
     id: "python-lib",
-    label: "Python library (from source)",
+    label: "Python library",
     group: "lib",
     desc: "Use ebb-ai directly as a Python library — no MCP host needed.",
-    command: 'pip install "git+https://github.com/Vitalini/ebb-ai.git#subdirectory=packages/core-py"',
+    command: "pip install ebb-ai",
     lang: "bash",
     followup:
       "from ebb_ai import Scheduler; s = Scheduler(); await s.schedule(...). Same API as the TypeScript core.",

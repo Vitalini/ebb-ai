@@ -53,7 +53,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "ebb-ai — Carbon-aware scheduling for agentic AI workflows",
     description:
-      "MCP server that defers non-urgent AI tasks to the cleanest grid window. 204 tests, 9 MCP tools, persistent SQLite queue. Apache-2.0.",
+      "MCP server that defers non-urgent AI tasks to the cleanest grid window. 333 tests, 9 MCP tools, persistent SQLite queue. Apache-2.0.",
     images: ["/og.png"],
   },
   robots: {

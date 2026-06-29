@@ -158,9 +158,9 @@ function CopyHint({
         <div>
           <h4 className="text-sm font-semibold text-fg">Send to ebb-mcp</h4>
           <p className="mt-1 text-xs text-fg-muted">
-            v0.2: copy this into your terminal where the ebb-ai scheduler is
-            installed. v0.3 will introduce a one-click dispatch from this page
-            (HTTP control plane).
+            Copy this into your terminal where the ebb-ai scheduler is
+            installed. A future release will add one-click dispatch from this
+            page (HTTP control plane).
           </p>
         </div>
         <button

@@ -239,7 +239,7 @@ export default function AboutPage() {
             </p>
             <p className="mt-1 font-semibold text-fg">GitHub repository</p>
             <p className="mt-1 text-sm text-fg-muted">
-              Apache-2.0. TypeScript + Python ports. 204 tests. PRs welcome.
+              Apache-2.0. TypeScript + Python ports. 333 tests. PRs welcome.
             </p>
           </a>
           <a
@@ -262,7 +262,7 @@ export default function AboutPage() {
       <section className="space-y-3">
         <h2 className="text-2xl font-bold tracking-tight">Status</h2>
         <p className="leading-relaxed text-fg-muted">
-          v0.10.x (operator preview). The scheduler is production-grade — the
+          v0.11.x (operator preview). The scheduler is production-grade — the
           even-distribution simulation routes 10 000 synthetic tasks across seven
           regions with under 11 % max-bucket concentration, the SQLite ledger
           survives process restart, and per-region routing is auto-wired. Live

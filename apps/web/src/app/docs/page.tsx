@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { InstallPicker } from "@/components/install-picker";
 
 export const metadata: Metadata = {
@@ -367,16 +366,16 @@ result = verify_receipt(signed)
           </h2>
         </header>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <Link
-            href="/architecture"
+          <a
+            href="https://github.com/Vitalini/ebb-ai#architecture"
             className="rounded-md border border-rule bg-bg-card p-4 transition-colors hover:border-accent/40 hover:bg-accent/5"
           >
             <p className="font-semibold text-fg">Architecture</p>
             <p className="mt-1 text-sm text-fg-muted">
-              System diagram, ingest→dispatch→receipt flow, what&apos;s
-              deliberately not in v0.10.
+              System diagram, ingest→dispatch→receipt flow, and what&apos;s
+              deliberately out of scope.
             </p>
-          </Link>
+          </a>
           <a
             href="https://github.com/Vitalini/ebb-ai"
             target="_blank"
