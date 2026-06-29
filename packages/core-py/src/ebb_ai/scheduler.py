@@ -22,17 +22,23 @@ re-evaluated only if the wait time exceeds an internal safety cap.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
+import math
+import re
 import uuid
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Final, Generic, TypeVar
 
 import aiosqlite
 
+from .energy import grams_for_intensity
 from .errors import CarbonBudgetExceededError, InvalidDeadlineError
 from .grid import GridFeed, mock_grid_feed
+from .sign import SigningKeyPair, load_or_create_signing_key, sign_receipt
 from .types import (
     CarbonReceipt,
     DeferOptions,
@@ -57,9 +63,12 @@ DEFAULT_REGION: Final[str] = "US-CAL-CISO"
 #: Hard ceiling on forecast horizon, in hours. Matches the TS port.
 MAX_HORIZON_HOURS: Final[int] = 72
 
-#: Energy used per moderate LLM call (kWh). Placeholder; v0.3 will
-#: learn per-model coefficients from published research (Patterson et
-#: al. 2021, Luccioni et al. 2023).
+#: Legacy flat energy estimate per task (kWh). Retained as the
+#: backwards-compatible fallback and for API stability (it is exported).
+#: Since v0.10 the real per-model coefficients live in
+#: :mod:`ebb_ai.energy`; with no model and no token counts the estimator
+#: returns exactly this value, so closure-based ``defer`` tasks keep
+#: their pre-v0.10 numbers.
 ENERGY_KWH_PER_TASK: Final[float] = 0.0015
 
 #: Safety cap for a single ``asyncio.sleep`` call, in seconds.
@@ -82,9 +91,92 @@ DeferrableTask = Callable[[], Awaitable[T] | T]
 # Helpers
 
 
-def _intensity_to_grams(g_co2_per_kwh: float) -> float:
-    """Convert grid intensity (gCO2/kWh) into grams CO2 for one task."""
-    return ENERGY_KWH_PER_TASK * g_co2_per_kwh
+def _round_half_up(x: float) -> int:
+    """Round halves away toward +inf, matching JavaScript ``Math.round``.
+
+    Python's built-in :func:`round` uses banker's rounding (half-to-even),
+    which diverges from the TS core's ``Math.round`` at exact ``.5``
+    boundaries (e.g. ``round(2.5) == 2`` but ``Math.round(2.5) == 3``).
+    Carbon/delta figures on a receipt must be reproducible across the two
+    ports, so they round through this instead of the builtin.
+    """
+    return math.floor(x + 0.5)
+
+
+def _intensity_to_grams(
+    g_co2_per_kwh: float,
+    *,
+    model: str | None = None,
+    input_tokens: int | None = None,
+    output_tokens: int | None = None,
+) -> float:
+    """Grams CO2 for one task at a given grid intensity.
+
+    Delegates to the per-model energy coefficients
+    (:func:`ebb_ai.energy.grams_for_intensity`, v0.10). With no model and
+    no token counts the estimator falls back to the legacy flat
+    0.0015 kWh, so closure-based ``defer`` tasks are unchanged;
+    provider-call tasks pass ``model`` (and, at dispatch, the real token
+    counts the provider reported) for calibrated per-model math.
+    """
+    return grams_for_intensity(
+        g_co2_per_kwh,
+        model=model,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+    )
+
+
+#: Default prompt-redaction patterns, applied unless a
+#: :class:`ProviderCallSpec` passes its own ``redact_in_receipt`` list.
+#: Mirrors the TS port's ``DEFAULT_REDACTION_PATTERNS`` — catches vendor
+#: API keys plus generic bearer tokens.
+_DEFAULT_REDACTION_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
+    re.compile(r"sk-(?:ant-)?[A-Za-z0-9_\-]{20,}"),
+    re.compile(r"sk-proj-[A-Za-z0-9_\-]{20,}"),
+    re.compile(r"\b[A-Z]{2,3}_[A-Z0-9]{6,}\b"),
+    re.compile(r"\bBearer\s+[A-Za-z0-9_\-.]{20,}", re.IGNORECASE),
+)
+
+
+def _redact_prompt(prompt: str, patterns: list[str] | None) -> str:
+    """Redact secrets from a prompt before storing it on a receipt.
+
+    ``patterns is None`` applies the built-in default set; an empty list
+    disables redaction; malformed user patterns are skipped. The live
+    dispatch always uses the original prompt — only the receipt copy is
+    redacted. Mirrors the TS ``redactPrompt``.
+    """
+    out = prompt
+    if patterns is None:
+        for pat in _DEFAULT_REDACTION_PATTERNS:
+            out = pat.sub("[REDACTED]", out)
+    elif patterns:
+        for raw in patterns:
+            # Skip malformed user-supplied regexes rather than failing.
+            with contextlib.suppress(re.error):
+                out = re.sub(raw, "[REDACTED]", out)
+    return out
+
+
+def _spec_model_from_body(body_json: str | None) -> str | None:
+    """Best-effort parse of ``spec.model`` from a persisted provider-call body.
+
+    Returns ``None`` when the body is absent, corrupt, or carries no
+    string model — callers then fall back to the legacy flat energy
+    estimate, matching the TS port.
+    """
+    if not body_json:
+        return None
+    try:
+        parsed = json.loads(body_json)
+    except (TypeError, ValueError):
+        return None
+    if isinstance(parsed, dict):
+        model = parsed.get("model")
+        if isinstance(model, str) and model:
+            return model
+    return None
 
 
 def _now_utc() -> datetime:
@@ -187,7 +279,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     error             TEXT,
     receipt_json      TEXT,
     intensity_source  TEXT,
-    body_json         TEXT
+    body_json         TEXT,
+    estimated_carbon_g REAL
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_enqueued_at ON tasks(enqueued_at);
@@ -207,6 +300,24 @@ async def _ensure_body_json_column(conn: aiosqlite.Connection) -> None:
     names = {row[0] for row in rows}
     if "body_json" not in names:
         await conn.execute("ALTER TABLE tasks ADD COLUMN body_json TEXT")
+        await conn.commit()
+
+
+async def _ensure_estimated_carbon_column(conn: aiosqlite.Connection) -> None:
+    """Idempotent migration: add ``estimated_carbon_g`` (v0.11) to a
+    pre-v0.11 ``tasks`` table.
+
+    The column records the schedule-time carbon projection for a
+    provider-call task so the later :meth:`Scheduler.tick` dispatcher can
+    compute the actual-vs-estimated delta on the receipt. Runs cleanly on
+    a freshly created v0.11 DB (the column already exists) and backfills
+    older DBs (the new nullable column ALTERs in on a non-empty table).
+    """
+    async with conn.execute("SELECT name FROM pragma_table_info('tasks')") as cur:
+        rows = await cur.fetchall()
+    names = {row[0] for row in rows}
+    if "estimated_carbon_g" not in names:
+        await conn.execute("ALTER TABLE tasks ADD COLUMN estimated_carbon_g REAL")
         await conn.commit()
 
 
@@ -249,6 +360,7 @@ class _TaskStore:
         await conn.executescript(_SCHEMA)
         await conn.commit()
         await _ensure_body_json_column(conn)
+        await _ensure_estimated_carbon_column(conn)
         self._conn = conn
 
     async def close(self) -> None:
@@ -269,19 +381,20 @@ class _TaskStore:
                 INSERT INTO tasks (
                     task_id, status, enqueued_at, scheduled_for, completed_at,
                     region, carbon_budget_g, result_json, error, receipt_json,
-                    intensity_source, body_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    intensity_source, body_json, estimated_carbon_g
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(task_id) DO UPDATE SET
-                    status           = excluded.status,
-                    scheduled_for    = excluded.scheduled_for,
-                    completed_at     = excluded.completed_at,
-                    region           = excluded.region,
-                    carbon_budget_g  = excluded.carbon_budget_g,
-                    result_json      = excluded.result_json,
-                    error            = excluded.error,
-                    receipt_json     = excluded.receipt_json,
-                    intensity_source = excluded.intensity_source,
-                    body_json        = excluded.body_json
+                    status            = excluded.status,
+                    scheduled_for     = excluded.scheduled_for,
+                    completed_at      = excluded.completed_at,
+                    region            = excluded.region,
+                    carbon_budget_g   = excluded.carbon_budget_g,
+                    result_json       = excluded.result_json,
+                    error             = excluded.error,
+                    receipt_json      = excluded.receipt_json,
+                    intensity_source  = excluded.intensity_source,
+                    body_json         = excluded.body_json,
+                    estimated_carbon_g = excluded.estimated_carbon_g
                 """,
                 (
                     record.task_id,
@@ -296,6 +409,7 @@ class _TaskStore:
                     json.dumps(record.receipt.to_dict()) if record.receipt else None,
                     record.intensity_source,
                     record.body_json,
+                    record.estimated_carbon_g_co2,
                 ),
             )
             await conn.commit()
@@ -367,9 +481,16 @@ def _row_to_record(row: Any) -> TaskRecord:
             ran_at=data["ran_at"],
             region=data["region"],
             estimated_carbon_g_co2=data["estimated_carbon_g_co2"],
+            actual_carbon_g_co2=data.get("actual_carbon_g_co2"),
+            delta_pct=data.get("delta_pct"),
             provider=data.get("provider"),
             model=data.get("model"),
             duration_ms=data.get("duration_ms"),
+            prompt=data.get("prompt"),
+            total_tokens=data.get("total_tokens"),
+            signature=data.get("signature"),
+            signer_public_key=data.get("signer_public_key"),
+            signed_at=data.get("signed_at"),
         )
     result = json.loads(row["result_json"]) if row["result_json"] else None
     # `body_json` is read defensively: SQLite columns added by a pre-v0.5
@@ -379,6 +500,12 @@ def _row_to_record(row: Any) -> TaskRecord:
         body_json = row["body_json"]
     except (IndexError, KeyError):
         body_json = None
+    # `estimated_carbon_g` is read defensively too — a row written before
+    # the v0.11 migration backfilled the column may still be NULL.
+    try:
+        estimated_carbon_g = row["estimated_carbon_g"]
+    except (IndexError, KeyError):
+        estimated_carbon_g = None
     return TaskRecord(
         task_id=row["task_id"],
         status=row["status"],
@@ -392,6 +519,7 @@ def _row_to_record(row: Any) -> TaskRecord:
         receipt=receipt,
         intensity_source=row["intensity_source"],
         body_json=body_json,
+        estimated_carbon_g_co2=estimated_carbon_g,
     )
 
 
@@ -443,6 +571,12 @@ class Scheduler:
         If omitted, tasks live only in process memory. Call
         :meth:`connect` once before any :meth:`defer` / :meth:`enqueue`
         when ``db_path`` is set.
+    signing:
+        Ed25519 receipt-signing config (v0.11). ``None`` (default) signs
+        every receipt with ``~/.ebb-ai/signing.key`` (lazily created);
+        ``False`` disables signing; a dict may pass ``{"key_path": "..."}``.
+        If the ``cryptography`` extra is absent, signing self-disables and
+        receipts ship unsigned.
 
     Notes
     -----
@@ -457,6 +591,7 @@ class Scheduler:
         feed: GridFeed | None = None,
         default_region: str = DEFAULT_REGION,
         db_path: str | None = None,
+        signing: bool | dict[str, Any] | None = None,
     ) -> None:
         self._feed: GridFeed = feed if feed is not None else mock_grid_feed()
         self._default_region = default_region
@@ -467,6 +602,17 @@ class Scheduler:
         self._background: set[asyncio.Task[Any]] = set()
         self._store: _TaskStore | None = _TaskStore(db_path) if db_path else None
         self._connected = False
+        # Ed25519 receipt-signing config (v0.11). ``None`` → sign every
+        # receipt with the default ``~/.ebb-ai/signing.key`` (lazily
+        # created on first dispatch); ``False`` → never sign; a dict may
+        # carry ``{"key_path": "..."}``. If the ``cryptography`` extra is
+        # absent (or the key can't be loaded), signing self-disables on
+        # the first attempt and receipts ship unsigned — the default
+        # ``pip install ebb-ai`` path stays v0.10-compatible.
+        self._signing_config: bool | dict[str, Any] = (
+            False if signing is False else (signing or {})
+        )
+        self._signing_key: SigningKeyPair | None = None
 
     # ----- lifecycle --------------------------------------------------- #
 
@@ -511,6 +657,64 @@ class Scheduler:
         if self._store is not None and self._connected:
             await self._store.close()
             self._connected = False
+
+    # ----- receipt signing (v0.11) ------------------------------------- #
+
+    def _load_signing_key(self) -> SigningKeyPair | None:
+        """Lazily load the signing keypair the first time a receipt needs it.
+
+        Returns ``None`` when signing is disabled or a load error (most
+        commonly the ``cryptography`` extra being absent) occurs — in
+        which case signing is permanently disabled for this scheduler and
+        subsequent receipts ship unsigned. Mirrors the TS ``maybeSign``
+        lazy-load + fail-open behaviour.
+        """
+        if self._signing_config is False:
+            return None
+        if self._signing_key is not None:
+            return self._signing_key
+        key_path = (
+            self._signing_config.get("key_path")
+            if isinstance(self._signing_config, dict)
+            else None
+        )
+        try:
+            self._signing_key = load_or_create_signing_key(key_path)
+            return self._signing_key
+        except Exception as err:  # SigningNotInstalled, FS errors, …
+            _log.warning(
+                "[ebb-ai/scheduler] failed to load signing key, "
+                "receipts will go out unsigned: %s",
+                err,
+            )
+            self._signing_config = False
+            return None
+
+    def _maybe_sign(self, receipt: CarbonReceipt) -> CarbonReceipt:
+        """Return a signed copy of ``receipt`` if signing is enabled.
+
+        The original receipt is not mutated. A signing failure logs and
+        returns the receipt unsigned rather than failing the dispatch —
+        the SQLite ledger entry is what matters; the signature is an
+        add-on.
+        """
+        key = self._load_signing_key()
+        if key is None:
+            return receipt
+        try:
+            signed = sign_receipt(receipt.to_dict(), key)
+        except Exception as err:
+            _log.warning(
+                "[ebb-ai/scheduler] receipt signing failed, shipping unsigned: %s",
+                err,
+            )
+            return receipt
+        return replace(
+            receipt,
+            signature=signed.get("signature"),
+            signer_public_key=signed.get("signer_public_key"),
+            signed_at=signed.get("signed_at"),
+        )
 
     # ----- public API -------------------------------------------------- #
 
@@ -1062,19 +1266,46 @@ class Scheduler:
             self._bodies.pop(task_id, None)
             return
 
+        # Mirror the TS dispatch: the scored forecast entry is the
+        # *estimate*; the intensity observed when the task actually ran is
+        # the *actual*. With no scored window (immediate fallback) the two
+        # coincide. Closure tasks carry no model/token info, so both sides
+        # use the legacy flat energy estimate and the numbers are
+        # unchanged from pre-v0.11.
         if forecast_entry is not None:
-            intensity_g = forecast_entry.carbon_intensity_g_co2_per_kwh
+            estimated_intensity_g: float | None = (
+                forecast_entry.carbon_intensity_g_co2_per_kwh
+            )
             source: str = "scored"
         else:
-            intensity_g = await self._fetch_current_intensity(record.region, ran_at)
+            estimated_intensity_g = None
             source = "current"
+        actual_intensity_g = await self._fetch_current_intensity(record.region, ran_at)
+        actual_carbon = _round_half_up(_intensity_to_grams(actual_intensity_g) * 10) / 10
+        estimated_carbon = (
+            _round_half_up(_intensity_to_grams(estimated_intensity_g) * 10) / 10
+            if estimated_intensity_g is not None
+            else actual_carbon
+        )
+        delta_pct = (
+            _round_half_up(
+                ((actual_carbon - estimated_carbon) / estimated_carbon) * 1000
+            )
+            / 10
+            if estimated_carbon > 0
+            else 0.0
+        )
 
-        receipt = CarbonReceipt(
-            task_id=task_id,
-            ran_at=_iso_utc(ran_at),
-            region=record.region,
-            estimated_carbon_g_co2=round(_intensity_to_grams(intensity_g) * 10) / 10,
-            duration_ms=duration_ms,
+        receipt = self._maybe_sign(
+            CarbonReceipt(
+                task_id=task_id,
+                ran_at=_iso_utc(ran_at),
+                region=record.region,
+                estimated_carbon_g_co2=estimated_carbon,
+                actual_carbon_g_co2=actual_carbon,
+                delta_pct=delta_pct,
+                duration_ms=duration_ms,
+            )
         )
         record.status = "completed"
         record.completed_at = _iso_utc(_now_utc())
@@ -1162,6 +1393,11 @@ class Scheduler:
         if record is None:
             return
 
+        # Parse spec.model out of the persisted body so the per-model
+        # energy coefficients (v0.10) factor into both the budget filter
+        # and the estimated-carbon projection recorded on the task.
+        spec_model = _spec_model_from_body(record.body_json)
+
         try:
             now = _now_utc()
             horizon_h = max(
@@ -1191,7 +1427,10 @@ class Scheduler:
             survivors = [
                 e
                 for e in forecast.entries
-                if _intensity_to_grams(e.carbon_intensity_g_co2_per_kwh) <= budget_g
+                if _intensity_to_grams(
+                    e.carbon_intensity_g_co2_per_kwh, model=spec_model
+                )
+                <= budget_g
             ]
         else:
             survivors = list(forecast.entries)
@@ -1203,7 +1442,9 @@ class Scheduler:
                     forecast.entries,
                     key=lambda e: e.carbon_intensity_g_co2_per_kwh,
                 )
-                cheapest_g = _intensity_to_grams(cheapest.carbon_intensity_g_co2_per_kwh)
+                cheapest_g = _intensity_to_grams(
+                    cheapest.carbon_intensity_g_co2_per_kwh, model=spec_model
+                )
                 if cheapest_g > budget_g:
                     await self._fail(task_id, CarbonBudgetExceededError(cheapest_g, budget_g))
                     return
@@ -1217,6 +1458,15 @@ class Scheduler:
 
         record.status = "scheduled"
         record.scheduled_for = candidate.datetime
+        record.estimated_carbon_g_co2 = (
+            _round_half_up(
+                _intensity_to_grams(
+                    candidate.carbon_intensity_g_co2_per_kwh, model=spec_model
+                )
+                * 10
+            )
+            / 10
+        )
         self._tasks[task_id] = record
         if self._store is not None and self._connected:
             await self._store.upsert(record)
@@ -1323,14 +1573,62 @@ class Scheduler:
             if intensity_source_override is not None
             else "scored"
         )
-        receipt = CarbonReceipt(
-            task_id=task_id,
-            ran_at=_iso_utc(ran_at),
-            region=record.region,
-            estimated_carbon_g_co2=round(_intensity_to_grams(intensity_g) * 10) / 10,
-            provider=spec.provider,
-            model=spec.model,
-            duration_ms=duration_ms,
+        # Re-estimate energy with the real token counts the provider
+        # reported so the receipt reflects this specific call rather than
+        # a typical task at this model. The batch path returns a handle
+        # with no usage, so tokens fall back to the per-model typical
+        # estimate. ``estimated_carbon_g_co2`` was projected at schedule
+        # time; the delta is the forecast drift between then and now.
+        input_tokens = getattr(result_obj, "input_tokens", None)
+        output_tokens = getattr(result_obj, "output_tokens", None)
+        actual_model = getattr(result_obj, "model", None) or spec.model
+        actual_carbon = (
+            _round_half_up(
+                _intensity_to_grams(
+                    intensity_g,
+                    model=actual_model,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                )
+                * 10
+            )
+            / 10
+        )
+        estimated_carbon = (
+            record.estimated_carbon_g_co2
+            if record.estimated_carbon_g_co2 is not None
+            else actual_carbon
+        )
+        delta_pct = (
+            _round_half_up(
+                ((actual_carbon - estimated_carbon) / estimated_carbon) * 1000
+            )
+            / 10
+            if estimated_carbon > 0
+            else 0.0
+        )
+        total_tokens = (
+            input_tokens + output_tokens
+            if input_tokens is not None and output_tokens is not None
+            else None
+        )
+        receipt = self._maybe_sign(
+            CarbonReceipt(
+                task_id=task_id,
+                ran_at=_iso_utc(ran_at),
+                region=record.region,
+                estimated_carbon_g_co2=estimated_carbon,
+                actual_carbon_g_co2=actual_carbon,
+                delta_pct=delta_pct,
+                # Record what actually ran (the adapter's result), not just
+                # what was requested — a runtime bridge may run a different
+                # model than spec.model. The batch path has no usage.
+                provider=getattr(result_obj, "provider", None) or spec.provider,
+                model=actual_model,
+                duration_ms=duration_ms,
+                prompt=_redact_prompt(spec.prompt, spec.redact_in_receipt),
+                total_tokens=total_tokens,
+            )
         )
         record.status = "completed"
         record.completed_at = _iso_utc(_now_utc())

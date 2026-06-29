@@ -25,18 +25,23 @@ Python, camelCase in TypeScript) so JSON serialized over MCP round-trips.
 from __future__ import annotations
 
 import logging
+import math
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from .energy import grams_for_intensity
 from .errors import CarbonBudgetExceededError, InvalidDeadlineError
 from .grid import GridFeed, mock_grid_feed
 from .types import Band, GridForecastEntry
 
 _log = logging.getLogger(__name__)
 
-#: Same constant the Scheduler uses — kept in sync deliberately.
+#: Legacy flat estimate, retained for API stability (exported). Since
+#: v0.10 the real math lives in :func:`ebb_ai.energy.grams_for_intensity`;
+#: with no model it returns exactly this, so model-less callers are
+#: unchanged.
 ENERGY_KWH_PER_TASK: float = 0.0015
 MAX_HORIZON_HOURS: int = 72
 #: Anthropic & OpenAI Batch APIs both promise a 24h SLA.
@@ -91,12 +96,24 @@ class RecommendResult:
 # Helpers
 
 
-def _intensity_to_grams(g_co2_per_kwh: float) -> float:
-    return ENERGY_KWH_PER_TASK * g_co2_per_kwh
+def _intensity_to_grams(g_co2_per_kwh: float, model: str | None = None) -> float:
+    """Grams CO2 for one task at a given intensity, via the per-model
+    coefficients (v0.10). ``model=None`` falls back to the legacy flat
+    estimate, so callers that pass no model keep their pre-v0.10 numbers.
+    """
+    return grams_for_intensity(g_co2_per_kwh, model=model)
+
+
+def _round_half_up(x: float) -> int:
+    """Round halves toward +inf, matching JS ``Math.round`` (and the TS
+    core). Python's builtin ``round`` is half-to-even, which diverges at
+    exact ``.5`` boundaries; receipt/plan figures must match the TS port.
+    """
+    return math.floor(x + 0.5)
 
 
 def _round_tenth(v: float) -> float:
-    return round(v * 10) / 10
+    return _round_half_up(v * 10) / 10
 
 
 def _format_hour(iso: str) -> str:
@@ -108,7 +125,7 @@ def _compute_savings_pct(now_intensity: float, chosen_intensity: float) -> int:
     if now_intensity <= 0:
         return 0
     raw = (1.0 - chosen_intensity / now_intensity) * 100.0
-    return max(0, round(raw))
+    return max(0, _round_half_up(raw))
 
 
 def _parse_iso(s: str) -> datetime | None:
@@ -189,7 +206,7 @@ async def recommend_window(
     deadline: str | datetime,
     region: str,
     carbon_budget_g: float | None = None,
-    model: str | None = None,  # held for parity with TS surface; affects reasoning only
+    model: str | None = None,  # per-model energy coefficients (v0.10); see below
     feed: GridFeed | None = None,
     now: Callable[[], datetime] | None = None,
 ) -> RecommendResult:
@@ -207,8 +224,12 @@ async def recommend_window(
         Optional grams CO2e cap. Forecast entries above the budget are dropped
         before the cheapest window is selected.
     model:
-        Optional vendor model name. Held for parity with the TS port; affects
-        only the reasoning string (not the chosen window).
+        Optional vendor model name (e.g. ``"claude-sonnet-4-5"``). Selects
+        the per-model energy coefficients (v0.10) used for the reported
+        grams and the carbon-budget filter, matching the TS port. With no
+        model the legacy flat estimate is used. It does not, on its own,
+        change which window is cheapest (that's ranked by raw intensity),
+        but it can change which windows survive a ``carbon_budget_g``.
     feed:
         Inject a grid feed. Defaults to :func:`mock_grid_feed`.
     now:
@@ -249,7 +270,9 @@ async def recommend_window(
 
     if not in_deadline:
         head = entries[0]
-        grams = _round_tenth(_intensity_to_grams(head.carbon_intensity_g_co2_per_kwh))
+        grams = _round_tenth(
+            _intensity_to_grams(head.carbon_intensity_g_co2_per_kwh, model)
+        )
         return RecommendResult(
             scheduled_for=head.datetime,
             intensity_g_co2_per_kwh=head.carbon_intensity_g_co2_per_kwh,
@@ -268,7 +291,8 @@ async def recommend_window(
         survivors = [
             e
             for e in in_deadline
-            if _intensity_to_grams(e.carbon_intensity_g_co2_per_kwh) <= carbon_budget_g
+            if _intensity_to_grams(e.carbon_intensity_g_co2_per_kwh, model)
+            <= carbon_budget_g
         ]
     else:
         survivors = list(in_deadline)
@@ -278,7 +302,7 @@ async def recommend_window(
             in_deadline, key=lambda e: e.carbon_intensity_g_co2_per_kwh
         )
         raise CarbonBudgetExceededError(
-            _intensity_to_grams(cheapest.carbon_intensity_g_co2_per_kwh),
+            _intensity_to_grams(cheapest.carbon_intensity_g_co2_per_kwh, model),
             carbon_budget_g,  # type: ignore[arg-type]  # cannot be None here
         )
 
@@ -300,7 +324,7 @@ async def recommend_window(
             intensity_g_co2_per_kwh=e.carbon_intensity_g_co2_per_kwh,
             band=e.band,
             estimated_carbon_g_co2=_round_tenth(
-                _intensity_to_grams(e.carbon_intensity_g_co2_per_kwh)
+                _intensity_to_grams(e.carbon_intensity_g_co2_per_kwh, model)
             ),
             estimated_savings_vs_now_pct=_compute_savings_pct(
                 now_intensity, e.carbon_intensity_g_co2_per_kwh
@@ -314,7 +338,7 @@ async def recommend_window(
         intensity_g_co2_per_kwh=chosen.carbon_intensity_g_co2_per_kwh,
         band=chosen.band,
         estimated_carbon_g_co2=_round_tenth(
-            _intensity_to_grams(chosen.carbon_intensity_g_co2_per_kwh)
+            _intensity_to_grams(chosen.carbon_intensity_g_co2_per_kwh, model)
         ),
         estimated_savings_vs_now_pct=savings_pct,
         batch_eligible=batch_eligible,

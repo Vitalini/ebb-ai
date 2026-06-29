@@ -10,7 +10,7 @@ a one-command Claude Code plugin.*
 [![npm (core)](https://img.shields.io/npm/v/%40ebb-ai%2Fcore?label=%40ebb-ai%2Fcore&color=cb3837)](https://www.npmjs.com/package/@ebb-ai/core)
 [![npm (mcp)](https://img.shields.io/npm/v/%40ebb-ai%2Fmcp?label=%40ebb-ai%2Fmcp&color=cb3837)](https://www.npmjs.com/package/@ebb-ai/mcp)
 [![npm (cli)](https://img.shields.io/npm/v/%40ebb-ai%2Fcli?label=%40ebb-ai%2Fcli&color=cb3837)](https://www.npmjs.com/package/@ebb-ai/cli)
-[![Tests](https://img.shields.io/badge/tests-204%20passing-22c55e)](#tests)
+[![Tests](https://img.shields.io/badge/tests-333%20passing-22c55e)](#tests)
 [![MCP tools](https://img.shields.io/badge/MCP-9%20tools-5eead4)](https://www.ebb-ai.com/docs)
 [![Hosts](https://img.shields.io/badge/MCP%20hosts-13-5eead4)](https://www.ebb-ai.com/docs#install)
 [![Website](https://img.shields.io/badge/website-ebb--ai.com-5eead4)](https://www.ebb-ai.com)
@@ -91,8 +91,8 @@ Windsurf, OpenClaw, OpenAI Codex CLI, Pi). The agent asks
 > CLI with macOS launchd + Linux systemd + pmset/rtcwake wake events,
 > full control surface (`cancel_task` / `expedite_task` /
 > `update_deadline` / `retry_task` / `cancel_all`), receipt redaction,
-> file output, retry-with-backoff. **325 tests passing** (213 TS +
-> 112 Python) across 5 packages and 2 languages. See
+> file output, retry-with-backoff. **333 tests passing** (213 TS +
+> 120 Python) across 5 packages and 2 languages. See
 > [QUICKSTART.md](./QUICKSTART.md).
 
 ### Live demo

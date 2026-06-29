@@ -24,8 +24,16 @@ v0.5 adds ``cancelled``: a task explicitly stopped by the caller via
 Band = Literal["very_clean", "clean", "average", "dirty", "very_dirty"]
 """Classifier for grid carbon intensity, matching the TS implementation."""
 
-GridSource = Literal["electricityMaps", "wattTime", "mock"]
-"""Source of the carbon-intensity forecast."""
+GridSource = Literal[
+    "electricityMaps", "ukCarbonIntensity", "eia", "entsoe", "wattTime", "mock"
+]
+"""Source of the carbon-intensity forecast.
+
+Mirrors the TS ``GridForecast["source"]`` union. The Python feed module
+currently only emits ``electricityMaps`` / ``mock``, but the wider set is
+accepted so a record persisted by the TS port (``ukCarbonIntensity`` /
+``eia`` / ``entsoe``) round-trips through the Python types unchanged.
+"""
 
 IntensitySource = Literal["scored", "current", "expedited"]
 """Where the receipt's intensity number came from.
@@ -119,28 +127,72 @@ class CarbonReceipt:
     ran_at: str
     region: str
     estimated_carbon_g_co2: float
+    """Carbon the scheduler projected for the chosen window at schedule
+    time, in grams CO2-equivalent."""
+    actual_carbon_g_co2: float | None = None
+    """Carbon billed against the grid intensity actually observed at
+    dispatch time. Equals ``estimated_carbon_g_co2`` when there was no
+    separate projection step (immediate / expedited dispatch)."""
+    delta_pct: float | None = None
+    """Signed percentage drift of actual vs estimated, rounded to 0.1.
+    Negative means the task ran cleaner than projected."""
     provider: str | None = None
     model: str | None = None
     duration_ms: float | None = None
     """Wall-clock duration of the dispatched call, in milliseconds."""
+    prompt: str | None = None
+    """The prompt as stored on the receipt — redacted per
+    ``ProviderCallSpec.redact_in_receipt``. Provider-call tasks only;
+    closure-based ``defer`` tasks leave this ``None``."""
+    total_tokens: int | None = None
+    """Total tokens (input + output) reported by the provider, if any."""
+    signature: str | None = None
+    """Base64 Ed25519 signature over the canonical JSON encoding of every
+    other field on this receipt (v0.11+). ``None`` on unsigned dispatches
+    (signing disabled, or the ``[signing]`` extra absent); the verifier
+    flags those as ``legacy-unsigned``."""
+    signer_public_key: str | None = None
+    """Base64-encoded raw 32-byte Ed25519 public key that produced
+    ``signature``. Bundled on every signed receipt so a consumer can
+    verify without out-of-band key distribution."""
+    signed_at: str | None = None
+    """ISO-8601 timestamp the signature was produced."""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     def to_camel_dict(self) -> dict[str, Any]:
-        """Render with TS-compatible camelCase keys."""
+        """Render with TS-compatible camelCase keys.
+
+        Optional fields are emitted only when set, mirroring how the TS
+        port drops ``undefined`` properties.
+        """
         d: dict[str, Any] = {
             "taskId": self.task_id,
             "ranAt": self.ran_at,
             "region": self.region,
             "estimatedCarbonGCo2": self.estimated_carbon_g_co2,
         }
+        if self.actual_carbon_g_co2 is not None:
+            d["actualCarbonGCo2"] = self.actual_carbon_g_co2
+        if self.delta_pct is not None:
+            d["deltaPct"] = self.delta_pct
         if self.provider is not None:
             d["provider"] = self.provider
         if self.model is not None:
             d["model"] = self.model
         if self.duration_ms is not None:
             d["durationMs"] = self.duration_ms
+        if self.prompt is not None:
+            d["prompt"] = self.prompt
+        if self.total_tokens is not None:
+            d["totalTokens"] = self.total_tokens
+        if self.signature is not None:
+            d["signature"] = self.signature
+        if self.signer_public_key is not None:
+            d["signerPublicKey"] = self.signer_public_key
+        if self.signed_at is not None:
+            d["signedAt"] = self.signed_at
         return d
 
 
@@ -171,6 +223,14 @@ class TaskRecord:
     field as ``None``.
     """
 
+    estimated_carbon_g_co2: float | None = None
+    """Carbon the scheduler projected for the chosen window when the task
+    was scheduled, in grams CO2-equivalent. Recorded by
+    :meth:`Scheduler._schedule_provider_call` so the dispatcher can compute
+    the actual-vs-estimated delta on the receipt (v0.11). Absent for
+    immediately-dispatched tasks, which have no projection step.
+    """
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "task_id": self.task_id,
@@ -185,6 +245,7 @@ class TaskRecord:
             "receipt": self.receipt.to_dict() if self.receipt else None,
             "intensity_source": self.intensity_source,
             "body_json": self.body_json,
+            "estimated_carbon_g_co2": self.estimated_carbon_g_co2,
         }
 
 
@@ -213,6 +274,13 @@ class ProviderCallSpec:
     """If True (default), route through the provider's Batch API when the
     task's scheduled window is more than 24 hours out.
     """
+    redact_in_receipt: list[str] | None = None
+    """Optional list of regex patterns the dispatcher redacts from the
+    prompt before storing it on the receipt. ``None`` (default) applies a
+    built-in set that catches API keys / bearer tokens; ``[]`` disables
+    redaction entirely. The dispatched call always uses the original
+    prompt — only the receipt's ``prompt`` field is redacted.
+    """
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -236,6 +304,9 @@ class ProviderCallSpec:
             max_tokens=data.get("max_tokens", data.get("maxTokens")),
             temperature=data.get("temperature"),
             prefer_batch=data.get("prefer_batch", data.get("preferBatch", True)),
+            redact_in_receipt=data.get(
+                "redact_in_receipt", data.get("redactInReceipt")
+            ),
         )
 
 
