@@ -32,9 +32,17 @@ jobs:
       - run: pnpm --filter "@ebb-ai/core" build
       - run: pnpm --filter "@ebb-ai/mcp" build
       - run: pnpm --filter "@ebb-ai/cli" build
+      - run: pnpm --filter "@vitalini/ebb" build
+      # Typecheck every workspace package (tsc --noEmit). CI previously
+      # gated build + tests only, so type regressions the emit-less build
+      # tolerated could land; this closes that gap.
+      - run: pnpm typecheck
       - run: pnpm --filter "@ebb-ai/core" test
       - run: pnpm --filter "@ebb-ai/mcp" test
       - run: pnpm --filter "@ebb-ai/cli" test
+      # The OpenClaw plugin's 24 tests previously ran only via the local
+      # root `pnpm test`, never in CI — gate them here too.
+      - run: pnpm --filter "@vitalini/ebb" test
 
   python:
     name: python (3.11 + 3.12)
