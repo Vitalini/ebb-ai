@@ -32,7 +32,11 @@ jobs:
       - run: pnpm --filter "@ebb-ai/core" build
       - run: pnpm --filter "@ebb-ai/mcp" build
       - run: pnpm --filter "@ebb-ai/cli" build
-      - run: pnpm --filter "@vitalini/ebb" build
+      # The OpenClaw plugin targets Node 22+ — its delivery store uses the
+      # node:sqlite builtin (22.5+) with no better-sqlite3 fallback — so its
+      # build + tests run only on the 22 matrix leg.
+      - if: matrix.node == '22'
+        run: pnpm --filter "@vitalini/ebb" build
       # Typecheck every workspace package (tsc --noEmit). CI previously
       # gated build + tests only, so type regressions the emit-less build
       # tolerated could land; this closes that gap.
@@ -41,8 +45,9 @@ jobs:
       - run: pnpm --filter "@ebb-ai/mcp" test
       - run: pnpm --filter "@ebb-ai/cli" test
       # The OpenClaw plugin's 24 tests previously ran only via the local
-      # root `pnpm test`, never in CI — gate them here too.
-      - run: pnpm --filter "@vitalini/ebb" test
+      # root `pnpm test`, never in CI — gate them here (Node 22 only).
+      - if: matrix.node == '22'
+        run: pnpm --filter "@vitalini/ebb" test
 
   python:
     name: python (3.11 + 3.12)
