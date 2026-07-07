@@ -1,18 +1,19 @@
 /**
  * @ebb-ai/core — carbon-aware scheduling for agentic AI workflows.
  *
- * Public surface (v0.2):
+ * Everything re-exported below is the public surface; the export list
+ * itself is the source of truth. The main entry points:
  *
- *   import { defer, Scheduler } from "@ebb-ai/core";
- *   import { AnthropicAdapter, OpenAIAdapter } from "@ebb-ai/core/providers";
- *   import { TaskStore } from "@ebb-ai/core/storage";
+ *   import { defer, Scheduler, recommendWindow } from "@ebb-ai/core";
+ *   import { AnthropicAdapter, OpenAIAdapter } from "@ebb-ai/core";
+ *   import { TaskStore } from "@ebb-ai/core";
  *
- * v0.2 additions over v0.1:
- *   - Anthropic + OpenAI provider adapters with sync + Batch API paths.
- *   - SQLite-backed durable queue (opt-in via `new Scheduler({ dbPath })`).
- *   - Carbon-receipt audit trail survives process restart.
+ * Highlights: Anthropic + OpenAI provider adapters, SQLite-backed
+ * durable queue with a cross-process audit ledger, per-model energy
+ * coefficients, Ed25519-signed carbon receipts, multi-source grid
+ * feeds with a deterministic mock fallback.
  *
- * Out of scope for v0.2 (tracked in ROADMAP.md):
+ * Still out of scope (tracked in ROADMAP.md):
  *   - Cross-provider routing.
  *   - WattTime marginal-emissions feed.
  *   - Gemini / local-Ollama adapters.

@@ -11,10 +11,16 @@
  * deferred to v0.9 once a privacy-conscious telemetry endpoint exists.
  */
 
+import { LEGACY_KWH_PER_TASK } from "./energy.js";
 import type { CarbonReceipt, TaskRecord } from "./types.js";
 
-/** Energy cost of one dispatched LLM call. Matches the dashboard methodology. */
-export const ASSUMED_KWH_PER_CALL = 0.0015;
+/**
+ * Flat energy cost of one dispatched LLM call, re-exported from the
+ * energy module (single source of truth) under the aggregator's
+ * historical name. Only used to back-derive intensity from legacy
+ * receipts that predate `receipt.intensityGCo2PerKwh`.
+ */
+export const ASSUMED_KWH_PER_CALL = LEGACY_KWH_PER_TASK;
 
 /**
  * Aggregate carbon stats. All fields are deterministic over the input
@@ -153,9 +159,12 @@ export function aggregateByRegion(rows: TaskRecord<unknown>[]): RegionStats[] {
 }
 
 /**
- * Build a band histogram. We derive the band from `receipt.estimatedCarbonGCo2 /
- * ASSUMED_KWH_PER_CALL`, recovering the grid intensity the scheduler scored
- * each task against.
+ * Build a band histogram. Receipts that record the raw grid intensity
+ * (`intensityGCo2PerKwh`, v0.12+) are classified directly. Legacy
+ * receipts fall back to back-deriving intensity as
+ * `estimatedCarbonGCo2 / ASSUMED_KWH_PER_CALL` — valid only for the
+ * flat pre-v0.10 energy model, which is exactly what those old
+ * receipts were computed with.
  */
 export function bandHistogram(rows: TaskRecord<unknown>[]): BandHistogram {
   const out: BandHistogram = {
@@ -167,7 +176,12 @@ export function bandHistogram(rows: TaskRecord<unknown>[]): BandHistogram {
   };
   for (const row of rows) {
     const r = row.receipt;
-    if (!r || r.estimatedCarbonGCo2 == null) continue;
+    if (!r) continue;
+    if (r.intensityGCo2PerKwh != null) {
+      out[classifyBand(r.intensityGCo2PerKwh)] += 1;
+      continue;
+    }
+    if (r.estimatedCarbonGCo2 == null) continue;
     const intensity = r.estimatedCarbonGCo2 / ASSUMED_KWH_PER_CALL;
     out[classifyBand(intensity)] += 1;
   }

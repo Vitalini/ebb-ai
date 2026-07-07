@@ -27,6 +27,7 @@ import {
 } from "./scheduler.js";
 import type {
   GridFeed,
+  GridForecast,
   GridForecastEntry,
   RecommendAlternative,
   RecommendOptions,
@@ -88,17 +89,19 @@ export async function recommendWindow(
 
   const budgetG = opts.carbonBudgetG;
   // Filter by deadline first (cheapest entry after the deadline is useless),
-  // then by budget.
+  // then by budget. Entries mark the *start* of an hour, so the entry
+  // covering "now" started up to an hour ago — it is a valid run-right-now
+  // candidate and must not be excluded from the pick (or the savings math).
   const inDeadline = entries.filter((e) => {
     const t = new Date(e.datetime).getTime();
-    return t >= now.getTime() && t <= deadline.getTime();
+    return t >= now.getTime() - 3_600_000 && t <= deadline.getTime();
   });
   if (inDeadline.length === 0) {
     // No entry between "now" and the deadline. The Scheduler dispatches
     // immediately in this case; the recommender treats it as the same — fall
     // back to entry[0] as the "best we can do".
     const head = entries[0]!;
-    return buildResultFromSingle(head, entries, deadline, opts, now, /* survivors */ 1);
+    return buildResultFromSingle(head, forecast, opts);
   }
 
   const survivors =
@@ -184,19 +187,23 @@ export async function recommendWindow(
     estimatedSavingsVsNowPct: savingsPct,
     batchEligible,
     alternatives,
-    reasoning: buildReasoning({
-      chosen,
-      savingsPct,
-      batchEligible,
-      budgetG,
-      survivorCount: survivors.length,
-      // `chosen` is picked at random from the cleanest-tolerance band to
-      // spread grid load, so it is not always the strict minimum. The
-      // reasoning string must say which case it is — otherwise it reads
-      // as "cleanest" while the alternatives list shows a lower figure.
-      isStrictCheapest: chosen === sorted[0],
-      cleanBandSize: equallyClean.length,
-    }),
+    gridSource: forecast.source,
+    reasoning: withSourceDisclosure(
+      forecast.source,
+      buildReasoning({
+        chosen,
+        savingsPct,
+        batchEligible,
+        budgetG,
+        survivorCount: survivors.length,
+        // `chosen` is picked at random from the cleanest-tolerance band to
+        // spread grid load, so it is not always the strict minimum. The
+        // reasoning string must say which case it is — otherwise it reads
+        // as "cleanest" while the alternatives list shows a lower figure.
+        isStrictCheapest: chosen === sorted[0],
+        cleanBandSize: equallyClean.length,
+      }),
+    ),
   };
 }
 
@@ -205,11 +212,8 @@ export async function recommendWindow(
 
 function buildResultFromSingle(
   head: GridForecastEntry,
-  _entries: GridForecastEntry[],
-  _deadline: Date,
+  forecast: GridForecast,
   opts: RecommendOptions,
-  _now: Date,
-  _survivorCount: number,
 ): RecommendResult {
   const grams = roundTenth(intensityToGrams(head.carbonIntensityGCo2PerKwh, opts.model));
   return {
@@ -220,9 +224,27 @@ function buildResultFromSingle(
     estimatedSavingsVsNowPct: 0,
     batchEligible: false,
     alternatives: [],
-    reasoning:
+    gridSource: forecast.source,
+    reasoning: withSourceDisclosure(
+      forecast.source,
       `no in-deadline windows; best available is ${formatHour(head.datetime)} UTC`,
+    ),
   };
+}
+
+/**
+ * Prefix the reasoning with a loud disclosure when the plan was scored
+ * against the synthetic mock curve, so an LLM caller (and the human it
+ * relays to) cannot mistake a keyless fallback for live grid data.
+ */
+function withSourceDisclosure(
+  source: GridForecast["source"],
+  reasoning: string,
+): string {
+  if (source === "mock") {
+    return `SYNTHETIC (mock) grid data — ${reasoning}`;
+  }
+  return reasoning;
 }
 
 function isBatchEligible(now: Date, deadline: Date): boolean {

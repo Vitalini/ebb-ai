@@ -100,6 +100,98 @@ describe("OpenAIAdapter", () => {
     expect(r.provider).toBe("openai");
   });
 
+  it("sends max_completion_tokens and omits temperature for o-series models", async () => {
+    let captured: Record<string, unknown> | undefined;
+    const adapter = new OpenAIAdapter({
+      apiKey: "test",
+      client: {
+        chat: {
+          completions: {
+            create: async (req: unknown) => {
+              captured = req as Record<string, unknown>;
+              return { choices: [{ message: { content: "x" } }] };
+            },
+          },
+        },
+        files: { create: async () => ({ id: "f" }) },
+        batches: { create: async () => ({ id: "b" }) },
+      },
+    });
+    await adapter.dispatch("o3-mini", "hi", { maxTokens: 100, temperature: 0.5 });
+    expect(captured?.max_completion_tokens).toBe(100);
+    expect("max_tokens" in captured!).toBe(false);
+    // o-series rejects temperature entirely — the key must not be sent.
+    expect("temperature" in captured!).toBe(false);
+  });
+
+  it("sends max_completion_tokens but keeps temperature for gpt-5-family models", async () => {
+    let captured: Record<string, unknown> | undefined;
+    const adapter = new OpenAIAdapter({
+      apiKey: "test",
+      client: {
+        chat: {
+          completions: {
+            create: async (req: unknown) => {
+              captured = req as Record<string, unknown>;
+              return { choices: [{ message: { content: "x" } }] };
+            },
+          },
+        },
+        files: { create: async () => ({ id: "f" }) },
+        batches: { create: async () => ({ id: "b" }) },
+      },
+    });
+    await adapter.dispatch("gpt-5-mini", "hi", { maxTokens: 64, temperature: 0.7 });
+    expect(captured?.max_completion_tokens).toBe(64);
+    expect("max_tokens" in captured!).toBe(false);
+    expect(captured?.temperature).toBe(0.7);
+  });
+
+  it("keeps classic max_tokens + temperature for other models", async () => {
+    let captured: Record<string, unknown> | undefined;
+    const adapter = new OpenAIAdapter({
+      apiKey: "test",
+      client: {
+        chat: {
+          completions: {
+            create: async (req: unknown) => {
+              captured = req as Record<string, unknown>;
+              return { choices: [{ message: { content: "x" } }] };
+            },
+          },
+        },
+        files: { create: async () => ({ id: "f" }) },
+        batches: { create: async () => ({ id: "b" }) },
+      },
+    });
+    await adapter.dispatch("gpt-4o", "hi", { maxTokens: 128, temperature: 0.2 });
+    expect(captured?.max_tokens).toBe(128);
+    expect("max_completion_tokens" in captured!).toBe(false);
+    expect(captured?.temperature).toBe(0.2);
+  });
+
+  it("applies the same o-series parameter mapping to batch JSONL bodies", async () => {
+    let jsonl: string | undefined;
+    const adapter = new OpenAIAdapter({
+      apiKey: "test",
+      client: {
+        chat: { completions: { create: async () => ({}) } },
+        files: {
+          create: async (req: { file: Blob }) => {
+            jsonl = await req.file.text();
+            return { id: "file_1" };
+          },
+        },
+        batches: { create: async () => ({ id: "batch_1" }) },
+      },
+    });
+    await adapter.dispatchBatch("o1", ["p"], { maxTokens: 32, temperature: 0.9 });
+    const body = JSON.parse(jsonl!.split("\n")[0]!).body as Record<string, unknown>;
+    expect(body.max_completion_tokens).toBe(32);
+    expect("max_tokens" in body).toBe(false);
+    expect("temperature" in body).toBe(false);
+  });
+
   it("uploads a JSONL file, then submits a batch", async () => {
     let uploadedPurpose: string | undefined;
     const adapter = new OpenAIAdapter({

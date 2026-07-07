@@ -6,6 +6,12 @@ export type TaskStatus =
   | "queued"
   | "scheduled"
   | "running"
+  /**
+   * v0.12: the task was routed through a provider Batch API and is
+   * awaiting results. `tick()` polls submitted batches and transitions
+   * to `completed` only when results actually arrive.
+   */
+  | "submitted"
   | "completed"
   | "failed"
   | "cancelled";
@@ -46,6 +52,14 @@ export interface GridForecast {
     | "mock";
   /** ISO-8601 timestamp when this forecast was generated. */
   generatedAt: string;
+  /**
+   * How the series was produced (v0.12+): a genuine forward forecast
+   * ("forecast"), or recent realised observations tiled onto future
+   * hours — a persistence naive-forecast ("persistence"). Feeds that
+   * relabel historical data must say so, so downstream surfaces can
+   * disclose it.
+   */
+  kind?: "forecast" | "persistence";
   entries: GridForecastEntry[];
 }
 
@@ -71,6 +85,26 @@ export interface CarbonReceipt {
   prompt?: string;
   /** Total tokens (input + output) reported by the provider, if any. */
   totalTokens?: number;
+  /**
+   * Grid intensity (gCO2eq/kWh) used to compute the actual side of this
+   * receipt (v0.12+). Recorded directly so consumers and `ebb stats`
+   * never back-derive it from grams (which skews per-model receipts).
+   */
+  intensityGCo2PerKwh?: number;
+  /**
+   * Which grid feed produced the intensity (v0.12+). "mock" means the
+   * number is SYNTHETIC — the feed had no key or errored and fell back
+   * to the deterministic curve. Covered by the signature, so a signed
+   * receipt can no longer silently attest mock-derived carbon.
+   */
+  gridSource?: GridForecast["source"];
+  /**
+   * Confidence tier of the per-model energy coefficients used (v0.12+):
+   * "measured" (open-weight, published measurements), "estimated"
+   * (closed models, size-class estimates), "fallback" (unknown model,
+   * flat legacy constant).
+   */
+  energySource?: "measured" | "estimated" | "fallback";
   /**
    * Ed25519 signature over the canonical JSON encoding of every other
    * field on this receipt. Base64-encoded raw 64-byte signature. v0.11+.
@@ -124,6 +158,18 @@ export interface TaskRecord<T = unknown> {
    * tasks, which have no projection step.
    */
   estimatedCarbonGCo2?: number;
+  /**
+   * Normalized ISO deadline captured at enqueue (v0.12+). Persisted so
+   * dispatch-time decisions (Batch API eligibility) can be made against
+   * the real deadline instead of the scheduled_for proxy.
+   */
+  deadline?: string;
+  /**
+   * Provider batch id when the task was routed through a Batch API
+   * (v0.12+). Set when status transitions to "submitted"; `tick()`
+   * polls this batch until results arrive.
+   */
+  batchId?: string;
 }
 
 /**
@@ -248,4 +294,10 @@ export interface RecommendResult {
   alternatives: RecommendAlternative[];
   /** Human-readable one-line explanation for an LLM caller. */
   reasoning: string;
+  /**
+   * Which grid feed produced the forecast this plan was scored against
+   * (v0.12+). "mock" means the recommendation is based on SYNTHETIC
+   * data — surface this to the caller.
+   */
+  gridSource?: GridForecast["source"];
 }

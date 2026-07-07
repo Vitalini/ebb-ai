@@ -42,15 +42,34 @@ describe("mockGridFeed", () => {
 
 describe("pickBestWindow", () => {
   it("returns undefined when no entry falls within the deadline", () => {
+    // 2h in the past: fully elapsed, not even the hour covering "now".
     const past = [
       {
-        datetime: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+        datetime: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
         carbonIntensityGCo2PerKwh: 100,
         band: "clean" as const,
       },
     ];
     const result = pickBestWindow(past, new Date(Date.now() + 60 * 60 * 1000));
     expect(result).toBeUndefined();
+  });
+
+  it("accepts the entry covering the current hour (start up to 1h in the past)", () => {
+    const entries = [
+      {
+        // Started 30 minutes ago — this is the hour containing "now".
+        datetime: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+        carbonIntensityGCo2PerKwh: 50,
+        band: "very_clean" as const,
+      },
+      {
+        datetime: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+        carbonIntensityGCo2PerKwh: 400,
+        band: "average" as const,
+      },
+    ];
+    const result = pickBestWindow(entries, new Date(Date.now() + 2 * 60 * 60 * 1000));
+    expect(result?.carbonIntensityGCo2PerKwh).toBe(50);
   });
 
   it("picks the lowest-intensity entry inside the window", () => {

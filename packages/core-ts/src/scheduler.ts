@@ -1,21 +1,24 @@
 /**
  * Scheduler — the in-process orchestrator for ebb-ai.
  *
- * Responsibilities (v0.1):
- *   - Hold a queue of deferrable tasks.
+ * Responsibilities:
+ *   - Hold a queue of deferrable tasks (closure-based `defer`/`enqueue`
+ *     and JSON-persistable provider-call tasks).
  *   - Score candidate execution windows for each task using a grid feed.
- *   - Sleep until the chosen window, then dispatch the task.
- *   - Record a carbon receipt on the resulting TaskRecord.
+ *   - Sleep until the chosen window (closure tasks) or mark the window
+ *     for a later `tick()` (provider-call tasks), then dispatch.
+ *   - Record a signed carbon receipt on the resulting TaskRecord.
+ *   - Optionally write every state transition through to a SQLite
+ *     audit ledger (`dbPath`), shared safely across processes via WAL
+ *     plus a row-level dispatch claim.
  *
- * Out of scope for v0.1 (see ROADMAP.md sections 7 and 9):
- *   - Durable persistence (everything is in-memory).
+ * Still out of scope (see ROADMAP.md):
  *   - Cross-provider routing.
- *   - Anthropic / OpenAI Batch API integration.
  *   - Multi-region failover.
  */
 
 import { randomUUID } from "node:crypto";
-import { gramsForIntensity } from "./energy.js";
+import { gramsForIntensity, lookupModelEnergy } from "./energy.js";
 import { mockGridFeed } from "./grid.js";
 import type { ProviderAdapter } from "./providers/base.js";
 import {
@@ -29,6 +32,7 @@ import type {
   DeferOptions,
   DeferrableTask,
   GridFeed,
+  GridForecast,
   GridForecastEntry,
   ProviderCallSpec,
   TaskRecord,
@@ -99,7 +103,6 @@ export class Scheduler {
   >();
   private readonly bodies = new Map<string, DeferrableTask<unknown>>();
   private readonly store: TaskStore | undefined;
-  private nextSerial = 1;
   // Mutable: a single load failure disables signing for the rest of
   // this scheduler instance (see `getSigningKey`).
   private signingConfig: false | { keyPath?: string };
@@ -188,7 +191,10 @@ export class Scheduler {
       if (typeof opts.taskId !== "string" || opts.taskId.length === 0) {
         throw new Error(`Invalid taskId: must be a non-empty string`);
       }
-      if (this.tasks.has(opts.taskId)) {
+      // Check both the in-memory map and the durable store: a fresh
+      // process re-using an old id must not silently overwrite a
+      // persisted (possibly completed + signed) ledger row.
+      if (this.tasks.has(opts.taskId) || this.store?.get(opts.taskId)) {
         throw new Error(`Task id "${opts.taskId}" is already in the queue`);
       }
     }
@@ -200,11 +206,17 @@ export class Scheduler {
       enqueuedAt: new Date().toISOString(),
       region,
       carbonBudgetG: opts.carbonBudgetG,
+      deadline: deadline.toISOString(),
     };
     this.tasks.set(taskId, record);
     this.bodies.set(taskId, task as DeferrableTask<unknown>);
     this.store?.upsert(record);
-    void this.schedule(taskId, deadline);
+    // Fire-and-forget, but never unhandled: a rejecting grid feed (or any
+    // scheduling error) must fail the task — rejecting the defer() promise
+    // — instead of crashing the process with an unhandledRejection.
+    this.schedule(taskId, deadline).catch((err) => {
+      this.failTask(taskId, err instanceof Error ? err : new Error(String(err)));
+    });
     return record;
   }
 
@@ -244,7 +256,10 @@ export class Scheduler {
       if (typeof opts.taskId !== "string" || opts.taskId.length === 0) {
         throw new Error(`Invalid taskId: must be a non-empty string`);
       }
-      if (this.tasks.has(opts.taskId)) {
+      // Check both the in-memory map and the durable store: a fresh
+      // process re-using an old id must not silently overwrite a
+      // persisted (possibly completed + signed) ledger row.
+      if (this.tasks.has(opts.taskId) || this.store?.get(opts.taskId)) {
         throw new Error(`Task id "${opts.taskId}" is already in the queue`);
       }
     }
@@ -257,6 +272,7 @@ export class Scheduler {
       region,
       carbonBudgetG: opts.carbonBudgetG,
       bodyJson: JSON.stringify(spec),
+      deadline: deadline.toISOString(),
     };
     this.tasks.set(taskId, record);
     this.store?.upsert(record);
@@ -265,7 +281,14 @@ export class Scheduler {
     // `Scheduler.tick`. We still write `scheduled` + `scheduledFor` so the
     // ledger reflects the chosen window and so `tick` can compare against
     // `Date.now()`.
-    await this.scheduleProviderCall(taskId, deadline);
+    try {
+      await this.scheduleProviderCall(taskId, deadline);
+    } catch (err) {
+      // A scheduling failure after the queued-row upsert must not strand
+      // a permanently-"queued" row in the ledger.
+      this.failTask(taskId, err instanceof Error ? err : new Error(String(err)));
+      throw err;
+    }
     return record;
   }
 
@@ -315,7 +338,19 @@ export class Scheduler {
       // processes pointing at the same SQLite file (e.g. an
       // interactive `ebb tick` racing the launchd cron).
       if (this.store) {
-        const claimed = this.store.claimScheduled(record.taskId);
+        let claimed = false;
+        try {
+          claimed = this.store.claimScheduled(record.taskId);
+        } catch (err) {
+          // A locked / throwing row (e.g. SQLITE_BUSY under heavy
+          // multi-process contention) is skipped — it stays "scheduled"
+          // and a later tick retries. It must never abort the whole tick.
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[ebb-ai/scheduler] tick: could not claim task ${record.taskId}: ${describeErr(err)}; skipping this round`,
+          );
+          continue;
+        }
         if (!claimed) continue;
       }
       inspected++;
@@ -363,8 +398,9 @@ export class Scheduler {
    *
    * Calling cancel on a `running` task is best-effort: we set status
    * to `cancelled` and clear the timer, but a provider call already
-   * in flight will still complete on the wire (the result is dropped
-   * locally and not written to the ledger).
+   * in flight will still complete on the wire. The dispatcher re-checks
+   * the status before finalizing, so a cancelled task's late result is
+   * dropped locally and never written over the cancelled ledger row.
    */
   cancelTask(taskId: string): TaskRecord<unknown> {
     const record = this.resolveTask(taskId);
@@ -385,6 +421,9 @@ export class Scheduler {
     }
     record.status = "cancelled";
     record.completedAt = new Date().toISOString();
+    // Terminal transition: redact secrets out of the persisted body so the
+    // ledger does not retain raw prompts forever (see redactBodyJson).
+    record.bodyJson = redactBodyJson(record.bodyJson);
     this.store?.upsert(record);
     const resolver = this.resolvers.get(taskId);
     resolver?.reject(new Error(`task ${taskId} cancelled`));
@@ -430,6 +469,14 @@ export class Scheduler {
     record.scheduledFor = new Date().toISOString();
     record.status = "scheduled";
     this.store?.upsert(record);
+    // Same row-level claim `tick` uses: if a concurrent process (e.g. the
+    // cron tick) grabbed the row between our upsert and here, do NOT
+    // dispatch a second (double-billed) provider call.
+    if (this.store && !this.store.claimScheduled(taskId)) {
+      throw new Error(
+        `task ${taskId} was just claimed by another process (racing tick?)`,
+      );
+    }
     const entry = await this.dispatchProviderCall(record, adapters);
     if (entry.status === "completed" && record.receipt) {
       record.intensitySource = "expedited";
@@ -462,6 +509,7 @@ export class Scheduler {
       );
     }
     const parsedDeadline = normalizeDeadline(newDeadline);
+    record.deadline = parsedDeadline.toISOString();
     const existingTimer = this.pendingTimers.get(taskId);
     if (existingTimer) {
       clearTimeout(existingTimer);
@@ -504,6 +552,13 @@ export class Scheduler {
     record.completedAt = undefined;
     record.error = undefined;
     this.store?.upsert(record);
+    // Row-level claim: don't double-dispatch if a concurrent tick in
+    // another process grabbed the freshly re-scheduled row first.
+    if (this.store && !this.store.claimScheduled(taskId)) {
+      throw new Error(
+        `task ${taskId} was just claimed by another process (racing tick?)`,
+      );
+    }
     return await this.dispatchProviderCall(record, adapters);
   }
 
@@ -540,6 +595,10 @@ export class Scheduler {
         ? forecast.entries.filter((e) => intensityToGrams(e.carbonIntensityGCo2PerKwh, spec.model) <= budgetG)
         : forecast.entries;
     const candidate = pickBestWindow(survivors, deadline);
+    // batchEligible reflects whether the *deadline* is far enough out
+    // that Batch API (24h SLA) is still a viable route, not whether the
+    // chosen window itself is more than 24h away.
+    const batchEligible = deadline.getTime() - Date.now() > 24 * 60 * 60 * 1000;
     if (!candidate) {
       if (budgetG !== undefined && forecast.entries.length > 0) {
         const cheapest = forecast.entries.reduce((a, b) =>
@@ -550,14 +609,30 @@ export class Scheduler {
           throw new CarbonBudgetExceededError(cheapestG, budgetG);
         }
       }
-      throw new Error("previewProviderCall: no usable window inside the deadline");
+      // No usable window inside the deadline. Mirror what the commit path
+      // (`scheduleProviderCall`) does — schedule for "now" — instead of
+      // throwing, so dry_run and the real call cannot diverge.
+      const head = forecast.entries[0];
+      if (!head) {
+        throw new Error("previewProviderCall: forecast returned no entries");
+      }
+      return {
+        scheduledFor: new Date().toISOString(),
+        estimatedCarbonGCo2:
+          Math.round(intensityToGrams(head.carbonIntensityGCo2PerKwh, spec.model) * 10) / 10,
+        intensityGCo2PerKwh: head.carbonIntensityGCo2PerKwh,
+        band: head.band,
+        batchEligible,
+        region,
+      };
     }
-    // batchEligible reflects whether the *deadline* is far enough out
-    // that Batch API (24h SLA) is still a viable route, not whether the
-    // chosen window itself is more than 24h away.
-    const batchEligible = deadline.getTime() - Date.now() > 24 * 60 * 60 * 1000;
     return {
-      scheduledFor: candidate.datetime,
+      // A candidate whose hour started in the past is the *current* hour —
+      // the commit path dispatches now, so the preview says "now" too.
+      scheduledFor:
+        new Date(candidate.datetime).getTime() <= Date.now()
+          ? new Date().toISOString()
+          : candidate.datetime,
       estimatedCarbonGCo2: Math.round(intensityToGrams(candidate.carbonIntensityGCo2PerKwh, spec.model) * 10) / 10,
       intensityGCo2PerKwh: candidate.carbonIntensityGCo2PerKwh,
       band: candidate.band,
@@ -613,7 +688,13 @@ export class Scheduler {
       }
       // No usable window inside the deadline — dispatch immediately rather
       // than miss the deadline.
-      void this.dispatch(taskId, new Date(), undefined);
+      this.dispatchSafe(taskId, new Date(), undefined);
+      return;
+    }
+    if (new Date(candidate.datetime).getTime() <= Date.now()) {
+      // The chosen window is the *current* hour (its start is in the
+      // past) — dispatch now, keeping the scored entry for the receipt.
+      this.dispatchSafe(taskId, new Date(), candidate);
       return;
     }
     record.status = "scheduled";
@@ -621,22 +702,48 @@ export class Scheduler {
     this.store?.upsert(record);
     const wait = Math.max(0, new Date(candidate.datetime).getTime() - Date.now());
     // Node's setTimeout overflows the signed-32-bit ms range (~24.85 days).
-    // Cap to one day before the actual fire time and re-schedule.
+    // Cap each hop at 2_000_000_000 ms (~23.1 days) and re-schedule when
+    // the timer fires before the actual window.
     const safeWait = Math.min(wait, 2_000_000_000);
     const timer = setTimeout(() => {
       this.pendingTimers.delete(taskId);
       if (safeWait < wait) {
-        void this.schedule(taskId, deadline);
+        // Re-entry after a capped hop. Errors route to failTask so a
+        // transient feed failure never becomes an unhandledRejection.
+        this.schedule(taskId, deadline).catch((err) => {
+          this.failTask(taskId, err instanceof Error ? err : new Error(String(err)));
+        });
       } else {
-        void this.dispatch(taskId, new Date(candidate.datetime), candidate);
+        this.dispatchSafe(taskId, new Date(candidate.datetime), candidate);
       }
     }, safeWait);
     this.pendingTimers.set(taskId, timer);
   }
 
+  /** Fire-and-forget wrapper around `dispatch` that routes any unexpected
+   *  rejection to `failTask` instead of an unhandledRejection. */
+  private dispatchSafe(
+    taskId: string,
+    ranAt: Date,
+    forecastEntry: GridForecastEntry | undefined,
+  ): void {
+    this.dispatch(taskId, ranAt, forecastEntry).catch((err) => {
+      this.failTask(taskId, err instanceof Error ? err : new Error(String(err)));
+    });
+  }
+
   private failTask(taskId: string, err: Error): void {
     const record = this.tasks.get(taskId);
     if (!record) return;
+    // Never overwrite a terminal state (a completed = billed dispatch, or
+    // an explicit cancellation) with "failed".
+    if (
+      record.status === "completed" ||
+      record.status === "failed" ||
+      record.status === "cancelled"
+    ) {
+      return;
+    }
     record.status = "failed";
     record.completedAt = new Date().toISOString();
     record.error = err.message;
@@ -659,22 +766,71 @@ export class Scheduler {
     record.status = "running";
     this.store?.upsert(record);
     const start = Date.now();
+    // The try/catch is deliberately narrow: it covers ONLY the user's task
+    // body. Once the body has succeeded, every piece of bookkeeping below
+    // (intensity fetch, receipt build/sign, ledger write) is fail-soft —
+    // a successful run must never be re-labelled "failed" by its paperwork.
+    let result: unknown;
     try {
-      const result = await body();
-      const durationMs = Date.now() - start;
-      // The scheduler scored `forecastEntry` when it picked the window —
-      // that is the estimate. `actual` is the intensity observed when the
-      // task actually ran. If we dispatched without a forecast (immediate
-      // fallback) there is no separate estimate, so the two coincide.
-      let source: "scored" | "current" = "scored";
-      let estimatedIntensityG: number | undefined;
-      if (forecastEntry) {
-        estimatedIntensityG = forecastEntry.carbonIntensityGCo2PerKwh;
-      } else {
-        source = "current";
-      }
-      const actualIntensityG = await this.fetchCurrentIntensity(record.region, ranAt);
-      const actualCarbonGCo2 = Math.round(intensityToGrams(actualIntensityG) * 10) / 10;
+      result = await body();
+    } catch (err) {
+      record.status = "failed";
+      record.completedAt = new Date().toISOString();
+      record.error = err instanceof Error ? err.message : String(err);
+      this.store?.upsert(record);
+      resolver?.reject(err);
+      this.bodies.delete(taskId);
+      this.resolvers.delete(taskId);
+      return;
+    }
+    const durationMs = Date.now() - start;
+
+    // The task may have been cancelled while the body was running — the
+    // resolver was already rejected by cancelTask. Do not overwrite the
+    // cancelled ledger row with a completed record + late result.
+    // (Widen through a local: TS otherwise keeps `record.status` narrowed
+    // to the "running" literal assigned above.)
+    const statusAfterRun = record.status as TaskRecord["status"] as string;
+    if (statusAfterRun === "cancelled") {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[ebb-ai/scheduler] task ${taskId} was cancelled while running; dropping its late result`,
+      );
+      this.bodies.delete(taskId);
+      this.resolvers.delete(taskId);
+      return;
+    }
+
+    // The scheduler scored `forecastEntry` when it picked the window —
+    // that is the estimate. `actual` is the intensity observed when the
+    // task actually ran. If we dispatched without a forecast (immediate
+    // fallback) there is no separate estimate, so the two coincide.
+    let source: "scored" | "current" = "scored";
+    let estimatedIntensityG: number | undefined;
+    if (forecastEntry) {
+      estimatedIntensityG = forecastEntry.carbonIntensityGCo2PerKwh;
+    } else {
+      source = "current";
+    }
+    let actualIntensityG: number | undefined;
+    let gridSource: GridForecast["source"] | undefined;
+    try {
+      const current = await this.fetchCurrentIntensity(record.region, ranAt);
+      actualIntensityG = current.intensityG;
+      gridSource = current.source;
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[ebb-ai/scheduler] intensity fetch for the receipt failed (${describeErr(err)}); receipt falls back to the schedule-time estimate`,
+      );
+    }
+    let receipt: CarbonReceipt | undefined;
+    try {
+      const intensityForActual = actualIntensityG ?? estimatedIntensityG;
+      const actualCarbonGCo2 =
+        intensityForActual !== undefined
+          ? Math.round(intensityToGrams(intensityForActual) * 10) / 10
+          : 0;
       const estimatedCarbonGCo2 =
         estimatedIntensityG !== undefined
           ? Math.round(intensityToGrams(estimatedIntensityG) * 10) / 10
@@ -685,7 +841,7 @@ export class Scheduler {
               ((actualCarbonGCo2 - estimatedCarbonGCo2) / estimatedCarbonGCo2) * 1000,
             ) / 10
           : 0;
-      const receipt: CarbonReceipt = this.maybeSign({
+      receipt = this.maybeSign({
         taskId,
         ranAt: ranAt.toISOString(),
         region: record.region,
@@ -693,24 +849,36 @@ export class Scheduler {
         actualCarbonGCo2,
         deltaPct,
         durationMs,
+        // Provenance: the raw intensity + which feed produced it. Left
+        // undefined when the receipt-side fetch failed. Closure tasks
+        // have no model, so the energy coefficients are the flat legacy
+        // fallback tier.
+        intensityGCo2PerKwh: actualIntensityG,
+        gridSource,
+        energySource: "fallback",
       });
-      record.status = "completed";
-      record.completedAt = new Date().toISOString();
-      record.result = result;
-      record.receipt = receipt;
-      record.intensitySource = source;
-      this.store?.upsert(record);
-      resolver?.resolve(result);
     } catch (err) {
-      record.status = "failed";
-      record.completedAt = new Date().toISOString();
-      record.error = err instanceof Error ? err.message : String(err);
-      this.store?.upsert(record);
-      resolver?.reject(err);
-    } finally {
-      this.bodies.delete(taskId);
-      this.resolvers.delete(taskId);
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[ebb-ai/scheduler] failed to build the carbon receipt for ${taskId}: ${describeErr(err)}; task stays completed without a receipt`,
+      );
     }
+    record.status = "completed";
+    record.completedAt = new Date().toISOString();
+    record.result = result;
+    record.receipt = receipt;
+    record.intensitySource = source;
+    try {
+      this.store?.upsert(record);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[ebb-ai/scheduler] failed to persist completed task ${taskId}: ${describeErr(err)}`,
+      );
+    }
+    resolver?.resolve(result);
+    this.bodies.delete(taskId);
+    this.resolvers.delete(taskId);
   }
 
   private async scheduleProviderCall(taskId: string, deadline: Date): Promise<void> {
@@ -762,7 +930,12 @@ export class Scheduler {
       return;
     }
     record.status = "scheduled";
-    record.scheduledFor = candidate.datetime;
+    // A candidate whose hour started in the past is the *current* hour —
+    // schedule for "now" so the very next tick dispatches immediately.
+    record.scheduledFor =
+      new Date(candidate.datetime).getTime() <= Date.now()
+        ? new Date().toISOString()
+        : candidate.datetime;
     record.estimatedCarbonGCo2 =
       Math.round(intensityToGrams(candidate.carbonIntensityGCo2PerKwh, specModel) * 10) / 10;
     this.store?.upsert(record);
@@ -793,20 +966,34 @@ export class Scheduler {
     }
 
     record.status = "running";
-    this.store?.upsert(record);
+    try {
+      this.store?.upsert(record);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[ebb-ai/scheduler] failed to persist running status for ${record.taskId}: ${describeErr(err)}`,
+      );
+    }
     const start = Date.now();
     const ranAt = new Date();
+    // The try/catch is deliberately narrow: it covers ONLY the (billed)
+    // provider call. Everything after a successful call — intensity fetch,
+    // receipt build/sign, ledger write, output file — is fail-soft: a paid
+    // dispatch must NEVER be re-labelled "failed" (a retry would bill the
+    // provider a second time).
+    let result: unknown;
     try {
       const preferBatch = spec.preferBatch !== false;
       // We compare the task's scheduled_for to a 24h-from-now boundary to
-      // decide whether the Batch API is still worth it. (The deadline itself
-      // is not on the record after enqueuing — `scheduled_for` is the proxy.)
+      // decide whether the Batch API is still worth it. (`scheduled_for`
+      // is the proxy; batch routing proper — status "submitted" + polling
+      // against record.deadline — lands in a later version.)
       const scheduledForTs = record.scheduledFor
         ? new Date(record.scheduledFor).getTime()
         : Date.now();
       const moreThan24h = scheduledForTs - Date.now() > 24 * 60 * 60 * 1000;
       const useBatch = preferBatch && moreThan24h && typeof adapter.dispatchBatch === "function";
-      const result = useBatch
+      result = useBatch
         ? await retryWithBackoff(() => adapter.dispatchBatch(spec.model, [spec.prompt], {
             temperature: spec.temperature,
             maxTokens: spec.maxTokens,
@@ -817,28 +1004,76 @@ export class Scheduler {
             maxTokens: spec.maxTokens,
             system: spec.systemPrompt,
           }));
-      const durationMs = Date.now() - start;
-      const intensityG = await this.intensityForReceipt(record.region, ranAt);
-      const source: "scored" | "current" = "scored";
-      // `estimatedCarbonGCo2` was projected at schedule time from the
-      // forecast entry the scheduler scored; `actual` is billed against
-      // the intensity observed when the task actually ran. The delta is
-      // the forecast drift between those two moments. For the actual side
-      // we re-estimate energy with the real token counts the provider
-      // reported (when available) — that turns the receipt from "typical
-      // task at this model" into "this specific call at this model".
-      const usage = (result as { usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number } }).usage;
-      const inputTokens = typeof usage?.inputTokens === "number" ? usage.inputTokens : undefined;
-      const outputTokens = typeof usage?.outputTokens === "number" ? usage.outputTokens : undefined;
-      const actualModel = (result as { model?: string }).model ?? spec.model;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      record.status = "failed";
+      record.completedAt = new Date().toISOString();
+      record.error = msg;
+      this.store?.upsert(record);
+      return { taskId: record.taskId, status: "failed", error: msg };
+    }
+    const durationMs = Date.now() - start;
+
+    // The task may have been cancelled while the provider call was in
+    // flight (this process, or another one via the shared store). Keep the
+    // cancelled ledger row: do not overwrite it with completed + result.
+    let cancelledElsewhere = false;
+    try {
+      cancelledElsewhere = this.store?.get(record.taskId)?.status === "cancelled";
+    } catch {
+      // Store read failure — fall back to the in-memory status only.
+    }
+    const statusAfterCall = record.status as TaskRecord["status"] as string;
+    if (statusAfterCall === "cancelled" || cancelledElsewhere) {
+      record.status = "cancelled";
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[ebb-ai/scheduler] task ${record.taskId} was cancelled while running; dropping its late result`,
+      );
+      return {
+        taskId: record.taskId,
+        status: "failed",
+        error: "task was cancelled while running; late result dropped",
+      };
+    }
+
+    let intensityG: number | undefined;
+    let gridSource: GridForecast["source"] | undefined;
+    try {
+      const current = await this.fetchCurrentIntensity(record.region, ranAt);
+      intensityG = current.intensityG;
+      gridSource = current.source;
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[ebb-ai/scheduler] intensity fetch for the receipt failed (${describeErr(err)}); receipt falls back to the schedule-time estimate`,
+      );
+    }
+    const source: "scored" | "current" = "scored";
+    // `estimatedCarbonGCo2` was projected at schedule time from the
+    // forecast entry the scheduler scored; `actual` is billed against
+    // the intensity observed when the task actually ran. The delta is
+    // the forecast drift between those two moments. For the actual side
+    // we re-estimate energy with the real token counts the provider
+    // reported (when available) — that turns the receipt from "typical
+    // task at this model" into "this specific call at this model".
+    const usage = (result as { usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number } }).usage;
+    const inputTokens = typeof usage?.inputTokens === "number" ? usage.inputTokens : undefined;
+    const outputTokens = typeof usage?.outputTokens === "number" ? usage.outputTokens : undefined;
+    const actualModel = (result as { model?: string }).model ?? spec.model;
+    const totalTokens = typeof usage?.totalTokens === "number" ? usage.totalTokens : undefined;
+    let receipt: CarbonReceipt | undefined;
+    try {
       const actualCarbonGCo2 =
-        Math.round(
-          gramsForIntensity(intensityG, {
-            model: actualModel,
-            inputTokens,
-            outputTokens,
-          }) * 10,
-        ) / 10;
+        intensityG !== undefined
+          ? Math.round(
+              gramsForIntensity(intensityG, {
+                model: actualModel,
+                inputTokens,
+                outputTokens,
+              }) * 10,
+            ) / 10
+          : (record.estimatedCarbonGCo2 ?? 0);
       const estimatedCarbonGCo2 = record.estimatedCarbonGCo2 ?? actualCarbonGCo2;
       const deltaPct =
         estimatedCarbonGCo2 > 0
@@ -846,8 +1081,7 @@ export class Scheduler {
               ((actualCarbonGCo2 - estimatedCarbonGCo2) / estimatedCarbonGCo2) * 1000,
             ) / 10
           : 0;
-      const totalTokens = typeof usage?.totalTokens === "number" ? usage.totalTokens : undefined;
-      const receipt: CarbonReceipt = this.maybeSign({
+      receipt = this.maybeSign({
         taskId: record.taskId,
         ranAt: ranAt.toISOString(),
         region: record.region,
@@ -863,37 +1097,55 @@ export class Scheduler {
         durationMs,
         prompt: redactPrompt(spec.prompt, spec.redactInReceipt),
         totalTokens,
+        // Provenance (v0.12): the raw intensity, which feed produced it
+        // ("mock" = synthetic), and the confidence tier of the per-model
+        // energy coefficients. Undefined intensity/gridSource means the
+        // receipt-side fetch failed and the actual side reuses the
+        // schedule-time estimate.
+        intensityGCo2PerKwh: intensityG,
+        gridSource,
+        energySource: lookupModelEnergy(actualModel).source,
       });
-      record.status = "completed";
-      record.completedAt = new Date().toISOString();
-      record.result = result;
-      record.receipt = receipt;
-      record.intensitySource = source;
-      this.store?.upsert(record);
-      if (spec.outputPath) {
-        await writeOutputFile(spec.outputPath, record.taskId, result, receipt);
-      }
-      return { taskId: record.taskId, status: "completed" };
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      record.status = "failed";
-      record.completedAt = new Date().toISOString();
-      record.error = msg;
-      this.store?.upsert(record);
-      return { taskId: record.taskId, status: "failed", error: msg };
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[ebb-ai/scheduler] failed to build the carbon receipt for ${record.taskId}: ${describeErr(err)}; task stays completed without a receipt`,
+      );
     }
+    record.status = "completed";
+    record.completedAt = new Date().toISOString();
+    record.result = result;
+    record.receipt = receipt;
+    record.intensitySource = source;
+    // Terminal transition: redact secrets out of the persisted body. The
+    // original (unredacted) body was needed up to this point so the live
+    // dispatch used the caller's exact prompt; the ledger keeps only the
+    // redacted form. (Failed tasks intentionally keep the original body —
+    // retryTask must re-dispatch the exact prompt.)
+    record.bodyJson = redactBodyJson(record.bodyJson);
+    try {
+      this.store?.upsert(record);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[ebb-ai/scheduler] failed to persist completed task ${record.taskId}: ${describeErr(err)}`,
+      );
+    }
+    if (spec.outputPath && receipt) {
+      await writeOutputFile(spec.outputPath, record.taskId, result, receipt);
+    }
+    return { taskId: record.taskId, status: "completed" };
   }
 
   /**
-   * Look up an intensity figure for the receipt. We re-fetch the forecast
-   * and pick the entry that best aligns with the task's `scheduled_for`
-   * (or the moment we ran, if there is no scheduled_for).
+   * Look up the intensity figure (and its feed provenance) used for the
+   * actual side of a receipt: re-fetch the forecast and pick the entry
+   * closest to the moment the task ran.
    */
-  private async intensityForReceipt(region: string, at: Date): Promise<number> {
-    return this.fetchCurrentIntensity(region, at);
-  }
-
-  private async fetchCurrentIntensity(region: string, at: Date): Promise<number> {
+  private async fetchCurrentIntensity(
+    region: string,
+    at: Date,
+  ): Promise<{ intensityG: number; source: GridForecast["source"] }> {
     const forecast = await this.feed.fetchForecast(region, 24);
     const target = at.getTime();
     let best: GridForecastEntry | undefined;
@@ -905,7 +1157,10 @@ export class Scheduler {
         bestDelta = d;
       }
     }
-    return best?.carbonIntensityGCo2PerKwh ?? 400;
+    return {
+      intensityG: best?.carbonIntensityGCo2PerKwh ?? 400,
+      source: forecast.source,
+    };
   }
 }
 
@@ -954,7 +1209,11 @@ export function pickBestWindow(
   const now = Date.now();
   const usable = entries.filter((e) => {
     const t = new Date(e.datetime).getTime();
-    return t >= now && t <= deadline.getTime();
+    // Forecast entries mark the *start* of an hour, so the entry covering
+    // `now` started up to an hour ago — it is still a valid (dispatch-now)
+    // candidate. Excluding it made "run right now" unpickable even when
+    // the current hour is the cleanest inside the deadline.
+    return t >= now - 3_600_000 && t <= deadline.getTime();
   });
   if (usable.length === 0) return undefined;
   let best = usable[0]!;
@@ -967,11 +1226,17 @@ export function pickBestWindow(
 }
 
 /**
- * Retry an async function with exponential backoff: up to 3 attempts
- * at 1s, 4s, 16s wait. Retries only on transient errors (429
- * rate-limit, 5xx, network errors). Non-retryable errors (4xx other
- * than 429) bubble up on the first call. v0.5 fix for the
- * provider-flake problem.
+ * Retry an async function with exponential backoff: up to 4 attempts
+ * total (1 initial + 3 retries at 1s, 4s, 16s waits). Retries only on
+ * errors that are safe to re-send: 429 rate-limits, 5xx, and network
+ * errors raised *before* the request could reach the provider
+ * (ECONNREFUSED / ENOTFOUND / EAI_AGAIN). Ambiguous mid-flight errors
+ * (ETIMEDOUT, ECONNRESET) are NOT retried — the provider may already
+ * have accepted and billed the call. Other 4xx bubble up immediately.
+ *
+ * This is the single retry policy for ebb-ai: provider adapters
+ * construct their SDK clients with `maxRetries: 0` so vendor-side
+ * retries cannot multiply with this one.
  */
 async function retryWithBackoff<T>(fn: () => Promise<T>): Promise<T> {
   const waits = [1_000, 4_000, 16_000];
@@ -996,17 +1261,27 @@ async function retryWithBackoff<T>(fn: () => Promise<T>): Promise<T> {
 
 function isRetryable(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
-  const e = err as { status?: number; statusCode?: number; code?: string; message?: string };
+  const e = err as {
+    status?: number;
+    statusCode?: number;
+    code?: string;
+    message?: string;
+    cause?: { code?: string };
+  };
   const status = e.status ?? e.statusCode;
   if (typeof status === "number") {
     if (status === 429) return true;
     if (status >= 500 && status < 600) return true;
     return false;
   }
-  const code = e.code;
+  // Node fetch / undici errors often wrap the syscall error in `cause`.
+  const code = e.code ?? e.cause?.code;
   if (typeof code === "string") {
-    // Node fetch / undici-style transient codes.
-    if (["ECONNRESET", "ETIMEDOUT", "ECONNREFUSED", "EAI_AGAIN", "UND_ERR_SOCKET"].includes(code)) {
+    // Only pre-connect failures are safely retryable: the request never
+    // reached the provider, so re-sending cannot double-bill. ETIMEDOUT /
+    // ECONNRESET happen mid-flight — the provider may have accepted the
+    // call — so they are deliberately NOT in this list.
+    if (["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN"].includes(code)) {
       return true;
     }
   }
@@ -1030,14 +1305,21 @@ function describeErr(err: unknown): string {
 
 /**
  * Default redaction patterns — applied unless the spec passes its
- * own `redactInReceipt` array. Catches API keys for the major
- * vendors plus generic bearer tokens.
+ * own `redactInReceipt` array. Vendor-shaped credential patterns only:
+ * a previous generic `[A-Z]{2,3}_[A-Z0-9]{6,}` catch-all mangled
+ * legitimate prose (DB_PASSWORD, US-MIDA-PJM-style codes, ISO_8601)
+ * while missing every real vendor key shape below.
  */
 const DEFAULT_REDACTION_PATTERNS: ReadonlyArray<RegExp> = [
-  /sk-(?:ant-)?[A-Za-z0-9_\-]{20,}/g,
-  /sk-proj-[A-Za-z0-9_\-]{20,}/g,
-  /\b[A-Z]{2,3}_[A-Z0-9]{6,}\b/g,                  // generic FOO_BAR keys
-  /\bBearer\s+[A-Za-z0-9_\-.]{20,}/gi,
+  /sk-(?:ant-)?[A-Za-z0-9_\-]{20,}/g,               // Anthropic / OpenAI legacy
+  /sk-proj-[A-Za-z0-9_\-]{20,}/g,                   // OpenAI project keys
+  /\bBearer\s+[A-Za-z0-9_\-.]{20,}/gi,              // OAuth bearer tokens
+  /\bAKIA[0-9A-Z]{16}\b/g,                          // AWS access key id
+  /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36}\b/g,   // GitHub tokens
+  /\bgithub_pat_[A-Za-z0-9_]{22,}\b/g,              // GitHub fine-grained PAT
+  /\bAIza[0-9A-Za-z_\-]{35}\b/g,                    // Google API key
+  /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/g,              // Slack tokens
+  /\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g, // JWT
 ];
 
 /**
@@ -1062,6 +1344,33 @@ function redactPrompt(prompt: string, patterns: string[] | undefined): string {
     }
   }
   return out;
+}
+
+/**
+ * Redact secrets out of a persisted provider-call body. Applied when a
+ * task reaches "completed" or "cancelled" — the live dispatch always
+ * uses the original body, and only the final ledger write is rewritten.
+ *
+ * Deliberately NOT applied on "failed": `retryTask` re-dispatches the
+ * persisted body, so a failed task must retain the caller's original
+ * prompt until it either succeeds (redacted then) or is cancelled.
+ */
+function redactBodyJson(bodyJson: string | undefined): string | undefined {
+  if (!bodyJson) return bodyJson;
+  try {
+    const spec = JSON.parse(bodyJson) as Partial<ProviderCallSpec>;
+    if (!spec || spec.type !== "provider_call") return bodyJson;
+    if (typeof spec.prompt === "string") {
+      spec.prompt = redactPrompt(spec.prompt, spec.redactInReceipt);
+    }
+    if (typeof spec.systemPrompt === "string") {
+      spec.systemPrompt = redactPrompt(spec.systemPrompt, spec.redactInReceipt);
+    }
+    return JSON.stringify(spec);
+  } catch {
+    // Corrupt body — leave it untouched rather than destroy evidence.
+    return bodyJson;
+  }
 }
 
 /**

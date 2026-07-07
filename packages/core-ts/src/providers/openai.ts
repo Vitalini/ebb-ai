@@ -36,6 +36,39 @@ interface OpenAIClient {
   };
 }
 
+/** o-series reasoning models (o1, o3, o4-mini, …). */
+function isOSeriesModel(model: string): boolean {
+  return /^o\d/.test(model.trim().toLowerCase());
+}
+
+/** gpt-5 family (gpt-5, gpt-5-mini, gpt-5.1, …). */
+function isGpt5FamilyModel(model: string): boolean {
+  return /^gpt-5/.test(model.trim().toLowerCase());
+}
+
+/**
+ * Build the token/temperature portion of a chat.completions payload.
+ * o-series and gpt-5-family models reject the legacy `max_tokens`
+ * parameter (400 "Unsupported parameter") and require
+ * `max_completion_tokens`; o-series additionally rejects `temperature`.
+ * Everything else keeps the classic parameters.
+ */
+function completionParams(
+  model: string,
+  options: DispatchOptions,
+): Record<string, unknown> {
+  const params: Record<string, unknown> = {};
+  if (isOSeriesModel(model) || isGpt5FamilyModel(model)) {
+    params.max_completion_tokens = options.maxTokens;
+  } else {
+    params.max_tokens = options.maxTokens;
+  }
+  if (!isOSeriesModel(model)) {
+    params.temperature = options.temperature;
+  }
+  return params;
+}
+
 export class OpenAIAdapter implements ProviderAdapter {
   readonly provider = "openai";
   private readonly apiKey: string | undefined;
@@ -67,8 +100,7 @@ export class OpenAIAdapter implements ProviderAdapter {
     const res = (await client.chat.completions.create({
       model,
       messages,
-      temperature: options.temperature,
-      max_tokens: options.maxTokens,
+      ...completionParams(model, options),
     })) as {
       choices?: Array<{ message?: { content?: string } }>;
       usage?: {
@@ -116,8 +148,7 @@ export class OpenAIAdapter implements ProviderAdapter {
           body: {
             model,
             messages,
-            temperature: options.temperature,
-            max_tokens: options.maxTokens,
+            ...completionParams(model, options),
           },
         };
         return JSON.stringify(body);
@@ -149,7 +180,7 @@ export class OpenAIAdapter implements ProviderAdapter {
         "OpenAIAdapter: no API key. Set OPENAI_API_KEY or pass { apiKey } to the constructor.",
       );
     }
-    let OpenAI: new (opts: { apiKey: string }) => OpenAIClient;
+    let OpenAI: new (opts: { apiKey: string; maxRetries?: number }) => OpenAIClient;
     try {
       const mod = (await import("openai")) as
         | { default: typeof OpenAI }
@@ -161,7 +192,10 @@ export class OpenAIAdapter implements ProviderAdapter {
         "OpenAIAdapter: `openai` SDK is not installed. Run `pnpm add openai`.",
       );
     }
-    this.client = new OpenAI({ apiKey: this.apiKey });
+    // maxRetries: 0 — ebb-ai's scheduler owns the retry policy
+    // (retryWithBackoff); letting the SDK retry too multiplies attempts
+    // and can double-bill ambiguous network errors.
+    this.client = new OpenAI({ apiKey: this.apiKey, maxRetries: 0 });
     return this.client;
   }
 }

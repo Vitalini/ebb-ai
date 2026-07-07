@@ -125,7 +125,10 @@ export class AnthropicAdapter implements ProviderAdapter {
         "AnthropicAdapter: no API key. Set ANTHROPIC_API_KEY or pass { apiKey } to the constructor.",
       );
     }
-    let Anthropic: new (opts: { apiKey: string }) => AnthropicMessagesClient;
+    let Anthropic: new (opts: {
+      apiKey: string;
+      maxRetries?: number;
+    }) => AnthropicMessagesClient;
     try {
       const mod = (await import("@anthropic-ai/sdk")) as
         | { default: typeof Anthropic }
@@ -139,7 +142,10 @@ export class AnthropicAdapter implements ProviderAdapter {
         "AnthropicAdapter: @anthropic-ai/sdk is not installed. Run `pnpm add @anthropic-ai/sdk`.",
       );
     }
-    this.client = new Anthropic({ apiKey: this.apiKey });
+    // maxRetries: 0 — ebb-ai's scheduler owns the retry policy
+    // (retryWithBackoff); letting the SDK retry too multiplies attempts
+    // and can double-bill ambiguous network errors.
+    this.client = new Anthropic({ apiKey: this.apiKey, maxRetries: 0 });
     return this.client;
   }
 }

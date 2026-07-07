@@ -9,8 +9,9 @@
  *
  *   - dispatchBatch(): submit N prompts via the vendor's Batch API
  *     (Anthropic Message Batches, OpenAI Batch Files). Returns a handle.
- *     50% cheaper, up-to-24h SLA. ebb-ai picks this path automatically
- *     when the deadline is far enough out.
+ *     50% cheaper, up-to-24h SLA. Automatic scheduler routing through
+ *     this path (status "submitted" + result polling) is in progress;
+ *     until then callers poll the handle via the vendor SDK themselves.
  *
  * Adapter modules import the vendor SDK lazily so the package can be
  * installed without forcing both SDK dependencies on every consumer.
@@ -23,7 +24,8 @@ export interface DispatchOptions {
   maxTokens?: number;
   /** Optional system prompt. */
   system?: string;
-  /** Free-form metadata passed through to the receipt. */
+  /** Free-form metadata forwarded to the provider request (e.g. the
+   *  Anthropic `metadata` field). Not recorded on the carbon receipt. */
   metadata?: Record<string, string>;
 }
 
