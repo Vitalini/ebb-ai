@@ -62,7 +62,7 @@ export default function StatsPage() {
           <code className="rounded bg-bg-elev px-1 font-mono text-sm">estimated_carbon_g</code>,{" "}
           <code className="rounded bg-bg-elev px-1 font-mono text-sm">actual_carbon_g</code>,{" "}
           <code className="rounded bg-bg-elev px-1 font-mono text-sm">intensity_source</code>{" "}
-          (one of <code className="font-mono">scheduled</code> /{" "}
+          (one of <code className="font-mono">scored</code> /{" "}
           <code className="font-mono">current</code> /{" "}
           <code className="font-mono">expedited</code>).
         </p>
@@ -83,14 +83,14 @@ npm install -g @ebb-ai/cli
 ebb stats
 
 # Programmatic
-ebb stats --json | jq '.totalEstimatedCarbonGCo2'
+ebb stats --json | jq '.stats.totalEstimatedCarbonGCo2'
 
-# Filter by date
-ebb stats --since 2026-05-01
-
-# Per-task receipt
+# Per-task receipts (completed tasks)
 ebb receipts list
-ebb receipts show <task_id>`}
+ebb receipts list --since 2026-05-01
+
+# Verify a receipt's Ed25519 signature
+ebb verify <task_id>`}
         </CodeBlock>
       </section>
 
@@ -100,7 +100,7 @@ ebb receipts show <task_id>`}
           <li>
             <strong className="text-fg">Cumulative impact:</strong>{" "}
             total tasks dispatched, accounted CO<sub>2</sub>e in grams,
-            cleanest-window hit rate (scheduled vs. expedited), and
+            cleanest-window hit rate (scored vs. expedited), and
             run-now overrides.
           </li>
           <li>

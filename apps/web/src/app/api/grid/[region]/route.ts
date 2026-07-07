@@ -1,8 +1,8 @@
 /**
  * GET /api/grid/[region]?hours=72
  *
- * Returns a GridForecast for the requested zone via the per-zone router
- * `fetchGridForecast`:
+ * Returns a GridForecast for the requested zone via `getGridForecast`
+ * (the 5-min-cached wrapper around the per-zone router):
  *   - GB           → UK National Grid ESO Carbon Intensity API (free, no key)
  *   - other zones  → Electricity Maps (when EBB_ELECTRICITY_MAPS_API_KEY is set)
  *   - any failure  → deterministic mock curve
@@ -12,13 +12,15 @@
  *   - Upstream feed unreachable → silently fall back to mock, 200 with
  *     `source: "mock"` (logged once to stderr). The dashboard never goes dark.
  *
- * Cache: 5 minutes at the edge (s-maxage). Neither upstream feed promises
- * sub-hour freshness; 5 minutes is a fair compromise between cost and
- * "live" feel.
+ * Cache: two layers. At origin, `getGridForecast` (unstable_cache,
+ * 5-min revalidate) caps upstream feed calls regardless of traffic; at
+ * the edge, s-maxage=300 keeps repeat hits off the origin entirely.
+ * Neither upstream feed promises sub-hour freshness; 5 minutes is a
+ * fair compromise between cost and "live" feel.
  */
 
 import { NextResponse } from "next/server";
-import { fetchGridForecast } from "@/lib/grid";
+import { getGridForecast } from "@/lib/grid";
 import { REGION_BY_ZONE } from "@/lib/regions";
 
 export const runtime = "nodejs";
@@ -48,7 +50,7 @@ export async function GET(
   const hoursParam = url.searchParams.get("hours");
   const hours = clampHours(hoursParam);
 
-  const forecast = await fetchGridForecast(region, hours);
+  const forecast = await getGridForecast(region, hours);
   return NextResponse.json(forecast, {
     headers: {
       "cache-control": "public, s-maxage=300, stale-while-revalidate=60",

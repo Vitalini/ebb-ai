@@ -44,7 +44,7 @@ server are wired automatically.
 ### OpenClaw
 
 ```text
-openclaw plugin add @vitalini/ebb
+openclaw plugins install clawhub:@vitalini/ebb
 ```
 
 The plugin self-registers on startup; no config edit needed.
@@ -93,7 +93,7 @@ and an estimated carbon figure, without persisting anything.
   "tool": "schedule_task",
   "args": {
     "prompt": "ping",
-    "deadline_iso": "<24h from now in ISO-8601>",
+    "deadline": "<24h from now in ISO-8601>",
     "dry_run": true
   }
 }

@@ -1,7 +1,9 @@
+import type { Metadata } from "next";
 import { BestWindowResult } from "@/components/best-window";
+import { DeadlineField } from "@/components/deadline-field";
 import { ForecastChart } from "@/components/forecast-chart";
 import {
-  fetchGridForecast,
+  getGridForecast,
   intensityToGrams,
   pickBestWindow,
 } from "@/lib/grid";
@@ -9,6 +11,13 @@ import { REGIONS, findRegion } from "@/lib/regions";
 import type { GridForecast } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Best-window finder",
+  description:
+    "Plan a deferrable LLM workload: pick a grid region, a deadline, and an optional carbon budget — ebb-ai shows the cleanest dispatch hour and the projected CO2e per task.",
+  alternates: { canonical: "https://www.ebb-ai.com/plan" },
+};
 
 interface PlanQuery {
   region?: string;
@@ -20,7 +29,9 @@ const DEFAULT_REGION = "US-CAL-CISO";
 const DEFAULT_HORIZON_HOURS = 24;
 
 async function loadForecast(zone: string, hours: number): Promise<GridForecast> {
-  return fetchGridForecast(zone, hours);
+  // Cached (5-min) wrapper — same layer the home greeting and /map use,
+  // so per-request renders don't burn upstream feed quota.
+  return getGridForecast(zone, hours);
 }
 
 export default async function PlanPage({
@@ -87,11 +98,6 @@ export default async function PlanPage({
     );
   }
 
-  // Default deadline value for the form input — 12 hours from now, rounded to the hour.
-  const defaultDeadline = new Date(Date.now() + 12 * 60 * 60 * 1000);
-  defaultDeadline.setMinutes(0, 0, 0);
-  const defaultDeadlineInput = toDatetimeLocal(defaultDeadline);
-
   return (
     <div className="space-y-10">
       <header className="space-y-3">
@@ -127,11 +133,8 @@ export default async function PlanPage({
         </Field>
 
         <Field label="Deadline">
-          <input
-            type="datetime-local"
-            name="deadline"
-            required
-            defaultValue={params.deadline ?? defaultDeadlineInput}
+          <DeadlineField
+            initialIso={params.deadline}
             className="w-full rounded-md border border-rule bg-bg px-3 py-2 font-mono text-sm text-fg focus:border-accent"
           />
         </Field>
@@ -154,7 +157,8 @@ export default async function PlanPage({
         <div className="sm:col-span-3 flex items-center justify-between">
           <p className="text-xs text-fg-muted">
             Energy assumption: {intensityToGrams(1000).toFixed(2)} gCO2e per task per 1000 g/kWh
-            grid intensity (1.5 mWh × PUE 1.5).
+            grid intensity — flat legacy estimate (1.5 Wh per task). Real
+            dispatches (v0.10+) use per-model Wh/token coefficients at PUE 1.15.
           </p>
           <button
             type="submit"
@@ -200,8 +204,14 @@ function Field({
 
 function parseDeadline(raw: string | undefined): Date | null {
   if (!raw) return null;
-  // datetime-local inputs supply `YYYY-MM-DDTHH:MM` (no timezone) — treat as local.
-  const d = new Date(raw);
+  // The form submits a UTC ISO string — <DeadlineField> resolves the
+  // visitor's timezone in the browser, so the server never has to guess
+  // a UTC offset. Fallback for direct URL hits: a bare, timezone-less
+  // `YYYY-MM-DDTHH:MM` is interpreted as UTC (explicitly, rather than
+  // whatever timezone the server happens to run in).
+  const hasOffset = /(?:Z|[+-]\d{2}:?\d{2})$/.test(raw);
+  const bareLocal = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(raw);
+  const d = new Date(hasOffset ? raw : bareLocal ? `${raw}Z` : raw);
   if (Number.isNaN(d.getTime())) return null;
   if (d.getTime() < Date.now() - 60_000) return null;
   // Cap at 96 hours into the future to match the forecast horizon.
@@ -215,9 +225,4 @@ function parseBudget(raw: string | undefined): number | null {
   const n = Number.parseFloat(raw);
   if (!Number.isFinite(n) || n <= 0) return null;
   return n;
-}
-
-function toDatetimeLocal(d: Date): string {
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }

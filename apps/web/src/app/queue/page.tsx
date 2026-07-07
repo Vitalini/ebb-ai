@@ -41,7 +41,7 @@ const STATUSES: Array<{ name: string; description: string }> = [
   {
     name: "failed",
     description:
-      "Provider returned an error. The reason is persisted; `ebb retry <id>` re-dispatches.",
+      "Provider returned an error. The reason is persisted; the /ebb-ai:retry slash command (or the retry_task MCP tool) re-dispatches.",
   },
   {
     name: "cancelled",
@@ -90,19 +90,16 @@ export default function QueuePage() {
 {`# All tasks (any status)
 ebb queue list
 
-# Filter
+# Filter by status
 ebb queue list --status scheduled
-ebb queue list --region US-CAL-CISO --since 2026-05-01
-
-# One task in detail (prompt, region, schedule, receipt if completed)
-ebb queue show <task_id>
-
-# JSON for piping
-ebb queue list --json | jq '.[] | select(.status == "failed")'
+ebb queue list --status failed
 
 # Receipts only (completed tasks)
 ebb receipts list
-ebb receipts show <task_id>`}
+ebb receipts list --since 2026-05-01
+
+# Verify a receipt's Ed25519 signature
+ebb verify <task_id>`}
         </CodeBlock>
       </section>
 

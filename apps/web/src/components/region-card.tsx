@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { CarbonBandBadge } from "./carbon-band";
-import { Sparkline } from "./forecast-chart";
+import { Sparkline } from "./sparkline";
 import type { GridForecast } from "@/lib/types";
 import type { Region } from "@/lib/regions";
 

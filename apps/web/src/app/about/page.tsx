@@ -271,13 +271,15 @@ export default function AboutPage() {
           clearly-labelled mock, never a silent one. As of v0.10, per-task
           carbon receipts use per-model Wh/token coefficients (Patterson 2021,
           Luccioni 2024, Hugging Face AI Energy Score) instead of a flat
-          placeholder.
+          placeholder; as of v0.11, receipts are Ed25519-signed and verifiable
+          offline with{" "}
+          <code className="rounded bg-bg-elev px-1 font-mono text-sm">ebb verify</code>.
         </p>
         <p className="leading-relaxed text-fg-muted">
           The public surface is still pre-1.0: API shapes can change in minor
           versions. Still on the roadmap: upstream MCP spec PR, opt-in aggregate
           leaderboard, WattTime marginal-emissions feed, cross-provider
-          routing, Ed25519-signed receipts. v1.0 will freeze the API surface.
+          routing. v1.0 will freeze the API surface.
         </p>
       </section>
 

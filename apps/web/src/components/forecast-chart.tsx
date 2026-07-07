@@ -1,8 +1,6 @@
 "use client";
 
 import {
-  Area,
-  AreaChart,
   CartesianGrid,
   Line,
   LineChart,
@@ -56,36 +54,10 @@ function labelFormatter(_: number | string, payload: Array<{ payload?: Datum }>)
 }
 
 /**
- * Sparkline for the RegionCard — no axes, no tooltip, just a 24-hour shape.
- */
-export function Sparkline({ entries }: { entries: GridForecastEntry[] }) {
-  const data = toData(entries.slice(0, 24));
-  return (
-    <div className="h-12 w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 2, right: 0, left: 0, bottom: 2 }}>
-          <defs>
-            <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--color-accent)" stopOpacity={0.45} />
-              <stop offset="100%" stopColor="var(--color-accent)" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <Area
-            type="monotone"
-            dataKey="intensity"
-            stroke="var(--color-accent)"
-            strokeWidth={1.5}
-            fill="url(#sparkFill)"
-            isAnimationActive={false}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
-/**
  * Full forecast chart with band threshold reference lines.
+ *
+ * The static per-region sparkline lives in `./sparkline.tsx` as a
+ * server-rendered <svg> so /map doesn't pull recharts into its bundle.
  */
 export function ForecastChart({
   entries,

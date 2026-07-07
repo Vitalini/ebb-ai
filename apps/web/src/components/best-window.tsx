@@ -70,11 +70,14 @@ export function BestWindowResult({
             <p className="font-mono text-xs uppercase tracking-wider text-accent">
               recommended window
             </p>
-            <h3 className="mt-1 font-mono text-2xl font-semibold tracking-tight text-fg">
+            <h3
+              suppressHydrationWarning
+              className="mt-1 font-mono text-2xl font-semibold tracking-tight text-fg"
+            >
               {localTime}{" "}
               <span className="text-base font-normal text-fg-muted">{tz}</span>
             </h3>
-            <p className="mt-1 text-sm text-fg-muted">
+            <p suppressHydrationWarning className="mt-1 text-sm text-fg-muted">
               {best.hourOffset === 0
                 ? "dispatch immediately — current hour is best"
                 : `in ${best.hourOffset} h, well inside your deadline (${deadlineStr})`}
@@ -142,45 +145,66 @@ function CopyHint({
   deadlineIso: string;
   carbonBudgetG: number | null;
 }) {
-  const [copied, setCopied] = useState(false);
-  const cli = [
-    "npx @ebb-ai/cli schedule \\",
-    `  --region ${region} \\`,
-    `  --deadline ${deadlineIso}${carbonBudgetG !== null ? " \\" : ""}`,
-    carbonBudgetG !== null ? `  --carbon-budget-g ${carbonBudgetG.toFixed(1)}` : "",
+  const slashCommand = `/ebb-ai:defer "<your task>" --by ${deadlineIso} --region ${region}${
+    carbonBudgetG !== null ? ` --budget ${carbonBudgetG.toFixed(1)}` : ""
+  }`;
+
+  const mcpArgs = [
+    `    "prompt": "<your task>",`,
+    `    "deadline": "${deadlineIso}",`,
+    `    "region": "${region}"${carbonBudgetG !== null ? "," : ""}`,
+    carbonBudgetG !== null
+      ? `    "carbon_budget_g": ${carbonBudgetG.toFixed(1)}`
+      : "",
   ]
     .filter(Boolean)
     .join("\n");
+  const mcpCall = `{\n  "tool": "schedule_task",\n  "args": {\n${mcpArgs}\n  }\n}`;
 
   return (
     <div className="rounded-xl border border-rule bg-bg-elev p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h4 className="text-sm font-semibold text-fg">Send to ebb-mcp</h4>
-          <p className="mt-1 text-xs text-fg-muted">
-            Copy this into your terminal where the ebb-ai scheduler is
-            installed. A future release will add one-click dispatch from this
-            page (HTTP control plane).
-          </p>
-        </div>
+      <h4 className="text-sm font-semibold text-fg">
+        Defer it from your agent
+      </h4>
+      <p className="mt-1 text-xs text-fg-muted">
+        In Claude Code (with the ebb-ai plugin installed), paste the slash
+        command. Any other MCP host can call the{" "}
+        <code className="rounded bg-bg px-1 font-mono">schedule_task</code>{" "}
+        tool with the same arguments.
+      </p>
+
+      <CopyBlock label="claude code" text={slashCommand} />
+      <CopyBlock label="mcp tool call (any host)" text={mcpCall} />
+    </div>
+  );
+}
+
+function CopyBlock({ label, text }: { label: string; text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="mt-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="font-mono text-[10px] uppercase tracking-wider text-fg-dim">
+          {label}
+        </p>
         <button
           type="button"
           onClick={async () => {
             try {
-              await navigator.clipboard.writeText(cli);
+              await navigator.clipboard.writeText(text);
               setCopied(true);
               setTimeout(() => setCopied(false), 1800);
             } catch {
               /* clipboard unavailable; silent */
             }
           }}
-          className="shrink-0 rounded-md border border-rule px-3 py-1.5 font-mono text-xs text-accent hover:bg-bg-alt"
+          className="shrink-0 rounded-md border border-rule px-3 py-1 font-mono text-xs text-accent hover:bg-bg-alt"
         >
           {copied ? "copied" : "copy"}
         </button>
       </div>
-      <pre className="mt-3 overflow-x-auto rounded-md bg-bg p-4 font-mono text-xs leading-relaxed text-fg">
-        <code>{cli}</code>
+      <pre className="mt-2 overflow-x-auto rounded-md bg-bg p-4 font-mono text-xs leading-relaxed text-fg">
+        <code>{text}</code>
       </pre>
     </div>
   );

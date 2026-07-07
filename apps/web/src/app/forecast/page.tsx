@@ -1,17 +1,26 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { ForecastChart } from "@/components/forecast-chart";
 import { CarbonBandBadge } from "@/components/carbon-band";
-import { fetchGridForecast } from "@/lib/grid";
+import { getGridForecast } from "@/lib/grid";
 import { REGION_BY_ZONE, REGIONS, findRegion } from "@/lib/regions";
 import type { GridForecast, GridForecastEntry } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
+
+export const metadata: Metadata = {
+  title: "72-hour carbon forecast",
+  description:
+    "Hourly grid carbon-intensity forecast for 31 regions — min/avg/max, diurnal swing, cleanest and dirtiest hours over the next 72 hours.",
+  alternates: { canonical: "https://www.ebb-ai.com/forecast" },
+};
 
 const DEFAULT_REGION = "US-CAL-CISO";
 
 async function loadForecast(zone: string, hours = 72): Promise<GridForecast> {
-  return fetchGridForecast(zone, hours);
+  // Cached (5-min) wrapper — same layer the home greeting and /map use,
+  // so per-request renders don't burn upstream feed quota.
+  return getGridForecast(zone, hours);
 }
 
 export default async function ForecastPage({
