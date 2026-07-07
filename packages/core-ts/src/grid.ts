@@ -5,8 +5,13 @@
  *   - mockGridFeed: deterministic synthetic curve, zero-config.
  *   - electricityMapsFeed: Electricity Maps free-tier API (key required).
  *   - ukCarbonIntensityFeed: National Grid ESO Carbon Intensity API
- *     (GB only, no auth, real forecast + 48h horizon).
+ *     (GB only, no auth, real forecast, paginated up to 96h).
+ *   - eiaFeed: US EIA fuel-mix data for the major ISO/RTOs (key required;
+ *     realised data served as a persistence forecast).
+ *   - entsoeFeed: ENTSO-E realised generation for EU bidding zones
+ *     (token required; realised data served as a persistence forecast).
  *   - multiSourceGridFeed: routes per zone across the feeds above.
+ *   - buildDefaultGridFeed: best free feed per zone, mock fallback.
  *
  * WattTime marginal-emissions support is tracked on the roadmap.
  */
@@ -27,7 +32,7 @@ function classify(g: number): GridForecastEntry["band"] {
  * Real grid intensity in the US typically dips overnight (lots of base-load
  * nuclear and hydro, plus wind) and peaks late afternoon (residential AC,
  * gas peaker plants). We mimic that shape with a sinusoid that bottoms at
- * 03:00 local and peaks at 17:00 local.
+ * 05:00 local and peaks at 17:00 local.
  */
 function syntheticIntensityForHour(date: Date, region: string): number {
   // Region-specific midpoint so different regions look distinct.
@@ -43,8 +48,8 @@ function syntheticIntensityForHour(date: Date, region: string): number {
     "GB": 220,
   };
   // Per-region phase offset in UTC hours: each region's local-time
-  // trough (≈ 03:00 local) translates to a different UTC hour. Without
-  // this offset, every region shares the same 03:00 UTC trough and
+  // trough (≈ 05:00 local) translates to a different UTC hour. Without
+  // this offset, every region shares the same 05:00 UTC trough and
   // multi-region simulations pile every "cleanest hour" choice into
   // the same bucket (the even-distribution.test.ts pathology shown
   // pre-v0.8.1: 66.9 % of dispatch in a single hour). The offset is
@@ -65,7 +70,7 @@ function syntheticIntensityForHour(date: Date, region: string): number {
   const floor = regionFloor[region] ?? 380;
   const offsetH = regionUtcOffsetHours[region] ?? 0;
   const amplitude = 220;
-  // Local-clock trough at 03:00, peak at 17:00. Phase 0 ⇒ peak.
+  // Local-clock trough at 05:00, peak at 17:00. Phase 0 ⇒ peak.
   const utcHour = date.getUTCHours();
   const localHour = ((utcHour + offsetH) % 24 + 24) % 24;
   const phase = (localHour - 17) * (Math.PI / 12);
@@ -104,6 +109,8 @@ export function mockGridFeed(clock?: () => Date): GridFeed {
         region,
         source: "mock",
         generatedAt: baseNow.toISOString(),
+        // A modeled forward curve, not a projection of realised data.
+        kind: "forecast",
         entries,
       };
     },
@@ -173,6 +180,7 @@ export function electricityMapsFeed(apiKey?: string): GridFeed {
           region,
           source: "electricityMaps",
           generatedAt: new Date().toISOString(),
+          kind: "forecast",
           entries,
         };
       } catch (err) {
@@ -189,12 +197,20 @@ export function electricityMapsFeed(apiKey?: string): GridFeed {
 /**
  * UK National Grid ESO Carbon Intensity API — `api.carbonintensity.org.uk`.
  *
- * Pros: free, no auth, no rate-limit registration, real 48-hour forecast.
+ * Pros: free, no auth, no rate-limit registration, real forward forecast.
  * Cons: GB only. Other zones fall back to the synthetic mock so this feed
  * is safe to use as the default zone-agnostic feed.
  *
- * The upstream API returns 30-minute intervals; we average each consecutive
- * pair into the hourly buckets ebb-ai uses elsewhere. Actual intensity is
+ * Each `/fw48h` page covers 48 hours; when more than 48 hours are
+ * requested (the scheduler's MAX_HORIZON is 72h) a second page is fetched
+ * at `from + 48h` and the two are merged, extending coverage to 96h.
+ *
+ * The upstream API returns 30-minute settlement periods; we average each
+ * consecutive pair into the hourly buckets ebb-ai uses elsewhere. The
+ * API's first settlement period can start *before* the requested
+ * top-of-hour (e.g. a request at 12:00 returns a period starting 11:30),
+ * so leading periods are dropped until one starts at :00 — that keeps
+ * every hourly bucket aligned to [HH:00, HH+1:00). Actual intensity is
  * preferred over forecast where the backfilled `actual` field is populated
  * (i.e. for the first one or two intervals on a fresh request).
  *
@@ -216,35 +232,73 @@ export function ukCarbonIntensityFeed(): GridFeed {
         const now = new Date();
         now.setMinutes(0, 0, 0);
         now.setSeconds(0, 0);
-        // API wants YYYY-MM-DDTHH:MMZ (no seconds).
-        const fromStr = `${now.toISOString().slice(0, 16)}Z`;
-        const url = `https://api.carbonintensity.org.uk/intensity/${fromStr}/fw48h`;
-        const res = await fetch(url, {
-          headers: { Accept: "application/json" },
-          signal: AbortSignal.timeout(5_000),
-        });
-        if (!res.ok) {
-          throw new Error(`UK Carbon Intensity API returned ${res.status}`);
+
+        interface UkSettlementPeriod {
+          from: string;
+          to: string;
+          intensity: {
+            forecast: number | null;
+            actual: number | null;
+          };
         }
-        const json = (await res.json()) as {
-          data?: Array<{
-            from: string;
-            to: string;
-            intensity: {
-              forecast: number | null;
-              actual: number | null;
-            };
-          }>;
+        const fetchPage = async (from: Date): Promise<UkSettlementPeriod[]> => {
+          // API wants YYYY-MM-DDTHH:MMZ (no seconds).
+          const fromStr = `${from.toISOString().slice(0, 16)}Z`;
+          const url = `https://api.carbonintensity.org.uk/intensity/${fromStr}/fw48h`;
+          const res = await fetch(url, {
+            headers: { Accept: "application/json" },
+            signal: AbortSignal.timeout(5_000),
+          });
+          if (!res.ok) {
+            throw new Error(`UK Carbon Intensity API returned ${res.status}`);
+          }
+          const json = (await res.json()) as { data?: UkSettlementPeriod[] };
+          return json.data ?? [];
         };
-        const raw = json.data ?? [];
+
+        // Each page covers 48h. For horizons beyond 48h (MAX_HORIZON is
+        // 72h) fetch a second page at from+48h; the two pages can share a
+        // boundary period, so merge by `from` timestamp before pairing.
+        const pages = [await fetchPage(now)];
+        if (hours > 48) {
+          pages.push(
+            await fetchPage(new Date(now.getTime() + 48 * 60 * 60 * 1000)),
+          );
+        }
+        const byFrom = new Map<number, UkSettlementPeriod>();
+        for (const page of pages) {
+          for (const p of page) {
+            const t = new Date(p.from).getTime();
+            if (Number.isFinite(t) && !byFrom.has(t)) byFrom.set(t, p);
+          }
+        }
+        const raw = [...byFrom.entries()]
+          .sort(([a], [b]) => a - b)
+          .map(([, p]) => p);
         if (raw.length === 0) {
           throw new Error("UK Carbon Intensity API returned empty forecast");
         }
+        // The first settlement period can start before the requested
+        // top-of-hour (e.g. 11:30 for a 12:00 request). Drop leading
+        // half-periods so consecutive-pair averaging yields buckets
+        // aligned to [HH:00, HH+1:00).
+        const firstAligned = raw.findIndex(
+          (p) => new Date(p.from).getUTCMinutes() === 0,
+        );
+        if (firstAligned < 0) {
+          throw new Error(
+            "UK Carbon Intensity API returned no top-of-hour-aligned periods",
+          );
+        }
         const hourly: GridForecastEntry[] = [];
-        for (let i = 0; i + 1 < raw.length && hourly.length < hours; i += 2) {
+        for (
+          let i = firstAligned;
+          i + 1 < raw.length && hourly.length < hours;
+          i += 2
+        ) {
           const a = raw[i];
           const b = raw[i + 1];
-          // `i + 1 < raw.length` guarantees both are defined, but TS strict
+          // The loop bound guarantees both are defined, but TS strict
           // index access doesn't narrow `a`/`b`. Guard explicitly.
           if (!a || !b) continue;
           const va = a.intensity.actual ?? a.intensity.forecast;
@@ -266,6 +320,8 @@ export function ukCarbonIntensityFeed(): GridFeed {
           region,
           source: "ukCarbonIntensity",
           generatedAt: new Date().toISOString(),
+          // A genuine forward forecast published by NG ESO.
+          kind: "forecast",
           entries: hourly,
         };
       } catch (err) {
@@ -318,10 +374,18 @@ const EMISSION_FACTORS_G_CO2_PER_KWH = {
  * every major US ISO/RTO with sub-hour resolution, no rate-limit on
  * reasonable use.
  * Cons: returns *historical* data only — there is no official forecast
- * endpoint for grid carbon intensity. We use the most recent 24 hours of
- * realized hourly fuel mix as a naive forecast for the next 24 hours,
- * which is defensible for "is now or +6h cleaner than +20h?" decisions
- * but should not be treated as a meteorologically-aware forecast.
+ * endpoint for grid carbon intensity. We serve a *persistence* forecast
+ * (`kind: "persistence"`): each future hour H gets the most recent
+ * realized observation whose UTC hour-of-day matches H, keyed by the
+ * observation's own timestamp. This keeps the diurnal curve in phase even
+ * when EIA publishes with a lag of several hours (naively tiling the last
+ * 24 values from wall-clock "now" rotates the whole curve by the lag).
+ * It is defensible for "is now or +6h cleaner than +20h?" decisions but
+ * should not be treated as a meteorologically-aware forecast.
+ *
+ * If the realized history covers fewer than 24 distinct hours-of-day we
+ * throw rather than tile a short tail (a partial tile would misassign
+ * hours); the caller's catch degrades to the mock feed with a warning.
  *
  * Carbon intensity is computed from the realized fuel-mix breakdown using
  * the IPCC AR5 lifecycle factors in `EMISSION_FACTORS_G_CO2_PER_KWH`.
@@ -451,28 +515,44 @@ export function eiaFeed(apiKey?: string): GridFeed {
           byPeriod[row.period]!.num += v * factor;
           byPeriod[row.period]!.den += v;
         }
+        // Index realized intensities by UTC hour-of-day, taken from each
+        // observation's own timestamp (EIA "period" is "YYYY-MM-DDTHH",
+        // UTC). Ascending iteration means later observations overwrite
+        // earlier ones, so each slot holds the most recent value for that
+        // hour-of-day.
         const periods = Object.keys(byPeriod).sort();
-        const historicalIntensities: number[] = [];
+        const byHourOfDay = new Map<number, number>();
         for (const p of periods) {
           const cell = byPeriod[p]!;
           if (cell.den === 0) continue;
-          historicalIntensities.push(Math.round(cell.num / cell.den));
+          const hourOfDay = Number(p.slice(11, 13));
+          if (!Number.isInteger(hourOfDay) || hourOfDay < 0 || hourOfDay > 23) {
+            continue;
+          }
+          byHourOfDay.set(hourOfDay, Math.round(cell.num / cell.den));
         }
-        if (historicalIntensities.length === 0) {
+        if (byHourOfDay.size === 0) {
           throw new Error("EIA API returned no usable fuel-mix rows");
         }
+        // Design choice: require full diurnal coverage. Tiling a short
+        // tail (or serving only some hours) would misassign or hide
+        // hours; throwing lets the wrapper degrade to the mock loudly.
+        if (byHourOfDay.size < 24) {
+          throw new Error(
+            `EIA history covers only ${byHourOfDay.size}/24 hours-of-day — refusing to synthesise a persistence forecast`,
+          );
+        }
 
-        // Synthesise a forecast: use the last 24 hours of history, shifted
-        // 24h forward, padded by repeating if we don't have enough history.
-        // entries[0] = "now" (anchored to the latest observation).
-        const tail = historicalIntensities.slice(-24);
+        // Persistence forecast: future hour H gets the most recent
+        // realized observation whose UTC hour-of-day matches H. This is
+        // phase-correct regardless of EIA's publication lag.
         const forecast: GridForecastEntry[] = [];
         const startTs = new Date(now);
         startTs.setMinutes(0, 0, 0);
         startTs.setSeconds(0, 0);
         for (let i = 0; i < hours; i++) {
-          const g = tail[i % tail.length]!;
           const t = new Date(startTs.getTime() + i * 60 * 60 * 1000);
+          const g = byHourOfDay.get(t.getUTCHours())!;
           forecast.push({
             datetime: t.toISOString(),
             carbonIntensityGCo2PerKwh: g,
@@ -483,6 +563,8 @@ export function eiaFeed(apiKey?: string): GridFeed {
           region,
           source: "eia",
           generatedAt: new Date().toISOString(),
+          // Realized data projected forward — not a real forecast.
+          kind: "persistence",
           entries: forecast,
         };
       } catch (err) {
@@ -548,40 +630,80 @@ const ENTSOE_PSR_FACTORS: Record<string, number> = {
   B20: EMISSION_FACTORS_G_CO2_PER_KWH.other,
 };
 
+/** One `<Period>` inside an ENTSO-E TimeSeries. */
+export interface EntsoePeriod {
+  /** ISO-8601 start of the period's time interval. */
+  start: string;
+  resolutionMin: number;
+  /** Points keyed by their `<position>` (1-based within the period). */
+  points: Array<{ position: number; quantity: number }>;
+}
+
+/** One generation `<TimeSeries>` from an ENTSO-E A75 document. */
+export interface EntsoeTimeSeries {
+  psrType: string;
+  periods: EntsoePeriod[];
+}
+
 /**
- * Minimal ENTSO-E XML extractor. Returns, for each TimeSeries block,
- * the psrType plus the period start time and the resolution and the
- * ordered list of Point quantities.
+ * Minimal ENTSO-E XML extractor. Returns, for each *generation*
+ * TimeSeries block, the psrType plus every `<Period>` (each with its own
+ * start/resolution) and each Point's `<position>` and `<quantity>`.
+ *
+ * Semantics handled here:
+ *   - `<Acknowledgement_MarketDocument>` (ENTSO-E's error envelope, e.g.
+ *     "no data") throws — an empty result must not masquerade as data.
+ *   - TimeSeries carrying `outBiddingZone_Domain.mRID` are CONSUMPTION
+ *     series (e.g. pumped-storage pumping in DE/FR/ES/IT) and are
+ *     skipped; only generation series (inBiddingZone) are returned.
+ *   - Multi-`<Period>` TimeSeries are parsed per-Period, since each
+ *     Period has its own start and resolution.
+ *   - `<position>` is captured so curveType A03 gaps do not shift
+ *     subsequent points; callers must compute each point's timestamp as
+ *     periodStart + (position − 1) × resolution.
  *
  * Why regex rather than a real parser: ENTSO-E's response shape is
  * stable, the fields we read are well-namespaced, and adding a 30KB
  * XML dep to `@ebb-ai/core` for one adapter is bad cost-benefit.
+ * Exported for parse-level fixture tests.
  */
-function parseEntsoeXml(xml: string): Array<{
-  psrType: string;
-  start: string;
-  resolutionMin: number;
-  points: number[];
-}> {
-  const out: Array<{
-    psrType: string;
-    start: string;
-    resolutionMin: number;
-    points: number[];
-  }> = [];
+export function parseEntsoeXml(xml: string): EntsoeTimeSeries[] {
+  if (/<Acknowledgement_MarketDocument[\s>]/.test(xml)) {
+    const reason =
+      xml.match(/<text>([\s\S]*?)<\/text>/)?.[1]?.trim() ??
+      "no reason text in document";
+    throw new Error(`ENTSO-E returned an Acknowledgement document: ${reason}`);
+  }
+  const out: EntsoeTimeSeries[] = [];
   const tsRe = /<TimeSeries>([\s\S]*?)<\/TimeSeries>/g;
   for (const m of xml.matchAll(tsRe)) {
     const block = m[1] ?? "";
+    // outBiddingZone_Domain.mRID marks a consumption series (energy
+    // taken OFF the grid, e.g. pumped-storage pumping). Counting it as
+    // generation would systematically drag intensity down.
+    if (/<outBiddingZone_Domain\.mRID[\s>]/.test(block)) continue;
     const psr = block.match(/<psrType>([A-Z0-9]+)<\/psrType>/)?.[1];
-    const start = block.match(/<start>([0-9TZ:-]+)<\/start>/)?.[1];
-    const res = block.match(/<resolution>PT(\d+)M<\/resolution>/)?.[1];
-    if (!psr || !start || !res) continue;
-    const pointMatches = [
-      ...block.matchAll(/<Point>\s*<position>\d+<\/position>\s*<quantity>([\d.]+)<\/quantity>\s*<\/Point>/g),
-    ];
-    const points = pointMatches.map((p) => Number(p[1])).filter((n) => Number.isFinite(n));
-    if (points.length === 0) continue;
-    out.push({ psrType: psr, start, resolutionMin: Number(res), points });
+    if (!psr) continue;
+    const periods: EntsoePeriod[] = [];
+    for (const pm of block.matchAll(/<Period>([\s\S]*?)<\/Period>/g)) {
+      const pBlock = pm[1] ?? "";
+      const start = pBlock.match(/<start>([0-9TZ:+-]+)<\/start>/)?.[1];
+      const res = pBlock.match(/<resolution>PT(\d+)M<\/resolution>/)?.[1];
+      if (!start || !res) continue;
+      const points: EntsoePeriod["points"] = [];
+      for (const p of pBlock.matchAll(
+        /<Point>\s*<position>(\d+)<\/position>\s*<quantity>([\d.]+)<\/quantity>\s*<\/Point>/g,
+      )) {
+        const position = Number(p[1]);
+        const quantity = Number(p[2]);
+        if (!Number.isFinite(position) || !Number.isFinite(quantity)) continue;
+        points.push({ position, quantity });
+      }
+      if (points.length === 0) continue;
+      periods.push({ start, resolutionMin: Number(res), points });
+    }
+    if (periods.length === 0) continue;
+    out.push({ psrType: psr, periods });
   }
   return out;
 }
@@ -589,7 +711,13 @@ function parseEntsoeXml(xml: string): Array<{
 /**
  * Carbon-intensity feed backed by the ENTSO-E Transparency Platform's
  * realised generation per type (document type A75). Returns up to
- * `hours` hourly entries computed from the per-fuel generation breakdown.
+ * `hours` hourly entries computed from the per-fuel generation breakdown,
+ * served as a persistence forecast (`kind: "persistence"`) anchored by
+ * UTC hour-of-day — see the EIA feed for the phase-correctness rationale.
+ *
+ * Note: ENTSO-E's real day-ahead forecast (documentType A71, processType
+ * A01) lacks the per-fuel generation mix we need to compute carbon
+ * intensity, which is why realised A75 data + persistence is used instead.
  */
 export function entsoeFeed(securityToken?: string): GridFeed {
   const token = securityToken ?? process.env.EBB_ENTSOE_SECURITY_TOKEN;
@@ -648,59 +776,69 @@ export function entsoeFeed(securityToken?: string): GridFeed {
         if (series.length === 0) {
           throw new Error("ENTSO-E returned no TimeSeries blocks");
         }
-        // Bucket each TimeSeries' points into UTC hours and accumulate
-        // weighted-average numerator/denominator per hour.
+        // Bucket every generation point into UTC hours and accumulate
+        // weighted-average numerator/denominator per hour. Each point's
+        // timestamp comes from its Period start + (position − 1) ×
+        // resolution, so curveType A03 gaps leave a hole instead of
+        // shifting subsequent points.
         const byHourMs: Record<number, { num: number; den: number }> = {};
         for (const ts of series) {
           const factor = ENTSOE_PSR_FACTORS[ts.psrType];
           if (factor === undefined) continue;
-          const seriesStart = new Date(ts.start).getTime();
-          for (let i = 0; i < ts.points.length; i++) {
-            const v = ts.points[i]!;
-            if (!Number.isFinite(v) || v < 0) continue;
-            const t = seriesStart + i * ts.resolutionMin * 60_000;
-            // Snap to the start of the hour containing t.
-            const hr = Math.floor(t / 3_600_000) * 3_600_000;
-            // Weight the contribution by how much of an hour this point covers.
-            const weight = ts.resolutionMin / 60;
-            byHourMs[hr] ??= { num: 0, den: 0 };
-            byHourMs[hr]!.num += v * weight * factor;
-            byHourMs[hr]!.den += v * weight;
+          for (const period of ts.periods) {
+            const periodStart = new Date(period.start).getTime();
+            if (!Number.isFinite(periodStart)) continue;
+            for (const point of period.points) {
+              const v = point.quantity;
+              if (!Number.isFinite(v) || v < 0) continue;
+              const t =
+                periodStart + (point.position - 1) * period.resolutionMin * 60_000;
+              // Snap to the start of the hour containing t.
+              const hr = Math.floor(t / 3_600_000) * 3_600_000;
+              // Weight the contribution by how much of an hour this point covers.
+              const weight = period.resolutionMin / 60;
+              byHourMs[hr] ??= { num: 0, den: 0 };
+              byHourMs[hr]!.num += v * weight * factor;
+              byHourMs[hr]!.den += v * weight;
+            }
           }
         }
+        // Index realized hourly intensities by UTC hour-of-day (from the
+        // buckets' own timestamps). Ascending iteration means the most
+        // recent observation wins each hour-of-day slot.
         const sortedHours = Object.keys(byHourMs)
           .map(Number)
           .sort((a, b) => a - b);
-        const intensities: GridForecastEntry[] = [];
+        const byHourOfDay = new Map<number, number>();
         for (const hr of sortedHours) {
           const cell = byHourMs[hr]!;
           if (cell.den === 0) continue;
-          const g = Math.round(cell.num / cell.den);
-          intensities.push({
-            datetime: new Date(hr).toISOString(),
-            carbonIntensityGCo2PerKwh: g,
-            band: classify(g),
-          });
+          byHourOfDay.set(
+            new Date(hr).getUTCHours(),
+            Math.round(cell.num / cell.den),
+          );
         }
-        if (intensities.length === 0) {
+        if (byHourOfDay.size === 0) {
           throw new Error("ENTSO-E returned no usable hourly buckets");
         }
-        // Same naive-forecast strategy as EIA: use the last 24h pattern,
-        // shifted forward. ENTSO-E does have a real day-ahead forecast
-        // (documentType=A71 processType=A01), worth a v0.8 upgrade.
-        const tail = intensities
-          .slice(-24)
-          .map((e) => e.carbonIntensityGCo2PerKwh);
-        if (tail.length === 0) {
-          throw new Error("ENTSO-E synthesised forecast empty");
+        // Same design choice as the EIA feed: require full diurnal
+        // coverage rather than tiling a short tail; the catch below
+        // degrades to the mock with a warning.
+        if (byHourOfDay.size < 24) {
+          throw new Error(
+            `ENTSO-E history covers only ${byHourOfDay.size}/24 hours-of-day — refusing to synthesise a persistence forecast`,
+          );
         }
+        // Persistence forecast: future hour H gets the most recent
+        // realized observation whose UTC hour-of-day matches H —
+        // phase-correct regardless of publication lag.
         const startTs = new Date(now);
         startTs.setMinutes(0, 0, 0);
         startTs.setSeconds(0, 0);
         const forecast: GridForecastEntry[] = [];
         for (let i = 0; i < hours; i++) {
-          const g = tail[i % tail.length]!;
           const t = new Date(startTs.getTime() + i * 60 * 60 * 1000);
+          const g = byHourOfDay.get(t.getUTCHours())!;
           forecast.push({
             datetime: t.toISOString(),
             carbonIntensityGCo2PerKwh: g,
@@ -711,6 +849,8 @@ export function entsoeFeed(securityToken?: string): GridFeed {
           region,
           source: "entsoe",
           generatedAt: new Date().toISOString(),
+          // Realised A75 data projected forward — not a real forecast.
+          kind: "persistence",
           entries: forecast,
         };
       } catch (err) {

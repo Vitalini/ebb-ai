@@ -1,0 +1,446 @@
+{
+  "response": {
+    "total": 48,
+    "dateFormat": "YYYY-MM-DDTHH24",
+    "frequency": "hourly",
+    "data": [
+      {
+        "period": "2026-05-13T22",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "COL",
+        "type-name": "Coal",
+        "value": 22,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-13T22",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "NUC",
+        "type-name": "Nuclear",
+        "value": 2,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-13T23",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "COL",
+        "type-name": "Coal",
+        "value": 23,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-13T23",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "NUC",
+        "type-name": "Nuclear",
+        "value": 1,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T00",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "COL",
+        "type-name": "Coal",
+        "value": 0,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T00",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "NUC",
+        "type-name": "Nuclear",
+        "value": 24,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T01",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "COL",
+        "type-name": "Coal",
+        "value": 1,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T01",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "NUC",
+        "type-name": "Nuclear",
+        "value": 23,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T02",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "COL",
+        "type-name": "Coal",
+        "value": 2,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T02",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "NUC",
+        "type-name": "Nuclear",
+        "value": 22,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T03",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "COL",
+        "type-name": "Coal",
+        "value": 3,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T03",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "NUC",
+        "type-name": "Nuclear",
+        "value": 21,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T04",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "COL",
+        "type-name": "Coal",
+        "value": 4,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T04",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "NUC",
+        "type-name": "Nuclear",
+        "value": 20,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T05",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "COL",
+        "type-name": "Coal",
+        "value": 5,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T05",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "NUC",
+        "type-name": "Nuclear",
+        "value": 19,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T06",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "COL",
+        "type-name": "Coal",
+        "value": 6,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T06",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "NUC",
+        "type-name": "Nuclear",
+        "value": 18,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T07",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "COL",
+        "type-name": "Coal",
+        "value": 7,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T07",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "NUC",
+        "type-name": "Nuclear",
+        "value": 17,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T08",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "COL",
+        "type-name": "Coal",
+        "value": 8,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T08",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "NUC",
+        "type-name": "Nuclear",
+        "value": 16,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T09",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "COL",
+        "type-name": "Coal",
+        "value": 9,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T09",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "NUC",
+        "type-name": "Nuclear",
+        "value": 15,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T10",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "COL",
+        "type-name": "Coal",
+        "value": 10,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T10",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "NUC",
+        "type-name": "Nuclear",
+        "value": 14,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T11",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "COL",
+        "type-name": "Coal",
+        "value": 11,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T11",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "NUC",
+        "type-name": "Nuclear",
+        "value": 13,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T12",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "COL",
+        "type-name": "Coal",
+        "value": 12,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T12",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "NUC",
+        "type-name": "Nuclear",
+        "value": 12,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T13",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "COL",
+        "type-name": "Coal",
+        "value": 13,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T13",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "NUC",
+        "type-name": "Nuclear",
+        "value": 11,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T14",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "COL",
+        "type-name": "Coal",
+        "value": 14,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T14",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "NUC",
+        "type-name": "Nuclear",
+        "value": 10,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T15",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "COL",
+        "type-name": "Coal",
+        "value": 15,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T15",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "NUC",
+        "type-name": "Nuclear",
+        "value": 9,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T16",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "COL",
+        "type-name": "Coal",
+        "value": 16,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T16",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "NUC",
+        "type-name": "Nuclear",
+        "value": 8,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T17",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "COL",
+        "type-name": "Coal",
+        "value": 17,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T17",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "NUC",
+        "type-name": "Nuclear",
+        "value": 7,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T18",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "COL",
+        "type-name": "Coal",
+        "value": 18,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T18",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "NUC",
+        "type-name": "Nuclear",
+        "value": 6,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T19",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "COL",
+        "type-name": "Coal",
+        "value": 19,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T19",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "NUC",
+        "type-name": "Nuclear",
+        "value": 5,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T20",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "COL",
+        "type-name": "Coal",
+        "value": 20,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T20",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "NUC",
+        "type-name": "Nuclear",
+        "value": 4,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T21",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "COL",
+        "type-name": "Coal",
+        "value": 21,
+        "value-units": "megawatthours"
+      },
+      {
+        "period": "2026-05-14T21",
+        "respondent": "CISO",
+        "respondent-name": "California Independent System Operator",
+        "fueltype": "NUC",
+        "type-name": "Nuclear",
+        "value": 3,
+        "value-units": "megawatthours"
+      }
+    ],
+    "description": "Hourly net generation by balancing authority and energy source."
+  },
+  "request": {
+    "command": "/v2/electricity/rto/fuel-type-data/data/"
+  },
+  "apiVersion": "2.1.8"
+}

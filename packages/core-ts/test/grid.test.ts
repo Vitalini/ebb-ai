@@ -214,15 +214,20 @@ describe("eiaFeed", () => {
   });
 
   it("computes intensity from fuel mix via emission factors", async () => {
-    // CAISO is half coal (820 g) + half nuclear (12 g) for two hours.
+    // CAISO is half coal (820 g) + half nuclear (12 g) for every hour.
     // Expected weighted average: (820 + 12) / 2 = 416 → rounded 416.
-    // Use enough hours so the synthesis round-trips through tail.
-    const rows = [
-      { period: "2026-05-14T10", respondent: "CISO", fueltype: "COL", value: 500 },
-      { period: "2026-05-14T10", respondent: "CISO", fueltype: "NUC", value: 500 },
-      { period: "2026-05-14T11", respondent: "CISO", fueltype: "COL", value: 500 },
-      { period: "2026-05-14T11", respondent: "CISO", fueltype: "NUC", value: 500 },
-    ];
+    // The persistence synthesis requires all 24 hours-of-day covered.
+    const rows: Array<{
+      period: string;
+      respondent: string;
+      fueltype: string;
+      value: number;
+    }> = [];
+    for (let h = 0; h < 24; h++) {
+      const period = `2026-05-14T${String(h).padStart(2, "0")}`;
+      rows.push({ period, respondent: "CISO", fueltype: "COL", value: 500 });
+      rows.push({ period, respondent: "CISO", fueltype: "NUC", value: 500 });
+    }
     globalThis.fetch = (async () =>
       new Response(JSON.stringify({ response: { data: rows } }), {
         status: 200,
@@ -238,10 +243,20 @@ describe("eiaFeed", () => {
   });
 
   it("skips fuel-types it does not recognise without crashing", async () => {
-    const rows = [
-      { period: "2026-05-14T10", respondent: "CISO", fueltype: "COL", value: 100 },
+    // 24 hours of pure coal, plus one unknown fuel-type row that must be
+    // ignored rather than crash or skew the weighted average.
+    const rows: Array<{
+      period: string;
+      respondent: string;
+      fueltype: string;
+      value: number;
+    }> = [
       { period: "2026-05-14T10", respondent: "CISO", fueltype: "XXX_UNKNOWN", value: 9999 },
     ];
+    for (let h = 0; h < 24; h++) {
+      const period = `2026-05-14T${String(h).padStart(2, "0")}`;
+      rows.push({ period, respondent: "CISO", fueltype: "COL", value: 100 });
+    }
     globalThis.fetch = (async () =>
       new Response(JSON.stringify({ response: { data: rows } }), {
         status: 200,
@@ -281,16 +296,22 @@ describe("entsoeFeed", () => {
   });
 
   it("parses XML, computes intensity from psrType mix", async () => {
-    // FR: 1 hour of all nuclear (B14, 12 g), at 1000 MW.
+    // FR: 24 hours of all nuclear (B14, 12 g), at 1000 MW.
     // Expected: weighted avg = 12 g/kWh → very_clean.
+    // The persistence synthesis requires all 24 hours-of-day covered.
+    const points = Array.from(
+      { length: 24 },
+      (_, i) =>
+        `<Point><position>${i + 1}</position><quantity>1000</quantity></Point>`,
+    ).join("\n            ");
     const xml = `
       <GL_MarketDocument>
         <TimeSeries>
           <MktPSRType><psrType>B14</psrType></MktPSRType>
           <Period>
-            <timeInterval><start>2026-05-14T10:00Z</start><end>2026-05-14T11:00Z</end></timeInterval>
+            <timeInterval><start>2026-05-14T00:00Z</start><end>2026-05-15T00:00Z</end></timeInterval>
             <resolution>PT60M</resolution>
-            <Point><position>1</position><quantity>1000</quantity></Point>
+            ${points}
           </Period>
         </TimeSeries>
       </GL_MarketDocument>`;
@@ -303,25 +324,28 @@ describe("entsoeFeed", () => {
   });
 
   it("blends two psrTypes by weighted MWh", async () => {
-    // DE: half coal (820 g) + half wind (11 g) at 1000 each.
+    // DE: half coal (820 g) + half wind (11 g) at 1000 each, all 24 hours.
     // Expected: weighted avg = (1000*820 + 1000*11) / 2000 = 415.5 → rounded 416.
+    const points = Array.from(
+      { length: 24 },
+      (_, i) =>
+        `<Point><position>${i + 1}</position><quantity>1000</quantity></Point>`,
+    ).join("\n            ");
+    const period = `
+          <Period>
+            <timeInterval><start>2026-05-14T00:00Z</start><end>2026-05-15T00:00Z</end></timeInterval>
+            <resolution>PT60M</resolution>
+            ${points}
+          </Period>`;
     const xml = `
       <GL_MarketDocument>
         <TimeSeries>
           <MktPSRType><psrType>B05</psrType></MktPSRType>
-          <Period>
-            <timeInterval><start>2026-05-14T10:00Z</start><end>2026-05-14T11:00Z</end></timeInterval>
-            <resolution>PT60M</resolution>
-            <Point><position>1</position><quantity>1000</quantity></Point>
-          </Period>
+          ${period}
         </TimeSeries>
         <TimeSeries>
           <MktPSRType><psrType>B19</psrType></MktPSRType>
-          <Period>
-            <timeInterval><start>2026-05-14T10:00Z</start><end>2026-05-14T11:00Z</end></timeInterval>
-            <resolution>PT60M</resolution>
-            <Point><position>1</position><quantity>1000</quantity></Point>
-          </Period>
+          ${period}
         </TimeSeries>
       </GL_MarketDocument>`;
     globalThis.fetch = (async () =>
