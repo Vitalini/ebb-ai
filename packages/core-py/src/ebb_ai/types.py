@@ -396,7 +396,11 @@ class TickResultEntry:
     """Per-task outcome returned by :meth:`Scheduler.tick`."""
 
     task_id: str
-    status: Literal["completed", "failed"]
+    status: Literal["completed", "failed", "submitted"]
+    """``submitted`` (v0.12): the task was routed to a provider Batch API
+    in this tick and is now awaiting results — a later tick polls it to
+    ``completed`` or ``failed``. ``completed`` / ``failed`` are terminal.
+    """
     error: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -414,6 +418,14 @@ class TickResult:
     dispatched: int = 0
     failed: int = 0
     results: list[TickResultEntry] = field(default_factory=list)
+    batch_submitted: int = 0
+    """v0.12: tasks routed to a Batch API this tick (scheduled →
+    submitted)."""
+    batch_polled: int = 0
+    """v0.12: submitted rows this tick observed as still in progress
+    (stayed submitted). Batch tasks that completed/failed on poll are
+    counted in ``dispatched`` / ``failed`` like any other terminal
+    transition."""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -421,6 +433,8 @@ class TickResult:
             "dispatched": self.dispatched,
             "failed": self.failed,
             "results": [r.to_dict() for r in self.results],
+            "batch_submitted": self.batch_submitted,
+            "batch_polled": self.batch_polled,
         }
 
 

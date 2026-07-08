@@ -250,39 +250,35 @@ async def test_tick_records_failure_on_adapter_error() -> None:
 
 @pytest.mark.asyncio
 async def test_prefer_batch_uses_batch_when_more_than_24h() -> None:
+    # Public path: a 72h-deadline task routes through the Batch API on the
+    # first tick(). Requires a batch-capable adapter (dispatch_batch +
+    # retrieve_batch) — see BatchAdapter in test_batch.py for the full
+    # submit→poll→complete flow; here we only assert the submit side.
+    from tests.test_batch import BatchAdapter
+
     async with Scheduler(feed=mock_grid_feed()) as s:
         spec = ProviderCallSpec(
             provider="anthropic", model="m", prompt="p", prefer_batch=True
         )
-        rec = await s.enqueue_provider_call(
+        await s.enqueue_provider_call(
             spec,
             DeferOptions(
                 deadline=(datetime.now(UTC) + timedelta(hours=72)).isoformat(),
                 task_id="batch:1",
             ),
         )
-        # Force scheduled_for far enough in the future that tick still
-        # treats it as due (= now) AND the batch decision still sees
-        # >24h. We achieve both by faking scheduled_for to a moment in
-        # the past *and* relying on the fact that the dispatch routine
-        # reads scheduled_for at dispatch time. To exercise the >24h
-        # branch we instead push scheduled_for to >24h in the future
-        # but mark the task as due by overriding the in-memory check:
-        # easier: set scheduled_for = now + 25h and let _dispatch_provider_call
-        # be called directly via expedite-style path. But expedite forces
-        # "now", which suppresses batch. So we test by calling
-        # _dispatch_provider_call directly with the desired scheduled_for.
-        rec.scheduled_for = (datetime.now(UTC) + timedelta(hours=25)).isoformat()
-        rec.status = "running"  # simulate post-claim state
-        s._tasks[rec.task_id] = rec  # type: ignore[index]
-        adapter = FakeAdapter()
-        await s._dispatch_provider_call(rec, {"anthropic": adapter})  # type: ignore[arg-type]
+        adapter = BatchAdapter()
+        result = await s.tick({"anthropic": adapter})
+        assert result.batch_submitted == 1
         assert len(adapter.batch_calls) == 1
         assert len(adapter.dispatch_calls) == 0
+        assert s.get_task("batch:1").status == "submitted"
 
 
 @pytest.mark.asyncio
 async def test_prefer_batch_uses_sync_when_under_24h() -> None:
+    # A 200ms-deadline task never routes to batch — the deadline is well
+    # under 24h, so tick() runs the sync dispatch path.
     async with Scheduler(feed=mock_grid_feed()) as s:
         spec = ProviderCallSpec(
             provider="anthropic", model="m", prompt="p", prefer_batch=True
@@ -291,11 +287,12 @@ async def test_prefer_batch_uses_sync_when_under_24h() -> None:
             spec,
             DeferOptions(deadline=_soon(), task_id="sync:1"),
         )
+        # Ensure the chosen window is due.
         rec.scheduled_for = (datetime.now(UTC) - timedelta(seconds=1)).isoformat()
-        rec.status = "running"
         s._tasks[rec.task_id] = rec  # type: ignore[index]
         adapter = FakeAdapter()
-        await s._dispatch_provider_call(rec, {"anthropic": adapter})  # type: ignore[arg-type]
+        result = await s.tick({"anthropic": adapter})
+        assert result.batch_submitted == 0
         assert len(adapter.batch_calls) == 0
         assert len(adapter.dispatch_calls) == 1
 

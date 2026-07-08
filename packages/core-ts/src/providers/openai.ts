@@ -12,6 +12,7 @@
 
 import type {
   BatchHandle,
+  BatchRetrieveResult,
   DispatchOptions,
   DispatchResult,
   ProviderAdapter,
@@ -30,9 +31,11 @@ interface OpenAIClient {
   };
   files: {
     create(req: unknown): Promise<unknown>;
+    content(fileId: string): Promise<unknown>;
   };
   batches: {
     create(req: unknown): Promise<unknown>;
+    retrieve(batchId: string): Promise<unknown>;
   };
 }
 
@@ -171,6 +174,88 @@ export class OpenAIAdapter implements ProviderAdapter {
       throw new Error("OpenAI Batch API returned no batch id");
     }
     return { batchId: batch.id, provider: this.provider, size: prompts.length };
+  }
+
+  /**
+   * Poll an OpenAI batch. Maps the batch `status`
+   * ("validating" | "in_progress" | "finalizing" | "completed" |
+   * "failed" | "expired" | "cancelled") onto the uniform result. When
+   * completed we download the `output_file_id` content (JSONL, one line
+   * per request) and parse the chat-completion `response.body`.
+   */
+  async retrieveBatch(batchId: string): Promise<BatchRetrieveResult> {
+    const client = await this.getClient();
+    const batch = (await client.batches.retrieve(batchId)) as {
+      status?: string;
+      output_file_id?: string;
+      error_file_id?: string;
+      errors?: { data?: Array<{ message?: string }> };
+    };
+    const status = batch.status;
+    if (
+      status === "validating" ||
+      status === "in_progress" ||
+      status === "finalizing"
+    ) {
+      return { status: "in_progress" };
+    }
+    if (status === "expired") {
+      return { status: "expired", error: "OpenAI batch expired" };
+    }
+    if (status === "failed" || status === "cancelled" || status === "cancelling") {
+      const msg =
+        batch.errors?.data?.[0]?.message ?? `OpenAI batch ${status}`;
+      return { status: "failed", error: msg };
+    }
+    // status === "completed"
+    if (!batch.output_file_id) {
+      return { status: "failed", error: "OpenAI batch completed with no output file" };
+    }
+    const content = (await client.files.content(batch.output_file_id)) as {
+      text?: () => Promise<string>;
+    };
+    const jsonl =
+      typeof content?.text === "function"
+        ? await content.text()
+        : String(content);
+    const results: NonNullable<BatchRetrieveResult["results"]> = [];
+    for (const line of jsonl.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      let parsed: {
+        response?: {
+          body?: {
+            choices?: Array<{ message?: { content?: string } }>;
+            usage?: {
+              prompt_tokens?: number;
+              completion_tokens?: number;
+              total_tokens?: number;
+            };
+            model?: string;
+          };
+        };
+      };
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        continue;
+      }
+      const body = parsed.response?.body;
+      if (!body) continue;
+      results.push({
+        text: body.choices?.[0]?.message?.content ?? "",
+        model: body.model,
+        usage: {
+          inputTokens: body.usage?.prompt_tokens,
+          outputTokens: body.usage?.completion_tokens,
+          totalTokens: body.usage?.total_tokens,
+        },
+      });
+    }
+    if (results.length === 0) {
+      return { status: "failed", error: "OpenAI batch output had no parseable results" };
+    }
+    return { status: "completed", results };
   }
 
   private async getClient(): Promise<OpenAIClient> {

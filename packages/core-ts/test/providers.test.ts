@@ -71,6 +71,57 @@ describe("AnthropicAdapter", () => {
       /at least one entry/i,
     );
   });
+
+  it("retrieveBatch reports in_progress while the batch has not ended", async () => {
+    const adapter = new AnthropicAdapter({
+      apiKey: "test",
+      client: {
+        messages: {
+          create: async () => ({}),
+          batches: {
+            create: async () => ({ id: "b" }),
+            retrieve: async () => ({ processing_status: "in_progress" }),
+            results: async () => [],
+          },
+        },
+      },
+    });
+    const r = await adapter.retrieveBatch("msgbatch_01");
+    expect(r.status).toBe("in_progress");
+  });
+
+  it("retrieveBatch parses a completed batch result + usage", async () => {
+    const adapter = new AnthropicAdapter({
+      apiKey: "test",
+      client: {
+        messages: {
+          create: async () => ({}),
+          batches: {
+            create: async () => ({ id: "b" }),
+            retrieve: async () => ({ processing_status: "ended" }),
+            // eslint-disable-next-line require-yield
+            results: async () =>
+              (async function* () {
+                yield {
+                  result: {
+                    type: "succeeded",
+                    message: {
+                      content: [{ type: "text", text: "batched answer" }],
+                      usage: { input_tokens: 11, output_tokens: 4 },
+                      model: "claude-sonnet-4-5",
+                    },
+                  },
+                };
+              })(),
+          },
+        },
+      },
+    });
+    const r = await adapter.retrieveBatch("msgbatch_01");
+    expect(r.status).toBe("completed");
+    expect(r.results?.[0]?.text).toBe("batched answer");
+    expect(r.results?.[0]?.usage?.totalTokens).toBe(15);
+  });
 });
 
 describe("OpenAIAdapter", () => {
@@ -220,5 +271,58 @@ describe("OpenAIAdapter", () => {
     expect(uploadedPurpose).toBe("batch");
     expect(handle.batchId).toBe("batch_abc");
     expect(handle.size).toBe(2);
+  });
+
+  it("retrieveBatch reports in_progress for a running batch", async () => {
+    const adapter = new OpenAIAdapter({
+      apiKey: "test",
+      client: {
+        chat: { completions: { create: async () => ({}) } },
+        files: { create: async () => ({ id: "f" }), content: async () => "" },
+        batches: {
+          create: async () => ({ id: "b" }),
+          retrieve: async () => ({ status: "in_progress" }),
+        },
+      },
+    });
+    const r = await adapter.retrieveBatch("batch_abc");
+    expect(r.status).toBe("in_progress");
+  });
+
+  it("retrieveBatch parses the completed output JSONL", async () => {
+    const outputLine = JSON.stringify({
+      custom_id: "ebb-0",
+      response: {
+        body: {
+          choices: [{ message: { content: "batched reply" } }],
+          usage: { prompt_tokens: 8, completion_tokens: 3, total_tokens: 11 },
+          model: "gpt-4.1-mini",
+        },
+      },
+    });
+    const adapter = new OpenAIAdapter({
+      apiKey: "test",
+      client: {
+        chat: { completions: { create: async () => ({}) } },
+        files: {
+          create: async () => ({ id: "f" }),
+          content: async (fileId: string) => {
+            expect(fileId).toBe("out_file_1");
+            return { text: async () => `${outputLine}\n` };
+          },
+        },
+        batches: {
+          create: async () => ({ id: "b" }),
+          retrieve: async () => ({
+            status: "completed",
+            output_file_id: "out_file_1",
+          }),
+        },
+      },
+    });
+    const r = await adapter.retrieveBatch("batch_abc");
+    expect(r.status).toBe("completed");
+    expect(r.results?.[0]?.text).toBe("batched reply");
+    expect(r.results?.[0]?.usage?.totalTokens).toBe(11);
   });
 });

@@ -70,7 +70,8 @@ CREATE TABLE IF NOT EXISTS tasks (
   intensity_source  TEXT,
   body_json         TEXT,
   estimated_carbon_g REAL,
-  deadline          TEXT
+  deadline          TEXT,
+  batch_id          TEXT
 );
 CREATE INDEX IF NOT EXISTS tasks_status_idx ON tasks(status);
 CREATE INDEX IF NOT EXISTS tasks_enqueued_idx ON tasks(enqueued_at);
@@ -89,6 +90,8 @@ CREATE INDEX IF NOT EXISTS tasks_enqueued_idx ON tasks(enqueued_at);
  *                        receipt can report actual-vs-estimated delta
  *   - deadline           (v0.12) normalized ISO deadline captured at
  *                        enqueue, for dispatch-time batch decisions
+ *   - batch_id           (v0.12) provider batch id set when a task is
+ *                        routed through the Batch API (status "submitted")
  */
 function ensureColumns(db: SqliteDatabase): void {
   const rows = db
@@ -108,6 +111,7 @@ function ensureColumns(db: SqliteDatabase): void {
   addColumn("body_json", "TEXT");
   addColumn("estimated_carbon_g", "REAL");
   addColumn("deadline", "TEXT");
+  addColumn("batch_id", "TEXT");
 }
 
 function safeStringify(value: unknown): string | null {
@@ -199,11 +203,11 @@ export class TaskStore {
       INSERT INTO tasks (
         task_id, status, enqueued_at, scheduled_for, completed_at,
         region, carbon_budget_g, result_json, error, receipt_json, intensity_source,
-        body_json, estimated_carbon_g, deadline
+        body_json, estimated_carbon_g, deadline, batch_id
       ) VALUES (
         @task_id, @status, @enqueued_at, @scheduled_for, @completed_at,
         @region, @carbon_budget_g, @result_json, @error, @receipt_json, @intensity_source,
-        @body_json, @estimated_carbon_g, @deadline
+        @body_json, @estimated_carbon_g, @deadline, @batch_id
       )
       ON CONFLICT(task_id) DO UPDATE SET
         status             = excluded.status,
@@ -217,7 +221,8 @@ export class TaskStore {
         intensity_source   = excluded.intensity_source,
         body_json          = excluded.body_json,
         estimated_carbon_g = excluded.estimated_carbon_g,
-        deadline           = excluded.deadline
+        deadline           = excluded.deadline,
+        batch_id           = excluded.batch_id
     `);
     stmt.run({
       task_id: record.taskId,
@@ -234,6 +239,7 @@ export class TaskStore {
       body_json: record.bodyJson ?? null,
       estimated_carbon_g: record.estimatedCarbonGCo2 ?? null,
       deadline: record.deadline ?? null,
+      batch_id: record.batchId ?? null,
     });
   }
 
@@ -276,6 +282,21 @@ export class TaskStore {
     return Number(res.changes) === 1;
   }
 
+  /**
+   * Atomic row-level claim for the polling side of the Batch API path
+   * (v0.12): flips a row from "submitted" to "running" so two racing
+   * ticks (or an interactive `ebb tick` + the launchd cron) cannot both
+   * complete the same submitted batch. Mirrors `claimScheduled`. Returns
+   * true iff this call performed the transition.
+   */
+  claimSubmitted(taskId: string): boolean {
+    const stmt = this.db.prepare(
+      `UPDATE tasks SET status = 'running' WHERE task_id = ? AND status = 'submitted'`,
+    );
+    const res = stmt.run(taskId);
+    return Number(res.changes) === 1;
+  }
+
   close(): void {
     this.db.close();
   }
@@ -307,6 +328,7 @@ function rowToRecord(row: Record<string, unknown>): TaskRecord<unknown> {
     estimatedCarbonGCo2:
       (row.estimated_carbon_g as number | null) ?? undefined,
     deadline: (row.deadline as string | null) ?? undefined,
+    batchId: (row.batch_id as string | null) ?? undefined,
   };
 }
 

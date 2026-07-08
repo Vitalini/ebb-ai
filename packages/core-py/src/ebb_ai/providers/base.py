@@ -73,9 +73,9 @@ class BatchHandle:
 
     Batch APIs return *eventually* (24h SLA at both Anthropic and
     OpenAI), so the dispatch call yields a handle the scheduler can
-    poll. Automatic scheduler routing through this path (status
-    ``"submitted"`` + result polling) is tracked in ROADMAP.md; until
-    then callers poll the handle via the vendor SDK themselves.
+    poll. The scheduler routes deadline > 24h tasks here automatically
+    (status ``"submitted"``), then polls :meth:`ProviderAdapter.retrieve_batch`
+    from ``tick()`` until results land (status ``"completed"``).
     """
 
     batch_id: str
@@ -83,6 +83,35 @@ class BatchHandle:
     model: str
     prompt_count: int
     raw: Any = None
+
+
+@dataclass(slots=True)
+class BatchResultItem:
+    """One per-request result parsed out of a completed batch."""
+
+    text: str
+    model: str | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    total_tokens: int | None = None
+
+
+@dataclass(slots=True)
+class BatchRetrieveResult:
+    """Result of polling a submitted batch via
+    :meth:`ProviderAdapter.retrieve_batch`.
+
+    The scheduler only ever submits single-prompt batches, so ``results``
+    carries at most one entry; the scheduler takes ``results[0]``.
+    """
+
+    status: str
+    """One of ``"in_progress"`` | ``"completed"`` | ``"failed"`` |
+    ``"expired"``."""
+    results: list[BatchResultItem] | None = None
+    """Per-request results, present when ``status == "completed"``."""
+    error: str | None = None
+    """Human-readable error when ``status`` is ``"failed"`` / ``"expired"``."""
 
 
 class ProviderAdapter(ABC):
@@ -110,9 +139,25 @@ class ProviderAdapter(ABC):
     ) -> BatchHandle:
         """Submit a batch of prompts to the provider's batch API."""
 
+    async def retrieve_batch(self, batch_id: str) -> BatchRetrieveResult:
+        """Poll a submitted batch by id.
+
+        Returns the batch's current status and, when completed, the
+        parsed per-request results (text + usage). The scheduler calls
+        this from ``tick()`` on every ``submitted`` task until it observes
+        a terminal status. Base implementation raises
+        :class:`NotImplementedError`; the scheduler feature-detects a real
+        override before routing a task through the batch path.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not implement retrieve_batch"
+        )
+
 
 __all__ = [
     "BatchHandle",
+    "BatchResultItem",
+    "BatchRetrieveResult",
     "DispatchOptions",
     "DispatchResult",
     "ProviderAdapter",

@@ -302,6 +302,55 @@ export class Scheduler {
     anthropic?: ProviderAdapter;
     openai?: ProviderAdapter;
   }): Promise<TickResult> {
+    const results: TickResultEntry[] = [];
+    let dispatched = 0;
+    let failed = 0;
+    let inspected = 0;
+
+    // ---- (1) Batch-submit sweep, BEFORE the due sweep ----
+    // A batch-eligible task's deferral mechanism IS the Batch API: the
+    // provider runs it within its own 24h SLA and picks the execution
+    // hour. We deliberately do NOT wait for a clean local window — the
+    // whole point is to submit early and let the provider place the run.
+    // Carbon scoring does not apply to batch-routed tasks (the provider
+    // owns the hour); cost does (50% off). See §0.1.
+    let batchSubmitted = 0;
+    // Tasks submitted in THIS tick must not be polled in the same tick's
+    // poll sweep — submit and poll are distinct ticks (the provider needs
+    // time to start the batch).
+    const submittedThisTick = new Set<string>();
+    for (const record of this.collectBatchSubmitCandidates(adapters)) {
+      // Reuse the scheduled→running claim so a racing tick can't submit
+      // the same row twice (double-billed batch). In-memory-only mode
+      // has no cross-process race, so claim only when a store exists.
+      if (this.store) {
+        let claimed = false;
+        try {
+          claimed = this.store.claimScheduled(record.taskId);
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[ebb-ai/scheduler] tick: could not claim task ${record.taskId} for batch submit: ${describeErr(err)}; skipping this round`,
+          );
+          continue;
+        }
+        if (!claimed) continue;
+      } else {
+        // In-memory guard: flip to running so a re-entrant tick skips it.
+        if (record.status !== "scheduled") continue;
+        record.status = "running";
+      }
+      inspected++;
+      const entry = await this.submitBatch(record, adapters);
+      results.push(entry);
+      if (entry.status === "submitted") {
+        batchSubmitted++;
+        submittedThisTick.add(record.taskId);
+      } else if (entry.status === "completed") dispatched++;
+      else failed++;
+    }
+
+    // ---- (2) Due sweep (sync provider calls) ----
     const now = Date.now();
     // Source-of-truth is the in-memory map for this process, plus any
     // persisted records (e.g. when a v0.4 `ebb tick` opens the SQLite file).
@@ -328,10 +377,6 @@ export class Scheduler {
       }
     }
 
-    const results: TickResultEntry[] = [];
-    let dispatched = 0;
-    let failed = 0;
-    let inspected = 0;
     for (const record of candidates) {
       // Row-level claim: only one tick gets to dispatch this task. If
       // the store is configured, the claim is also visible to other
@@ -359,12 +404,117 @@ export class Scheduler {
       if (entry.status === "completed") dispatched++;
       else failed++;
     }
+
+    // ---- (3) Batch-poll sweep, AFTER the due sweep ----
+    let batchPolled = 0;
+    for (const record of this.collectSubmittedCandidates(submittedThisTick)) {
+      // Claim submitted→running so two racing ticks can't double-complete.
+      if (this.store) {
+        let claimed = false;
+        try {
+          claimed = this.store.claimSubmitted(record.taskId);
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[ebb-ai/scheduler] tick: could not claim submitted task ${record.taskId}: ${describeErr(err)}; skipping this round`,
+          );
+          continue;
+        }
+        if (!claimed) continue;
+      } else {
+        if (record.status !== "submitted") continue;
+        record.status = "running";
+      }
+      inspected++;
+      const entry = await this.pollBatch(record, adapters);
+      results.push(entry);
+      if (entry.status === "completed") dispatched++;
+      else if (entry.status === "submitted") batchPolled++;
+      else failed++;
+    }
+
     return {
       inspected,
       dispatched,
       failed,
       results,
+      batchSubmitted,
+      batchPolled,
     };
+  }
+
+  /**
+   * Collect scheduled provider-call tasks that should be routed through a
+   * Batch API this tick: preferBatch !== false, an adapter with a
+   * dispatchBatch function exists, a deadline is persisted, and
+   * (deadline − now) > 24h. Legacy rows with no persisted deadline are
+   * skipped (they fall through to the sync due-sweep), never errored.
+   */
+  private collectBatchSubmitCandidates(adapters: {
+    anthropic?: ProviderAdapter;
+    openai?: ProviderAdapter;
+  }): TaskRecord<unknown>[] {
+    const now = Date.now();
+    const out: TaskRecord<unknown>[] = [];
+    const seen = new Set<string>();
+    const consider = (record: TaskRecord<unknown>): void => {
+      if (seen.has(record.taskId)) return;
+      if (record.status !== "scheduled") return;
+      if (!record.bodyJson) return;
+      if (!record.deadline) return; // legacy row → sync path
+      if (new Date(record.deadline).getTime() - now <= 24 * 60 * 60 * 1000) return;
+      let spec: Partial<ProviderCallSpec>;
+      try {
+        spec = JSON.parse(record.bodyJson) as Partial<ProviderCallSpec>;
+      } catch {
+        return; // corrupt body → sync due-sweep fails it with a clear error
+      }
+      if (spec.type !== "provider_call") return;
+      if (spec.preferBatch === false) return;
+      if (spec.provider !== "anthropic" && spec.provider !== "openai") return;
+      const adapter = adapters[spec.provider];
+      if (!adapter) return;
+      if (typeof adapter.dispatchBatch !== "function") return;
+      seen.add(record.taskId);
+      out.push(record);
+    };
+    for (const record of this.tasks.values()) consider(record);
+    if (this.store) {
+      for (const record of this.store.list({ status: "scheduled" })) {
+        if (seen.has(record.taskId)) continue;
+        this.tasks.set(record.taskId, record);
+        consider(record);
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Collect every "submitted" provider-call task awaiting batch results.
+   * `exclude` skips tasks submitted earlier in the same tick — submit and
+   * poll are distinct ticks by design.
+   */
+  private collectSubmittedCandidates(
+    exclude: Set<string> = new Set(),
+  ): TaskRecord<unknown>[] {
+    const out: TaskRecord<unknown>[] = [];
+    const seen = new Set<string>();
+    for (const record of this.tasks.values()) {
+      if (exclude.has(record.taskId)) continue;
+      if (record.status !== "submitted") continue;
+      if (!record.batchId) continue;
+      out.push(record);
+      seen.add(record.taskId);
+    }
+    if (this.store) {
+      for (const record of this.store.list({ status: "submitted" })) {
+        if (exclude.has(record.taskId) || seen.has(record.taskId)) continue;
+        if (!record.batchId) continue;
+        this.tasks.set(record.taskId, record);
+        out.push(record);
+      }
+    }
+    return out;
   }
 
   /**
@@ -419,6 +569,18 @@ export class Scheduler {
       clearTimeout(timer);
       this.pendingTimers.delete(taskId);
     }
+    if (record.status === "submitted") {
+      // The task is already in flight at the provider's Batch API. We
+      // have no adapter handle here (cancelTask takes no adapters), so we
+      // cannot issue a provider-side cancel — mark it cancelled locally
+      // and warn that the batch may still run and bill. (Trivial
+      // provider cancel is deferred: the vendor batch-cancel endpoints
+      // are best-effort and racy against completion.)
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[ebb-ai/scheduler] cancelTask: task ${taskId} was submitted to the provider's Batch API (batch id ${record.batchId ?? "unknown"}); marking cancelled locally, but the provider-side batch may still run and bill`,
+      );
+    }
     record.status = "cancelled";
     record.completedAt = new Date().toISOString();
     // Terminal transition: redact secrets out of the persisted body so the
@@ -448,6 +610,11 @@ export class Scheduler {
     }
     if (record.status === "running") {
       throw new Error(`expediteTask: task ${taskId} is already running`);
+    }
+    if (record.status === "submitted") {
+      throw new Error(
+        `expediteTask: task ${taskId} is already submitted to the provider's Batch API (batch id ${record.batchId ?? "unknown"}); poll with tick / check_queue_status`,
+      );
     }
     if (
       record.status === "completed" ||
@@ -551,6 +718,10 @@ export class Scheduler {
     record.scheduledFor = new Date().toISOString();
     record.completedAt = undefined;
     record.error = undefined;
+    // A retry re-dispatches synchronously via the due path below — clear
+    // any stale batchId from a prior batch attempt so the completed row
+    // no longer points at a dead/failed batch.
+    record.batchId = undefined;
     this.store?.upsert(record);
     // Row-level claim: don't double-dispatch if a concurrent tick in
     // another process grabbed the freshly re-scheduled row first.
@@ -983,27 +1154,14 @@ export class Scheduler {
     // provider a second time).
     let result: unknown;
     try {
-      const preferBatch = spec.preferBatch !== false;
-      // We compare the task's scheduled_for to a 24h-from-now boundary to
-      // decide whether the Batch API is still worth it. (`scheduled_for`
-      // is the proxy; batch routing proper — status "submitted" + polling
-      // against record.deadline — lands in a later version.)
-      const scheduledForTs = record.scheduledFor
-        ? new Date(record.scheduledFor).getTime()
-        : Date.now();
-      const moreThan24h = scheduledForTs - Date.now() > 24 * 60 * 60 * 1000;
-      const useBatch = preferBatch && moreThan24h && typeof adapter.dispatchBatch === "function";
-      result = useBatch
-        ? await retryWithBackoff(() => adapter.dispatchBatch(spec.model, [spec.prompt], {
-            temperature: spec.temperature,
-            maxTokens: spec.maxTokens,
-            system: spec.systemPrompt,
-          }))
-        : await retryWithBackoff(() => adapter.dispatch(spec.model, spec.prompt, {
-            temperature: spec.temperature,
-            maxTokens: spec.maxTokens,
-            system: spec.systemPrompt,
-          }));
+      // Batch routing (deadline > 24h) is handled by the dedicated
+      // submit/poll sweeps in tick(); by the time a task reaches this
+      // sync due-sweep it is a genuine synchronous call.
+      result = await retryWithBackoff(() => adapter.dispatch(spec.model, spec.prompt, {
+        temperature: spec.temperature,
+        maxTokens: spec.maxTokens,
+        system: spec.systemPrompt,
+      }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       record.status = "failed";
@@ -1122,6 +1280,231 @@ export class Scheduler {
     // dispatch used the caller's exact prompt; the ledger keeps only the
     // redacted form. (Failed tasks intentionally keep the original body —
     // retryTask must re-dispatch the exact prompt.)
+    record.bodyJson = redactBodyJson(record.bodyJson);
+    try {
+      this.store?.upsert(record);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[ebb-ai/scheduler] failed to persist completed task ${record.taskId}: ${describeErr(err)}`,
+      );
+    }
+    if (spec.outputPath && receipt) {
+      await writeOutputFile(spec.outputPath, record.taskId, result, receipt);
+    }
+    return { taskId: record.taskId, status: "completed" };
+  }
+
+  /**
+   * Submit a batch-eligible task to the provider's Batch API. The row was
+   * already claimed (scheduled → running) by the caller. On success the
+   * task transitions to "submitted" with the returned batchId persisted —
+   * the provider now owns the execution hour (within its 24h SLA), and a
+   * later tick's poll sweep completes it. On submit failure → failed
+   * (retryTask can re-dispatch sync). No receipt is written here: carbon
+   * is scored only when real results (and usage) arrive at poll time.
+   */
+  private async submitBatch(
+    record: TaskRecord<unknown>,
+    adapters: { anthropic?: ProviderAdapter; openai?: ProviderAdapter },
+  ): Promise<TickResultEntry> {
+    let spec: ProviderCallSpec;
+    try {
+      spec = JSON.parse(record.bodyJson ?? "null") as ProviderCallSpec;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.failTask(record.taskId, new Error(`tick: corrupt body_json: ${msg}`));
+      return { taskId: record.taskId, status: "failed", error: msg };
+    }
+    const adapter = adapters[spec.provider];
+    if (!adapter || typeof adapter.dispatchBatch !== "function") {
+      // Should not happen — collectBatchSubmitCandidates already filtered
+      // — but stay defensive: fall back to a clear failure.
+      const msg = `tick: batch submit selected but adapter/dispatchBatch missing for ${spec.provider}`;
+      this.failTask(record.taskId, new Error(msg));
+      return { taskId: record.taskId, status: "failed", error: msg };
+    }
+    try {
+      const handle = await retryWithBackoff(() =>
+        adapter.dispatchBatch(spec.model, [spec.prompt], {
+          temperature: spec.temperature,
+          maxTokens: spec.maxTokens,
+          system: spec.systemPrompt,
+        }),
+      );
+      record.status = "submitted";
+      record.batchId = handle.batchId;
+      try {
+        this.store?.upsert(record);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[ebb-ai/scheduler] failed to persist submitted status for ${record.taskId}: ${describeErr(err)}`,
+        );
+      }
+      return { taskId: record.taskId, status: "submitted" };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      record.status = "failed";
+      record.completedAt = new Date().toISOString();
+      record.error = msg;
+      this.store?.upsert(record);
+      return { taskId: record.taskId, status: "failed", error: msg };
+    }
+  }
+
+  /**
+   * Poll a "submitted" task's batch. The row was already claimed
+   * (submitted → running) by the caller. On:
+   *   - in_progress: transition back to "submitted", stay pending.
+   *   - completed:   build the full receipt exactly like the sync path
+   *                  (real usage tokens + provenance + signing + output
+   *                  file) and mark completed.
+   *   - failed/expired: mark failed with the provider error (retryTask
+   *                  re-dispatches sync via the expedite path).
+   */
+  private async pollBatch(
+    record: TaskRecord<unknown>,
+    adapters: { anthropic?: ProviderAdapter; openai?: ProviderAdapter },
+  ): Promise<TickResultEntry> {
+    let spec: ProviderCallSpec;
+    try {
+      spec = JSON.parse(record.bodyJson ?? "null") as ProviderCallSpec;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.failTask(record.taskId, new Error(`tick: corrupt body_json: ${msg}`));
+      return { taskId: record.taskId, status: "failed", error: msg };
+    }
+    const adapter = adapters[spec.provider];
+    if (!adapter || typeof adapter.retrieveBatch !== "function") {
+      // No poller available: return the row to "submitted" so a later
+      // tick with a capable adapter can pick it up. Do not fail — the
+      // batch is genuinely in flight at the provider.
+      record.status = "submitted";
+      this.store?.upsert(record);
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[ebb-ai/scheduler] tick: no retrieveBatch on adapter for ${spec.provider}; leaving ${record.taskId} submitted`,
+      );
+      return { taskId: record.taskId, status: "submitted" };
+    }
+    const batchId = record.batchId;
+    if (!batchId) {
+      const msg = "tick: submitted task has no batchId";
+      this.failTask(record.taskId, new Error(msg));
+      return { taskId: record.taskId, status: "failed", error: msg };
+    }
+    const ranAt = new Date();
+    let poll: import("./providers/base.js").BatchRetrieveResult;
+    try {
+      poll = await retryWithBackoff(() => adapter.retrieveBatch!(batchId));
+    } catch (err) {
+      // A transient poll error must not fail a genuinely in-flight batch:
+      // return it to "submitted" and let a later tick retry.
+      record.status = "submitted";
+      this.store?.upsert(record);
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[ebb-ai/scheduler] tick: retrieveBatch failed for ${record.taskId} (${describeErr(err)}); leaving submitted`,
+      );
+      return { taskId: record.taskId, status: "submitted" };
+    }
+
+    if (poll.status === "in_progress") {
+      record.status = "submitted";
+      this.store?.upsert(record);
+      return { taskId: record.taskId, status: "submitted" };
+    }
+    if (poll.status === "failed" || poll.status === "expired") {
+      const msg = poll.error ?? `batch ${poll.status}`;
+      record.status = "failed";
+      record.completedAt = new Date().toISOString();
+      record.error = msg;
+      this.store?.upsert(record);
+      return { taskId: record.taskId, status: "failed", error: msg };
+    }
+    // completed — take the first (single-prompt) result.
+    const first = poll.results?.[0];
+    if (!first) {
+      const msg = "batch completed with no results";
+      record.status = "failed";
+      record.completedAt = new Date().toISOString();
+      record.error = msg;
+      this.store?.upsert(record);
+      return { taskId: record.taskId, status: "failed", error: msg };
+    }
+    // Shape a DispatchResult-like object so the receipt path is identical
+    // to the sync dispatch.
+    const result = {
+      text: first.text,
+      usage: first.usage,
+      model: first.model ?? spec.model,
+      provider: spec.provider,
+      raw: poll,
+    };
+
+    let intensityG: number | undefined;
+    let gridSource: GridForecast["source"] | undefined;
+    try {
+      const current = await this.fetchCurrentIntensity(record.region, ranAt);
+      intensityG = current.intensityG;
+      gridSource = current.source;
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[ebb-ai/scheduler] intensity fetch for the receipt failed (${describeErr(err)}); receipt falls back to the schedule-time estimate`,
+      );
+    }
+    const usage = result.usage;
+    const inputTokens = typeof usage?.inputTokens === "number" ? usage.inputTokens : undefined;
+    const outputTokens = typeof usage?.outputTokens === "number" ? usage.outputTokens : undefined;
+    const actualModel = result.model;
+    const totalTokens = typeof usage?.totalTokens === "number" ? usage.totalTokens : undefined;
+    let receipt: CarbonReceipt | undefined;
+    try {
+      const actualCarbonGCo2 =
+        intensityG !== undefined
+          ? Math.round(
+              gramsForIntensity(intensityG, {
+                model: actualModel,
+                inputTokens,
+                outputTokens,
+              }) * 10,
+            ) / 10
+          : (record.estimatedCarbonGCo2 ?? 0);
+      const estimatedCarbonGCo2 = record.estimatedCarbonGCo2 ?? actualCarbonGCo2;
+      const deltaPct =
+        estimatedCarbonGCo2 > 0
+          ? Math.round(
+              ((actualCarbonGCo2 - estimatedCarbonGCo2) / estimatedCarbonGCo2) * 1000,
+            ) / 10
+          : 0;
+      receipt = this.maybeSign({
+        taskId: record.taskId,
+        ranAt: ranAt.toISOString(),
+        region: record.region,
+        estimatedCarbonGCo2,
+        actualCarbonGCo2,
+        deltaPct,
+        provider: result.provider ?? spec.provider,
+        model: actualModel,
+        prompt: redactPrompt(spec.prompt, spec.redactInReceipt),
+        totalTokens,
+        intensityGCo2PerKwh: intensityG,
+        gridSource,
+        energySource: lookupModelEnergy(actualModel).source,
+      });
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[ebb-ai/scheduler] failed to build the carbon receipt for ${record.taskId}: ${describeErr(err)}; task stays completed without a receipt`,
+      );
+    }
+    record.status = "completed";
+    record.completedAt = new Date().toISOString();
+    record.result = result;
+    record.receipt = receipt;
+    record.intensitySource = "scored";
     record.bodyJson = redactBodyJson(record.bodyJson);
     try {
       this.store?.upsert(record);

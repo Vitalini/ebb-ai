@@ -107,6 +107,47 @@ async def test_anthropic_dispatch_batch_builds_requests() -> None:
     ]
 
 
+@pytest.mark.asyncio
+async def test_anthropic_retrieve_batch_in_progress() -> None:
+    client = _make_anthropic_client()
+    client.messages.batches.retrieve = AsyncMock(
+        return_value=SimpleNamespace(processing_status="in_progress")
+    )
+    adapter = AnthropicAdapter(client=client)
+    result = await adapter.retrieve_batch("msgbatch_01xyz")
+    assert result.status == "in_progress"
+
+
+@pytest.mark.asyncio
+async def test_anthropic_retrieve_batch_completed() -> None:
+    client = _make_anthropic_client()
+    client.messages.batches.retrieve = AsyncMock(
+        return_value=SimpleNamespace(processing_status="ended")
+    )
+
+    async def _results(_batch_id: str) -> Any:
+        async def gen() -> Any:
+            yield SimpleNamespace(
+                result=SimpleNamespace(
+                    type="succeeded",
+                    message=SimpleNamespace(
+                        content=[SimpleNamespace(type="text", text="batched")],
+                        usage=SimpleNamespace(input_tokens=11, output_tokens=4),
+                        model="claude-sonnet-4-5",
+                    ),
+                )
+            )
+
+        return gen()
+
+    client.messages.batches.results = _results
+    adapter = AnthropicAdapter(client=client)
+    result = await adapter.retrieve_batch("msgbatch_01xyz")
+    assert result.status == "completed"
+    assert result.results[0].text == "batched"
+    assert result.results[0].total_tokens == 15
+
+
 def test_anthropic_extract_text_handles_dict_blocks() -> None:
     resp = SimpleNamespace(
         content=[
@@ -232,6 +273,53 @@ async def test_openai_dispatch_batch_uploads_jsonl() -> None:
     assert batch_kwargs["input_file_id"] == "file_uploaded"
     assert batch_kwargs["endpoint"] == "/v1/chat/completions"
     assert batch_kwargs["completion_window"] == "24h"
+
+
+@pytest.mark.asyncio
+async def test_openai_retrieve_batch_in_progress() -> None:
+    client = _make_openai_client()
+    client.batches.retrieve = AsyncMock(
+        return_value=SimpleNamespace(status="in_progress")
+    )
+    adapter = OpenAIAdapter(client=client)
+    result = await adapter.retrieve_batch("batch_01xyz")
+    assert result.status == "in_progress"
+
+
+@pytest.mark.asyncio
+async def test_openai_retrieve_batch_completed_parses_jsonl() -> None:
+    import json
+
+    output_line = json.dumps(
+        {
+            "custom_id": "req-0",
+            "response": {
+                "body": {
+                    "choices": [{"message": {"content": "batched reply"}}],
+                    "usage": {
+                        "prompt_tokens": 8,
+                        "completion_tokens": 3,
+                        "total_tokens": 11,
+                    },
+                    "model": "gpt-4.1-mini",
+                }
+            },
+        }
+    )
+    client = _make_openai_client()
+    client.batches.retrieve = AsyncMock(
+        return_value=SimpleNamespace(
+            status="completed", output_file_id="out_file_1"
+        )
+    )
+    client.files.content = AsyncMock(
+        return_value=SimpleNamespace(text=output_line + "\n")
+    )
+    adapter = OpenAIAdapter(client=client)
+    result = await adapter.retrieve_batch("batch_01xyz")
+    assert result.status == "completed"
+    assert result.results[0].text == "batched reply"
+    assert result.results[0].total_tokens == 11
 
 
 def test_openai_extract_text_handles_dict_message() -> None:

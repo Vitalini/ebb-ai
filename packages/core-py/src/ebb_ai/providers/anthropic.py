@@ -17,7 +17,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from .base import BatchHandle, DispatchOptions, DispatchResult, ProviderAdapter
+from .base import (
+    BatchHandle,
+    BatchResultItem,
+    BatchRetrieveResult,
+    DispatchOptions,
+    DispatchResult,
+    ProviderAdapter,
+)
 
 
 def _load_sdk() -> Any:
@@ -136,6 +143,77 @@ class AnthropicAdapter(ProviderAdapter):
             model=model,
             prompt_count=len(prompts),
             raw=batch,
+        )
+
+    async def retrieve_batch(self, batch_id: str) -> BatchRetrieveResult:
+        """Poll a Message Batch.
+
+        Maps Anthropic's ``processing_status`` (``"in_progress"`` |
+        ``"canceling"`` | ``"ended"``) onto the uniform result. Once the
+        batch has ended we stream ``messages.batches.results``, which
+        yields one entry per request with a ``result`` union (succeeded /
+        errored / expired / canceled).
+        """
+        batch = await self._client.messages.batches.retrieve(batch_id)
+        processing_status = getattr(batch, "processing_status", None)
+        if processing_status != "ended":
+            # "in_progress" and "canceling" are both still-running here.
+            return BatchRetrieveResult(status="in_progress")
+
+        results: list[BatchResultItem] = []
+        saw_expired = False
+        saw_error = False
+        first_error: str | None = None
+        stream = await self._client.messages.batches.results(batch_id)
+        async for entry in stream:
+            result = getattr(entry, "result", None)
+            result_type = getattr(result, "type", None)
+            if result_type == "succeeded":
+                message = getattr(result, "message", None)
+                text = _extract_text(message) if message is not None else ""
+                usage = getattr(message, "usage", None)
+                input_tokens = getattr(usage, "input_tokens", None) if usage else None
+                output_tokens = (
+                    getattr(usage, "output_tokens", None) if usage else None
+                )
+                total = (
+                    input_tokens + output_tokens
+                    if input_tokens is not None and output_tokens is not None
+                    else None
+                )
+                results.append(
+                    BatchResultItem(
+                        text=text,
+                        model=getattr(message, "model", None),
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                        total_tokens=total,
+                    )
+                )
+            elif result_type == "expired":
+                saw_expired = True
+            else:
+                saw_error = True
+                if first_error is None:
+                    err = getattr(result, "error", None)
+                    first_error = (
+                        getattr(err, "message", None)
+                        or f"batch request result type: {result_type}"
+                    )
+
+        if results:
+            return BatchRetrieveResult(status="completed", results=results)
+        if saw_expired:
+            return BatchRetrieveResult(
+                status="expired", error="Anthropic batch request expired"
+            )
+        if saw_error:
+            return BatchRetrieveResult(
+                status="failed",
+                error=first_error or "Anthropic batch request failed",
+            )
+        return BatchRetrieveResult(
+            status="failed", error="Anthropic batch ended with no results"
         )
 
 

@@ -9,9 +9,12 @@
  *
  *   - dispatchBatch(): submit N prompts via the vendor's Batch API
  *     (Anthropic Message Batches, OpenAI Batch Files). Returns a handle.
- *     50% cheaper, up-to-24h SLA. Automatic scheduler routing through
- *     this path (status "submitted" + result polling) is in progress;
- *     until then callers poll the handle via the vendor SDK themselves.
+ *     50% cheaper, up-to-24h SLA. The scheduler routes deadline > 24h
+ *     tasks here automatically (status "submitted"), then polls
+ *     retrieveBatch() from tick() until results land (status "completed").
+ *
+ *   - retrieveBatch(): poll a submitted batch by id; returns status and,
+ *     when completed, the parsed per-request results (text + usage).
  *
  * Adapter modules import the vendor SDK lazily so the package can be
  * installed without forcing both SDK dependencies on every consumer.
@@ -55,6 +58,35 @@ export interface BatchHandle {
   size: number;
 }
 
+/**
+ * Result of polling a submitted batch via {@link ProviderAdapter.retrieveBatch}.
+ *
+ * The scheduler only ever submits single-prompt batches, so `results`
+ * carries at most one entry; the scheduler takes `results[0]`.
+ */
+export interface BatchRetrieveResult {
+  /**
+   * Batch lifecycle:
+   *   - "in_progress": still running; poll again later.
+   *   - "completed":   results are available in `results`.
+   *   - "failed":      the batch itself errored (not per-request).
+   *   - "expired":     the batch exceeded its SLA without completing.
+   */
+  status: "in_progress" | "completed" | "failed" | "expired";
+  /** Per-request results, present when status === "completed". */
+  results?: Array<{
+    text: string;
+    model?: string;
+    usage?: {
+      inputTokens?: number;
+      outputTokens?: number;
+      totalTokens?: number;
+    };
+  }>;
+  /** Human-readable error when status is "failed" / "expired". */
+  error?: string;
+}
+
 export interface ProviderAdapter {
   /** Vendor name, lowercase, no spaces. */
   readonly provider: string;
@@ -74,4 +106,14 @@ export interface ProviderAdapter {
     prompts: string[],
     options?: DispatchOptions,
   ): Promise<BatchHandle>;
+
+  /**
+   * Poll a submitted batch by id. Returns the batch's current status and,
+   * when completed, the parsed per-request results (text + usage). The
+   * scheduler calls this from `tick()` on every "submitted" task until it
+   * observes a terminal status. Optional so adapters that only submit
+   * (or third-party adapters) need not implement it — the scheduler
+   * feature-detects `typeof adapter.retrieveBatch === "function"`.
+   */
+  retrieveBatch?(batchId: string): Promise<BatchRetrieveResult>;
 }

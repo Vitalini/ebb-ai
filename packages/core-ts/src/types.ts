@@ -211,7 +211,12 @@ export interface ProviderCallSpec {
 /** Per-task outcome returned by `Scheduler.tick`. */
 export interface TickResultEntry {
   taskId: string;
-  status: "completed" | "failed";
+  /**
+   * "submitted" (v0.12): the task was routed to a provider Batch API in
+   * this tick and is now awaiting results — a later tick will poll it to
+   * "completed" or "failed". "completed"/"failed" are terminal.
+   */
+  status: "completed" | "failed" | "submitted";
   error?: string;
 }
 
@@ -221,6 +226,15 @@ export interface TickResult {
   dispatched: number;
   failed: number;
   results: TickResultEntry[];
+  /**
+   * v0.12 Batch API counters. `batchSubmitted` = tasks routed to a Batch
+   * API this tick (scheduled → submitted). `batchPolled` = "submitted"
+   * rows this tick observed as still in progress (stayed submitted).
+   * Batch tasks that completed/failed on poll are counted in
+   * `dispatched`/`failed` like any other terminal transition.
+   */
+  batchSubmitted: number;
+  batchPolled: number;
 }
 
 /** Function the user hands to `defer`. */

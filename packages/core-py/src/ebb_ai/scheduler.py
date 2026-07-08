@@ -438,7 +438,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     intensity_source  TEXT,
     body_json         TEXT,
     estimated_carbon_g REAL,
-    deadline          TEXT
+    deadline          TEXT,
+    batch_id          TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_enqueued_at ON tasks(enqueued_at);
@@ -504,6 +505,26 @@ async def _ensure_deadline_column(conn: aiosqlite.Connection) -> None:
         await conn.commit()
 
 
+async def _ensure_batch_id_column(conn: aiosqlite.Connection) -> None:
+    """Idempotent migration: add ``batch_id`` (v0.12) to a pre-v0.12
+    ``tasks`` table.
+
+    Records the provider batch id when a task is routed through the Batch
+    API (status ``submitted``). The column name matches the TS port's
+    SQLite schema exactly — the DB file is shared cross-language.
+    """
+    async with conn.execute("SELECT name FROM pragma_table_info('tasks')") as cur:
+        rows = await cur.fetchall()
+    names = {row[0] for row in rows}
+    if "batch_id" not in names:
+        try:
+            await conn.execute("ALTER TABLE tasks ADD COLUMN batch_id TEXT")
+        except aiosqlite.OperationalError as err:
+            if "duplicate column name" not in str(err).lower():
+                raise
+        await conn.commit()
+
+
 class _TaskStore:
     """Optional SQLite-backed durable queue.
 
@@ -553,6 +574,7 @@ class _TaskStore:
         await _ensure_body_json_column(conn)
         await _ensure_estimated_carbon_column(conn)
         await _ensure_deadline_column(conn)
+        await _ensure_batch_id_column(conn)
         self._conn = conn
         # The ledger stores prompts (redacted only at terminal
         # transitions) next to a 0600 signing key — keep the DB and its
@@ -587,8 +609,9 @@ class _TaskStore:
                 INSERT INTO tasks (
                     task_id, status, enqueued_at, scheduled_for, completed_at,
                     region, carbon_budget_g, result_json, error, receipt_json,
-                    intensity_source, body_json, estimated_carbon_g, deadline
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    intensity_source, body_json, estimated_carbon_g, deadline,
+                    batch_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(task_id) DO UPDATE SET
                     status            = excluded.status,
                     scheduled_for     = excluded.scheduled_for,
@@ -601,7 +624,8 @@ class _TaskStore:
                     intensity_source  = excluded.intensity_source,
                     body_json         = excluded.body_json,
                     estimated_carbon_g = excluded.estimated_carbon_g,
-                    deadline          = excluded.deadline
+                    deadline          = excluded.deadline,
+                    batch_id          = excluded.batch_id
                 """,
                 (
                     record.task_id,
@@ -618,6 +642,7 @@ class _TaskStore:
                     record.body_json,
                     record.estimated_carbon_g_co2,
                     record.deadline,
+                    record.batch_id,
                 ),
             )
             await conn.commit()
@@ -665,6 +690,27 @@ class _TaskStore:
             cur = await conn.execute(
                 "UPDATE tasks SET status = 'running' "
                 "WHERE task_id = ? AND status = 'scheduled'",
+                (task_id,),
+            )
+            rowcount = cur.rowcount
+            await cur.close()
+            await conn.commit()
+        return rowcount == 1
+
+    async def claim_submitted(self, task_id: str) -> bool:
+        """Atomically claim a submitted task for batch polling.
+
+        Returns ``True`` iff this caller transitioned the row from
+        ``submitted`` to ``running``. Two ticks racing on the same DB
+        cannot both complete the same batch. Mirrors
+        :meth:`claim_scheduled` for the polling side of the Batch API
+        path (v0.12).
+        """
+        conn = self._require()
+        async with self._lock:
+            cur = await conn.execute(
+                "UPDATE tasks SET status = 'running' "
+                "WHERE task_id = ? AND status = 'submitted'",
                 (task_id,),
             )
             rowcount = cur.rowcount
@@ -747,6 +793,13 @@ def _row_to_record(row: Any) -> TaskRecord:
         deadline = row["deadline"]
     except (IndexError, KeyError):
         deadline = None
+    # `batch_id` (v0.12) is read defensively too — the column may be
+    # absent on a pre-v0.12 DB row, or written by the TS port's schema
+    # (same column name, shared queue.db).
+    try:
+        batch_id = row["batch_id"]
+    except (IndexError, KeyError):
+        batch_id = None
     return TaskRecord(
         task_id=row["task_id"],
         status=row["status"],
@@ -762,6 +815,7 @@ def _row_to_record(row: Any) -> TaskRecord:
         body_json=body_json,
         estimated_carbon_g_co2=estimated_carbon_g,
         deadline=deadline,
+        batch_id=batch_id,
     )
 
 
@@ -1222,10 +1276,61 @@ class Scheduler:
             (or ``None`` to mark the provider unavailable).
         """
         adapters = adapters or {}
-        now = _now_utc()
 
-        # Source-of-truth is the in-memory map for this process, plus
-        # any persisted scheduled rows we haven't yet hydrated.
+        results: list[TickResultEntry] = []
+        dispatched = 0
+        failed = 0
+        inspected = 0
+        batch_submitted = 0
+        batch_polled = 0
+        submitted_this_tick: set[str] = set()
+
+        # ---- (1) Batch-submit sweep, BEFORE the due sweep ----
+        # A batch-eligible task's deferral mechanism IS the Batch API: the
+        # provider runs it within its own 24h SLA and picks the execution
+        # hour. We deliberately do NOT wait for a clean local window — the
+        # whole point is to submit early and let the provider place the
+        # run. Carbon scoring does not apply to batch-routed tasks (the
+        # provider owns the hour); cost does (50% off). See §0.1.
+        for record in await self._collect_batch_submit_candidates(adapters):
+            if self._store is not None and self._connected:
+                try:
+                    won = await self._store.claim_scheduled(record.task_id)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as err:
+                    _log.warning(
+                        "[ebb-ai/scheduler] tick: could not claim task %s for "
+                        "batch submit: %s; skipping this round",
+                        record.task_id,
+                        err,
+                    )
+                    continue
+                if not won:
+                    continue
+                record.status = "running"
+                self._tasks[record.task_id] = record
+            else:
+                if record.status != "scheduled":
+                    continue
+                record.status = "running"
+                self._tasks[record.task_id] = record
+            inspected += 1
+            entry = await self._submit_batch(record, adapters)
+            results.append(entry)
+            if entry.status == "submitted":
+                batch_submitted += 1
+                # A task submitted THIS tick must not be polled in the
+                # same tick's poll sweep — submit and poll are distinct
+                # ticks (the provider needs time to start the batch).
+                submitted_this_tick.add(record.task_id)
+            elif entry.status == "completed":
+                dispatched += 1
+            else:
+                failed += 1
+
+        # ---- (2) Due sweep (sync provider calls) ----
+        now = _now_utc()
         candidates: list[TaskRecord] = []
         seen: set[str] = set()
         for record in self._tasks.values():
@@ -1255,10 +1360,6 @@ class Scheduler:
                 self._tasks[record.task_id] = record
                 candidates.append(record)
 
-        results: list[TickResultEntry] = []
-        dispatched = 0
-        failed = 0
-        inspected = 0
         for record in candidates:
             # Concurrency-safe row-level claim. Only the caller that
             # flips status from "scheduled" -> "running" proceeds. A
@@ -1287,12 +1388,134 @@ class Scheduler:
                 dispatched += 1
             else:
                 failed += 1
+
+        # ---- (3) Batch-poll sweep, AFTER the due sweep ----
+        for record in await self._collect_submitted_candidates(submitted_this_tick):
+            if self._store is not None and self._connected:
+                try:
+                    won = await self._store.claim_submitted(record.task_id)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as err:
+                    _log.warning(
+                        "[ebb-ai/scheduler] tick: could not claim submitted "
+                        "task %s: %s; skipping this round",
+                        record.task_id,
+                        err,
+                    )
+                    continue
+                if not won:
+                    continue
+                record.status = "running"
+                self._tasks[record.task_id] = record
+            else:
+                if record.status != "submitted":
+                    continue
+                record.status = "running"
+                self._tasks[record.task_id] = record
+            inspected += 1
+            entry = await self._poll_batch(record, adapters)
+            results.append(entry)
+            if entry.status == "completed":
+                dispatched += 1
+            elif entry.status == "submitted":
+                batch_polled += 1
+            else:
+                failed += 1
+
         return TickResult(
             inspected=inspected,
             dispatched=dispatched,
             failed=failed,
             results=results,
+            batch_submitted=batch_submitted,
+            batch_polled=batch_polled,
         )
+
+    async def _collect_batch_submit_candidates(
+        self, adapters: dict[str, ProviderAdapter | None]
+    ) -> list[TaskRecord]:
+        """Scheduled provider-call tasks to route through a Batch API this
+        tick: ``prefer_batch`` is not False, an adapter with a real
+        ``dispatch_batch`` exists, a ``deadline`` is persisted, and
+        ``deadline - now > 24h``. Legacy rows with no persisted deadline
+        are skipped (they fall through to the sync due-sweep), never
+        errored.
+        """
+        now = _now_utc()
+        out: list[TaskRecord] = []
+        seen: set[str] = set()
+
+        def consider(record: TaskRecord) -> None:
+            if record.task_id in seen:
+                return
+            if record.status != "scheduled":
+                return
+            if not record.body_json:
+                return
+            if not record.deadline:
+                return  # legacy row → sync path
+            deadline_dt = _parse_iso(record.deadline)
+            if deadline_dt is None or (deadline_dt - now) <= timedelta(hours=24):
+                return
+            try:
+                raw = json.loads(record.body_json)
+            except (TypeError, ValueError):
+                return  # corrupt → sync due-sweep fails it with a clear error
+            if not isinstance(raw, dict) or raw.get("type") != "provider_call":
+                return
+            if raw.get("prefer_batch", raw.get("preferBatch", True)) is False:
+                return
+            provider = raw.get("provider")
+            if provider not in ("anthropic", "openai"):
+                return
+            adapter = adapters.get(provider)
+            if adapter is None:
+                return
+            if not _has_batch_support(adapter):
+                return
+            seen.add(record.task_id)
+            out.append(record)
+
+        for record in list(self._tasks.values()):
+            consider(record)
+        if self._store is not None and self._connected:
+            for record in await self._store.list_by_status("scheduled"):
+                if record.task_id in seen:
+                    continue
+                self._tasks[record.task_id] = record
+                consider(record)
+        return out
+
+    async def _collect_submitted_candidates(
+        self, exclude: set[str] | None = None
+    ) -> list[TaskRecord]:
+        """Every ``submitted`` provider-call task awaiting batch results.
+
+        ``exclude`` skips tasks submitted earlier in the same tick — submit
+        and poll are distinct ticks by design.
+        """
+        exclude = exclude or set()
+        out: list[TaskRecord] = []
+        seen: set[str] = set()
+        for record in list(self._tasks.values()):
+            if record.task_id in exclude:
+                continue
+            if record.status != "submitted":
+                continue
+            if not record.batch_id:
+                continue
+            out.append(record)
+            seen.add(record.task_id)
+        if self._store is not None and self._connected:
+            for record in await self._store.list_by_status("submitted"):
+                if record.task_id in exclude or record.task_id in seen:
+                    continue
+                if not record.batch_id:
+                    continue
+                self._tasks[record.task_id] = record
+                out.append(record)
+        return out
 
     async def cancel_task(self, task_id: str) -> TaskRecord:
         """Cancel a queued or scheduled task. Idempotent.
@@ -1320,6 +1543,21 @@ class Scheduler:
         # Idempotent on terminal states.
         if record.status in ("completed", "failed", "cancelled"):
             return record
+
+        if record.status == "submitted":
+            # The task is already in flight at the provider's Batch API.
+            # cancel_task takes no adapters, so we cannot issue a
+            # provider-side cancel — mark it cancelled locally and warn
+            # that the batch may still run and bill. (Trivial provider
+            # cancel is deferred: the vendor batch-cancel endpoints are
+            # best-effort and racy against completion.)
+            _log.warning(
+                "[ebb-ai/scheduler] cancel_task: task %s was submitted to the "
+                "provider's Batch API (batch id %s); marking cancelled locally, "
+                "but the provider-side batch may still run and bill",
+                task_id,
+                record.batch_id or "unknown",
+            )
 
         # Mark cancelled FIRST, so an in-flight dispatch (this process or
         # another via the shared store) sees the cancellation when it
@@ -1373,6 +1611,12 @@ class Scheduler:
             raise RuntimeError(
                 f"expedite_task: task {task_id!r} has no body_json; "
                 "expedite is only valid for tasks enqueued via enqueue_provider_call"
+            )
+        if record.status == "submitted":
+            raise RuntimeError(
+                f"expedite_task: task {task_id!r} is already submitted to the "
+                f"provider's Batch API (batch id {record.batch_id or 'unknown'}); "
+                "poll with tick / check_queue_status"
             )
         if record.status in ("running", "completed", "failed", "cancelled"):
             raise RuntimeError(
@@ -1489,6 +1733,10 @@ class Scheduler:
         record.completed_at = None
         record.receipt = None
         record.intensity_source = None
+        # A retry re-dispatches synchronously via the expedite path — clear
+        # any stale batch_id from a prior batch attempt so the completed
+        # row no longer points at a dead/failed batch.
+        record.batch_id = None
         self._tasks[task_id] = record
         if self._store is not None and self._connected:
             await self._store.upsert(record)
@@ -1991,22 +2239,9 @@ class Scheduler:
         start = _now_utc()
         ran_at = start
 
-        # Batch-vs-sync decision. We compare scheduled_for to a
-        # 24h-from-now boundary; scheduled_for is the proxy (batch
-        # routing proper — status "submitted" + polling against
-        # record.deadline — lands in a later version). Expedited tasks
-        # (whose scheduled_for is set to "now") therefore never go
-        # through the batch endpoint, which is the right call.
-        scheduled_for_ts = (
-            _parse_iso(record.scheduled_for) if record.scheduled_for else None
-        )
-        more_than_24h = (
-            scheduled_for_ts is not None
-            and (scheduled_for_ts - _now_utc()) > timedelta(hours=24)
-        )
-        use_batch = (
-            spec.prefer_batch and more_than_24h and hasattr(adapter, "dispatch_batch")
-        )
+        # Batch routing (deadline > 24h) is handled by the dedicated
+        # submit/poll sweeps in tick(); by the time a task reaches this
+        # sync due-sweep it is a genuine synchronous call.
 
         # Build adapter DispatchOptions.
         from .providers.base import DispatchOptions  # local import to avoid cycle
@@ -2027,14 +2262,9 @@ class Scheduler:
         # a post-success exception must never strand a zombie "running"
         # row, hang the defer() awaiter, or crash tick() (§0.5-PY).
         try:
-            if use_batch:
-                result_obj: Any = await _retry_with_backoff(
-                    lambda: adapter.dispatch_batch(spec.model, [spec.prompt], opts)
-                )
-            else:
-                result_obj = await _retry_with_backoff(
-                    lambda: adapter.dispatch(spec.model, spec.prompt, opts)
-                )
+            result_obj: Any = await _retry_with_backoff(
+                lambda: adapter.dispatch(spec.model, spec.prompt, opts)
+            )
         except asyncio.CancelledError:
             raise
         except Exception as err:
@@ -2199,6 +2429,313 @@ class Scheduler:
                 spec.output_path, task_id, record.result, receipt
             )
         return TickResultEntry(task_id=task_id, status="completed")
+
+    async def _submit_batch(
+        self,
+        record: TaskRecord,
+        adapters: dict[str, ProviderAdapter | None],
+    ) -> TickResultEntry:
+        """Submit a batch-eligible task to the provider's Batch API.
+
+        The row was already claimed (scheduled → running) by the caller.
+        On success the task transitions to ``submitted`` with the returned
+        ``batch_id`` persisted — the provider now owns the execution hour
+        (within its 24h SLA), and a later tick's poll sweep completes it.
+        On submit failure → failed (retry_task can re-dispatch sync). No
+        receipt is written here: carbon is scored only when real results
+        (and usage) arrive at poll time.
+        """
+        task_id = record.task_id
+        try:
+            raw = json.loads(record.body_json or "null")
+        except (TypeError, ValueError) as err:
+            msg = f"tick: corrupt body_json: {err}"
+            await self._fail(task_id, RuntimeError(msg))
+            return TickResultEntry(task_id=task_id, status="failed", error=msg)
+        try:
+            spec = ProviderCallSpec.from_dict(raw)
+        except ValueError as err:
+            msg = f"tick: invalid provider_call spec: {err}"
+            await self._fail(task_id, RuntimeError(msg))
+            return TickResultEntry(task_id=task_id, status="failed", error=msg)
+
+        adapter = adapters.get(spec.provider)
+        if adapter is None or not _has_batch_support(adapter):
+            # Should not happen — _collect_batch_submit_candidates filtered
+            # — but stay defensive.
+            msg = (
+                "tick: batch submit selected but adapter/dispatch_batch "
+                f"missing for {spec.provider!r}"
+            )
+            await self._fail(task_id, RuntimeError(msg))
+            return TickResultEntry(task_id=task_id, status="failed", error=msg)
+
+        from .providers.base import DispatchOptions  # local import to avoid cycle
+
+        opts = DispatchOptions(
+            max_tokens=spec.max_tokens if spec.max_tokens is not None else 1024,
+            system=spec.system_prompt,
+            extra={"temperature": spec.temperature}
+            if spec.temperature is not None
+            else {},
+        )
+        try:
+            handle = await _retry_with_backoff(
+                lambda: adapter.dispatch_batch(spec.model, [spec.prompt], opts)
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as err:
+            msg = str(err)
+            record.status = "failed"
+            record.completed_at = _iso_utc(_now_utc())
+            record.error = msg
+            self._tasks[task_id] = record
+            if self._store is not None and self._connected:
+                await self._store.upsert(record)
+            return TickResultEntry(task_id=task_id, status="failed", error=msg)
+
+        record.status = "submitted"
+        record.batch_id = getattr(handle, "batch_id", None)
+        self._tasks[task_id] = record
+        if self._store is not None and self._connected:
+            try:
+                await self._store.upsert(record)
+            except Exception as err:
+                _log.warning(
+                    "[ebb-ai/scheduler] failed to persist submitted task %s: %s",
+                    task_id,
+                    err,
+                )
+        return TickResultEntry(task_id=task_id, status="submitted")
+
+    async def _poll_batch(
+        self,
+        record: TaskRecord,
+        adapters: dict[str, ProviderAdapter | None],
+    ) -> TickResultEntry:
+        """Poll a ``submitted`` task's batch.
+
+        The row was already claimed (submitted → running) by the caller.
+        On ``in_progress`` transition back to ``submitted``; on
+        ``completed`` build the full receipt exactly like the sync path
+        (real usage tokens + provenance + signing + output file) and mark
+        completed; on ``failed`` / ``expired`` mark failed with the
+        provider error (retry_task re-dispatches sync).
+        """
+        task_id = record.task_id
+        try:
+            raw = json.loads(record.body_json or "null")
+        except (TypeError, ValueError) as err:
+            msg = f"tick: corrupt body_json: {err}"
+            await self._fail(task_id, RuntimeError(msg))
+            return TickResultEntry(task_id=task_id, status="failed", error=msg)
+        try:
+            spec = ProviderCallSpec.from_dict(raw)
+        except ValueError as err:
+            msg = f"tick: invalid provider_call spec: {err}"
+            await self._fail(task_id, RuntimeError(msg))
+            return TickResultEntry(task_id=task_id, status="failed", error=msg)
+
+        adapter = adapters.get(spec.provider)
+        if adapter is None or not _has_batch_support(adapter):
+            # No poller available: return the row to "submitted" so a later
+            # tick with a capable adapter picks it up. The batch is
+            # genuinely in flight at the provider — do not fail it.
+            record.status = "submitted"
+            self._tasks[task_id] = record
+            if self._store is not None and self._connected:
+                await self._store.upsert(record)
+            _log.warning(
+                "[ebb-ai/scheduler] tick: no retrieve_batch on adapter for "
+                "%r; leaving %s submitted",
+                spec.provider,
+                task_id,
+            )
+            return TickResultEntry(task_id=task_id, status="submitted")
+
+        batch_id = record.batch_id
+        if not batch_id:
+            msg = "tick: submitted task has no batch_id"
+            await self._fail(task_id, RuntimeError(msg))
+            return TickResultEntry(task_id=task_id, status="failed", error=msg)
+
+        ran_at = _now_utc()
+        try:
+            poll = await _retry_with_backoff(
+                lambda: adapter.retrieve_batch(batch_id)
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as err:
+            # A transient poll error must not fail a genuinely in-flight
+            # batch: return it to "submitted" and let a later tick retry.
+            record.status = "submitted"
+            self._tasks[task_id] = record
+            if self._store is not None and self._connected:
+                await self._store.upsert(record)
+            _log.warning(
+                "[ebb-ai/scheduler] tick: retrieve_batch failed for %s (%s); "
+                "leaving submitted",
+                task_id,
+                err,
+            )
+            return TickResultEntry(task_id=task_id, status="submitted")
+
+        if poll.status == "in_progress":
+            record.status = "submitted"
+            self._tasks[task_id] = record
+            if self._store is not None and self._connected:
+                await self._store.upsert(record)
+            return TickResultEntry(task_id=task_id, status="submitted")
+        if poll.status in ("failed", "expired"):
+            msg = poll.error or f"batch {poll.status}"
+            record.status = "failed"
+            record.completed_at = _iso_utc(_now_utc())
+            record.error = msg
+            self._tasks[task_id] = record
+            if self._store is not None and self._connected:
+                await self._store.upsert(record)
+            return TickResultEntry(task_id=task_id, status="failed", error=msg)
+
+        # completed — take the first (single-prompt) result.
+        first = poll.results[0] if poll.results else None
+        if first is None:
+            msg = "batch completed with no results"
+            record.status = "failed"
+            record.completed_at = _iso_utc(_now_utc())
+            record.error = msg
+            self._tasks[task_id] = record
+            if self._store is not None and self._connected:
+                await self._store.upsert(record)
+            return TickResultEntry(task_id=task_id, status="failed", error=msg)
+
+        # Shape a DispatchResult so the receipt path is identical to sync.
+        from .providers.base import DispatchResult  # local import to avoid cycle
+
+        result_obj = DispatchResult(
+            text=first.text,
+            model=first.model or spec.model,
+            provider=spec.provider,
+            raw=None,
+            input_tokens=first.input_tokens,
+            output_tokens=first.output_tokens,
+        )
+
+        intensity_g: float | None = None
+        grid_source: GridSource | None = None
+        try:
+            intensity_g, grid_source = await self._fetch_current_intensity(
+                record.region, ran_at
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as err:
+            _log.warning(
+                "[ebb-ai/scheduler] intensity fetch for the receipt failed (%s); "
+                "receipt falls back to the schedule-time estimate",
+                err,
+            )
+
+        input_tokens = first.input_tokens
+        output_tokens = first.output_tokens
+        actual_model = first.model or spec.model
+        total_tokens = first.total_tokens
+        if total_tokens is None and input_tokens is not None and output_tokens is not None:
+            total_tokens = input_tokens + output_tokens
+        receipt: CarbonReceipt | None = None
+        try:
+            actual_carbon = (
+                _round_half_up(
+                    _intensity_to_grams(
+                        intensity_g,
+                        model=actual_model,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                    )
+                    * 10
+                )
+                / 10
+                if intensity_g is not None
+                else (record.estimated_carbon_g_co2 or 0.0)
+            )
+            estimated_carbon = (
+                record.estimated_carbon_g_co2
+                if record.estimated_carbon_g_co2 is not None
+                else actual_carbon
+            )
+            delta_pct = (
+                _round_half_up(
+                    ((actual_carbon - estimated_carbon) / estimated_carbon) * 1000
+                )
+                / 10
+                if estimated_carbon > 0
+                else 0.0
+            )
+            receipt = self._maybe_sign(
+                CarbonReceipt(
+                    task_id=task_id,
+                    ran_at=_iso_utc(ran_at),
+                    region=record.region,
+                    estimated_carbon_g_co2=estimated_carbon,
+                    actual_carbon_g_co2=actual_carbon,
+                    delta_pct=delta_pct,
+                    provider=spec.provider,
+                    model=actual_model,
+                    prompt=_redact_prompt(spec.prompt, spec.redact_in_receipt),
+                    total_tokens=total_tokens,
+                    intensity_g_co2_per_kwh=intensity_g,
+                    grid_source=grid_source,
+                    energy_source=lookup_model_energy(actual_model).source,
+                )
+            )
+        except Exception as err:
+            _log.warning(
+                "[ebb-ai/scheduler] failed to build the carbon receipt for %s: %s; "
+                "task stays completed without a receipt",
+                task_id,
+                err,
+            )
+        record.status = "completed"
+        record.completed_at = _iso_utc(_now_utc())
+        record.result = _result_to_serializable(result_obj)
+        record.receipt = receipt
+        record.intensity_source = "scored"  # type: ignore[assignment]
+        record.body_json = _redact_body_json(record.body_json)
+        self._tasks[task_id] = record
+        if self._store is not None and self._connected:
+            try:
+                await self._store.upsert(record)
+            except Exception as err:
+                _log.warning(
+                    "[ebb-ai/scheduler] failed to persist completed task %s: %s",
+                    task_id,
+                    err,
+                )
+        if spec.output_path and receipt is not None:
+            await _write_output_file(
+                spec.output_path, task_id, record.result, receipt
+            )
+        return TickResultEntry(task_id=task_id, status="completed")
+
+
+def _has_batch_support(adapter: Any) -> bool:
+    """True if the adapter implements a *real* ``retrieve_batch`` (i.e. the
+    base-class NotImplementedError stub is overridden) and ``dispatch_batch``.
+
+    The scheduler feature-detects this before routing a task through the
+    batch path — a third-party adapter that only implements the sync
+    surface stays on the sync path.
+    """
+    from .providers.base import ProviderAdapter as _Base
+
+    if not hasattr(adapter, "dispatch_batch"):
+        return False
+    retrieve = getattr(type(adapter), "retrieve_batch", None)
+    if retrieve is None:
+        return False
+    # Overridden if it is not the base ABC's stub.
+    return retrieve is not _Base.retrieve_batch
 
 
 def _result_to_serializable(value: Any) -> Any:

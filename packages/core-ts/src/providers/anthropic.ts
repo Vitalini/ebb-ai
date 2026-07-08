@@ -12,6 +12,7 @@
 
 import type {
   BatchHandle,
+  BatchRetrieveResult,
   DispatchOptions,
   DispatchResult,
   ProviderAdapter,
@@ -32,6 +33,8 @@ interface AnthropicMessagesClient {
     create(req: unknown): Promise<unknown>;
     batches: {
       create(req: unknown): Promise<unknown>;
+      retrieve(batchId: string): Promise<unknown>;
+      results(batchId: string): Promise<AsyncIterable<unknown>>;
     };
   };
 }
@@ -116,6 +119,82 @@ export class AnthropicAdapter implements ProviderAdapter {
       throw new Error("Anthropic Batch API returned no batch id");
     }
     return { batchId: res.id, provider: this.provider, size: prompts.length };
+  }
+
+  /**
+   * Poll a Message Batch. Maps Anthropic's
+   * `processing_status` ("in_progress" | "canceling" | "ended") plus the
+   * per-request `request_counts` onto the uniform BatchRetrieveResult.
+   * Once the batch has ended we stream `messages.batches.results`, which
+   * yields one entry per request with a `result` union (succeeded /
+   * errored / expired / canceled).
+   */
+  async retrieveBatch(batchId: string): Promise<BatchRetrieveResult> {
+    const client = await this.getClient();
+    const batch = (await client.messages.batches.retrieve(batchId)) as {
+      processing_status?: string;
+    };
+    if (batch.processing_status !== "ended") {
+      // "in_progress" and "canceling" are both still-running from our POV.
+      return { status: "in_progress" };
+    }
+    const results: NonNullable<BatchRetrieveResult["results"]> = [];
+    let sawExpired = false;
+    let sawError = false;
+    let firstError: string | undefined;
+    const iterable = await client.messages.batches.results(batchId);
+    for await (const entry of iterable) {
+      const e = entry as {
+        result?: {
+          type?: string;
+          message?: {
+            content?: Array<{ type: string; text?: string }>;
+            usage?: { input_tokens?: number; output_tokens?: number };
+            model?: string;
+          };
+          error?: { message?: string; type?: string };
+        };
+      };
+      const type = e.result?.type;
+      if (type === "succeeded") {
+        const message = e.result?.message;
+        const text = (message?.content ?? [])
+          .filter((b) => b.type === "text" && typeof b.text === "string")
+          .map((b) => b.text as string)
+          .join("");
+        const inputTokens = message?.usage?.input_tokens;
+        const outputTokens = message?.usage?.output_tokens;
+        results.push({
+          text,
+          model: message?.model,
+          usage: {
+            inputTokens,
+            outputTokens,
+            totalTokens:
+              inputTokens !== undefined && outputTokens !== undefined
+                ? inputTokens + outputTokens
+                : undefined,
+          },
+        });
+      } else if (type === "expired") {
+        sawExpired = true;
+      } else {
+        sawError = true;
+        firstError ??=
+          e.result?.error?.message ?? `batch request result type: ${type}`;
+      }
+    }
+    if (results.length > 0) {
+      return { status: "completed", results };
+    }
+    if (sawExpired) {
+      return { status: "expired", error: "Anthropic batch request expired" };
+    }
+    if (sawError) {
+      return { status: "failed", error: firstError ?? "Anthropic batch request failed" };
+    }
+    // Ended with no parseable results — treat as failed rather than hang.
+    return { status: "failed", error: "Anthropic batch ended with no results" };
   }
 
   private async getClient(): Promise<AnthropicMessagesClient> {

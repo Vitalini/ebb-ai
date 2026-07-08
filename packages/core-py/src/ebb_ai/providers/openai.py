@@ -24,7 +24,14 @@ import json
 import re
 from typing import Any
 
-from .base import BatchHandle, DispatchOptions, DispatchResult, ProviderAdapter
+from .base import (
+    BatchHandle,
+    BatchResultItem,
+    BatchRetrieveResult,
+    DispatchOptions,
+    DispatchResult,
+    ProviderAdapter,
+)
 
 
 def _load_sdk() -> Any:
@@ -191,6 +198,103 @@ class OpenAIAdapter(ProviderAdapter):
             prompt_count=len(prompts),
             raw=batch,
         )
+
+    async def retrieve_batch(self, batch_id: str) -> BatchRetrieveResult:
+        """Poll an OpenAI batch.
+
+        Maps the batch ``status`` (``"validating"`` | ``"in_progress"`` |
+        ``"finalizing"`` | ``"completed"`` | ``"failed"`` | ``"expired"``
+        | ``"cancelled"``) onto the uniform result. When completed we
+        download the ``output_file_id`` content (JSONL, one line per
+        request) and parse each chat-completion ``response.body``.
+        """
+        batch = await self._client.batches.retrieve(batch_id)
+        status = getattr(batch, "status", None)
+        if status in ("validating", "in_progress", "finalizing"):
+            return BatchRetrieveResult(status="in_progress")
+        if status == "expired":
+            return BatchRetrieveResult(status="expired", error="OpenAI batch expired")
+        if status in ("failed", "cancelled", "cancelling"):
+            msg = _first_batch_error(batch) or f"OpenAI batch {status}"
+            return BatchRetrieveResult(status="failed", error=msg)
+
+        # status == "completed"
+        output_file_id = getattr(batch, "output_file_id", None)
+        if not output_file_id:
+            return BatchRetrieveResult(
+                status="failed", error="OpenAI batch completed with no output file"
+            )
+        content = await self._client.files.content(output_file_id)
+        text = await _read_file_content(content)
+        results: list[BatchResultItem] = []
+        for line in text.split("\n"):
+            trimmed = line.strip()
+            if not trimmed:
+                continue
+            try:
+                parsed = json.loads(trimmed)
+            except (TypeError, ValueError):
+                continue
+            body = (parsed.get("response") or {}).get("body")
+            if not isinstance(body, dict):
+                continue
+            choices = body.get("choices") or []
+            reply = ""
+            if choices:
+                message = choices[0].get("message") or {}
+                reply = message.get("content") or ""
+            usage = body.get("usage") or {}
+            results.append(
+                BatchResultItem(
+                    text=reply,
+                    model=body.get("model"),
+                    input_tokens=usage.get("prompt_tokens"),
+                    output_tokens=usage.get("completion_tokens"),
+                    total_tokens=usage.get("total_tokens"),
+                )
+            )
+        if not results:
+            return BatchRetrieveResult(
+                status="failed", error="OpenAI batch output had no parseable results"
+            )
+        return BatchRetrieveResult(status="completed", results=results)
+
+
+def _first_batch_error(batch: Any) -> str | None:
+    """Pull the first error message out of an OpenAI batch object."""
+    errors = getattr(batch, "errors", None)
+    data = getattr(errors, "data", None) if errors is not None else None
+    if data:
+        first = data[0]
+        return getattr(first, "message", None) or (
+            first.get("message") if isinstance(first, dict) else None
+        )
+    return None
+
+
+async def _read_file_content(content: Any) -> str:
+    """Read the body of an OpenAI Files ``content`` response as text.
+
+    The SDK's ``files.content`` returns an ``HttpxBinaryResponseContent``
+    exposing ``.text`` (str) and ``.read()`` (bytes); tests may inject a
+    plain string. Handle all three shapes.
+    """
+    if isinstance(content, str):
+        return content
+    text_attr = getattr(content, "text", None)
+    if isinstance(text_attr, str):
+        return text_attr
+    if callable(text_attr):
+        maybe = text_attr()
+        return await maybe if hasattr(maybe, "__await__") else maybe
+    read = getattr(content, "read", None)
+    if callable(read):
+        data = read()
+        data = await data if hasattr(data, "__await__") else data
+        if isinstance(data, (bytes, bytearray)):
+            return data.decode("utf-8")
+        return str(data)
+    return str(content)
 
 
 def _extract_text(response: Any) -> str:
