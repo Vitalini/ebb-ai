@@ -16,8 +16,35 @@ of pre-signed receipts also requires the extra. The scheduler itself
 silently falls back to writing unsigned receipts when the extra is
 absent, so the default install path remains v0.10-compatible.
 
-See ``packages/core-ts/src/sign.ts`` for the full design rationale,
-canonicalization rules, and key lifecycle.
+Cross-language canonical form (audit §0.3): there is exactly ONE
+canonical signing payload shared by both ports — the **camelCase wire
+rendering** of the receipt (the TS shape; ``ebb verify`` is the
+consumer). :func:`sign_receipt` converts the snake_case receipt dict to
+camelCase algorithmically before canonicalization, and numbers are
+serialized ECMAScript-style (RFC 8785 / JCS: ``2.0`` → ``"2"``,
+``1e-07`` → ``"1e-7"``) via :func:`es_number` so the canonical bytes
+match ``JSON.stringify`` exactly. The RETURNED receipt dict still
+carries snake_case keys and snake_case signature fields (``signature``,
+``signer_public_key``, ``signed_at``) — Python storage and consumers
+are unchanged.
+
+``signed_at`` is computed BEFORE canonicalization and is covered by the
+signature (v0.12+); only ``signature`` and ``signer_public_key`` sit
+outside the signed payload. Replay defence still requires ledger-side
+uniqueness (e.g. unique ``task_id``): a validly signed receipt can be
+presented twice.
+
+:func:`verify_receipt` accepts a receipt in EITHER key rendering
+(camelCase TS receipts included) and falls back to the legacy v0.11
+canonical forms for receipts signed by older releases.
+
+The shared fixture
+``packages/core-ts/test/fixtures/cross-lang-receipt-vectors.json`` pins
+the canonical bytes; both language test suites assert against it
+byte-for-byte.
+
+See ``packages/core-ts/src/sign.ts`` for the full design rationale and
+key lifecycle.
 """
 
 from __future__ import annotations
@@ -27,6 +54,7 @@ import contextlib
 import json
 import math
 import os
+import re
 import stat
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -86,14 +114,37 @@ def default_signing_key_path() -> Path:
     return Path.home() / ".ebb-ai" / "signing.key"
 
 
+def _write_bytes_atomic(path: Path, data: bytes, mode: int | None = None) -> None:
+    """Write ``data`` atomically: same-directory temp file + ``os.replace``.
+
+    Readers never observe a partial file; concurrent first-callers
+    converge on one winner. ``mode`` (if given) is applied to the temp
+    file BEFORE the rename so the final file never exists with loose
+    permissions.
+    """
+    tmp = path.with_name(f"{path.name}.tmp-{os.getpid()}")
+    try:
+        tmp.write_bytes(data)
+        if mode is not None:
+            # Best-effort chmod — some filesystems (WSL/Windows mounts) refuse it.
+            with contextlib.suppress(OSError):
+                os.chmod(tmp, mode)
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            tmp.unlink()
+        raise
+
+
 def load_or_create_signing_key(
     private_key_path: str | os.PathLike[str] | None = None,
 ) -> SigningKeyPair:
     """Load the local signing keypair, generating + persisting one on first call.
 
     Mirrors the TS ``loadOrCreateSigningKey()``: idempotent and safe under
-    concurrent first-call (file write through ``open(..., 'wb')`` is atomic
-    on POSIX; the first writer wins).
+    concurrent first-call (files are written atomically via
+    write-temp-then-rename; the winning writer's key is what both
+    callers converge on next load).
     """
     if not _HAS_CRYPTO:
         raise SigningNotInstalled()
@@ -117,11 +168,8 @@ def load_or_create_signing_key(
             format=serialization.PublicFormat.SubjectPublicKeyInfo,
         )
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(private_pem)
-        public_path.write_bytes(public_pem)
-        # Best-effort chmod — some filesystems (WSL/Windows mounts) refuse it.
-        with contextlib.suppress(OSError):
-            os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+        _write_bytes_atomic(path, private_pem, mode=stat.S_IRUSR | stat.S_IWUSR)
+        _write_bytes_atomic(public_path, public_pem)
 
     raw_pub = public_key.public_bytes(
         encoding=serialization.Encoding.Raw,
@@ -135,15 +183,99 @@ def load_or_create_signing_key(
     )
 
 
-_SIGNATURE_FIELDS = frozenset({"signature", "signer_public_key", "signed_at"})
+# Fields excluded from the signed payload — they are the proof itself.
+# NOTE: ``signedAt`` is NOT excluded: since v0.12 it is covered by the
+# signature (audit §0.8). These are the *normalized* (camelCase) names.
+_SIGNATURE_FIELDS = frozenset({"signature", "signerPublicKey"})
+
+# Every signature-machinery key, in both wire renderings.
+_SIGNATURE_FIELDS_ANY_RENDERING = frozenset(
+    {"signature", "signerPublicKey", "signer_public_key", "signedAt", "signed_at"}
+)
+
+_ES_SAFE_INT = 2**53
 
 
-def _canonicalize(value: Any) -> str:
+def es_number(value: int | float) -> str:
+    """Serialize a number exactly like ECMAScript ``JSON.stringify``.
+
+    RFC 8785 (JCS) number formatting: shortest round-trip digits,
+    integers without a trailing ``.0`` (``2.0`` → ``"2"``), positional
+    notation for magnitudes in ``[1e-6, 1e21)``, ES exponent style
+    outside it (``1e-07`` → ``"1e-7"``, ``1e21`` → ``"1e+21"``), and
+    ``-0.0`` → ``"0"``. Ints beyond 2**53 are coerced through float —
+    JavaScript would have parsed them as IEEE-754 doubles anyway.
+    """
+    if isinstance(value, bool):  # bool is an int subclass; not a number here.
+        raise TypeError("es_number: booleans are not numbers")
+    if isinstance(value, int):
+        if -_ES_SAFE_INT <= value <= _ES_SAFE_INT:
+            return str(value)
+        value = float(value)  # beyond safe range JS sees a double
+    if not math.isfinite(value):
+        raise ValueError(f"canonicalize: refusing non-finite number {value}")
+    if value == 0:
+        return "0"  # covers -0.0 → "0", matching JSON.stringify(-0)
+
+    # repr() gives the shortest round-trip decimal form; re-render it
+    # with ECMAScript's Number::toString notation rules (ECMA-262
+    # §6.1.6.1.20). Represent value as 0.<digits> * 10**n.
+    text = repr(value)
+    sign = ""
+    if text.startswith("-"):
+        sign, text = "-", text[1:]
+    mantissa, _, exp_text = text.partition("e")
+    exponent = int(exp_text) if exp_text else 0
+    int_part, _, frac_part = mantissa.partition(".")
+    combined = int_part + frac_part
+    digits = combined.lstrip("0")
+    leading_zeros = len(combined) - len(digits)
+    digits = digits.rstrip("0")
+    n = len(int_part) - leading_zeros + exponent
+    k = len(digits)
+
+    if k <= n <= 21:
+        body = digits + "0" * (n - k)
+    elif 0 < n <= 21:
+        body = f"{digits[:n]}.{digits[n:]}"
+    elif -6 < n <= 0:
+        body = "0." + "0" * (-n) + digits
+    else:
+        e = n - 1
+        head = digits if k == 1 else f"{digits[0]}.{digits[1:]}"
+        body = f"{head}e{'+' if e >= 0 else '-'}{abs(e)}"
+    return sign + body
+
+
+def _snake_to_camel(key: str) -> str:
+    """``snake_case`` → ``camelCase``; already-camel keys pass through unchanged."""
+    return re.sub(r"_([a-z0-9])", lambda m: m.group(1).upper(), key)
+
+
+def _normalize_keys(value: Any) -> Any:
+    """Normalize to the canonical camelCase wire rendering.
+
+    Keys are converted snake→camel *algorithmically* (no hardcoded field
+    list — future receipt fields are covered automatically) and
+    ``None``-valued object keys are dropped (Python's ``None`` and TS's
+    ``undefined`` both mean "field absent"). Lists keep ``None`` elements.
+    """
+    if isinstance(value, list):
+        return [_normalize_keys(v) for v in value]
+    if isinstance(value, dict):
+        return {_snake_to_camel(k): _normalize_keys(v) for k, v in value.items() if v is not None}
+    return value
+
+
+def _canonicalize(value: Any, *, es_numbers: bool = True) -> str:
     """Deterministic JSON serialization. Mirrors the TS canonicalize().
 
     - Object keys sorted recursively.
     - ``None``-valued keys dropped (parity with TS dropping ``undefined``).
-    - Numbers serialized via :func:`json.dumps` (shortest round-trip).
+    - Numbers serialized ECMAScript-style via :func:`es_number` so the
+      bytes match ``JSON.stringify`` cross-language (``es_numbers=False``
+      reproduces the legacy ≤v0.11 ``json.dumps`` formatting for
+      backward-compatible verification only).
     - Non-finite numbers (NaN, ±Inf) raise — the canonical form is total.
     """
     if value is None:
@@ -153,23 +285,55 @@ def _canonicalize(value: Any) -> str:
     if isinstance(value, (int, float)):
         if isinstance(value, float) and not math.isfinite(value):
             raise ValueError(f"canonicalize: refusing non-finite number {value}")
-        return json.dumps(value)
+        return es_number(value) if es_numbers else json.dumps(value)
     if isinstance(value, str):
         return json.dumps(value, ensure_ascii=False)
     if isinstance(value, list):
-        return "[" + ",".join(_canonicalize(v) for v in value) + "]"
+        return "[" + ",".join(_canonicalize(v, es_numbers=es_numbers) for v in value) + "]"
     if isinstance(value, dict):
         keys = sorted(k for k, v in value.items() if v is not None)
         return (
             "{"
-            + ",".join(f"{json.dumps(k)}:{_canonicalize(value[k])}" for k in keys)
+            + ",".join(
+                f"{json.dumps(k, ensure_ascii=False)}:{_canonicalize(value[k], es_numbers=es_numbers)}"
+                for k in keys
+            )
             + "}"
         )
     raise TypeError(f"canonicalize: unsupported type {type(value).__name__}")
 
 
-def _strip_signature_fields(receipt: dict[str, Any]) -> dict[str, Any]:
-    return {k: v for k, v in receipt.items() if k not in _SIGNATURE_FIELDS and v is not None}
+def canonical_receipt_payload(
+    receipt: dict[str, Any],
+    *,
+    exclude_signed_at: bool = False,
+) -> str:
+    """The exact canonical byte string a receipt's signature covers.
+
+    camelCase-normalized payload minus ``signature``/``signerPublicKey``,
+    canonicalized with ES number formatting. Pass ``exclude_signed_at``
+    to reproduce the legacy v0.11 form (payloads signed before
+    ``signedAt`` entered the signature). Byte-for-byte identical to the
+    TS ``canonicalReceiptPayload()``.
+    """
+    normalized = _normalize_keys(receipt)
+    payload = {
+        k: v
+        for k, v in normalized.items()
+        if k not in _SIGNATURE_FIELDS and not (exclude_signed_at and k == "signedAt")
+    }
+    return _canonicalize(payload)
+
+
+def _legacy_snake_canonical(receipt: dict[str, Any]) -> str:
+    """Legacy ≤v0.11 Python canonical form: raw snake_case keys, no
+    ``signed_at``, ``json.dumps`` number formatting."""
+    payload = {
+        k: v
+        for k, v in receipt.items()
+        if k not in _SIGNATURE_FIELDS_ANY_RENDERING and v is not None
+    }
+    return _canonicalize(payload, es_numbers=False)
 
 
 def sign_receipt(
@@ -180,18 +344,20 @@ def sign_receipt(
 ) -> dict[str, Any]:
     """Return a new dict with signature, signer_public_key, signed_at populated.
 
-    The input receipt is not mutated. Field names use snake_case to match
-    the Python receipt schema; verification in the TS verifier is
-    cross-language compatible iff the consumer first applies
-    snake↔camel translation (the on-wire receipt format is the
-    operator's choice).
+    The input receipt is not mutated. The signature covers the ONE
+    cross-language canonical form: the camelCase wire rendering of the
+    receipt (converted algorithmically) WITH ``signedAt`` included —
+    a receipt signed here verifies as-is in the TS ``verifyReceipt``
+    (``ebb verify``) and vice versa. The returned dict still carries
+    snake_case keys and snake_case signature fields, so Python storage
+    and consumers are unchanged.
     """
     if not _HAS_CRYPTO:
         raise SigningNotInstalled()
-    payload = _strip_signature_fields(receipt)
-    canonical = _canonicalize(payload).encode("utf-8")
-    sig = key_pair.private_key.sign(canonical)
     timestamp = (now or datetime.now(UTC)).isoformat()
+    claims = {k: v for k, v in receipt.items() if k not in _SIGNATURE_FIELDS_ANY_RENDERING}
+    canonical = canonical_receipt_payload({**claims, "signedAt": timestamp}).encode("utf-8")
+    sig = key_pair.private_key.sign(canonical)
     return {
         **receipt,
         "signature": base64.b64encode(sig).decode("ascii"),
@@ -207,14 +373,22 @@ def verify_receipt(
 ) -> VerifyResult:
     """Verify a (possibly signed) receipt — mirrors the TS verifyReceipt().
 
+    Accepts the receipt in EITHER key rendering — snake_case (Python
+    ledger rows) or camelCase (TS wire shape) — keys are normalized
+    algorithmically before canonicalization.
+
     Outcomes:
-      - ``valid``           — Ed25519 signature matches the canonical payload.
-      - ``tampered``        — signed receipt whose signature is no longer valid.
+      - ``valid``           — Ed25519 signature matches the canonical payload
+                              (v0.12 form with ``signedAt`` covered, or a
+                              legacy v0.11 form — the reason says which).
+      - ``tampered``        — signed receipt whose signature matches none of
+                              the canonical forms of its fields.
       - ``key-mismatch``    — ``trusted_public_key`` set, receipt signed by someone else.
       - ``legacy-unsigned`` — pre-v0.11 receipt (or unsigned by config).
     """
-    signature = receipt.get("signature")
-    signer = receipt.get("signer_public_key")
+    normalized = _normalize_keys(receipt)
+    signature = normalized.get("signature")
+    signer = normalized.get("signerPublicKey")
     if not signature or not signer:
         return VerifyResult(
             outcome="legacy-unsigned",
@@ -234,22 +408,46 @@ def verify_receipt(
     if len(raw_pub) != 32:
         raise ValueError(f"signer_public_key must be 32 bytes (got {len(raw_pub)})")
     public_key = ed25519.Ed25519PublicKey.from_public_bytes(raw_pub)
-    payload = _strip_signature_fields(receipt)
-    canonical = _canonicalize(payload).encode("utf-8")
-    try:
-        public_key.verify(base64.b64decode(signature), canonical)
-    except Exception:  # InvalidSignature
-        return VerifyResult(
-            outcome="tampered",
-            signer_public_key=signer,
-            reason="Ed25519 signature does not match the canonical payload — "
-            "receipt was modified after signing",
+    sig_bytes = base64.b64decode(signature)
+
+    def _matches(canonical: str) -> bool:
+        try:
+            public_key.verify(sig_bytes, canonical.encode("utf-8"))
+        except Exception:  # InvalidSignature
+            return False
+        return True
+
+    # Verification order (audit §0.3): (a) v0.12 canonical form — camelCase
+    # payload WITH signedAt covered; (b) legacy v0.11 form — signedAt
+    # excluded; (c) legacy ≤v0.11 Python snake_case rendering (signed the
+    # snake dict as-is, json.dumps numbers). Only after every form fails →
+    # tampered.
+    attempts: list[tuple[str, bool]] = []
+
+    def _push_unique(canonical: str, legacy: bool) -> None:
+        if all(canonical != seen for seen, _ in attempts):
+            attempts.append((canonical, legacy))
+
+    _push_unique(canonical_receipt_payload(receipt), False)
+    _push_unique(canonical_receipt_payload(receipt, exclude_signed_at=True), True)
+    _push_unique(_legacy_snake_canonical(receipt), True)
+
+    for canonical, legacy in attempts:
+        if not _matches(canonical):
+            continue
+        reason = (
+            "Ed25519 signature verified against legacy v0.11 canonical form "
+            f"(signedAt not covered; {len(canonical.encode('utf-8'))} bytes)"
+            if legacy
+            else "Ed25519 signature verified against canonical payload "
+            f"({len(canonical.encode('utf-8'))} bytes)"
         )
+        return VerifyResult(outcome="valid", signer_public_key=signer, reason=reason)
     return VerifyResult(
-        outcome="valid",
+        outcome="tampered",
         signer_public_key=signer,
-        reason=f"Ed25519 signature verified against canonical payload "
-        f"({len(canonical)} bytes)",
+        reason="Ed25519 signature does not match the canonical payload — "
+        "receipt was modified after signing",
     )
 
 
@@ -258,7 +456,9 @@ __all__ = [
     "SigningNotInstalled",
     "VerifyOutcome",
     "VerifyResult",
+    "canonical_receipt_payload",
     "default_signing_key_path",
+    "es_number",
     "is_signing_available",
     "load_or_create_signing_key",
     "sign_receipt",

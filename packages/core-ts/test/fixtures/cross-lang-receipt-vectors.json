@@ -1,0 +1,154 @@
+{
+  "_comment": [
+    "Shared cross-language receipt signing test vectors (audit §0.3).",
+    "Consumed byte-for-byte by BOTH packages/core-ts/test/sign-vectors.test.ts",
+    "and packages/core-py/tests/test_sign_vectors.py — keep in lockstep.",
+    "privateKeyPem is a THROWAWAY Ed25519 key generated once for this fixture.",
+    "It is TEST-ONLY, intentionally public, and protects nothing.",
+    "Ed25519 is deterministic, so suites may re-sign `receipt` (with the fixed",
+    "signedAt) and assert the exact `signature` bytes."
+  ],
+  "signerPublicKeyBase64": "7l7DiP7+qwhqOxgWmwA1mFQfQ/q+MQugu0rMPYuojgU=",
+  "vectors": [
+    {
+      "description": "v0.12 camelCase receipt — signedAt covered by the signature; null-valued `prompt` excluded from the canonical form",
+      "legacyV011": false,
+      "privateKeyPem": "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIAAOh7m8nGkSotPu+auTLXSyG/C3XjJV251/026Vw9eM\n-----END PRIVATE KEY-----\n",
+      "receipt": {
+        "taskId": "vec-1-v012-camel",
+        "ranAt": "2026-07-01T04:00:00.000Z",
+        "region": "US-CAL-CISO",
+        "estimatedCarbonGCo2": 0.6,
+        "actualCarbonGCo2": 2.0,
+        "deltaPct": -12.5,
+        "provider": "anthropic",
+        "model": "claude-sonnet-4-5",
+        "durationMs": 1234,
+        "totalTokens": 4096,
+        "prompt": null
+      },
+      "signedAt": "2026-07-01T04:00:01.000Z",
+      "expectedCanonical": "{\"actualCarbonGCo2\":2,\"deltaPct\":-12.5,\"durationMs\":1234,\"estimatedCarbonGCo2\":0.6,\"model\":\"claude-sonnet-4-5\",\"provider\":\"anthropic\",\"ranAt\":\"2026-07-01T04:00:00.000Z\",\"region\":\"US-CAL-CISO\",\"signedAt\":\"2026-07-01T04:00:01.000Z\",\"taskId\":\"vec-1-v012-camel\",\"totalTokens\":4096}",
+      "signedReceipt": {
+        "taskId": "vec-1-v012-camel",
+        "ranAt": "2026-07-01T04:00:00.000Z",
+        "region": "US-CAL-CISO",
+        "estimatedCarbonGCo2": 0.6,
+        "actualCarbonGCo2": 2.0,
+        "deltaPct": -12.5,
+        "provider": "anthropic",
+        "model": "claude-sonnet-4-5",
+        "durationMs": 1234,
+        "totalTokens": 4096,
+        "prompt": null,
+        "signature": "YYIApkCra28RY6tIUXWmotf5nfZigF84oq+JQUrAHksjD3Z9okaDun1FvkiO3Fas/w9c4GhD+05ByLG6TqWlAg==",
+        "signerPublicKey": "7l7DiP7+qwhqOxgWmwA1mFQfQ/q+MQugu0rMPYuojgU=",
+        "signedAt": "2026-07-01T04:00:01.000Z"
+      }
+    },
+    {
+      "description": "legacy v0.11 camelCase receipt — signature covers the payload WITHOUT signedAt; must verify via the legacy fallback",
+      "legacyV011": true,
+      "privateKeyPem": "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIAAOh7m8nGkSotPu+auTLXSyG/C3XjJV251/026Vw9eM\n-----END PRIVATE KEY-----\n",
+      "receipt": {
+        "taskId": "vec-2-v011-legacy",
+        "ranAt": "2026-06-01T12:00:00.000Z",
+        "region": "DE",
+        "estimatedCarbonGCo2": 3.2,
+        "actualCarbonGCo2": 3.4,
+        "deltaPct": 6.3,
+        "model": "claude-haiku-4-5",
+        "durationMs": 987.5
+      },
+      "signedAt": "2026-06-01T12:00:01.000Z",
+      "expectedCanonical": "{\"actualCarbonGCo2\":3.4,\"deltaPct\":6.3,\"durationMs\":987.5,\"estimatedCarbonGCo2\":3.2,\"model\":\"claude-haiku-4-5\",\"ranAt\":\"2026-06-01T12:00:00.000Z\",\"region\":\"DE\",\"taskId\":\"vec-2-v011-legacy\"}",
+      "signedReceipt": {
+        "taskId": "vec-2-v011-legacy",
+        "ranAt": "2026-06-01T12:00:00.000Z",
+        "region": "DE",
+        "estimatedCarbonGCo2": 3.2,
+        "actualCarbonGCo2": 3.4,
+        "deltaPct": 6.3,
+        "model": "claude-haiku-4-5",
+        "durationMs": 987.5,
+        "signature": "a89REXKfapqltOh2YevATkikyUvmtIimcypKCeiyMAhhrXZKatq0NCnprpfb/xCTg8Zl9WkHmeIOFfbEuKHcBA==",
+        "signerPublicKey": "7l7DiP7+qwhqOxgWmwA1mFQfQ/q+MQugu0rMPYuojgU=",
+        "signedAt": "2026-06-01T12:00:01.000Z"
+      }
+    },
+    {
+      "description": "snake_case rendering — Python sign_receipt() output verbatim; signature covers the camelCase canonical form, receipt keys stay snake_case",
+      "legacyV011": false,
+      "privateKeyPem": "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIAAOh7m8nGkSotPu+auTLXSyG/C3XjJV251/026Vw9eM\n-----END PRIVATE KEY-----\n",
+      "receipt": {
+        "task_id": "vec-3-py-snake",
+        "ran_at": "2026-07-01T06:00:00+00:00",
+        "region": "SE",
+        "estimated_carbon_g_co2": 0.6,
+        "actual_carbon_g_co2": 2.0,
+        "delta_pct": 233.3,
+        "provider": null,
+        "model": "claude-opus-4-1",
+        "duration_ms": 2500.0,
+        "prompt": "Grüße, 世界 — carbon ☀️",
+        "total_tokens": 1000
+      },
+      "signedAt": "2026-07-01T06:00:01+00:00",
+      "expectedCanonical": "{\"actualCarbonGCo2\":2,\"deltaPct\":233.3,\"durationMs\":2500,\"estimatedCarbonGCo2\":0.6,\"model\":\"claude-opus-4-1\",\"prompt\":\"Grüße, 世界 — carbon ☀️\",\"ranAt\":\"2026-07-01T06:00:00+00:00\",\"region\":\"SE\",\"signedAt\":\"2026-07-01T06:00:01+00:00\",\"taskId\":\"vec-3-py-snake\",\"totalTokens\":1000}",
+      "signedReceipt": {
+        "task_id": "vec-3-py-snake",
+        "ran_at": "2026-07-01T06:00:00+00:00",
+        "region": "SE",
+        "estimated_carbon_g_co2": 0.6,
+        "actual_carbon_g_co2": 2.0,
+        "delta_pct": 233.3,
+        "provider": null,
+        "model": "claude-opus-4-1",
+        "duration_ms": 2500.0,
+        "prompt": "Grüße, 世界 — carbon ☀️",
+        "total_tokens": 1000,
+        "signature": "V5d+tbt14bNyziZss8TSjHYzB3MgucrfyAkZ5uPKI55JwrtugPnjcr2c7PxKm8aFa9TOadjQGLmpiasuX8I5Dg==",
+        "signer_public_key": "7l7DiP7+qwhqOxgWmwA1mFQfQ/q+MQugu0rMPYuojgU=",
+        "signed_at": "2026-07-01T06:00:01+00:00"
+      }
+    },
+    {
+      "description": "numbers torture — ES/RFC-8785 number formatting: 2.0→2, 1e-7→1e-7, 1e21→1e+21, 1e20 positional, 0.000001 positional, int beyond 2^53 rounds like an IEEE double",
+      "legacyV011": false,
+      "privateKeyPem": "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIAAOh7m8nGkSotPu+auTLXSyG/C3XjJV251/026Vw9eM\n-----END PRIVATE KEY-----\n",
+      "receipt": {
+        "taskId": "vec-4-numbers-torture",
+        "ranAt": "2026-07-01T07:00:00.000Z",
+        "region": "PL",
+        "estimatedCarbonGCo2": 2.0,
+        "actualCarbonGCo2": 0.1,
+        "deltaPct": -0.5,
+        "durationMs": 1e-07,
+        "totalTokens": 9007199254740991,
+        "hugeExponent": 1e+21,
+        "positionalUpperEdge": 1e+20,
+        "positionalLowerEdge": 1e-06,
+        "beyondSafeInt": 1234567890123456789
+      },
+      "signedAt": "2026-07-01T07:00:01.000Z",
+      "expectedCanonical": "{\"actualCarbonGCo2\":0.1,\"beyondSafeInt\":1234567890123456800,\"deltaPct\":-0.5,\"durationMs\":1e-7,\"estimatedCarbonGCo2\":2,\"hugeExponent\":1e+21,\"positionalLowerEdge\":0.000001,\"positionalUpperEdge\":100000000000000000000,\"ranAt\":\"2026-07-01T07:00:00.000Z\",\"region\":\"PL\",\"signedAt\":\"2026-07-01T07:00:01.000Z\",\"taskId\":\"vec-4-numbers-torture\",\"totalTokens\":9007199254740991}",
+      "signedReceipt": {
+        "taskId": "vec-4-numbers-torture",
+        "ranAt": "2026-07-01T07:00:00.000Z",
+        "region": "PL",
+        "estimatedCarbonGCo2": 2.0,
+        "actualCarbonGCo2": 0.1,
+        "deltaPct": -0.5,
+        "durationMs": 1e-07,
+        "totalTokens": 9007199254740991,
+        "hugeExponent": 1e+21,
+        "positionalUpperEdge": 1e+20,
+        "positionalLowerEdge": 1e-06,
+        "beyondSafeInt": 1234567890123456789,
+        "signature": "TOJAc39TsUS8AJ3L2tOGYt6acFFYIPtzABuDuM25B4orHoXYSxOQINAtSnAdQXkZRKFc3AQHU3LpbfhmXe51DQ==",
+        "signerPublicKey": "7l7DiP7+qwhqOxgWmwA1mFQfQ/q+MQugu0rMPYuojgU=",
+        "signedAt": "2026-07-01T07:00:01.000Z"
+      }
+    }
+  ]
+}
