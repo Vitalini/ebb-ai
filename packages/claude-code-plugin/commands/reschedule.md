@@ -34,8 +34,10 @@ Convert duration to absolute ISO-8601 before calling. Validate future.
 2. Call the `ebb-ai` MCP server's **`update_deadline`** tool with:
    - `task_id`
    - `deadline` — the resolved ISO-8601 timestamp.
-3. Show the new `scheduled_for`, `status`, and resulting carbon
-   estimate (re-scored). One line each.
+3. Show the new `scheduled_for`, `status`, and `new_deadline` from the
+   response — one line each. (The response does not carry a carbon
+   estimate; if the user wants the re-scored estimate, follow up with
+   `/ebb-ai:check <task_id>`.)
 
 If the response indicates carbon budget can no longer be met under the
 new deadline, tell the user, and offer two options:

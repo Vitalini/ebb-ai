@@ -25,8 +25,12 @@ Expected format:
 - **`--by <duration>`** — required. Same parsing rules as
   `/ebb-ai:defer`. Default if missing: 24h.
 - **`--region <zone>`** — Electricity Maps zone code. **Required by
-  this tool** — `recommend_window` is intentionally explicit. Default:
-  `US-CAL-CISO`.
+  this tool** — `recommend_window` is intentionally explicit. If the
+  user gave none, derive one from their timezone the same way the
+  server derives its default (`Europe/London`→`GB`, `Europe/Paris`→`FR`,
+  `Europe/Berlin`→`DE`, `America/Los_Angeles`→`US-CAL-CISO`,
+  `America/New_York`→`US-MIDA-PJM`, otherwise `GB`) and tell the user
+  which zone you picked.
 - **`--budget <grams>`** — optional grams CO2-equivalent cap. Windows
   above the budget are dropped before selection.
 - **`--model <name>`** — optional; affects only the `reasoning` string
@@ -48,6 +52,7 @@ Expected format:
      est. carbon     <g> g CO2e
      savings         <X>% vs running now
      batch eligible  <yes/no>
+     grid source     <grid_source>
      reasoning       <one-line>
    
    Top alternatives:
@@ -55,6 +60,10 @@ Expected format:
      2. <time>  <g>g  <savings>%
      3. <time>  <g>g  <savings>%
    ```
+
+   If `grid_source` is `mock`, say so plainly — the plan was scored
+   against synthetic data, so the carbon numbers are an illustrative
+   baseline, not a measurement.
 
 4. End with a single-line offer:
    "Run `/ebb-ai:defer "<echoed task>" --by <duration> --region <zone>`

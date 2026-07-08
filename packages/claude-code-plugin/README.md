@@ -77,7 +77,7 @@ dispatch at the chosen window requires the **`ebb tick` daemon**:
 ```bash
 npm install -g @ebb-ai/cli
 ebb install      # registers launchd (macOS) / systemd (Linux) cron-tick
-ebb status       # confirm the tick is wired
+ebb queue list   # confirm tasks are visible and dispatching
 ```
 
 Until the daemon is installed, tasks sit queued and can be dispatched

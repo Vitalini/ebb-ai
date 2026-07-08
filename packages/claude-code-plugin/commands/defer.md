@@ -45,12 +45,15 @@ Parse `$ARGUMENTS` into:
   scheduler can't find a window that meets it, the task fails fast with a
   `CarbonBudgetExceededError`.
 - **`--region <zone>`** — optional Electricity Maps zone code (e.g.
-  `US-CAL-CISO`, `GB`, `FR`). **Default: `US-CAL-CISO`** (heuristic — most
-  AWS/GCP US workloads run there). Tell the user the default if you guessed.
+  `US-CAL-CISO`, `GB`, `FR`). **Default: omit the field** — the server
+  resolves its own default (`EBB_DEFAULT_REGION` if configured, otherwise a
+  guess from the host machine's timezone, falling back to `GB`). The
+  `region` line in the tool response tells you what it picked; relay that
+  to the user.
 - **`--model <name>`** — optional vendor model hint (e.g.
   `claude-sonnet-4-6`). **Required when the deferred task should
-  actually dispatch via `ebb tick`** — without a model the dispatcher
-  falls back to `claude-sonnet-4-6`.
+  actually dispatch via `ebb tick`** — without a model the server falls
+  back to its default (`EBB_DEFAULT_MODEL`, else `claude-sonnet-4-6`).
 - **`--output <abs-path>`** — optional absolute file path. When the
   task completes, ebb-ai writes `{ taskId, result, receipt }` as JSON
   to this path. Useful if the user wants the result to land in an
@@ -67,7 +70,8 @@ Parse `$ARGUMENTS` into:
 2. Call the `ebb-ai` MCP server's **`schedule_task`** tool with:
    - `prompt` — the parsed user prompt
    - `deadline` — the ISO-8601 deadline you computed
-   - `region` — the parsed or default zone
+   - `region` — the parsed zone, omit if the user gave none (the server
+     resolves its timezone-based default)
    - `carbon_budget_g` — the parsed budget, omit if not given
    - `model` — the parsed model hint, omit if not given
    - `output_path` — the parsed `--output` value, omit if not given
@@ -75,24 +79,29 @@ Parse `$ARGUMENTS` into:
    - **Do not pass `dispatch`.** As of v0.7.1 the MCP server defaults
      to persistent provider_call mode, which is what the user wants
      99% of the time.
-3. After the tool returns, report back in this exact shape:
+3. After the tool returns, report back in this exact shape. Every field
+   below is present verbatim in the tool response — do not invent numbers
+   the response does not carry (e.g. savings % or band; those come from
+   `recommend_window` / `/ebb-ai:plan`, not from `schedule_task`):
 
    ```
    Deferred ✓
      task id        <task_id>
      scheduled for  <scheduled_for as relative + absolute, e.g. "in 3h, 22:15 UTC">
-     est. carbon    <estimated_carbon_g> g CO2e
-     savings        <estimated_savings_vs_now_pct>% cleaner than running now
-     band           <band>
-     batch          <yes/no>  ← only if model was provided
-     persisted to   <path-from-tool-response>
+     deadline       <deadline>
+     est. carbon    <estimated_carbon_g_co2> g CO2e
+     region         <region>
+     grid source    <grid_source>
+     persisted to   <persisted_to>
      check status   /ebb-ai:check <task_id>
      cancel         /ebb-ai:cancel <task_id>
    ```
 
-   If the tool response mentions `ebb tick`/daemon, surface that warning
-   verbatim to the user — they need to know whether the task will
-   actually dispatch or just sit in the queue.
+   If the response contains the "SYNTHETIC (mock) grid data" warning
+   (`grid_source: mock`), repeat it prominently — the carbon numbers are
+   illustrative, not measured. If the tool response mentions `ebb tick`/
+   daemon, surface that warning verbatim to the user — they need to know
+   whether the task will actually dispatch or just sit in the queue.
 
 4. If `schedule_task` raises `CarbonBudgetExceededError`, do NOT silently fall
    back. Tell the user the budget could not be met, show the cheapest feasible

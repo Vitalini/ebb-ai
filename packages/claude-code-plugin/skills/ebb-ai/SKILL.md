@@ -8,8 +8,9 @@ description: Auto-defer "do it later" / "by tomorrow" / "tonight" / "overnight" 
 When the user has a task that can wait, route it through ebb-ai instead of
 dispatching synchronously. Modern grids vary 30–60% in carbon intensity inside
 a single day. A 4-hour delay on a deferrable LLM call routinely cuts its
-footprint in half — and for tasks deferred more than 24 hours, the provider
-Batch APIs also give a 50% cost discount.
+footprint in half — and for tasks deferred more than 24 hours, ebb-ai can
+route through the provider Batch APIs (50% cheaper) when the deadline
+allows.
 
 ## When to defer
 
@@ -73,8 +74,14 @@ When the user later asks "is that thing done?" or "where's my translation?",
 use **`/ebb-ai:check`**. The receipt includes:
 
 - `scheduled_for` vs `completed_at` — did it dispatch on time?
-- `estimated_carbon_g` vs `actual_carbon_g` — how good was the forecast?
-- `result` — the LLM response itself, ready to surface to the user.
+- `estimated_carbon_g` vs `actual_carbon_g` (+ `delta_pct`) — how good was
+  the forecast?
+- `grid_source` / `energy_source` — provenance: which grid feed produced
+  the intensity and how confident the per-model energy coefficients are.
+  `grid_source: mock` is flagged as SYNTHETIC in the response — never
+  present those grams as measured.
+- the `Result:` block — the LLM response itself, ready to surface to the
+  user.
 
 If the user supplied `--output` at defer time, the same JSON also
 appears at that path — they can `cat` it or have a file-watcher pick
@@ -91,10 +98,12 @@ npm install -g @ebb-ai/cli
 ebb install      # registers launchd (macOS) / systemd (Linux) cron-tick
 ```
 
-If the user reports that a task "never ran", first check whether the
-daemon is installed (`ebb status`). The most common bug at v0.7.1 is
-"plugin installed, daemon not installed — tasks accumulate but never
-fire."
+If the user reports that a task "never ran", first look at the queue:
+`ebb queue list` shows whether tasks are accumulating without
+dispatching, and `ebb stats` shows the dispatch history. The most
+common bug at v0.7.1 is "plugin installed, daemon not installed —
+tasks accumulate but never fire"; the fix is `ebb install` (or a
+manual `ebb tick --once`).
 
 ## Anti-patterns to avoid
 

@@ -26,9 +26,11 @@ Expected: a single `task_id`. If empty, list candidates first via
 ## What to do
 
 1. Call the `ebb-ai` MCP server's **`expedite_task`** tool with `task_id`.
-2. Report the resulting status and any error.
-3. If the response surfaces a `result` field, show the user the actual
-   LLM response verbatim.
+2. Report the resulting status and any error (that is all the tool
+   returns: `status` plus an `error` line on failure).
+3. To show the user the actual LLM response and the carbon receipt, follow
+   up with `/ebb-ai:check <task_id>` — the detail view carries the
+   `Result:` block once the dispatch completed.
 4. Remind the user that this dispatch bypassed the carbon-aware window —
    the receipt's `intensity_source` will read `expedited`.
 
