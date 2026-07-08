@@ -2,21 +2,25 @@
 
 Responsibilities
 ----------------
-- Hold a queue of deferrable tasks (in-memory + optional SQLite).
+- Hold a queue of deferrable tasks (closure-based :meth:`Scheduler.defer`
+  / :meth:`Scheduler.enqueue` and JSON-persistable provider-call tasks).
 - Score candidate execution windows for each task using a grid feed.
-- Sleep until the chosen window, then dispatch the task.
-- Record a carbon receipt on the resulting :class:`TaskRecord`.
+- Sleep until the chosen window (closure tasks) or mark the window for a
+  later :meth:`Scheduler.tick` (provider-call tasks), then dispatch.
+- Record a signed carbon receipt on the resulting :class:`TaskRecord`.
+- Optionally write every state transition through to a SQLite audit
+  ledger (``db_path``), shared safely across processes via WAL plus a
+  row-level dispatch claim. Both ports persist to the same schema, so a
+  ``queue.db`` written by ``@ebb-ai/core`` is readable here and vice
+  versa.
 
 This module ports the design from
-``packages/core-ts/src/scheduler.ts`` to ``asyncio``, with one
-deliberate asymmetry: the Python port adds optional SQLite persistence
-from day one (the TS port is still in-memory). See :class:`Scheduler`'s
-``db_path`` parameter.
+``packages/core-ts/src/scheduler.ts`` to ``asyncio``.
 
-The scheduler runs cooperatively: each scheduled task is an
+The scheduler runs cooperatively: each closure task's schedule is an
 ``asyncio.Task`` that sleeps until its window. There is no separate
-"tick" loop — the scheduling decision is made once at enqueue time and
-re-evaluated only if the wait time exceeds an internal safety cap.
+in-process tick loop — the scheduling decision is made at enqueue time
+and re-evaluated hourly while the task waits.
 """
 
 from __future__ import annotations
@@ -26,17 +30,27 @@ import contextlib
 import json
 import logging
 import math
+import os
 import re
+import socket
+import sqlite3
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, Generic, TypeVar
 
 import aiosqlite
+import httpx
 
-from .energy import grams_for_intensity
-from .errors import CarbonBudgetExceededError, InvalidDeadlineError
+from .energy import grams_for_intensity, lookup_model_energy
+from .errors import (
+    CarbonBudgetExceededError,
+    InvalidDeadlineError,
+    SchedulerShutdownError,
+    TaskCancelledError,
+)
 from .grid import GridFeed, mock_grid_feed
 from .sign import SigningKeyPair, load_or_create_signing_key, sign_receipt
 from .types import (
@@ -44,6 +58,7 @@ from .types import (
     DeferOptions,
     GridForecast,
     GridForecastEntry,
+    GridSource,
     ProviderCallSpec,
     TaskRecord,
     TickResult,
@@ -129,13 +144,23 @@ def _intensity_to_grams(
 
 #: Default prompt-redaction patterns, applied unless a
 #: :class:`ProviderCallSpec` passes its own ``redact_in_receipt`` list.
-#: Mirrors the TS port's ``DEFAULT_REDACTION_PATTERNS`` — catches vendor
-#: API keys plus generic bearer tokens.
+#: Mirrors the TS port's ``DEFAULT_REDACTION_PATTERNS`` exactly:
+#: vendor-shaped credential patterns only. A previous generic
+#: ``[A-Z]{2,3}_[A-Z0-9]{6,}`` catch-all mangled legitimate prose
+#: (DB_PASSWORD, US-MIDA-PJM-style codes, ISO_8601) while missing every
+#: real vendor key shape below.
 _DEFAULT_REDACTION_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
-    re.compile(r"sk-(?:ant-)?[A-Za-z0-9_\-]{20,}"),
-    re.compile(r"sk-proj-[A-Za-z0-9_\-]{20,}"),
-    re.compile(r"\b[A-Z]{2,3}_[A-Z0-9]{6,}\b"),
-    re.compile(r"\bBearer\s+[A-Za-z0-9_\-.]{20,}", re.IGNORECASE),
+    re.compile(r"sk-(?:ant-)?[A-Za-z0-9_\-]{20,}"),  # Anthropic / OpenAI legacy
+    re.compile(r"sk-proj-[A-Za-z0-9_\-]{20,}"),  # OpenAI project keys
+    re.compile(r"\bBearer\s+[A-Za-z0-9_\-.]{20,}", re.IGNORECASE),  # OAuth bearer
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),  # AWS access key id
+    re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36}\b"),  # GitHub tokens
+    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{22,}\b"),  # GitHub fine-grained PAT
+    re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b"),  # Google API key
+    re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b"),  # Slack tokens
+    re.compile(
+        r"\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"
+    ),  # JWT
 )
 
 
@@ -157,6 +182,133 @@ def _redact_prompt(prompt: str, patterns: list[str] | None) -> str:
             with contextlib.suppress(re.error):
                 out = re.sub(raw, "[REDACTED]", out)
     return out
+
+
+def _redact_body_json(body_json: str | None) -> str | None:
+    """Redact secrets out of a persisted provider-call body.
+
+    Applied when a task reaches ``completed`` or ``cancelled`` — the live
+    dispatch always uses the original body, and only the final ledger
+    write is rewritten. Deliberately NOT applied on ``failed``:
+    :meth:`Scheduler.retry_task` re-dispatches the persisted body, so a
+    failed task must retain the caller's original prompt until it either
+    succeeds (redacted then) or is cancelled. Mirrors the TS
+    ``redactBodyJson``.
+    """
+    if not body_json:
+        return body_json
+    try:
+        spec = json.loads(body_json)
+    except (TypeError, ValueError):
+        # Corrupt body — leave it untouched rather than destroy evidence.
+        return body_json
+    if not isinstance(spec, dict) or spec.get("type") != "provider_call":
+        return body_json
+    patterns = spec.get("redact_in_receipt", spec.get("redactInReceipt"))
+    if not isinstance(patterns, list):
+        patterns = None
+    # Rewrite both the snake_case keys this port writes and the camelCase
+    # variants a TS-written row carries (shared queue.db deployment).
+    for key in ("prompt", "system_prompt", "systemPrompt"):
+        value = spec.get(key)
+        if isinstance(value, str):
+            spec[key] = _redact_prompt(value, patterns)
+    return json.dumps(spec)
+
+
+#: Backoff waits (seconds) between retryable dispatch attempts: 4 attempts
+#: total — 1 initial + 3 retries. Module-level so tests can monkeypatch it
+#: to near-zero waits.
+_RETRY_WAITS_S: tuple[float, ...] = (1.0, 4.0, 16.0)
+
+
+def _is_retryable(err: BaseException) -> bool:
+    """Whether a dispatch error is safe to re-send.
+
+    Retryable: HTTP 429 rate-limits and 5xx (via ``err.status`` /
+    ``err.status_code``), plus transport errors raised *before* the
+    request could reach the provider (:class:`httpx.ConnectError`,
+    :class:`httpx.ConnectTimeout`, :class:`socket.gaierror`). Ambiguous
+    mid-flight errors (read timeouts, connection resets) are NOT retried
+    — the provider may already have accepted and billed the call. Other
+    4xx bubble up immediately.
+    """
+    status = getattr(err, "status", None)
+    if not isinstance(status, int):
+        status = getattr(err, "status_code", None)
+    if isinstance(status, int):
+        if status == 429:
+            return True
+        return 500 <= status < 600
+    # Pre-connect failures only: the request never reached the provider,
+    # so re-sending cannot double-bill. httpx.ReadTimeout / ReadError /
+    # ConnectionResetError happen mid-flight and are deliberately absent.
+    return isinstance(err, (httpx.ConnectError, httpx.ConnectTimeout, socket.gaierror))
+
+
+async def _retry_with_backoff(
+    fn: Callable[[], Awaitable[T]],
+    *,
+    waits: Sequence[float] | None = None,
+) -> T:
+    """Retry ``fn`` with exponential backoff. Port of the TS
+    ``retryWithBackoff``.
+
+    Up to ``len(waits) + 1`` attempts (default 4: 1 initial + retries at
+    1s, 4s, 16s). Only errors :func:`_is_retryable` approves are retried.
+    This is the single retry policy for ebb-ai: provider adapters
+    construct their SDK clients with ``max_retries=0`` so vendor-side
+    retries cannot multiply with this one.
+    """
+    effective_waits = _RETRY_WAITS_S if waits is None else waits
+    last_err: BaseException | None = None
+    for attempt in range(len(effective_waits) + 1):
+        try:
+            return await fn()
+        except asyncio.CancelledError:
+            raise
+        except Exception as err:
+            last_err = err
+            if not _is_retryable(err) or attempt == len(effective_waits):
+                raise
+            _log.warning(
+                "[ebb-ai/scheduler] dispatch attempt %d failed (%s); retrying in %gs",
+                attempt + 1,
+                err,
+                effective_waits[attempt],
+            )
+            await asyncio.sleep(effective_waits[attempt])
+    raise last_err if last_err is not None else RuntimeError("unreachable")
+
+
+async def _write_output_file(
+    path: str,
+    task_id: str,
+    result: Any,
+    receipt: CarbonReceipt,
+) -> None:
+    """Write ``{taskId, result, receipt}`` as JSON to the spec's
+    ``output_path``. The receipt is emitted with camelCase keys so the
+    file is byte-compatible with the TS port's ``writeOutputFile``.
+    Failures are logged but never fail the task — the SQLite ledger is
+    the source of truth, the file is a convenience.
+    """
+    try:
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "taskId": task_id,
+            "result": result,
+            "receipt": receipt.to_camel_dict(),
+        }
+        target.write_text(json.dumps(payload, indent=2, default=repr))
+    except Exception as err:
+        _log.warning(
+            "[ebb-ai/scheduler] failed to write output_path=%s: %s; "
+            "result is still in the SQLite ledger",
+            path,
+            err,
+        )
 
 
 def _spec_model_from_body(body_json: str | None) -> str | None:
@@ -240,7 +392,12 @@ def pick_best_window(
     entries: list[GridForecastEntry],
     deadline: datetime,
 ) -> GridForecastEntry | None:
-    """Pick the lowest-intensity entry inside ``[now, deadline]``.
+    """Pick the lowest-intensity entry inside ``[now - 1h, deadline]``.
+
+    Forecast entries mark the *start* of an hour, so the entry covering
+    "now" started up to an hour ago — it is still a valid (dispatch-now)
+    candidate. Excluding it made "run right now" unpickable even when
+    the current hour is the cleanest inside the deadline (§1.7).
 
     Returns ``None`` if no entry fits the window. Pure function — no
     side effects, no I/O — so it's safe to call directly from tests.
@@ -251,7 +408,7 @@ def pick_best_window(
         t = _parse_iso(e.datetime)
         if t is None:
             continue
-        if now <= t <= deadline:
+        if now - timedelta(hours=1) <= t <= deadline:
             usable.append(e)
     if not usable:
         return None
@@ -280,7 +437,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     receipt_json      TEXT,
     intensity_source  TEXT,
     body_json         TEXT,
-    estimated_carbon_g REAL
+    estimated_carbon_g REAL,
+    deadline          TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_enqueued_at ON tasks(enqueued_at);
@@ -321,18 +479,45 @@ async def _ensure_estimated_carbon_column(conn: aiosqlite.Connection) -> None:
         await conn.commit()
 
 
+async def _ensure_deadline_column(conn: aiosqlite.Connection) -> None:
+    """Idempotent migration: add ``deadline`` (v0.12) to a pre-v0.12
+    ``tasks`` table.
+
+    Records the normalized ISO deadline captured at enqueue so
+    dispatch-time decisions (Batch API eligibility) can be made against
+    the real deadline instead of the ``scheduled_for`` proxy. The column
+    name matches the TS port's SQLite schema exactly — the DB file is
+    shared cross-language.
+    """
+    async with conn.execute("SELECT name FROM pragma_table_info('tasks')") as cur:
+        rows = await cur.fetchall()
+    names = {row[0] for row in rows}
+    if "deadline" not in names:
+        try:
+            await conn.execute("ALTER TABLE tasks ADD COLUMN deadline TEXT")
+        except aiosqlite.OperationalError as err:
+            # Another process migrated between our pragma check and the
+            # ALTER (check-then-ALTER is TOCTOU-racy on a shared DB). The
+            # column exists either way.
+            if "duplicate column name" not in str(err).lower():
+                raise
+        await conn.commit()
+
+
 class _TaskStore:
     """Optional SQLite-backed durable queue.
 
-    Stores task lifecycle and carbon receipts. The Python port ships
-    this from day one as an asymmetry with the TS port (which is still
-    in-memory at v0.1). See ``PLAN.md`` section 4.1.
+    Stores task lifecycle and carbon receipts. Uses the same schema as
+    the TS port's ``TaskStore`` (``packages/core-ts/src/storage/
+    sqlite.ts``), so both language cores can share one ``queue.db``.
 
     Concurrency: writes are serialized through an :class:`asyncio.Lock`
     so a single connection is enough; for cross-process concurrency the
     store enables SQLite's WAL journal on first connect (v0.11) so a
     second TaskStore (e.g. ``ebb tick`` daemon + interactive ``ebb-mcp``)
-    can hold a separate handle without ``SQLITE_BUSY`` collisions.
+    can hold a separate handle, and sets ``busy_timeout = 5000`` so a
+    colliding writer queues for up to 5s instead of throwing
+    ``SQLITE_BUSY`` immediately.
     """
 
     def __init__(self, db_path: str) -> None:
@@ -352,6 +537,12 @@ class _TaskStore:
         if self._db_path != ":memory:":
             try:
                 await conn.execute("PRAGMA journal_mode = WAL")
+                # busy_timeout makes a colliding writer queue for up to
+                # 5s instead of raising SQLITE_BUSY immediately —
+                # essential when a cron `ebb tick` and an interactive
+                # process write the same file. Per-connection, so it is
+                # set on every open (v0.12, mirrors the TS store).
+                await conn.execute("PRAGMA busy_timeout = 5000")
                 await conn.execute("PRAGMA synchronous = NORMAL")
             except Exception:
                 # Some FS-level configurations refuse WAL; the store
@@ -361,7 +552,22 @@ class _TaskStore:
         await conn.commit()
         await _ensure_body_json_column(conn)
         await _ensure_estimated_carbon_column(conn)
+        await _ensure_deadline_column(conn)
         self._conn = conn
+        # The ledger stores prompts (redacted only at terminal
+        # transitions) next to a 0600 signing key — keep the DB and its
+        # WAL side-files out of reach of other local users. Best-effort:
+        # never fail open over a chmod error (exotic FS, Windows).
+        if self._db_path != ":memory:":
+            parent = os.path.dirname(self._db_path)
+            if parent:
+                with contextlib.suppress(OSError):
+                    os.chmod(parent, 0o700)
+            for suffix in ("", "-wal", "-shm"):
+                p = self._db_path + suffix
+                with contextlib.suppress(OSError):
+                    if os.path.exists(p):
+                        os.chmod(p, 0o600)
 
     async def close(self) -> None:
         if self._conn is not None:
@@ -381,8 +587,8 @@ class _TaskStore:
                 INSERT INTO tasks (
                     task_id, status, enqueued_at, scheduled_for, completed_at,
                     region, carbon_budget_g, result_json, error, receipt_json,
-                    intensity_source, body_json, estimated_carbon_g
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    intensity_source, body_json, estimated_carbon_g, deadline
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(task_id) DO UPDATE SET
                     status            = excluded.status,
                     scheduled_for     = excluded.scheduled_for,
@@ -394,7 +600,8 @@ class _TaskStore:
                     receipt_json      = excluded.receipt_json,
                     intensity_source  = excluded.intensity_source,
                     body_json         = excluded.body_json,
-                    estimated_carbon_g = excluded.estimated_carbon_g
+                    estimated_carbon_g = excluded.estimated_carbon_g,
+                    deadline          = excluded.deadline
                 """,
                 (
                     record.task_id,
@@ -410,6 +617,7 @@ class _TaskStore:
                     record.intensity_source,
                     record.body_json,
                     record.estimated_carbon_g_co2,
+                    record.deadline,
                 ),
             )
             await conn.commit()
@@ -464,6 +672,31 @@ class _TaskStore:
             await conn.commit()
         return rowcount == 1
 
+    def exists_sync(self, task_id: str) -> bool:
+        """Synchronous existence probe for the duplicate-id guard.
+
+        :meth:`Scheduler.enqueue` is a synchronous API, so it cannot
+        ``await`` the aiosqlite connection; a short-lived stdlib
+        :mod:`sqlite3` connection answers "does this ledger row exist?"
+        with a point read instead. Returns ``False`` for in-memory
+        stores (a ``:memory:`` DB is private to its connection — the
+        in-memory map already covers same-process id reuse, and there is
+        no cross-process ledger to protect). Best-effort: an unreadable
+        file also returns ``False`` rather than failing the enqueue.
+        """
+        if self._conn is None or self._db_path == ":memory:":
+            return False
+        try:
+            with contextlib.closing(
+                sqlite3.connect(self._db_path, timeout=5.0)
+            ) as conn:
+                cur = conn.execute(
+                    "SELECT 1 FROM tasks WHERE task_id = ? LIMIT 1", (task_id,)
+                )
+                return cur.fetchone() is not None
+        except sqlite3.Error:
+            return False
+
 
 def _row_to_record(row: Any) -> TaskRecord:
     """Convert a SQLite row into a :class:`TaskRecord`.
@@ -488,6 +721,9 @@ def _row_to_record(row: Any) -> TaskRecord:
             duration_ms=data.get("duration_ms"),
             prompt=data.get("prompt"),
             total_tokens=data.get("total_tokens"),
+            intensity_g_co2_per_kwh=data.get("intensity_g_co2_per_kwh"),
+            grid_source=data.get("grid_source"),
+            energy_source=data.get("energy_source"),
             signature=data.get("signature"),
             signer_public_key=data.get("signer_public_key"),
             signed_at=data.get("signed_at"),
@@ -506,6 +742,11 @@ def _row_to_record(row: Any) -> TaskRecord:
         estimated_carbon_g = row["estimated_carbon_g"]
     except (IndexError, KeyError):
         estimated_carbon_g = None
+    # `deadline` (v0.12) is read defensively for the same reason.
+    try:
+        deadline = row["deadline"]
+    except (IndexError, KeyError):
+        deadline = None
     return TaskRecord(
         task_id=row["task_id"],
         status=row["status"],
@@ -520,6 +761,7 @@ def _row_to_record(row: Any) -> TaskRecord:
         intensity_source=row["intensity_source"],
         body_json=body_json,
         estimated_carbon_g_co2=estimated_carbon_g,
+        deadline=deadline,
     )
 
 
@@ -633,27 +875,37 @@ class Scheduler:
         await self.shutdown()
 
     async def shutdown(self) -> None:
-        """Cancel all in-flight schedule tasks and close the DB.
+        """Cancel all in-flight schedule tasks, settle pending awaiters,
+        and close the DB.
 
-        Idempotent.
+        Every still-unresolved :meth:`defer` awaiter is rejected with
+        :class:`SchedulerShutdownError` so ``async with Scheduler(...)``
+        can never deadlock a pending ``defer()`` (P11). Idempotent.
+
+        ``asyncio.gather(..., return_exceptions=True)`` absorbs the
+        child tasks' own ``CancelledError`` without swallowing a
+        cancellation of *this* coroutine — if shutdown itself is
+        cancelled, the outer await re-raises as usual.
         """
         pending = list(self._schedules.values())
         for t in pending:
             t.cancel()
-        for t in pending:
-            try:  # noqa: SIM105
-                await t
-            except (asyncio.CancelledError, Exception):
-                pass
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
         self._schedules.clear()
         # Drain any in-flight DB writes before closing the connection;
         # otherwise a queued upsert can fire against a closed conn.
-        for bg in list(self._background):
-            try:  # noqa: SIM105
-                await bg
-            except (asyncio.CancelledError, Exception):
-                pass
+        background = list(self._background)
+        if background:
+            await asyncio.gather(*background, return_exceptions=True)
         self._background.clear()
+        # Settle every remaining awaiter: a defer() whose schedule task
+        # was just cancelled would otherwise wait forever. Bodies are
+        # dropped with the resolvers — nothing will dispatch them now.
+        for task_id, resolver in list(self._resolvers.items()):
+            resolver.reject(SchedulerShutdownError(task_id))
+            self._bodies.pop(task_id, None)
+        self._resolvers.clear()
         if self._store is not None and self._connected:
             await self._store.close()
             self._connected = False
@@ -728,6 +980,16 @@ class Scheduler:
         Returns the value the task body returns (or raises whatever it
         raised). Internally calls :meth:`enqueue` and then awaits the
         resolver future.
+
+        Raises
+        ------
+        TaskCancelledError
+            If the task is cancelled via :meth:`cancel_task` before (or
+            while) it runs. A plain :class:`Exception` — deliberately
+            not :class:`asyncio.CancelledError`, which would mark the
+            *awaiting* task as cancelled and unwind ``TaskGroup``\\ s.
+        SchedulerShutdownError
+            If :meth:`shutdown` runs before the task dispatched.
         """
         record = self.enqueue(task, opts)
         resolver = self._resolvers[record.task_id]
@@ -745,12 +1007,28 @@ class Scheduler:
         external system (e.g. an MCP client) wants to poll status.
         """
         opts = opts or DeferOptions()
+        # Resolve the event loop BEFORE any state mutation: calling this
+        # from a synchronous context must raise cleanly instead of
+        # leaving a phantom "queued" record behind (P12).
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError as err:
+            raise RuntimeError(
+                "Scheduler.enqueue must be called from within a running event loop"
+            ) from err
         deadline = normalize_deadline(opts.deadline)
 
         if opts.task_id is not None:
             if not isinstance(opts.task_id, str) or len(opts.task_id) == 0:
                 raise ValueError("Invalid task_id: must be a non-empty string")
-            if opts.task_id in self._tasks:
+            # Check both the in-memory map and the durable store: a fresh
+            # process re-using an old id must not silently overwrite a
+            # persisted (possibly completed + signed) ledger row.
+            if opts.task_id in self._tasks or (
+                self._store is not None
+                and self._connected
+                and self._store.exists_sync(opts.task_id)
+            ):
                 raise ValueError(f"Task id {opts.task_id!r} is already in the queue")
         task_id = opts.task_id if opts.task_id is not None else f"t-{uuid.uuid4()}"
         region = opts.region if opts.region is not None else self._default_region
@@ -761,11 +1039,10 @@ class Scheduler:
             enqueued_at=_iso_utc(_now_utc()),
             region=region,
             carbon_budget_g=opts.carbon_budget_g,
+            deadline=_iso_utc(deadline),
         )
         self._tasks[task_id] = record
         self._bodies[task_id] = task
-
-        loop = asyncio.get_running_loop()
         self._resolvers[task_id] = _Resolver(loop)
 
         # Persist queued state up front so an external observer (or a
@@ -778,12 +1055,48 @@ class Scheduler:
             upsert_task.add_done_callback(self._background.discard)
 
         # Schedule on the event loop. Captures `deadline` so reschedules
-        # honor it.
-        self._schedules[task_id] = loop.create_task(
-            self._schedule(task_id, deadline),
+        # honor it. Routed through _schedule_safe so any scheduling
+        # failure fails the task (rejecting the defer() awaiter) instead
+        # of dying as an unobserved task exception (§1.5).
+        self._spawn_schedule(loop, task_id, deadline)
+        return record
+
+    def _spawn_schedule(
+        self,
+        loop: asyncio.AbstractEventLoop,
+        task_id: str,
+        deadline: datetime,
+    ) -> None:
+        """Create the schedule task for a closure task and register it in
+        ``_schedules`` with a done-callback that prunes the entry once the
+        task finishes (P13) — mirroring the ``_background`` pattern.
+        """
+        sched_task = loop.create_task(
+            self._schedule_safe(task_id, deadline),
             name=f"ebb-ai:schedule:{task_id}",
         )
-        return record
+        self._schedules[task_id] = sched_task
+
+        def _prune(t: asyncio.Task[None], task_id: str = task_id) -> None:
+            # Only prune our own entry: update_deadline may have replaced
+            # it with a fresh schedule task in the meantime.
+            if self._schedules.get(task_id) is t:
+                del self._schedules[task_id]
+
+        sched_task.add_done_callback(_prune)
+
+    async def _schedule_safe(self, task_id: str, deadline: datetime) -> None:
+        """Run :meth:`_schedule`, routing any unexpected failure to
+        :meth:`_fail` so a fire-and-forget scheduling coroutine can never
+        strand a permanently-"queued" record or leak an unobserved
+        exception (§1.5). Cancellation passes through untouched.
+        """
+        try:
+            await self._schedule(task_id, deadline)
+        except asyncio.CancelledError:
+            raise
+        except Exception as err:
+            await self._fail(task_id, err)
 
     def get_task(self, task_id: str) -> TaskRecord | None:
         """Snapshot the current state of one task (in-memory only)."""
@@ -851,7 +1164,13 @@ class Scheduler:
         if opts.task_id is not None:
             if not isinstance(opts.task_id, str) or len(opts.task_id) == 0:
                 raise ValueError("Invalid task_id: must be a non-empty string")
-            if opts.task_id in self._tasks:
+            # Check both the in-memory map and the durable store: a fresh
+            # process re-using an old id must not silently overwrite a
+            # persisted (possibly completed + signed) ledger row.
+            duplicate = opts.task_id in self._tasks
+            if not duplicate and self._store is not None and self._connected:
+                duplicate = await self._store.load(opts.task_id) is not None
+            if duplicate:
                 raise ValueError(f"Task id {opts.task_id!r} is already in the queue")
         task_id = opts.task_id if opts.task_id is not None else f"t-{uuid.uuid4()}"
         region = opts.region if opts.region is not None else self._default_region
@@ -863,6 +1182,7 @@ class Scheduler:
             region=region,
             carbon_budget_g=opts.carbon_budget_g,
             body_json=json.dumps(spec.to_dict()),
+            deadline=_iso_utc(deadline),
         )
         self._tasks[task_id] = record
         if self._store is not None and self._connected:
@@ -871,7 +1191,15 @@ class Scheduler:
         # Pick a carbon window and update status to "scheduled" but do
         # NOT register an in-process timer: provider-call tasks are
         # driven exclusively by tick().
-        await self._schedule_provider_call(task_id, deadline)
+        try:
+            await self._schedule_provider_call(task_id, deadline)
+        except asyncio.CancelledError:
+            raise
+        except Exception as err:
+            # A scheduling failure after the queued-row upsert must not
+            # strand a permanently-"queued" row in the ledger (§1.5).
+            await self._fail(task_id, err)
+            raise
         return self._tasks[task_id]
 
     async def tick(
@@ -933,8 +1261,23 @@ class Scheduler:
         inspected = 0
         for record in candidates:
             # Concurrency-safe row-level claim. Only the caller that
-            # flips status from "scheduled" -> "running" proceeds.
-            won = await self._claim_for_dispatch(record)
+            # flips status from "scheduled" -> "running" proceeds. A
+            # locked / throwing row (e.g. SQLITE_BUSY under heavy
+            # multi-process contention) is skipped — it stays
+            # "scheduled" and a later tick retries. It must never abort
+            # the whole tick.
+            try:
+                won = await self._claim_for_dispatch(record)
+            except asyncio.CancelledError:
+                raise
+            except Exception as err:
+                _log.warning(
+                    "[ebb-ai/scheduler] tick: could not claim task %s: %s; "
+                    "skipping this round",
+                    record.task_id,
+                    err,
+                )
+                continue
             if not won:
                 continue
             inspected += 1
@@ -957,6 +1300,18 @@ class Scheduler:
         If the task is already ``completed`` / ``failed`` / ``cancelled``
         this is a no-op; the current record is returned. Raises
         :class:`KeyError` only if the task id doesn't exist.
+
+        Awaiters of :meth:`defer` are rejected with
+        :class:`TaskCancelledError` — a plain :class:`Exception`, never
+        :class:`asyncio.CancelledError` (which would bypass ``except
+        Exception`` in the caller, mark the *caller's* task as cancelled,
+        and unwind ``TaskGroup``\\ s).
+
+        Cancelling a ``running`` task is best-effort: a provider call
+        already in flight may still complete on the wire. The dispatcher
+        re-checks the status before finalizing, so a cancelled task's
+        late result is dropped and never written over the cancelled
+        ledger row.
         """
         record = await self._lookup_record(task_id)
         if record is None:
@@ -966,25 +1321,32 @@ class Scheduler:
         if record.status in ("completed", "failed", "cancelled"):
             return record
 
-        # Stop any pending in-process timer.
-        sched_task = self._schedules.pop(task_id, None)
-        if sched_task is not None and not sched_task.done():
-            sched_task.cancel()
-            try:  # noqa: SIM105
-                await sched_task
-            except (asyncio.CancelledError, Exception):
-                pass
-
+        # Mark cancelled FIRST, so an in-flight dispatch (this process or
+        # another via the shared store) sees the cancellation when it
+        # re-checks before finalizing, and its late result is dropped
+        # instead of overwriting the cancelled ledger row (§1.2).
         record.status = "cancelled"
         record.completed_at = _iso_utc(_now_utc())
+        # Terminal transition: redact secrets out of the persisted body so
+        # the ledger does not retain raw prompts forever (§0.8).
+        record.body_json = _redact_body_json(record.body_json)
         self._tasks[task_id] = record
         if self._store is not None and self._connected:
             await self._store.upsert(record)
         # Reject any pending resolver so awaiters get a clear error.
+        # TaskCancelledError is a plain Exception (see errors.py) — never
+        # asyncio.CancelledError, which would cancel the *caller*.
         resolver = self._resolvers.pop(task_id, None)
         if resolver is not None:
-            resolver.reject(asyncio.CancelledError(f"task {task_id!r} cancelled"))
+            resolver.reject(TaskCancelledError(task_id))
         self._bodies.pop(task_id, None)
+
+        # Stop any pending in-process timer (best-effort for a body that
+        # is already running — see the dispatcher's cancelled re-check).
+        sched_task = self._schedules.pop(task_id, None)
+        if sched_task is not None and not sched_task.done():
+            sched_task.cancel()
+            await asyncio.gather(sched_task, return_exceptions=True)
         return record
 
     async def expedite_task(
@@ -1036,10 +1398,13 @@ class Scheduler:
             await self._store.upsert(record)
         won = await self._claim_for_dispatch(record)
         if not won:
-            # Someone else (a parallel tick) is already running it.
-            # Return the current record snapshot.
-            refreshed = await self._lookup_record(task_id)
-            return refreshed if refreshed is not None else record
+            # Same row-level claim tick() uses: if a concurrent process
+            # (e.g. the cron tick) grabbed the row between our upsert and
+            # here, do NOT dispatch a second (double-billed) provider
+            # call.
+            raise RuntimeError(
+                f"task {task_id} was just claimed by another process (racing tick?)"
+            )
         await self._dispatch_provider_call(
             record, adapters, intensity_source_override="expedited"
         )
@@ -1082,6 +1447,7 @@ class Scheduler:
         # observer sees a coherent state transition.
         record.status = "queued"
         record.scheduled_for = None
+        record.deadline = _iso_utc(deadline)
         self._tasks[task_id] = record
         if self._store is not None and self._connected:
             await self._store.upsert(record)
@@ -1092,11 +1458,7 @@ class Scheduler:
             await self._schedule_provider_call(task_id, deadline)
         else:
             # Closure task: re-arm the in-process schedule loop.
-            loop = asyncio.get_running_loop()
-            self._schedules[task_id] = loop.create_task(
-                self._schedule(task_id, deadline),
-                name=f"ebb-ai:schedule:{task_id}",
-            )
+            self._spawn_schedule(asyncio.get_running_loop(), task_id, deadline)
         return self._tasks[task_id]
 
     async def retry_task(
@@ -1158,7 +1520,30 @@ class Scheduler:
             raise
         except Exception as err:
             _log.warning("[ebb-ai/scheduler] forecast fetch failed: %s", err)
-            await self._dispatch(task_id, _now_utc(), None)
+            # V20: distinguish first-schedule from hourly re-entry via the
+            # committed window. On re-entry a transient feed failure must
+            # NOT abandon the already-chosen clean window and dispatch
+            # into an unknown (possibly dirty) hour.
+            committed = (
+                _parse_iso(record.scheduled_for) if record.scheduled_for else None
+            )
+            now = _now_utc()
+            if committed is not None and committed > now and now <= deadline:
+                # Keep the window: nap toward it and re-enter (the next
+                # entry retries the fetch; when the window itself
+                # arrives, the branch below dispatches).
+                wait_s = (committed - now).total_seconds()
+                await asyncio.sleep(min(_SLEEP_CHUNK_S, wait_s))
+                await self._schedule(task_id, deadline)
+                return
+            if committed is not None:
+                # The committed window has arrived (or the deadline would
+                # otherwise be missed) — dispatch now, at the window.
+                await self._dispatch(task_id, now, None)
+                return
+            # First schedule with no committed window — dispatch
+            # immediately rather than miss the deadline entirely.
+            await self._dispatch(task_id, now, None)
             return
 
         budget_g = record.carbon_budget_g
@@ -1189,15 +1574,21 @@ class Scheduler:
             await self._dispatch(task_id, _now_utc(), None)
             return
 
-        record.status = "scheduled"
-        record.scheduled_for = candidate.datetime
-        if self._store is not None and self._connected:
-            await self._store.upsert(record)
-
         target = _parse_iso(candidate.datetime)
         if target is None:
             await self._dispatch(task_id, _now_utc(), None)
             return
+        if target <= _now_utc():
+            # The chosen window is the *current* hour (its start is in
+            # the past) — dispatch now, keeping the scored entry for the
+            # receipt (§1.7).
+            await self._dispatch(task_id, _now_utc(), candidate)
+            return
+
+        record.status = "scheduled"
+        record.scheduled_for = candidate.datetime
+        if self._store is not None and self._connected:
+            await self._store.upsert(record)
 
         wait_s = max(0.0, (target - _now_utc()).total_seconds())
         # Cap sleep so we re-evaluate on long horizons (clock drift,
@@ -1219,6 +1610,10 @@ class Scheduler:
     async def _fail(self, task_id: str, err: Exception) -> None:
         record = self._tasks.get(task_id)
         if record is None:
+            return
+        # Never overwrite a terminal state (a completed = billed dispatch,
+        # or an explicit cancellation) with "failed".
+        if record.status in ("completed", "failed", "cancelled"):
             return
         record.status = "failed"
         record.completed_at = _iso_utc(_now_utc())
@@ -1245,13 +1640,17 @@ class Scheduler:
             await self._store.upsert(record)
 
         start = _now_utc()
+        # The try/except is deliberately narrow: it covers ONLY the user's
+        # task body. Once the body has succeeded, every piece of
+        # bookkeeping below (intensity fetch, receipt build/sign, ledger
+        # write) is fail-soft — a successful run must never be re-labelled
+        # "failed" by its paperwork (§0.5).
         try:
             outcome = body()
             if asyncio.iscoroutine(outcome) or isinstance(outcome, Awaitable):
                 result = await outcome
             else:
                 result = outcome
-            duration_ms = (_now_utc() - start).total_seconds() * 1000.0
         except asyncio.CancelledError:
             raise
         except Exception as err:
@@ -1264,6 +1663,21 @@ class Scheduler:
             if resolver is not None:
                 resolver.reject(err)
             self._bodies.pop(task_id, None)
+            return
+        duration_ms = (_now_utc() - start).total_seconds() * 1000.0
+
+        # The task may have been cancelled while the body was running —
+        # the resolver was already rejected by cancel_task. Do not
+        # overwrite the cancelled ledger row with a completed record +
+        # late result (§1.2).
+        if record.status == "cancelled":
+            _log.warning(
+                "[ebb-ai/scheduler] task %s was cancelled while running; "
+                "dropping its late result",
+                task_id,
+            )
+            self._bodies.pop(task_id, None)
+            self._resolvers.pop(task_id, None)
             return
 
         # Mirror the TS dispatch: the scored forecast entry is the
@@ -1280,48 +1694,97 @@ class Scheduler:
         else:
             estimated_intensity_g = None
             source = "current"
-        actual_intensity_g = await self._fetch_current_intensity(record.region, ran_at)
-        actual_carbon = _round_half_up(_intensity_to_grams(actual_intensity_g) * 10) / 10
-        estimated_carbon = (
-            _round_half_up(_intensity_to_grams(estimated_intensity_g) * 10) / 10
-            if estimated_intensity_g is not None
-            else actual_carbon
-        )
-        delta_pct = (
-            _round_half_up(
-                ((actual_carbon - estimated_carbon) / estimated_carbon) * 1000
+        actual_intensity_g: float | None = None
+        grid_source: GridSource | None = None
+        try:
+            actual_intensity_g, grid_source = await self._fetch_current_intensity(
+                record.region, ran_at
             )
-            / 10
-            if estimated_carbon > 0
-            else 0.0
-        )
-
-        receipt = self._maybe_sign(
-            CarbonReceipt(
-                task_id=task_id,
-                ran_at=_iso_utc(ran_at),
-                region=record.region,
-                estimated_carbon_g_co2=estimated_carbon,
-                actual_carbon_g_co2=actual_carbon,
-                delta_pct=delta_pct,
-                duration_ms=duration_ms,
+        except asyncio.CancelledError:
+            raise
+        except Exception as err:
+            _log.warning(
+                "[ebb-ai/scheduler] intensity fetch for the receipt failed (%s); "
+                "receipt falls back to the schedule-time estimate",
+                err,
             )
-        )
+        receipt: CarbonReceipt | None = None
+        try:
+            intensity_for_actual = (
+                actual_intensity_g
+                if actual_intensity_g is not None
+                else estimated_intensity_g
+            )
+            actual_carbon = (
+                _round_half_up(_intensity_to_grams(intensity_for_actual) * 10) / 10
+                if intensity_for_actual is not None
+                else 0.0
+            )
+            estimated_carbon = (
+                _round_half_up(_intensity_to_grams(estimated_intensity_g) * 10) / 10
+                if estimated_intensity_g is not None
+                else actual_carbon
+            )
+            delta_pct = (
+                _round_half_up(
+                    ((actual_carbon - estimated_carbon) / estimated_carbon) * 1000
+                )
+                / 10
+                if estimated_carbon > 0
+                else 0.0
+            )
+            receipt = self._maybe_sign(
+                CarbonReceipt(
+                    task_id=task_id,
+                    ran_at=_iso_utc(ran_at),
+                    region=record.region,
+                    estimated_carbon_g_co2=estimated_carbon,
+                    actual_carbon_g_co2=actual_carbon,
+                    delta_pct=delta_pct,
+                    duration_ms=duration_ms,
+                    # Provenance: the raw intensity + which feed produced
+                    # it. Left None when the receipt-side fetch failed.
+                    # Closure tasks have no model, so the energy
+                    # coefficients are the flat legacy fallback tier.
+                    intensity_g_co2_per_kwh=actual_intensity_g,
+                    grid_source=grid_source,
+                    energy_source="fallback",
+                )
+            )
+        except Exception as err:
+            _log.warning(
+                "[ebb-ai/scheduler] failed to build the carbon receipt for %s: %s; "
+                "task stays completed without a receipt",
+                task_id,
+                err,
+            )
         record.status = "completed"
         record.completed_at = _iso_utc(_now_utc())
         record.result = result
         record.receipt = receipt
         record.intensity_source = source  # type: ignore[assignment]
         if self._store is not None and self._connected:
-            await self._store.upsert(record)
+            try:
+                await self._store.upsert(record)
+            except Exception as err:
+                _log.warning(
+                    "[ebb-ai/scheduler] failed to persist completed task %s: %s",
+                    task_id,
+                    err,
+                )
 
         resolver = self._resolvers.pop(task_id, None)
         if resolver is not None:
             resolver.resolve(result)
         self._bodies.pop(task_id, None)
 
-    async def _fetch_current_intensity(self, region: str, at: datetime) -> float:
-        """Look up the forecast bucket closest to ``at`` (fallback path)."""
+    async def _fetch_current_intensity(
+        self, region: str, at: datetime
+    ) -> tuple[float, GridSource]:
+        """Look up the intensity figure (and its feed provenance) used
+        for the actual side of a receipt: re-fetch the forecast and pick
+        the entry closest to the moment the task ran.
+        """
         forecast: GridForecast = await self._feed.fetch_forecast(region, 24)
         target = at.timestamp()
         best: GridForecastEntry | None = None
@@ -1334,7 +1797,8 @@ class Scheduler:
             if d < best_delta:
                 best = entry
                 best_delta = d
-        return best.carbon_intensity_g_co2_per_kwh if best is not None else 400.0
+        intensity = best.carbon_intensity_g_co2_per_kwh if best is not None else 400.0
+        return intensity, forecast.source
 
     # ----- v0.5 helpers ------------------------------------------------ #
 
@@ -1457,7 +1921,15 @@ class Scheduler:
             return
 
         record.status = "scheduled"
-        record.scheduled_for = candidate.datetime
+        # A candidate whose hour started in the past is the *current*
+        # hour — schedule for "now" so the very next tick dispatches
+        # immediately (§1.7).
+        candidate_at = _parse_iso(candidate.datetime)
+        record.scheduled_for = (
+            _iso_utc(_now_utc())
+            if candidate_at is not None and candidate_at <= _now_utc()
+            else candidate.datetime
+        )
         record.estimated_carbon_g_co2 = (
             _round_half_up(
                 _intensity_to_grams(
@@ -1518,43 +1990,51 @@ class Scheduler:
 
         start = _now_utc()
         ran_at = start
+
+        # Batch-vs-sync decision. We compare scheduled_for to a
+        # 24h-from-now boundary; scheduled_for is the proxy (batch
+        # routing proper — status "submitted" + polling against
+        # record.deadline — lands in a later version). Expedited tasks
+        # (whose scheduled_for is set to "now") therefore never go
+        # through the batch endpoint, which is the right call.
+        scheduled_for_ts = (
+            _parse_iso(record.scheduled_for) if record.scheduled_for else None
+        )
+        more_than_24h = (
+            scheduled_for_ts is not None
+            and (scheduled_for_ts - _now_utc()) > timedelta(hours=24)
+        )
+        use_batch = (
+            spec.prefer_batch and more_than_24h and hasattr(adapter, "dispatch_batch")
+        )
+
+        # Build adapter DispatchOptions.
+        from .providers.base import DispatchOptions  # local import to avoid cycle
+
+        opts = DispatchOptions(
+            max_tokens=spec.max_tokens if spec.max_tokens is not None else 1024,
+            system=spec.system_prompt,
+            extra={"temperature": spec.temperature}
+            if spec.temperature is not None
+            else {},
+        )
+
+        # The try/except is deliberately narrow: it covers ONLY the
+        # (billed) provider call. Everything after a successful call —
+        # intensity fetch, receipt build/sign, ledger write, output file
+        # — is fail-soft: a paid dispatch must NEVER be re-labelled
+        # "failed" (a retry would bill the provider a second time), and
+        # a post-success exception must never strand a zombie "running"
+        # row, hang the defer() awaiter, or crash tick() (§0.5-PY).
         try:
-            # Batch-vs-sync decision. We compare scheduled_for to a
-            # 24h-from-now boundary; deadline isn't on the record after
-            # enqueue, so scheduled_for is the proxy. Expedited tasks
-            # (whose scheduled_for is set to "now") therefore never go
-            # through the batch endpoint, which is the right call.
-            scheduled_for_ts = (
-                _parse_iso(record.scheduled_for) if record.scheduled_for else None
-            )
-            more_than_24h = (
-                scheduled_for_ts is not None
-                and (scheduled_for_ts - _now_utc()) > timedelta(hours=24)
-            )
-            use_batch = (
-                spec.prefer_batch
-                and more_than_24h
-                and hasattr(adapter, "dispatch_batch")
-            )
-
-            # Build adapter DispatchOptions.
-            from .providers.base import DispatchOptions  # local import to avoid cycle
-
-            opts = DispatchOptions(
-                max_tokens=spec.max_tokens if spec.max_tokens is not None else 1024,
-                system=spec.system_prompt,
-                extra={"temperature": spec.temperature}
-                if spec.temperature is not None
-                else {},
-            )
-
             if use_batch:
-                result_obj: Any = await adapter.dispatch_batch(
-                    spec.model, [spec.prompt], opts
+                result_obj: Any = await _retry_with_backoff(
+                    lambda: adapter.dispatch_batch(spec.model, [spec.prompt], opts)
                 )
             else:
-                result_obj = await adapter.dispatch(spec.model, spec.prompt, opts)
-            duration_ms = (_now_utc() - start).total_seconds() * 1000.0
+                result_obj = await _retry_with_backoff(
+                    lambda: adapter.dispatch(spec.model, spec.prompt, opts)
+                )
         except asyncio.CancelledError:
             raise
         except Exception as err:
@@ -1566,8 +2046,49 @@ class Scheduler:
             if self._store is not None and self._connected:
                 await self._store.upsert(record)
             return TickResultEntry(task_id=task_id, status="failed", error=msg)
+        duration_ms = (_now_utc() - start).total_seconds() * 1000.0
 
-        intensity_g = await self._fetch_current_intensity(record.region, ran_at)
+        # The task may have been cancelled while the provider call was in
+        # flight (this process, or another one via the shared store).
+        # Keep the cancelled ledger row: do not overwrite it with
+        # completed + result (§1.2).
+        cancelled_elsewhere = False
+        if self._store is not None and self._connected:
+            try:
+                persisted = await self._store.load(task_id)
+                cancelled_elsewhere = (
+                    persisted is not None and persisted.status == "cancelled"
+                )
+            except Exception:
+                # Store read failure — fall back to the in-memory status.
+                cancelled_elsewhere = False
+        if record.status == "cancelled" or cancelled_elsewhere:
+            record.status = "cancelled"
+            _log.warning(
+                "[ebb-ai/scheduler] task %s was cancelled while running; "
+                "dropping its late result",
+                task_id,
+            )
+            return TickResultEntry(
+                task_id=task_id,
+                status="failed",
+                error="task was cancelled while running; late result dropped",
+            )
+
+        intensity_g: float | None = None
+        grid_source: GridSource | None = None
+        try:
+            intensity_g, grid_source = await self._fetch_current_intensity(
+                record.region, ran_at
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as err:
+            _log.warning(
+                "[ebb-ai/scheduler] intensity fetch for the receipt failed (%s); "
+                "receipt falls back to the schedule-time estimate",
+                err,
+            )
         source = (
             intensity_source_override
             if intensity_source_override is not None
@@ -1582,62 +2103,101 @@ class Scheduler:
         input_tokens = getattr(result_obj, "input_tokens", None)
         output_tokens = getattr(result_obj, "output_tokens", None)
         actual_model = getattr(result_obj, "model", None) or spec.model
-        actual_carbon = (
-            _round_half_up(
-                _intensity_to_grams(
-                    intensity_g,
-                    model=actual_model,
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                )
-                * 10
-            )
-            / 10
-        )
-        estimated_carbon = (
-            record.estimated_carbon_g_co2
-            if record.estimated_carbon_g_co2 is not None
-            else actual_carbon
-        )
-        delta_pct = (
-            _round_half_up(
-                ((actual_carbon - estimated_carbon) / estimated_carbon) * 1000
-            )
-            / 10
-            if estimated_carbon > 0
-            else 0.0
-        )
         total_tokens = (
             input_tokens + output_tokens
             if input_tokens is not None and output_tokens is not None
             else None
         )
-        receipt = self._maybe_sign(
-            CarbonReceipt(
-                task_id=task_id,
-                ran_at=_iso_utc(ran_at),
-                region=record.region,
-                estimated_carbon_g_co2=estimated_carbon,
-                actual_carbon_g_co2=actual_carbon,
-                delta_pct=delta_pct,
-                # Record what actually ran (the adapter's result), not just
-                # what was requested — a runtime bridge may run a different
-                # model than spec.model. The batch path has no usage.
-                provider=getattr(result_obj, "provider", None) or spec.provider,
-                model=actual_model,
-                duration_ms=duration_ms,
-                prompt=_redact_prompt(spec.prompt, spec.redact_in_receipt),
-                total_tokens=total_tokens,
+        receipt: CarbonReceipt | None = None
+        try:
+            actual_carbon = (
+                _round_half_up(
+                    _intensity_to_grams(
+                        intensity_g,
+                        model=actual_model,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                    )
+                    * 10
+                )
+                / 10
+                if intensity_g is not None
+                else (record.estimated_carbon_g_co2 or 0.0)
             )
-        )
+            estimated_carbon = (
+                record.estimated_carbon_g_co2
+                if record.estimated_carbon_g_co2 is not None
+                else actual_carbon
+            )
+            delta_pct = (
+                _round_half_up(
+                    ((actual_carbon - estimated_carbon) / estimated_carbon) * 1000
+                )
+                / 10
+                if estimated_carbon > 0
+                else 0.0
+            )
+            receipt = self._maybe_sign(
+                CarbonReceipt(
+                    task_id=task_id,
+                    ran_at=_iso_utc(ran_at),
+                    region=record.region,
+                    estimated_carbon_g_co2=estimated_carbon,
+                    actual_carbon_g_co2=actual_carbon,
+                    delta_pct=delta_pct,
+                    # Record what actually ran (the adapter's result), not
+                    # just what was requested — a runtime bridge may run a
+                    # different model than spec.model. The batch path has
+                    # no usage.
+                    provider=getattr(result_obj, "provider", None) or spec.provider,
+                    model=actual_model,
+                    duration_ms=duration_ms,
+                    prompt=_redact_prompt(spec.prompt, spec.redact_in_receipt),
+                    total_tokens=total_tokens,
+                    # Provenance (v0.12): the raw intensity, which feed
+                    # produced it ("mock" = synthetic), and the confidence
+                    # tier of the per-model energy coefficients. None
+                    # intensity/grid_source means the receipt-side fetch
+                    # failed and the actual side reuses the schedule-time
+                    # estimate.
+                    intensity_g_co2_per_kwh=intensity_g,
+                    grid_source=grid_source,
+                    energy_source=lookup_model_energy(actual_model).source,
+                )
+            )
+        except Exception as err:
+            _log.warning(
+                "[ebb-ai/scheduler] failed to build the carbon receipt for %s: %s; "
+                "task stays completed without a receipt",
+                task_id,
+                err,
+            )
         record.status = "completed"
         record.completed_at = _iso_utc(_now_utc())
         record.result = _result_to_serializable(result_obj)
         record.receipt = receipt
         record.intensity_source = source  # type: ignore[assignment]
+        # Terminal transition: redact secrets out of the persisted body.
+        # The original (unredacted) body was needed up to this point so
+        # the live dispatch used the caller's exact prompt; the ledger
+        # keeps only the redacted form. (Failed tasks intentionally keep
+        # the original body — retry_task must re-dispatch the exact
+        # prompt.)
+        record.body_json = _redact_body_json(record.body_json)
         self._tasks[task_id] = record
         if self._store is not None and self._connected:
-            await self._store.upsert(record)
+            try:
+                await self._store.upsert(record)
+            except Exception as err:
+                _log.warning(
+                    "[ebb-ai/scheduler] failed to persist completed task %s: %s",
+                    task_id,
+                    err,
+                )
+        if spec.output_path and receipt is not None:
+            await _write_output_file(
+                spec.output_path, task_id, record.result, receipt
+            )
         return TickResultEntry(task_id=task_id, status="completed")
 
 
@@ -1714,18 +2274,15 @@ async def defer(
     ...         region="US-CAL-CISO",
     ...     )
     """
+    # The dataclass holds the deadline as a string for serialization;
+    # datetime instances are rendered to ISO here and re-parsed by
+    # normalize_deadline when enqueue() runs.
     opts = DeferOptions(
         deadline=deadline.isoformat() if isinstance(deadline, datetime) else deadline,
         carbon_budget_g=carbon_budget_g,
         region=region,
         task_id=task_id,
     )
-    # Override deadline normalization to accept datetime instances at this
-    # layer too — the dataclass holds the raw user value as a string for
-    # serialization, but we pass the parsed object through opts.deadline
-    # via normalize_deadline when enqueue() runs.
-    if isinstance(deadline, datetime):
-        opts.deadline = deadline.isoformat()
     return await _get_default().defer(task, opts)
 
 

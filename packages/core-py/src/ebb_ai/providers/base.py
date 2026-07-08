@@ -73,8 +73,9 @@ class BatchHandle:
 
     Batch APIs return *eventually* (24h SLA at both Anthropic and
     OpenAI), so the dispatch call yields a handle the scheduler can
-    poll. v0.3 will add a polling helper; for now the caller can
-    retrieve the batch directly via the SDK if needed.
+    poll. Automatic scheduler routing through this path (status
+    ``"submitted"`` + result polling) is tracked in ROADMAP.md; until
+    then callers poll the handle via the vendor SDK themselves.
     """
 
     batch_id: str

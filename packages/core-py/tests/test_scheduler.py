@@ -34,9 +34,11 @@ def _in_hours(h: float) -> datetime:
 
 
 def test_pick_best_window_returns_none_when_past() -> None:
+    # Two hours ago is outside even the current-hour candidacy window
+    # (entries up to 1h old are valid "run now" candidates since §1.7).
     past = [
         GridForecastEntry(
-            datetime=(datetime.now(UTC) - timedelta(hours=1)).isoformat(),
+            datetime=(datetime.now(UTC) - timedelta(hours=2)).isoformat(),
             carbon_intensity_g_co2_per_kwh=100,
             band="clean",
         )

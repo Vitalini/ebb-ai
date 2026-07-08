@@ -13,12 +13,21 @@ from typing import Any, Literal
 
 # Public type aliases — kept narrow to match the TS literal unions.
 TaskStatus = Literal[
-    "queued", "scheduled", "running", "completed", "failed", "cancelled"
+    "queued",
+    "scheduled",
+    "running",
+    "submitted",
+    "completed",
+    "failed",
+    "cancelled",
 ]
 """Lifecycle of a deferred task.
 
 v0.5 adds ``cancelled``: a task explicitly stopped by the caller via
-:meth:`Scheduler.cancel_task` before it ran.
+:meth:`Scheduler.cancel_task` before it ran. v0.12 adds ``submitted``:
+the task was routed through a provider Batch API and is awaiting
+results — ``tick()`` will transition it to ``completed`` only when
+results actually arrive.
 """
 
 Band = Literal["very_clean", "clean", "average", "dirty", "very_dirty"]
@@ -47,6 +56,23 @@ and the scheduler used the current-hour intensity from a fresh forecast.
 
 Provider = Literal["anthropic", "openai"]
 """Provider identifier for :class:`ProviderCallSpec`."""
+
+ForecastKind = Literal["forecast", "persistence"]
+"""How a :class:`GridForecast` series was produced (v0.12+).
+
+``forecast`` is a genuine forward forecast; ``persistence`` means recent
+realised observations were tiled onto future hours — a naive
+persistence forecast. Feeds that relabel historical data must say so,
+so downstream surfaces can disclose it.
+"""
+
+EnergySource = Literal["measured", "estimated", "fallback"]
+"""Confidence tier of the per-model energy coefficients (v0.12+).
+
+``measured`` — open-weight models with published measurements;
+``estimated`` — closed models, size-class estimates; ``fallback`` —
+unknown model (or closure task), flat legacy constant.
+"""
 
 
 @dataclass(slots=True)
@@ -105,13 +131,21 @@ class GridForecast:
 
     entries: list[GridForecastEntry] = field(default_factory=list)
 
+    kind: ForecastKind | None = None
+    """How the series was produced (v0.12+): a genuine forward forecast
+    (``"forecast"``) or realised observations tiled onto future hours
+    (``"persistence"``). ``None`` on forecasts persisted before v0.12."""
+
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d: dict[str, Any] = {
             "region": self.region,
             "source": self.source,
             "generated_at": self.generated_at,
             "entries": [e.to_dict() for e in self.entries],
         }
+        if self.kind is not None:
+            d["kind"] = self.kind
+        return d
 
 
 @dataclass(slots=True)
@@ -146,6 +180,22 @@ class CarbonReceipt:
     closure-based ``defer`` tasks leave this ``None``."""
     total_tokens: int | None = None
     """Total tokens (input + output) reported by the provider, if any."""
+    intensity_g_co2_per_kwh: float | None = None
+    """Grid intensity (gCO2eq/kWh) used to compute the actual side of this
+    receipt (v0.12+). Recorded directly so consumers and ``ebb stats``
+    never back-derive it from grams (which skews per-model receipts).
+    ``None`` means the receipt-side intensity fetch failed and the actual
+    side reused the schedule-time estimate."""
+    grid_source: GridSource | None = None
+    """Which grid feed produced the intensity (v0.12+). ``"mock"`` means
+    the number is SYNTHETIC — the feed had no key or errored and fell
+    back to the deterministic curve. Covered by the signature, so a
+    signed receipt can no longer silently attest mock-derived carbon."""
+    energy_source: EnergySource | None = None
+    """Confidence tier of the per-model energy coefficients used
+    (v0.12+): ``"measured"`` (open-weight, published measurements),
+    ``"estimated"`` (closed models, size-class estimates), ``"fallback"``
+    (unknown model or closure task, flat legacy constant)."""
     signature: str | None = None
     """Base64 Ed25519 signature over the canonical JSON encoding of every
     other field on this receipt (v0.11+). ``None`` on unsigned dispatches
@@ -187,6 +237,12 @@ class CarbonReceipt:
             d["prompt"] = self.prompt
         if self.total_tokens is not None:
             d["totalTokens"] = self.total_tokens
+        if self.intensity_g_co2_per_kwh is not None:
+            d["intensityGCo2PerKwh"] = self.intensity_g_co2_per_kwh
+        if self.grid_source is not None:
+            d["gridSource"] = self.grid_source
+        if self.energy_source is not None:
+            d["energySource"] = self.energy_source
         if self.signature is not None:
             d["signature"] = self.signature
         if self.signer_public_key is not None:
@@ -231,6 +287,18 @@ class TaskRecord:
     immediately-dispatched tasks, which have no projection step.
     """
 
+    deadline: str | None = None
+    """Normalized ISO deadline captured at enqueue (v0.12+). Persisted so
+    dispatch-time decisions (Batch API eligibility) can be made against
+    the real deadline instead of the ``scheduled_for`` proxy.
+    """
+
+    batch_id: str | None = None
+    """Provider batch id when the task was routed through a Batch API
+    (v0.12+). Set when status transitions to ``submitted``; ``tick()``
+    polls this batch until results arrive.
+    """
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "task_id": self.task_id,
@@ -246,6 +314,8 @@ class TaskRecord:
             "intensity_source": self.intensity_source,
             "body_json": self.body_json,
             "estimated_carbon_g_co2": self.estimated_carbon_g_co2,
+            "deadline": self.deadline,
+            "batch_id": self.batch_id,
         }
 
 
@@ -274,12 +344,22 @@ class ProviderCallSpec:
     """If True (default), route through the provider's Batch API when the
     task's scheduled window is more than 24 hours out.
     """
+    output_path: str | None = None
+    """Optional file path. When set, the dispatcher writes
+    ``{"taskId", "result", "receipt"}`` as JSON to this path after a
+    successful dispatch. Useful when the caller wants to drop the result
+    into an inbox or trigger a file-watcher rather than poll
+    ``check_queue_status``. Accepted as camelCase ``outputPath`` from
+    rows persisted by the TS port (a shared ``queue.db`` is a documented
+    deployment).
+    """
     redact_in_receipt: list[str] | None = None
     """Optional list of regex patterns the dispatcher redacts from the
     prompt before storing it on the receipt. ``None`` (default) applies a
-    built-in set that catches API keys / bearer tokens; ``[]`` disables
+    built-in set of vendor-shaped credential patterns; ``[]`` disables
     redaction entirely. The dispatched call always uses the original
-    prompt — only the receipt's ``prompt`` field is redacted.
+    prompt — only the receipt's ``prompt`` field (and the terminal
+    ``body_json`` ledger copy) is redacted.
     """
 
     def to_dict(self) -> dict[str, Any]:
@@ -304,6 +384,7 @@ class ProviderCallSpec:
             max_tokens=data.get("max_tokens", data.get("maxTokens")),
             temperature=data.get("temperature"),
             prefer_batch=data.get("prefer_batch", data.get("preferBatch", True)),
+            output_path=data.get("output_path", data.get("outputPath")),
             redact_in_receipt=data.get(
                 "redact_in_receipt", data.get("redactInReceipt")
             ),
@@ -347,6 +428,8 @@ __all__ = [
     "Band",
     "CarbonReceipt",
     "DeferOptions",
+    "EnergySource",
+    "ForecastKind",
     "GridForecast",
     "GridForecastEntry",
     "GridSource",

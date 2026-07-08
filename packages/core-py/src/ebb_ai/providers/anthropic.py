@@ -58,7 +58,14 @@ class AnthropicAdapter(ProviderAdapter):
             self._client = client
         else:
             sdk = _load_sdk()
-            self._client = sdk.AsyncAnthropic(api_key=api_key) if api_key else sdk.AsyncAnthropic()
+            # max_retries=0 — ebb-ai's scheduler owns the retry policy
+            # (_retry_with_backoff); letting the SDK retry too multiplies
+            # attempts and can double-bill ambiguous network errors.
+            self._client = (
+                sdk.AsyncAnthropic(api_key=api_key, max_retries=0)
+                if api_key
+                else sdk.AsyncAnthropic(max_retries=0)
+            )
 
     async def dispatch(
         self,

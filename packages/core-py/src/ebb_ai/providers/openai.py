@@ -4,17 +4,24 @@ Implements :class:`ProviderAdapter` against the official ``openai``
 Python SDK. The module imports cleanly even when the SDK isn't
 installed — the import is deferred to first use.
 
-The sync path uses ``responses.create`` (the SDK's modern entrypoint,
-which supersedes ``chat.completions.create``). The batch path uses
-``batches.create``, which requires a JSONL "input file" — we build the
-file in memory and upload it via ``files.create(purpose="batch")``.
-This is the same flow the official OpenAI batch cookbook recommends.
+The sync path uses ``chat.completions.create`` for the broadest model
+compatibility. The batch path uses ``batches.create``, which requires a
+JSONL "input file" — we build the file in memory and upload it via
+``files.create(purpose="batch")``. This is the same flow the official
+OpenAI batch cookbook recommends.
+
+o-series reasoning models and the gpt-5 family reject the legacy
+``max_tokens`` parameter (400 "Unsupported parameter") and require
+``max_completion_tokens``; o-series additionally rejects
+``temperature``. :func:`_completion_params` maps the request
+accordingly, mirroring the TS adapter's ``completionParams``.
 """
 
 from __future__ import annotations
 
 import io
 import json
+import re
 from typing import Any
 
 from .base import BatchHandle, DispatchOptions, DispatchResult, ProviderAdapter
@@ -30,6 +37,35 @@ def _load_sdk() -> Any:
             "`pip install openai`."
         ) from err
     return openai
+
+
+def _is_o_series_model(model: str) -> bool:
+    """o-series reasoning models (o1, o3, o4-mini, …)."""
+    return re.match(r"^o\d", model.strip().lower()) is not None
+
+
+def _is_gpt5_family_model(model: str) -> bool:
+    """gpt-5 family (gpt-5, gpt-5-mini, gpt-5.1, …)."""
+    return model.strip().lower().startswith("gpt-5")
+
+
+def _completion_params(model: str, opts: DispatchOptions) -> dict[str, Any]:
+    """Build the token/temperature portion of a chat.completions payload.
+
+    o-series and gpt-5-family models reject the legacy ``max_tokens``
+    parameter and require ``max_completion_tokens``; o-series
+    additionally rejects ``temperature`` (which arrives via
+    ``opts.extra``). Everything else keeps the classic parameters.
+    """
+    params: dict[str, Any] = {}
+    if _is_o_series_model(model) or _is_gpt5_family_model(model):
+        params["max_completion_tokens"] = opts.max_tokens
+    else:
+        params["max_tokens"] = opts.max_tokens
+    params.update(opts.extra)
+    if _is_o_series_model(model):
+        params.pop("temperature", None)
+    return params
 
 
 class OpenAIAdapter(ProviderAdapter):
@@ -57,7 +93,14 @@ class OpenAIAdapter(ProviderAdapter):
             self._client = client
         else:
             sdk = _load_sdk()
-            self._client = sdk.AsyncOpenAI(api_key=api_key) if api_key else sdk.AsyncOpenAI()
+            # max_retries=0 — ebb-ai's scheduler owns the retry policy
+            # (_retry_with_backoff); letting the SDK retry too multiplies
+            # attempts and can double-bill ambiguous network errors.
+            self._client = (
+                sdk.AsyncOpenAI(api_key=api_key, max_retries=0)
+                if api_key
+                else sdk.AsyncOpenAI(max_retries=0)
+            )
 
     async def dispatch(
         self,
@@ -80,11 +123,10 @@ class OpenAIAdapter(ProviderAdapter):
         kwargs: dict[str, Any] = {
             "model": model,
             "messages": messages,
-            "max_tokens": opts.max_tokens,
+            **_completion_params(model, opts),
         }
         if opts.metadata:
             kwargs["metadata"] = opts.metadata
-        kwargs.update(opts.extra)
 
         response = await self._client.chat.completions.create(**kwargs)
         text = _extract_text(response)
@@ -120,9 +162,8 @@ class OpenAIAdapter(ProviderAdapter):
             body: dict[str, Any] = {
                 "model": model,
                 "messages": messages,
-                "max_tokens": opts.max_tokens,
+                **_completion_params(model, opts),
             }
-            body.update(opts.extra)
             line = {
                 "custom_id": f"req-{i}",
                 "method": "POST",

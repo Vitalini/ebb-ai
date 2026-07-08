@@ -42,7 +42,12 @@ from .energy import (
     lookup_model_energy,
     normalize_model_name,
 )
-from .errors import CarbonBudgetExceededError, InvalidDeadlineError
+from .errors import (
+    CarbonBudgetExceededError,
+    InvalidDeadlineError,
+    SchedulerShutdownError,
+    TaskCancelledError,
+)
 from .grid import GridFeed, electricity_maps_feed, mock_grid_feed
 from .recommend import (
     RecommendAlternative,
@@ -74,6 +79,8 @@ from .types import (
     Band,
     CarbonReceipt,
     DeferOptions,
+    EnergySource,
+    ForecastKind,
     GridForecast,
     GridForecastEntry,
     GridSource,
@@ -101,7 +108,9 @@ __all__ = [
     "CarbonReceipt",
     "DeferOptions",
     "DeferrableTask",
+    "EnergySource",
     "EnergySourceTier",
+    "ForecastKind",
     "GridFeed",
     "GridForecast",
     "GridForecastEntry",
@@ -114,8 +123,10 @@ __all__ = [
     "RecommendAlternative",
     "RecommendResult",
     "Scheduler",
+    "SchedulerShutdownError",
     "SigningKeyPair",
     "SigningNotInstalled",
+    "TaskCancelledError",
     "TaskRecord",
     "TaskStatus",
     "TickResult",

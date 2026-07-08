@@ -1,6 +1,6 @@
 """Grid carbon-intensity feeds.
 
-v0.2 ships two sources, matching the TS port:
+The Python port ships two sources:
 
 - :func:`mock_grid_feed` — deterministic synthetic data with a
   realistic intraday curve, for development and tests without an API
@@ -10,8 +10,14 @@ v0.2 ships two sources, matching the TS port:
   is missing, the request fails, or the response shape is unexpected —
   matching the TS implementation's deliberate behavior.
 
-WattTime support is planned for v0.3 (marginal emissions are the
-better climate signal for time-shifting).
+The TS port additionally implements UK Carbon Intensity, EIA, and
+ENTSO-E feeds; records they persist round-trip through the Python types
+unchanged (see :data:`ebb_ai.types.GridSource`). Porting those feeds —
+and a WattTime marginal-emissions source — is tracked in ROADMAP.md.
+
+Every forecast this module emits carries ``kind="forecast"`` (v0.12+):
+both feeds return genuine forward-looking series, never realised
+observations relabelled as a forecast.
 """
 
 from __future__ import annotations
@@ -135,6 +141,7 @@ class _MockGridFeed(GridFeed):
             source="mock",
             generated_at=_iso_utc(_now_utc()),
             entries=entries,
+            kind="forecast",
         )
 
 
@@ -201,6 +208,7 @@ class _ElectricityMapsFeed(GridFeed):
                 source="electricityMaps",
                 generated_at=_iso_utc(_now_utc()),
                 entries=entries,
+                kind="forecast",
             )
         except (httpx.HTTPError, RuntimeError, ValueError) as err:
             _log.warning(

@@ -34,7 +34,7 @@ from typing import Any
 from .energy import grams_for_intensity
 from .errors import CarbonBudgetExceededError, InvalidDeadlineError
 from .grid import GridFeed, mock_grid_feed
-from .types import Band, GridForecastEntry
+from .types import Band, GridForecastEntry, GridSource
 
 _log = logging.getLogger(__name__)
 
@@ -78,6 +78,10 @@ class RecommendResult:
     batch_eligible: bool
     alternatives: list[RecommendAlternative] = field(default_factory=list)
     reasoning: str = ""
+    grid_source: GridSource | None = None
+    """Which grid feed produced the forecast this plan was scored against
+    (v0.12+). ``"mock"`` means the recommendation is based on SYNTHETIC
+    data — surface this to the caller."""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -89,6 +93,7 @@ class RecommendResult:
             "batch_eligible": self.batch_eligible,
             "alternatives": [a.to_dict() for a in self.alternatives],
             "reasoning": self.reasoning,
+            "grid_source": self.grid_source,
         }
 
 
@@ -168,6 +173,17 @@ def _normalize_deadline(
     if parsed < now - timedelta(seconds=5):
         raise InvalidDeadlineError(d)
     return parsed
+
+
+def _with_source_disclosure(source: GridSource, reasoning: str) -> str:
+    """Prefix the reasoning with a loud disclosure when the plan was
+    scored against the synthetic mock curve, so an LLM caller (and the
+    human it relays to) cannot mistake a keyless fallback for live grid
+    data. Mirrors the TS ``withSourceDisclosure``.
+    """
+    if source == "mock":
+        return f"SYNTHETIC (mock) grid data — {reasoning}"
+    return reasoning
 
 
 def _build_reasoning(
@@ -260,12 +276,15 @@ async def recommend_window(
     if not entries:
         raise RuntimeError("recommend_window: forecast returned no entries")
 
+    # Entries mark the *start* of an hour, so the entry covering "now"
+    # started up to an hour ago — it is a valid run-right-now candidate
+    # and must not be excluded from the pick (or the savings math).
     in_deadline: list[GridForecastEntry] = []
     for e in entries:
         t = _parse_iso(e.datetime)
         if t is None:
             continue
-        if now_dt <= t <= parsed_deadline:
+        if now_dt - timedelta(hours=1) <= t <= parsed_deadline:
             in_deadline.append(e)
 
     if not in_deadline:
@@ -281,10 +300,14 @@ async def recommend_window(
             estimated_savings_vs_now_pct=0,
             batch_eligible=False,
             alternatives=[],
-            reasoning=(
-                f"no in-deadline windows; best available is "
-                f"{_format_hour(head.datetime)} UTC"
+            reasoning=_with_source_disclosure(
+                forecast.source,
+                (
+                    f"no in-deadline windows; best available is "
+                    f"{_format_hour(head.datetime)} UTC"
+                ),
             ),
+            grid_source=forecast.source,
         )
 
     if carbon_budget_g is not None:
@@ -343,13 +366,17 @@ async def recommend_window(
         estimated_savings_vs_now_pct=savings_pct,
         batch_eligible=batch_eligible,
         alternatives=alternatives,
-        reasoning=_build_reasoning(
-            chosen=chosen,
-            savings_pct=savings_pct,
-            batch_eligible=batch_eligible,
-            budget_g=carbon_budget_g,
-            survivor_count=len(survivors),
+        reasoning=_with_source_disclosure(
+            forecast.source,
+            _build_reasoning(
+                chosen=chosen,
+                savings_pct=savings_pct,
+                batch_eligible=batch_eligible,
+                budget_g=carbon_budget_g,
+                survivor_count=len(survivors),
+            ),
         ),
+        grid_source=forecast.source,
     )
 
 

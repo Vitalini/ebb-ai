@@ -36,6 +36,52 @@ class CarbonBudgetExceededError(Exception):
         )
 
 
+class TaskCancelledError(Exception):
+    """A task was cancelled via :meth:`Scheduler.cancel_task`.
+
+    Awaiters of :meth:`Scheduler.defer` receive this exception when the
+    task is cancelled before (or while) it runs. It deliberately derives
+    from :class:`Exception` — **not** :class:`asyncio.CancelledError` —
+    because ``CancelledError`` is a ``BaseException`` that bypasses
+    ``except Exception`` handlers, marks the *awaiting* task as cancelled,
+    and unwinds ``asyncio.TaskGroup``\\ s. Cancelling an ebb-ai task must
+    not cancel the caller.
+
+    Attributes
+    ----------
+    task_id:
+        Identifier of the cancelled task.
+    """
+
+    task_id: str
+
+    def __init__(self, task_id: str) -> None:
+        self.task_id = task_id
+        super().__init__(f"task {task_id!r} cancelled")
+
+
+class SchedulerShutdownError(Exception):
+    """The scheduler shut down before a pending task could dispatch.
+
+    Raised into every unresolved :meth:`Scheduler.defer` awaiter by
+    :meth:`Scheduler.shutdown`, so ``async with Scheduler(...)`` can
+    never deadlock a still-pending ``defer()``.
+
+    Attributes
+    ----------
+    task_id:
+        Identifier of the task whose awaiter was settled.
+    """
+
+    task_id: str
+
+    def __init__(self, task_id: str) -> None:
+        self.task_id = task_id
+        super().__init__(
+            f"scheduler shut down before task {task_id!r} was dispatched"
+        )
+
+
 class InvalidDeadlineError(ValueError):
     """The supplied deadline could not be parsed or is already in the past.
 
@@ -58,4 +104,9 @@ class InvalidDeadlineError(ValueError):
         )
 
 
-__all__ = ["CarbonBudgetExceededError", "InvalidDeadlineError"]
+__all__ = [
+    "CarbonBudgetExceededError",
+    "InvalidDeadlineError",
+    "SchedulerShutdownError",
+    "TaskCancelledError",
+]
