@@ -63,22 +63,25 @@ export function rtcwakeCommand(at: Date): string {
 }
 
 /**
- * Run `rtcwake -m no -t <epoch>`. Requires CAP_SYS_TIME / root; we
- * don't sudo on the user's behalf. If the process is not euid 0, we
- * return `{ ok: false, stderr: "sudo required" }` so the caller can
- * prompt.
+ * Run `rtcwake -m no -t <epoch>`. Needs CAP_SYS_TIME / root. If we are
+ * euid 0 we run it directly; otherwise we try `sudo -n` (non-interactive
+ * — succeeds only if a sudoers rule pre-authorizes it without a password)
+ * and, on failure, hand the caller a non-ok result so it can print the
+ * exact sudoers one-liner.
  */
 export async function rtcwakeScheduleWake(
   at: Date,
 ): Promise<{ command: string; ok: boolean; stderr: string }> {
   const command = rtcwakeCommand(at);
   const uid = typeof process.getuid === "function" ? process.getuid() : -1;
-  if (uid !== 0) {
-    return { command, ok: false, stderr: "sudo required" };
-  }
   const epoch = Math.floor(at.getTime() / 1000);
+  const bare = ["-m", "no", "-t", String(epoch)];
+  const [bin, args] =
+    uid === 0
+      ? (["rtcwake", bare] as const)
+      : (["sudo", ["-n", "rtcwake", ...bare]] as const);
   return await new Promise((resolve) => {
-    const child = spawn("rtcwake", ["-m", "no", "-t", String(epoch)], {
+    const child = spawn(bin, args, {
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stderr = "";
@@ -101,8 +104,17 @@ export async function rtcwakeScheduleWake(
 export const pmsetScheduleWake = rtcwakeScheduleWake;
 
 export interface SystemdServiceOptions {
-  ebbBinaryPath: string;
   dbPath: string;
+  /**
+   * The argv[0..n] that invoke `ebb`, resolved at install time. For a
+   * pinned node install this is `[process.execPath, realpath(argv[1])]`
+   * — the exact interpreter plus the real dist entry — immune to a bare
+   * service PATH and `#!/usr/bin/env node` shebangs. Falls back to
+   * `ebbBinaryPath` (single element) if omitted.
+   */
+  launcher?: string[];
+  /** Legacy single-binary launcher. Prefer `launcher`. */
+  ebbBinaryPath?: string;
   /** Absolute path to write stdout/stderr logs. Defaults to ~/.ebb/tick.log. */
   logPath?: string;
   /** Optional env vars added as `Environment=KEY=VAL` lines. */
@@ -113,10 +125,18 @@ export interface SystemdServiceOptions {
  * Render the `ebb-tick.service` unit file. `Type=oneshot` because the
  * service runs `ebb tick --once` and exits; the companion timer is
  * responsible for cadence. `EnvironmentFile=` references a user-owned
- * env file so secrets never land in the service unit itself.
+ * env file (belt-and-braces: `ebb tick` also loads it directly), so
+ * secrets never land in the service unit itself.
  */
 export function systemdService(opts: SystemdServiceOptions): string {
   const logPath = opts.logPath ?? `${homeDir()}/.ebb/tick.log`;
+  const launcher =
+    opts.launcher && opts.launcher.length > 0
+      ? opts.launcher
+      : [opts.ebbBinaryPath ?? "ebb"];
+  const execStart = [...launcher, "tick", "--db", opts.dbPath, "--once"].join(
+    " ",
+  );
   const envLines = opts.env
     ? Object.entries(opts.env)
         .map(([k, v]) => `Environment=${k}=${v}`)
@@ -129,7 +149,7 @@ After=network.target
 
 [Service]
 Type=oneshot
-ExecStart=${opts.ebbBinaryPath} tick --db ${opts.dbPath} --once
+ExecStart=${execStart}
 EnvironmentFile=-%h/.config/ebb/env
 ${envBlock}StandardOutput=append:${logPath}
 StandardError=append:${logPath}

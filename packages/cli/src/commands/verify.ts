@@ -122,11 +122,16 @@ function renderHuman(receipt: CarbonReceipt, res: ReturnType<typeof verifyReceip
 
   const lines: string[] = [
     status,
+  ];
+  if (receipt.gridSource === "mock") {
+    lines.push("!! MOCK DATA — grid intensity is synthetic, not from a real feed");
+  }
+  lines.push(
     "",
     `task_id           ${receipt.taskId}`,
     `region            ${receipt.region}`,
     `ran_at            ${receipt.ranAt}`,
-  ];
+  );
   if (receipt.actualCarbonGCo2 !== undefined) {
     lines.push(`actual_g_co2      ${receipt.actualCarbonGCo2}`);
   }
@@ -135,6 +140,18 @@ function renderHuman(receipt: CarbonReceipt, res: ReturnType<typeof verifyReceip
   }
   if (receipt.deltaPct !== undefined) {
     lines.push(`delta_pct         ${receipt.deltaPct >= 0 ? "+" : ""}${receipt.deltaPct}`);
+  }
+  if (receipt.intensityGCo2PerKwh !== undefined) {
+    lines.push(`intensity_g_kwh   ${receipt.intensityGCo2PerKwh}`);
+  }
+  if (receipt.gridSource !== undefined) {
+    const mock = receipt.gridSource === "mock";
+    lines.push(
+      `grid_source       ${receipt.gridSource}${mock ? "   !! MOCK DATA (synthetic — carbon is illustrative, not measured)" : ""}`,
+    );
+  }
+  if (receipt.energySource !== undefined) {
+    lines.push(`energy_source     ${receipt.energySource}`);
   }
   if (receipt.model) lines.push(`model             ${receipt.model}`);
   if (receipt.provider) lines.push(`provider          ${receipt.provider}`);

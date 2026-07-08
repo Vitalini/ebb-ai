@@ -103,4 +103,40 @@ describe("runVerify --file", () => {
     const res = await runVerify({ file: path, json: true });
     expect(JSON.parse(res.rendered).outcome).toBe("valid");
   });
+
+  it("renders provenance fields (intensity, grid_source, energy_source)", async () => {
+    const kp = loadOrCreateSigningKey({ privateKeyPath: join(dir, "k") });
+    const receipt: CarbonReceipt = {
+      ...baseReceipt,
+      intensityGCo2PerKwh: 210,
+      gridSource: "electricityMaps",
+      energySource: "estimated",
+    };
+    const signed = signReceipt(receipt, kp);
+    const path = join(dir, "prov.json");
+    writeFileSync(path, JSON.stringify(signed));
+
+    const res = await runVerify({ file: path });
+    expect(res.rendered).toContain("intensity_g_kwh   210");
+    expect(res.rendered).toContain("grid_source       electricityMaps");
+    expect(res.rendered).toContain("energy_source     estimated");
+    expect(res.rendered).not.toContain("MOCK DATA");
+  });
+
+  it("loudly marks a MOCK-derived receipt", async () => {
+    const kp = loadOrCreateSigningKey({ privateKeyPath: join(dir, "k") });
+    const receipt: CarbonReceipt = {
+      ...baseReceipt,
+      intensityGCo2PerKwh: 400,
+      gridSource: "mock",
+      energySource: "fallback",
+    };
+    const signed = signReceipt(receipt, kp);
+    const path = join(dir, "mock.json");
+    writeFileSync(path, JSON.stringify(signed));
+
+    const res = await runVerify({ file: path });
+    expect(res.rendered).toContain("MOCK DATA");
+    expect(res.rendered).toContain("grid_source       mock");
+  });
 });

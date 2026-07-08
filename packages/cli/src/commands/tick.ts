@@ -12,11 +12,13 @@ import {
   OpenAIAdapter,
   resolveRegion,
   Scheduler,
+  TaskStore,
   type ProviderAdapter,
 } from "@ebb-ai/core";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { loadEnvFileIntoProcess } from "./env-file.js";
 
 export interface TickCommandOptions {
   db?: string;
@@ -24,6 +26,8 @@ export interface TickCommandOptions {
   once?: boolean;
   interval?: number;
   region?: string;
+  /** Override the secrets file path (tests). Defaults to ~/.config/ebb/env. */
+  envFile?: string;
 }
 
 export interface TickRunResult {
@@ -66,25 +70,86 @@ function buildAdapters(): {
   return out;
 }
 
+/** Provider key expected in the env for a given provider name. */
+const PROVIDER_KEY: Record<string, string> = {
+  anthropic: "ANTHROPIC_API_KEY",
+  openai: "OPENAI_API_KEY",
+};
+
+/**
+ * Inspect the ledger for pending provider-call tasks whose provider key
+ * is missing from the environment. Returns the distinct missing keys.
+ * Best-effort — never throws (a broken/absent DB just yields []).
+ */
+export function missingProviderKeysForPending(dbPath: string): string[] {
+  const missing = new Set<string>();
+  let store: TaskStore | undefined;
+  try {
+    store = new TaskStore({ dbPath });
+    const pending = [
+      ...store.list({ status: "queued" }),
+      ...store.list({ status: "scheduled" }),
+      ...store.list({ status: "submitted" }),
+    ];
+    for (const rec of pending) {
+      if (!rec.bodyJson) continue;
+      let provider: string | undefined;
+      try {
+        provider = (JSON.parse(rec.bodyJson) as { provider?: string })
+          .provider;
+      } catch {
+        continue;
+      }
+      const key = provider ? PROVIDER_KEY[provider] : undefined;
+      if (key && !process.env[key]) missing.add(key);
+    }
+  } catch {
+    // absent / unreadable DB — nothing to warn about.
+  } finally {
+    store?.close();
+  }
+  return [...missing];
+}
+
 export async function runTickOnce(
   opts: TickCommandOptions = {},
 ): Promise<TickRunResult> {
+  // Load the standardized secrets file into the environment for any key
+  // not already set — covers launchd (bare env), systemd, and manual
+  // cron uniformly. Explicit env always wins.
+  loadEnvFileIntoProcess(opts.envFile);
+
+  const dbPath = opts.db ?? defaultDbPath();
   const adapters = buildAdapters();
   if (!adapters.anthropic && !adapters.openai) {
+    // Loud warning when pending provider tasks exist but no key is set.
+    const missing = missingProviderKeysForPending(dbPath);
+    const detail =
+      missing.length > 0
+        ? `; pending tasks need ${missing.join(" / ")} — set them in ~/.config/ebb/env`
+        : "";
     return {
       exitCode: 0,
       message:
-        "tick: no provider keys (ANTHROPIC_API_KEY / OPENAI_API_KEY); nothing to dispatch",
+        `tick: no provider keys (ANTHROPIC_API_KEY / OPENAI_API_KEY); nothing to dispatch${detail}`,
     };
   }
-  const dbPath = opts.db ?? defaultDbPath();
+  // Even with some keys present, warn about pending tasks needing a key
+  // we do not have (e.g. OpenAI tasks queued but only ANTHROPIC set).
+  const missingForPending = missingProviderKeysForPending(dbPath);
   const scheduler = new Scheduler({
     dbPath,
     defaultRegion: resolveRegion(undefined, opts.region).region,
   });
   try {
     const result = await scheduler.tick(adapters);
-    const msg = `tick: ${result.inspected} inspected, ${result.dispatched} dispatched, ${result.failed} failed`;
+    let msg = `tick: ${result.inspected} inspected, ${result.dispatched} dispatched, ${result.failed} failed`;
+    if (missingForPending.length > 0) {
+      msg +=
+        `\n!! WARNING: pending tasks need ${missingForPending.join(" / ")} ` +
+        `but that key is not set — those tasks cannot dispatch. ` +
+        `Add it to ~/.config/ebb/env.`;
+    }
     return { exitCode: result.failed > 0 ? 1 : 0, message: msg };
   } finally {
     scheduler.shutdown();

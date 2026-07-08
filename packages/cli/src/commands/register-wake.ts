@@ -40,7 +40,10 @@ export async function runRegisterWake(
       command: "",
       ok: false,
       stderr: "non-posix",
-      message: `[ebb-ai/cli] register-wake on ${platform} is planned for v0.5.`,
+      message:
+        `[ebb-ai/cli] register-wake is not supported on Windows — there is no ` +
+        `pmset/rtcwake equivalent wired. Use Task Scheduler's "Wake the ` +
+        `computer to run this task" option on your ebb-tick job instead.`,
     };
   }
 
@@ -83,6 +86,26 @@ export async function runRegisterWake(
     stderr: res.stderr,
     message: res.ok
       ? `registered: ${res.command}`
-      : `failed (${res.stderr}). Run as root, or pre-authorize via sudoers:\n    sudo ${res.command}`,
+      : `failed (${res.stderr}).\n` +
+        `Run as root, or pre-authorize password-less wake scheduling — add this\n` +
+        `line via \`sudo visudo\` (replace ${whoami()} with your login):\n` +
+        `    ${sudoersLine(platform)}`,
   };
+}
+
+/** Best-effort current username for the sudoers hint. */
+function whoami(): string {
+  return (
+    process.env.SUDO_USER ??
+    process.env.USER ??
+    process.env.LOGNAME ??
+    "youruser"
+  );
+}
+
+/** The exact NOPASSWD sudoers line the user should paste. */
+function sudoersLine(platform: PlatformName): string {
+  const bin =
+    platform === "macos" ? "/usr/bin/pmset" : "/usr/sbin/rtcwake";
+  return `${whoami()} ALL=(root) NOPASSWD: ${bin}`;
 }

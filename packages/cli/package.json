@@ -5,6 +5,9 @@
   "license": "Apache-2.0",
   "author": "Vitalii Borovyk",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "main": "./dist/index.js",
   "bin": {
     "ebb": "./dist/index.js"

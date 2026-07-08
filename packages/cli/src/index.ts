@@ -10,6 +10,7 @@
  *   ebb register-wake  schedule a macOS wake event 30s before a task
  */
 
+import { createRequire } from "node:module";
 import { Command } from "commander";
 import { runInstall, type InstallMode } from "./commands/install.js";
 import { runQueueList } from "./commands/queue.js";
@@ -19,9 +20,23 @@ import { runStats } from "./commands/stats.js";
 import { runTick } from "./commands/tick.js";
 import { runVerify } from "./commands/verify.js";
 
-/** CLI version — keep in sync with `package.json`. Sole source of truth for
- * what `ebb --version` prints. */
-const CLI_VERSION = "0.11.0";
+/**
+ * CLI version — read from this package's own `package.json` so there is
+ * a single source of truth and `ebb --version` never drifts from the
+ * published version. `createRequire` resolves relative to this module,
+ * so it works from both `src` (tests) and `dist` (published bin).
+ */
+export function readCliVersion(): string {
+  try {
+    const require = createRequire(import.meta.url);
+    const pkg = require("../package.json") as { version?: string };
+    return pkg.version ?? "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+}
+
+const CLI_VERSION = readCliVersion();
 
 export function buildProgram(): Command {
   const program = new Command();

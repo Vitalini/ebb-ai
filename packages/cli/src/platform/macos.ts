@@ -62,20 +62,24 @@ export function pmsetCommand(at: Date): string {
 }
 
 /**
- * Run `pmset schedule wake <at>`. Requires root; we don't sudo on
- * the user's behalf. If the process is not euid 0, we return `{ ok:
- * false, stderr: "sudo required" }` so the caller can prompt.
+ * Run `pmset schedule wake <at>`. `pmset` needs root. If we are euid 0
+ * we run it directly; otherwise we try `sudo -n` (non-interactive — it
+ * succeeds only if a sudoers rule pre-authorizes the command without a
+ * password) and, on failure, hand the caller a non-ok result so it can
+ * print the exact sudoers one-liner.
  */
 export async function pmsetScheduleWake(
   at: Date,
 ): Promise<{ command: string; ok: boolean; stderr: string }> {
   const command = pmsetCommand(at);
   const uid = typeof process.getuid === "function" ? process.getuid() : -1;
-  if (uid !== 0) {
-    return { command, ok: false, stderr: "sudo required" };
-  }
+  const bare = ["schedule", "wake", formatPmsetDate(at)];
+  const [bin, args] =
+    uid === 0
+      ? (["pmset", bare] as const)
+      : (["sudo", ["-n", "pmset", ...bare]] as const);
   return await new Promise((resolve) => {
-    const child = spawn("pmset", ["schedule", "wake", formatPmsetDate(at)], {
+    const child = spawn(bin, args, {
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stderr = "";
@@ -93,8 +97,18 @@ export async function pmsetScheduleWake(
 
 export interface LaunchdPlistOptions {
   tickIntervalSec: number;
-  ebbBinaryPath: string;
   dbPath: string;
+  /**
+   * The argv[0..n] that invoke `ebb`, resolved at install time. For a
+   * pinned node install this is `[process.execPath, realpath(argv[1])]`
+   * — the exact interpreter plus the real dist entry — which is immune
+   * to launchd's bare PATH and `#!/usr/bin/env node` shebangs. When the
+   * caller only has a single wrapper binary on PATH, pass a one-element
+   * array. Falls back to `ebbBinaryPath` (single element) if omitted.
+   */
+  launcher?: string[];
+  /** Legacy single-binary launcher. Prefer `launcher`. */
+  ebbBinaryPath?: string;
   /** Absolute path to write stdout/stderr logs. Defaults to ~/.ebb/tick.log. */
   logPath?: string;
   /** Optional env vars (e.g. ANTHROPIC_API_KEY) added to the plist. */
@@ -111,6 +125,14 @@ export interface LaunchdPlistOptions {
  */
 export function launchdPlist(opts: LaunchdPlistOptions): string {
   const logPath = opts.logPath ?? `${homeDir()}/.ebb/tick.log`;
+  const launcher =
+    opts.launcher && opts.launcher.length > 0
+      ? opts.launcher
+      : [opts.ebbBinaryPath ?? "ebb"];
+  const programArgs = [...launcher, "tick", "--db", opts.dbPath, "--once"];
+  const argBlock = programArgs
+    .map((a) => `    <string>${escapeXml(a)}</string>`)
+    .join("\n");
   const envBlock = opts.env
     ? Object.entries(opts.env)
         .map(
@@ -130,11 +152,7 @@ export function launchdPlist(opts: LaunchdPlistOptions): string {
   <string>com.ebb-ai.tick</string>
   <key>ProgramArguments</key>
   <array>
-    <string>${escapeXml(opts.ebbBinaryPath)}</string>
-    <string>tick</string>
-    <string>--db</string>
-    <string>${escapeXml(opts.dbPath)}</string>
-    <string>--once</string>
+${argBlock}
   </array>
   <key>StartInterval</key>
   <integer>${Math.max(1, Math.floor(opts.tickIntervalSec))}</integer>

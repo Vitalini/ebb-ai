@@ -13,8 +13,11 @@ const VALID_STATUSES: ReadonlySet<TaskStatus> = new Set([
   "queued",
   "scheduled",
   "running",
+  // v0.12: task routed through a provider Batch API, awaiting results.
+  "submitted",
   "completed",
   "failed",
+  "cancelled",
 ]);
 
 export interface QueueListOptions {

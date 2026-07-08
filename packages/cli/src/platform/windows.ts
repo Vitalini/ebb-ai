@@ -1,17 +1,24 @@
 /**
- * Windows platform stubs. v0.4 emits TODO notices; full Task Scheduler
- * integration is planned for v0.5.
+ * Windows platform helpers.
+ *
+ * There is no automated daemon install on Windows: `ebb install` does
+ * not register a Task Scheduler job or an nssm service for you. Instead
+ * it prints a ready-to-paste `schtasks` command, built from the real
+ * node interpreter + the resolved `ebb` entry, that you run yourself
+ * from an elevated prompt. `caffeinate`/wake-event equivalents
+ * (SetThreadExecutionState, waitable timers) are not wired.
  */
 
 export const TODO_NOTE =
-  "[ebb-ai/cli] Windows support is planned for v0.5. " +
-  "Run `ebb tick --daemon` under nssm / a Task Scheduler entry for now.";
+  "[ebb-ai/cli] Windows daemon install is not supported. " +
+  "Run `ebb tick` under Task Scheduler or nssm manually — " +
+  "`ebb install` prints a ready-to-paste schtasks command.";
 
 export async function caffeinateWhilePending(
   _durationSec: number,
 ): Promise<() => void> {
-  // PowerSetThreadExecutionState / SetThreadExecutionState would be the
-  // equivalent here; deferred to v0.5.
+  // SetThreadExecutionState(ES_SYSTEM_REQUIRED) would be the equivalent
+  // here; not wired. Idle-sleep prevention is a no-op on Windows.
   // eslint-disable-next-line no-console
   console.warn(TODO_NOTE);
   return () => {
@@ -25,21 +32,41 @@ export async function pmsetScheduleWake(
   // eslint-disable-next-line no-console
   console.warn(TODO_NOTE);
   return {
-    command: `REM TODO: schtasks /create /SC ONCE /TN ebb-wake ... (planned for v0.5)`,
+    command: "",
     ok: false,
-    stderr: "windows wake registration not implemented",
+    stderr: "wake-event registration is not supported on Windows",
   };
 }
 
+/**
+ * Build a ready-to-paste `schtasks` command for running `ebb tick`
+ * periodically. `launcher` is the resolved invocation
+ * (`[process.execPath, realpath(argv[1])]` for a pinned-node install),
+ * so the task runs the exact interpreter + entry rather than relying on
+ * a POSIX-style `/usr/local/bin/ebb` path that never exists on Windows.
+ */
 export function schtasksTemplate(opts: {
-  ebbBinaryPath: string;
+  launcher?: string[];
+  ebbBinaryPath?: string;
   dbPath: string;
   tickIntervalSec: number;
 }): string {
-  return `REM TODO: planned for v0.5.
-REM Run from an elevated CMD:
-REM
-REM   schtasks /create /TN "ebb-tick" /TR "${opts.ebbBinaryPath} tick --db ${opts.dbPath} --once" ^
-REM     /SC MINUTE /MO ${Math.max(1, Math.floor(opts.tickIntervalSec / 60))} /F
+  const launcher =
+    opts.launcher && opts.launcher.length > 0
+      ? opts.launcher
+      : [opts.ebbBinaryPath ?? "ebb"];
+  const quote = (s: string) => (/\s/.test(s) ? `\\"${s}\\"` : s);
+  const run = [...launcher, "tick", "--db", opts.dbPath, "--once"]
+    .map(quote)
+    .join(" ");
+  const everyMin = Math.max(1, Math.floor(opts.tickIntervalSec / 60));
+  return `Windows daemon install is not supported. Run \`ebb tick\` yourself under
+Task Scheduler or nssm. From an elevated PowerShell / CMD:
+
+  schtasks /create /TN "ebb-tick" /TR "${run}" /SC MINUTE /MO ${everyMin} /F
+
+Provide provider keys via %USERPROFILE%\\.config\\ebb\\env (KEY=VALUE lines);
+\`ebb tick\` loads that file on startup. Wake-from-sleep events are not
+supported on Windows.
 `;
 }
