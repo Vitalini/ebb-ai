@@ -11,6 +11,9 @@
     "directory": "packages/openclaw-plugin"
   },
   "type": "module",
+  "engines": {
+    "node": ">=22.5"
+  },
   "main": "./dist/index.js",
   "files": [
     "dist",

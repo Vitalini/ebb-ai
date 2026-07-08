@@ -38,6 +38,10 @@ they want the result. Default: `chat`.
 
 ## Install
 
+**Requires Node 22.5 or newer** — the SQLite queue uses Node's built-in
+`node:sqlite` with no fallback, so the OpenClaw gateway must run on Node
+≥ 22.5 (declared in `engines`).
+
 ```bash
 openclaw plugins install clawhub:@vitalini/ebb
 ```

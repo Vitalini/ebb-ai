@@ -300,3 +300,39 @@ export function dispatchCapability(
   if (env.ANTHROPIC_API_KEY?.trim() || env.OPENAI_API_KEY?.trim()) return "api-key";
   return "unconfigured";
 }
+
+export type Provider = "anthropic" | "openai";
+
+/**
+ * Infer the provider from a model identifier. OpenAI models are `gpt-*` or
+ * `o<digit>*` (o1, o3-mini, o4, …); everything Anthropic is `claude-*`.
+ * Anything unrecognised defaults to `anthropic` (the historical default and
+ * the safest fallback for a gateway that has an Anthropic key). Case- and
+ * whitespace-insensitive.
+ */
+export function inferProvider(model: string | undefined): Provider {
+  const m = (model ?? "").trim().toLowerCase();
+  if (m.startsWith("gpt-") || m.startsWith("gpt") || /^o\d/.test(m)) return "openai";
+  if (m.startsWith("claude")) return "anthropic";
+  return "anthropic";
+}
+
+/**
+ * Which providers can actually be dispatched in the current environment.
+ * With the runtime bridge captured, BOTH providers are dispatchable (the
+ * bridge routes through the gateway's own model regardless of the requested
+ * provider). Otherwise it is exactly the set of providers with an API key.
+ */
+export function availableProviders(
+  env: Record<string, string | undefined> = process.env,
+): Set<Provider> {
+  const set = new Set<Provider>();
+  if (bridgeComplete) {
+    set.add("anthropic");
+    set.add("openai");
+    return set;
+  }
+  if (env.ANTHROPIC_API_KEY?.trim()) set.add("anthropic");
+  if (env.OPENAI_API_KEY?.trim()) set.add("openai");
+  return set;
+}

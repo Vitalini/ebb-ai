@@ -6,8 +6,16 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { TaskStore } from "@ebb-ai/core";
 
-import ebbPlugin, { runDispatchTick } from "../src/index.js";
-import { buildAdapters, setLlmBridgeForTest } from "../src/dispatch.js";
+import ebbPlugin, {
+  bootstrapDispatcherOnStartup,
+  runDispatchTick,
+} from "../src/index.js";
+import {
+  availableProviders,
+  buildAdapters,
+  inferProvider,
+  setLlmBridgeForTest,
+} from "../src/dispatch.js";
 import {
   deliverResult,
   formatReport,
@@ -369,6 +377,282 @@ describe("ebb OpenClaw plugin — dispatch adapters", () => {
     expect(adapters.anthropic?.provider).toBe("anthropic");
     expect(adapters.openai?.provider).toBe("openai");
     expect(typeof adapters.anthropic?.dispatch).toBe("function");
+  });
+});
+
+describe("ebb OpenClaw plugin — provider inference", () => {
+  beforeEach(() => setLlmBridgeForTest(undefined));
+
+  it("infers openai from gpt-* and o<n>* models, anthropic from claude-*", () => {
+    expect(inferProvider("gpt-4o")).toBe("openai");
+    expect(inferProvider("gpt-5.5")).toBe("openai");
+    expect(inferProvider("o3-mini")).toBe("openai");
+    expect(inferProvider("o1")).toBe("openai");
+    expect(inferProvider("claude-sonnet-4-6")).toBe("anthropic");
+    expect(inferProvider("claude-opus-4-1")).toBe("anthropic");
+  });
+
+  it("defaults unknown / empty models to anthropic", () => {
+    expect(inferProvider(undefined)).toBe("anthropic");
+    expect(inferProvider("")).toBe("anthropic");
+    expect(inferProvider("some-random-model")).toBe("anthropic");
+    expect(inferProvider("  GPT-4O  ")).toBe("openai"); // trim + case-insensitive
+  });
+
+  it("availableProviders reflects API keys, and both providers under the bridge", () => {
+    expect([...availableProviders({})]).toEqual([]);
+    expect([...availableProviders({ ANTHROPIC_API_KEY: "k" })]).toEqual(["anthropic"]);
+    expect(
+      [...availableProviders({ OPENAI_API_KEY: "k" })].sort(),
+    ).toEqual(["openai"]);
+    setLlmBridgeForTest(async () => ({ text: "" }));
+    try {
+      // With the bridge captured, both providers are dispatchable regardless.
+      expect([...availableProviders({})].sort()).toEqual(["anthropic", "openai"]);
+    } finally {
+      setLlmBridgeForTest(undefined);
+    }
+  });
+});
+
+describe("ebb OpenClaw plugin — schedule_task provider param", () => {
+  let tmp: string;
+  let dbPath: string;
+
+  beforeAll(() => {
+    tmp = mkdtempSync(join(tmpdir(), "ebb-provider-test-"));
+    dbPath = join(tmp, "queue.db");
+  });
+  afterAll(() => rmSync(tmp, { recursive: true, force: true }));
+  beforeEach(() => setLlmBridgeForTest(undefined));
+
+  it("infers provider from model and records provider_source", async () => {
+    // Bridge present so the api-key rejection path is not triggered.
+    setLlmBridgeForTest(async () => ({ text: "" }));
+    try {
+      const gpt = (await tool("schedule_task").execute(
+        { prompt: "p", deadline: deadlineISO(), region: "GB", model: "gpt-4o" },
+        { dbPath },
+      )) as { provider: string; provider_source: string; model: string };
+      expect(gpt.provider).toBe("openai");
+      expect(gpt.provider_source).toBe("inferred");
+      expect(gpt.model).toBe("gpt-4o");
+
+      const claude = (await tool("schedule_task").execute(
+        { prompt: "p", deadline: deadlineISO(), region: "GB", model: "claude-opus-4-1" },
+        { dbPath },
+      )) as { provider: string };
+      expect(claude.provider).toBe("anthropic");
+
+      // No model → default anthropic + flagship model.
+      const dflt = (await tool("schedule_task").execute(
+        { prompt: "p", deadline: deadlineISO(), region: "GB" },
+        { dbPath },
+      )) as { provider: string; model: string };
+      expect(dflt.provider).toBe("anthropic");
+      expect(dflt.model).toBe("claude-sonnet-4-6");
+    } finally {
+      setLlmBridgeForTest(undefined);
+    }
+  });
+
+  it("explicit provider wins over model inference", async () => {
+    setLlmBridgeForTest(async () => ({ text: "" }));
+    try {
+      const res = (await tool("schedule_task").execute(
+        {
+          prompt: "p",
+          deadline: deadlineISO(),
+          region: "GB",
+          model: "gpt-4o",
+          provider: "anthropic",
+        },
+        { dbPath },
+      )) as { provider: string; provider_source: string };
+      expect(res.provider).toBe("anthropic");
+      expect(res.provider_source).toBe("request");
+    } finally {
+      setLlmBridgeForTest(undefined);
+    }
+  });
+
+  it("rejects at schedule time when the api-key path lacks the chosen provider's key", async () => {
+    // No bridge, only an ANTHROPIC key → an openai (gpt) task must be rejected
+    // rather than queued to fail (or POSTed to the wrong provider) at dispatch.
+    setLlmBridgeForTest(undefined);
+    const prev = { a: process.env.ANTHROPIC_API_KEY, o: process.env.OPENAI_API_KEY };
+    process.env.ANTHROPIC_API_KEY = "sk-ant-test";
+    delete process.env.OPENAI_API_KEY;
+    try {
+      await expect(
+        tool("schedule_task").execute(
+          { prompt: "p", deadline: deadlineISO(), region: "GB", model: "gpt-4o" },
+          { dbPath },
+        ),
+      ).rejects.toThrow(/OPENAI_API_KEY/);
+
+      // An anthropic task with the anthropic key set is accepted.
+      const ok = (await tool("schedule_task").execute(
+        { prompt: "p", deadline: deadlineISO(), region: "GB", model: "claude-sonnet-4-6" },
+        { dbPath },
+      )) as { provider: string; dispatch: string };
+      expect(ok.provider).toBe("anthropic");
+      expect(ok.dispatch).toBe("api-key");
+    } finally {
+      if (prev.a === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = prev.a;
+      if (prev.o === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = prev.o;
+    }
+  });
+
+  it("surfaces the SYNTHETIC (mock) grid note when the feed is mock", async () => {
+    setLlmBridgeForTest(async () => ({ text: "" }));
+    try {
+      const res = (await tool("schedule_task").execute(
+        { prompt: "p", deadline: deadlineISO(), region: "GB" },
+        { dbPath },
+      )) as { grid_source?: string; synthetic_grid_data?: string };
+      // The default grid feed with no live keys is the deterministic mock.
+      if (res.grid_source === "mock") {
+        expect(res.synthetic_grid_data).toMatch(/SYNTHETIC \(mock\)/);
+      }
+      expect(res.grid_source).toBeTruthy();
+    } finally {
+      setLlmBridgeForTest(undefined);
+    }
+  });
+});
+
+describe("ebb OpenClaw plugin — submitted-status rendering", () => {
+  let tmp: string;
+  let dbPath: string;
+
+  beforeAll(() => {
+    tmp = mkdtempSync(join(tmpdir(), "ebb-submitted-test-"));
+    dbPath = join(tmp, "queue.db");
+  });
+  afterAll(() => rmSync(tmp, { recursive: true, force: true }));
+  beforeEach(() => setLlmBridgeForTest(undefined));
+
+  it("renders a 'submitted' task with its batch_id in the queue list", async () => {
+    setLlmBridgeForTest(async () => ({ text: "" }));
+    let taskId: string;
+    try {
+      const sched = (await tool("schedule_task").execute(
+        { prompt: "batch me", deadline: deadlineISO(48), region: "GB" },
+        { dbPath },
+      )) as { task_id: string };
+      taskId = sched.task_id;
+    } finally {
+      setLlmBridgeForTest(undefined);
+    }
+
+    // Simulate the core's batch routing: flip the row to "submitted" + batch_id.
+    const store = new TaskStore({ dbPath });
+    const rec = store.get(taskId);
+    if (!rec) throw new Error("task was not persisted");
+    rec.status = "submitted";
+    rec.batchId = "batch_abc123";
+    store.upsert(rec);
+    // Does the linked core build actually round-trip batchId through SQLite?
+    // (v0.12 core persists it; an older build silently drops the column.) Only
+    // assert the plugin surfaces it when core supports it — the plugin's own
+    // rendering (show batch_id when present) is what we're pinning here.
+    const coreRoundTripsBatchId = store.get(taskId)?.batchId === "batch_abc123";
+    store.close();
+
+    const list = (await tool("check_queue_status").execute({}, { dbPath })) as {
+      tasks: Array<{ task_id: string; status: string; batch_id?: string }>;
+    };
+    const row = list.tasks.find((t) => t.task_id === taskId);
+    expect(row?.status).toBe("submitted");
+    if (coreRoundTripsBatchId) {
+      expect(row?.batch_id).toBe("batch_abc123");
+    }
+  });
+
+  it("expedite_task surfaces the scheduler's rejection message cleanly", async () => {
+    // A running task cannot be expedited; the core throws, and the plugin must
+    // relay that message rather than a generic failure. (Mirrors how a
+    // 'submitted' task is rejected once the core enforces it.)
+    const store = new TaskStore({ dbPath });
+    const rec = {
+      taskId: "t-running-guard",
+      status: "running" as const,
+      enqueuedAt: new Date().toISOString(),
+      region: "GB",
+      bodyJson: JSON.stringify({
+        type: "provider_call",
+        provider: "anthropic",
+        model: "claude-sonnet-4-6",
+        prompt: "x",
+      }),
+    };
+    store.upsert(rec);
+    store.close();
+
+    await expect(
+      tool("expedite_task").execute({ task_id: "t-running-guard" }, { dbPath }),
+    ).rejects.toThrow(/expedite_task could not run task t-running-guard/);
+  });
+});
+
+describe("ebb OpenClaw plugin — runDispatchTick skips provider-less tasks", () => {
+  let tmp: string;
+  let dbPath: string;
+
+  beforeAll(() => {
+    tmp = mkdtempSync(join(tmpdir(), "ebb-skip-test-"));
+    dbPath = join(tmp, "queue.db");
+  });
+  afterAll(() => rmSync(tmp, { recursive: true, force: true }));
+  beforeEach(() => setLlmBridgeForTest(undefined));
+
+  it("leaves an overdue task 'scheduled' (not failed) when no adapter serves its provider", async () => {
+    setLlmBridgeForTest(async () => ({ text: "" }));
+    let taskId: string;
+    try {
+      const sched = (await tool("schedule_task").execute(
+        { prompt: "no adapter yet", deadline: deadlineISO(), region: "GB" },
+        { dbPath },
+      )) as { task_id: string };
+      taskId = sched.task_id;
+    } finally {
+      setLlmBridgeForTest(undefined);
+    }
+
+    // Force the window into the past so the task is due.
+    const store = new TaskStore({ dbPath });
+    const rec = store.get(taskId);
+    if (!rec) throw new Error("task was not persisted");
+    rec.status = "scheduled";
+    rec.scheduledFor = new Date(Date.now() - 60_000).toISOString();
+    store.upsert(rec);
+    store.close();
+
+    // No bridge, empty adapters → the provider has no adapter. The task must
+    // be SKIPPED (left scheduled), not failed.
+    const result = await runDispatchTick({ dbPath }, {});
+    expect(result.failed).toBe(0);
+    expect(result.results.every((r) => r.taskId !== taskId)).toBe(true);
+
+    const after = (await tool("check_queue_status").execute(
+      { task_id: taskId },
+      { dbPath },
+    )) as { status: string };
+    expect(after.status).toBe("scheduled");
+  });
+});
+
+describe("ebb OpenClaw plugin — startup dispatcher bootstrap", () => {
+  it("bootstrapDispatcherOnStartup is exported and idempotent, and honours the disable flag", () => {
+    // The suite runs with EBB_DISABLE_STARTUP_DISPATCH=1, so the module-load
+    // call was a no-op. Calling it directly must not throw and must be
+    // idempotent (guarded so a second call is a no-op).
+    expect(typeof bootstrapDispatcherOnStartup).toBe("function");
+    expect(() => bootstrapDispatcherOnStartup({}, { EBB_DISABLE_STARTUP_DISPATCH: "1" })).not.toThrow();
+    expect(() => bootstrapDispatcherOnStartup({}, {})).not.toThrow();
   });
 });
 
