@@ -31,6 +31,7 @@ import json
 import logging
 import math
 import os
+import random
 import re
 import socket
 import sqlite3
@@ -336,6 +337,13 @@ def _now_utc() -> datetime:
     return datetime.now(UTC)
 
 
+def _default_rng() -> float:
+    """Default PRNG returning ``[0, 1)`` for the tie-break. Mirrors the TS
+    ``Math.random`` default; tests inject a seeded generator instead.
+    """
+    return random.random()
+
+
 def _iso_utc(dt: datetime) -> str:
     """Render a datetime as a TS-compatible ISO-8601 string in UTC.
 
@@ -388,35 +396,129 @@ def normalize_deadline(d: str | datetime | None) -> datetime:
     return parsed
 
 
-def pick_best_window(
+#: Tolerance band floor, in gCO2e/kWh. See :func:`select_window`.
+TOLERANCE_FLOOR_G: Final[float] = 30.0
+#: Tolerance band as a fraction of the cheapest survivor's intensity.
+TOLERANCE_FRACTION: Final[float] = 0.15
+
+
+def _in_deadline_entries(
     entries: list[GridForecastEntry],
     deadline: datetime,
-) -> GridForecastEntry | None:
-    """Pick the lowest-intensity entry inside ``[now - 1h, deadline]``.
+    now: datetime,
+) -> list[GridForecastEntry]:
+    """Filter ``entries`` to the ones inside ``[now - 1h, deadline]``.
 
     Forecast entries mark the *start* of an hour, so the entry covering
     "now" started up to an hour ago — it is still a valid (dispatch-now)
-    candidate. Excluding it made "run right now" unpickable even when
-    the current hour is the cleanest inside the deadline (§1.7).
-
-    Returns ``None`` if no entry fits the window. Pure function — no
-    side effects, no I/O — so it's safe to call directly from tests.
+    candidate (§1.7). Mirrors the TS ``inDeadlineEntries``.
     """
-    now = _now_utc()
+    lo = now - timedelta(hours=1)
     usable: list[GridForecastEntry] = []
     for e in entries:
         t = _parse_iso(e.datetime)
         if t is None:
             continue
-        if now - timedelta(hours=1) <= t <= deadline:
+        if lo <= t <= deadline:
             usable.append(e)
+    return usable
+
+
+class SelectWindowResult:
+    """Output of :func:`select_window`.
+
+    Mirrors the TS ``SelectWindowResult``: the chosen entry (a random pick
+    from the cleanest-tolerance band), the sorted in-deadline survivors,
+    the tolerance-band subset, and the tolerance width applied.
+    """
+
+    __slots__ = ("band", "chosen", "sorted", "tolerance")
+
+    def __init__(
+        self,
+        chosen: GridForecastEntry,
+        sorted_entries: list[GridForecastEntry],
+        band: list[GridForecastEntry],
+        tolerance: float,
+    ) -> None:
+        self.chosen = chosen
+        self.sorted = sorted_entries
+        self.band = band
+        self.tolerance = tolerance
+
+
+def select_window(
+    entries: list[GridForecastEntry],
+    deadline: datetime,
+    *,
+    now: Callable[[], datetime] | None = None,
+    rng: Callable[[], float] | None = None,
+) -> SelectWindowResult | None:
+    """The single carbon-window selection policy, shared by the planning
+    path (:func:`recommend_window`) and every committing scheduler path
+    (:meth:`Scheduler._schedule`, :meth:`Scheduler._schedule_provider_call`).
+
+    The randomized cleanest-tolerance-band tie-break used to live only in
+    the TS ``recommendWindow``; the Python ``recommend_window`` took the
+    strict minimum, and both cores' committing paths used strict-minimum
+    ``pick_best_window``. So every task in a region collapsed onto one
+    trough hour. Routing all callers through this closes that gap (§2.1).
+
+    Policy (identical to the TS ``selectWindow``):
+      1. In-deadline filter INCLUDING the current hour (``>= now - 1h``).
+      2. Tolerance band: entries within ``max(cheapest * 0.15, 30 g)`` of
+         the cheapest survivor are "equally clean".
+      3. Random pick within the band (injectable ``rng``); a single-entry
+         band returns the strict minimum.
+
+    Budget filtering is the caller's responsibility — this ranks only the
+    entries it is handed. Returns ``None`` when nothing fits the window.
+    Pure function — no I/O — so it's safe to call directly from tests.
+    """
+    now_dt = now() if now is not None else _now_utc()
+    usable = _in_deadline_entries(entries, deadline, now_dt)
     if not usable:
         return None
-    best = usable[0]
-    for e in usable:
-        if e.carbon_intensity_g_co2_per_kwh < best.carbon_intensity_g_co2_per_kwh:
-            best = e
-    return best
+    sorted_entries = sorted(
+        usable, key=lambda e: e.carbon_intensity_g_co2_per_kwh
+    )
+    cheapest = sorted_entries[0].carbon_intensity_g_co2_per_kwh
+    tolerance = max(cheapest * TOLERANCE_FRACTION, TOLERANCE_FLOOR_G)
+    band = [
+        e
+        for e in sorted_entries
+        if e.carbon_intensity_g_co2_per_kwh <= cheapest + tolerance
+    ]
+    rng_fn = rng if rng is not None else _default_rng
+    if len(band) > 1:
+        idx = math.floor(rng_fn() * len(band))
+        # Guard against rng() == 1.0 landing out of range.
+        idx = min(idx, len(band) - 1)
+        chosen = band[idx]
+    else:
+        chosen = sorted_entries[0]
+    return SelectWindowResult(chosen, sorted_entries, band, tolerance)
+
+
+def pick_best_window(
+    entries: list[GridForecastEntry],
+    deadline: datetime,
+) -> GridForecastEntry | None:
+    """Strict-minimum window pick, retained for API compat.
+
+    .. deprecated::
+        Every committing scheduler path now uses the shared
+        :func:`select_window` (randomized cleanest-tolerance-band
+        tie-break) so committed tasks spread across the clean band
+        instead of all colliding on the single trough hour (§2.1). This
+        helper still returns the strict minimum: it delegates to
+        :func:`select_window` with an ``rng`` pinned to ``0.0``, which
+        always picks the first (cheapest) entry in the sorted band.
+
+    Returns ``None`` if no entry fits the window.
+    """
+    result = select_window(entries, deadline, rng=lambda: 0.0)
+    return result.chosen if result is not None else None
 
 
 # --------------------------------------------------------------------------- #
@@ -888,9 +990,16 @@ class Scheduler:
         default_region: str = DEFAULT_REGION,
         db_path: str | None = None,
         signing: bool | dict[str, Any] | None = None,
+        rng: Callable[[], float] | None = None,
     ) -> None:
         self._feed: GridFeed = feed if feed is not None else mock_grid_feed()
         self._default_region = default_region
+        # Injectable PRNG for the cleanest-tolerance-band tie-break used by
+        # every committing scheduling path, so a region's committed tasks
+        # spread across the clean band instead of all landing on the single
+        # trough hour (§2.1). Defaults to :func:`random.random`; a seeded
+        # generator makes window selection deterministic in tests.
+        self._rng: Callable[[], float] = rng if rng is not None else _default_rng
         self._tasks: dict[str, TaskRecord] = {}
         self._bodies: dict[str, DeferrableTask[Any]] = {}
         self._resolvers: dict[str, _Resolver[Any]] = {}
@@ -1804,7 +1913,11 @@ class Scheduler:
         else:
             survivors = list(forecast.entries)
 
-        candidate = pick_best_window(survivors, deadline)
+        # Shared selection (§2.1): cleanest-tolerance-band tie-break with
+        # the scheduler's rng, so committed closure tasks spread across the
+        # clean band instead of all colliding on the single trough hour.
+        selection = select_window(survivors, deadline, rng=self._rng)
+        candidate = selection.chosen if selection is not None else None
         if candidate is None:
             if budget_g is not None and forecast.entries:
                 cheapest = min(
@@ -2147,7 +2260,10 @@ class Scheduler:
         else:
             survivors = list(forecast.entries)
 
-        candidate = pick_best_window(survivors, deadline)
+        # Shared selection (§2.1): same cleanest-tolerance-band tie-break as
+        # the recommend path, so committed provider-call tasks spread too.
+        selection = select_window(survivors, deadline, rng=self._rng)
+        candidate = selection.chosen if selection is not None else None
         if candidate is None:
             if budget_g is not None and forecast.entries:
                 cheapest = min(

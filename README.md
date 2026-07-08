@@ -17,8 +17,8 @@ a one-command Claude Code plugin.*
 
 ## Why defer non-urgent AI work?
 
-US AI compute is projected to consume 6.7–12% of national electricity
-grid load by 2028 ([DOE 2024](https://www.energy.gov/eere/buildings/articles/2024-united-states-data-center-energy-usage-report)).
+US data centers are projected to consume 6.7–12% of national electricity
+grid load by 2028 ([DOE 2024](https://www.energy.gov/eere/buildings/articles/2024-united-states-data-center-energy-usage-report)), driven primarily by AI compute.
 Most agent workload that lands on that load is *deferrable* (overnight
 summaries, batch analyses, scheduled compliance scans, multi-step
 report generation) — agent code just dispatches it synchronously by

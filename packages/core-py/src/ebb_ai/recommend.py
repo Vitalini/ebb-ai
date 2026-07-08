@@ -13,7 +13,9 @@ Algorithm
 1. Validate the deadline (same rules as :func:`defer`).
 2. Fetch a grid forecast for ``region``, horizon clamped to 72h.
 3. Optionally drop entries above ``carbon_budget_g``.
-4. Pick the cheapest in-deadline survivor.
+4. Select a window via the shared ``select_window`` — a random pick from
+   the cleanest-tolerance band, the SAME policy the committing scheduler
+   paths use (§2.1), so planning and committing agree.
 5. Compute alternatives = next 3 cheapest survivors (excluding the chosen).
 6. Compute savings vs "now" using forecast ``entries[0]`` as the current cell.
 7. Generate a one-line ``reasoning`` string tailored to the situation.
@@ -34,6 +36,7 @@ from typing import Any
 from .energy import grams_for_intensity
 from .errors import CarbonBudgetExceededError, InvalidDeadlineError
 from .grid import GridFeed, mock_grid_feed
+from .scheduler import select_window
 from .types import Band, GridForecastEntry, GridSource
 
 _log = logging.getLogger(__name__)
@@ -193,21 +196,30 @@ def _build_reasoning(
     batch_eligible: bool,
     budget_g: float | None,
     survivor_count: int,
+    is_strict_cheapest: bool,
+    clean_band_size: int,
 ) -> str:
     hour = _format_hour(chosen.datetime)
+    band_str = chosen.band.replace("_", " ")
+    savings_tail = (
+        f"; ~{savings_pct}% cleaner than dispatching now" if savings_pct > 30 else ""
+    )
     if budget_g is not None and survivor_count == 1:
         base = (
             f"only one window meets the carbon budget of {budget_g}g; "
             f"falls at {hour} UTC"
         )
-    elif savings_pct > 30:
-        band_str = chosen.band.replace("_", " ")
-        base = (
-            f"cleanest in-deadline window is {hour} UTC ({band_str} mix); "
-            f"~{savings_pct}% cleaner than dispatching now"
-        )
+    elif is_strict_cheapest:
+        base = f"cleanest in-deadline window is {hour} UTC ({band_str} mix){savings_tail}"
     else:
-        base = f"cleanest in-deadline window is {hour} UTC"
+        # Chosen at random from the cleanest-tolerance band, not the strict
+        # minimum: be explicit so the wording does not contradict the
+        # alternatives list, which will show a lower figure (§2.1).
+        base = (
+            f"{hour} UTC sits in the cleanest band ({band_str} mix; one of "
+            f"{clean_band_size} near-equal low-carbon windows, picked to "
+            f"spread grid load){savings_tail}"
+        )
     if batch_eligible:
         return f"{base}; Batch API saves an additional 50% on cost (24h SLA)"
     return base
@@ -225,6 +237,7 @@ async def recommend_window(
     model: str | None = None,  # per-model energy coefficients (v0.10); see below
     feed: GridFeed | None = None,
     now: Callable[[], datetime] | None = None,
+    rng: Callable[[], float] | None = None,
 ) -> RecommendResult:
     """Compute a recommended execution window for a task.
 
@@ -250,6 +263,14 @@ async def recommend_window(
         Inject a grid feed. Defaults to :func:`mock_grid_feed`.
     now:
         Inject a clock. Defaults to :func:`datetime.now` (UTC).
+    rng:
+        Inject a pseudo-random generator returning ``[0, 1)``. Defaults to
+        :func:`random.random`. Only affects the choice among entries within
+        the cleanest-tolerance band when multiple equally-clean entries
+        exist. A seeded generator makes the tie-break deterministic in
+        tests. This is the SAME band+rng logic the committing scheduler
+        paths use, so planning and committing agree on the candidate band
+        (§2.1).
 
     Raises
     ------
@@ -329,11 +350,20 @@ async def recommend_window(
             carbon_budget_g,  # type: ignore[arg-type]  # cannot be None here
         )
 
-    sorted_survivors = sorted(
-        survivors, key=lambda e: e.carbon_intensity_g_co2_per_kwh
-    )
-    chosen = sorted_survivors[0]
-    alts_entries = sorted_survivors[1:4]
+    # Randomized cleanest-tolerance-band tie-break via the SAME
+    # select_window the committing scheduler paths use, so planning and
+    # committing agree on the candidate band (§2.1). Previously this port
+    # took the strict minimum sorted_survivors[0] — the known PY gap where
+    # every recommendation landed on the single trough hour. `survivors` is
+    # already in-deadline + budget filtered; select_window's in-deadline
+    # filter is idempotent over it.
+    selection = select_window(survivors, parsed_deadline, now=now, rng=rng)
+    assert selection is not None  # survivors is non-empty and in-deadline
+    sorted_survivors = selection.sorted
+    chosen = selection.chosen
+    equally_clean = selection.band
+    # Alternatives = next 3 cheapest entries that weren't chosen.
+    alts_entries = [e for e in sorted_survivors if e is not chosen][:3]
 
     now_intensity = entries[0].carbon_intensity_g_co2_per_kwh
     savings_pct = _compute_savings_pct(
@@ -374,6 +404,12 @@ async def recommend_window(
                 batch_eligible=batch_eligible,
                 budget_g=carbon_budget_g,
                 survivor_count=len(survivors),
+                # `chosen` is a random pick from the cleanest-tolerance
+                # band, so it is not always the strict minimum. The
+                # reasoning must say which case it is — otherwise it reads
+                # as "cleanest" while the alternatives show a lower figure.
+                is_strict_cheapest=chosen is sorted_survivors[0],
+                clean_band_size=len(equally_clean),
             ),
         ),
         grid_source=forecast.source,

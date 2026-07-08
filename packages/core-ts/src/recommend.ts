@@ -13,7 +13,9 @@
  *   1. Validate deadline (same rules as `defer`).
  *   2. Fetch grid forecast for `region`, horizon clamped to 72h.
  *   3. Optionally drop entries above `carbonBudgetG`.
- *   4. Pick the cheapest in-deadline survivor (`pickBestWindow`).
+ *   4. Select a window via the shared `selectWindow` — a random pick from
+ *      the cleanest-tolerance band, the SAME policy the committing
+ *      scheduler paths use (§2.1), so planning and committing agree.
  *   5. Compute alternatives = next 3 cheapest survivors (excluding the chosen).
  *   6. Compute savings vs "now" using forecast entry[0] as the current cell.
  *   7. Generate a one-line `reasoning` string tailored to the situation.
@@ -25,6 +27,7 @@ import {
   CarbonBudgetExceededError,
   InvalidDeadlineError,
 } from "./scheduler.js";
+import { selectWindow } from "./select-window.js";
 import type {
   GridFeed,
   GridForecast,
@@ -123,13 +126,14 @@ export async function recommendWindow(
     );
   }
 
-  // Sort ascending by intensity. Then apply a randomized tie-break:
-  // every entry within a tolerance band of the cheapest is treated as
-  // "equally clean" and one is selected at random. Without the tie-break
-  // the scheduler collapses every task with a long deadline onto the
-  // single global trough — the v0.8.0 even-distribution simulation
-  // observed 66.9 % of dispatch piling into one UTC hour. With the
-  // tie-break, equally-clean entries spread evenly across the band.
+  // Sort ascending by intensity and apply a randomized tie-break: every
+  // entry within a tolerance band of the cheapest is treated as "equally
+  // clean" and one is selected at random. Without it, tasks with long
+  // deadlines all collapse onto the single global trough — the v0.8.0
+  // even-distribution simulation observed 66.9 % of dispatch piling into
+  // one UTC hour. This is the SAME `selectWindow` the committing scheduler
+  // paths (schedule / scheduleProviderCall / previewProviderCall) now use,
+  // so planning and committing agree on the candidate band (§2.1).
   //
   // Tolerance: max(15 % of cheapest intensity, 30 g CO2e / kWh). The
   // 30-g floor matters when cheapest intensity is very small (e.g.,
@@ -140,18 +144,16 @@ export async function recommendWindow(
   // and 100-250 as clean; a 15 % step from 200 lands at 230, same
   // band) and the carbon-savings claim against running-now (which is
   // typically 30-70 % dirtier) remains accurate.
-  const sorted = [...survivors].sort(
-    (a, b) => a.carbonIntensityGCo2PerKwh - b.carbonIntensityGCo2PerKwh,
-  );
-  const cheapest = sorted[0]!.carbonIntensityGCo2PerKwh;
-  const tolerance = Math.max(cheapest * 0.15, 30);
-  const equallyClean = sorted.filter(
-    (e) => e.carbonIntensityGCo2PerKwh <= cheapest + tolerance,
-  );
-  const chosen =
-    equallyClean.length > 1
-      ? equallyClean[Math.floor((deps.rng ?? Math.random)() * equallyClean.length)]!
-      : sorted[0]!;
+  //
+  // `survivors` is already in-deadline + budget filtered; selectWindow's
+  // own in-deadline filter is idempotent over it.
+  const selection = selectWindow(survivors, deadline, {
+    now: () => now,
+    rng: deps.rng,
+  })!; // survivors is non-empty and in-deadline, so this is defined
+  const sorted = selection.sorted;
+  const chosen = selection.chosen;
+  const equallyClean = selection.band;
   // Alternatives = next 3 cheapest entries that weren't chosen.
   const altEntries = sorted.filter((e) => e !== chosen).slice(0, 3);
 

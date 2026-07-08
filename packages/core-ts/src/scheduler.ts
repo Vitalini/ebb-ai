@@ -21,6 +21,7 @@ import { randomUUID } from "node:crypto";
 import { gramsForIntensity, lookupModelEnergy } from "./energy.js";
 import { mockGridFeed } from "./grid.js";
 import type { ProviderAdapter } from "./providers/base.js";
+import { selectWindow } from "./select-window.js";
 import {
   loadOrCreateSigningKey,
   signReceipt,
@@ -90,11 +91,20 @@ export interface SchedulerOptions {
    * v0.11+.
    */
   signing?: false | { keyPath?: string };
+  /**
+   * Inject a pseudo-random number generator returning [0, 1). Defaults to
+   * `Math.random`. Used by the cleanest-tolerance-band tie-break in every
+   * committing scheduling path so a region's committed tasks spread across
+   * the clean band instead of all landing on the single trough hour
+   * (§2.1). A seeded PRNG makes window selection deterministic in tests.
+   */
+  rng?: () => number;
 }
 
 export class Scheduler {
   private readonly feed: GridFeed;
   private readonly defaultRegion: string;
+  private readonly rng: () => number;
   private readonly tasks = new Map<string, TaskRecord<unknown>>();
   private readonly pendingTimers = new Map<string, NodeJS.Timeout>();
   private readonly resolvers = new Map<
@@ -111,6 +121,7 @@ export class Scheduler {
   constructor(opts: SchedulerOptions = {}) {
     this.feed = opts.feed ?? mockGridFeed();
     this.defaultRegion = opts.defaultRegion ?? DEFAULT_REGION;
+    this.rng = opts.rng ?? Math.random;
     if (opts.store) {
       this.store = opts.store;
     } else if (opts.dbPath) {
@@ -749,6 +760,15 @@ export class Scheduler {
     band: GridForecastEntry["band"];
     batchEligible: boolean;
     region: string;
+    /**
+     * How many near-equal low-carbon windows sat in the cleanest-tolerance
+     * band the shared `selectWindow` chose from (§2.1). A committed
+     * `enqueueProviderCall` picks randomly within this same set, so the
+     * preview's `scheduledFor` may legitimately differ from the eventual
+     * commit's — but the candidate SET is identical. Undefined when no
+     * in-deadline window existed (the "run now" fallback below).
+     */
+    cleanBandSize?: number;
   }> {
     const deadline = normalizeDeadline(opts.deadline);
     const region = opts.region ?? this.defaultRegion;
@@ -765,7 +785,11 @@ export class Scheduler {
       budgetG !== undefined
         ? forecast.entries.filter((e) => intensityToGrams(e.carbonIntensityGCo2PerKwh, spec.model) <= budgetG)
         : forecast.entries;
-    const candidate = pickBestWindow(survivors, deadline);
+    // Shared selection (§2.1): preview and the eventual commit both run
+    // `selectWindow` over the same budget survivors, so they agree on the
+    // candidate band even though each makes its own random pick within it.
+    const selection = selectWindow(survivors, deadline, { rng: this.rng });
+    const candidate = selection?.chosen;
     // batchEligible reflects whether the *deadline* is far enough out
     // that Batch API (24h SLA) is still a viable route, not whether the
     // chosen window itself is more than 24h away.
@@ -809,6 +833,7 @@ export class Scheduler {
       band: candidate.band,
       batchEligible,
       region,
+      cleanBandSize: selection!.band.length,
     };
   }
 
@@ -845,7 +870,10 @@ export class Scheduler {
       budgetG !== undefined
         ? forecast.entries.filter((e) => intensityToGrams(e.carbonIntensityGCo2PerKwh) <= budgetG)
         : forecast.entries;
-    const candidate = pickBestWindow(survivors, deadline);
+    // Shared selection: cleanest-tolerance-band tie-break with the
+    // scheduler's rng, so committed tasks spread across the clean band
+    // instead of all colliding on the single trough hour (§2.1).
+    const candidate = selectWindow(survivors, deadline, { rng: this.rng })?.chosen;
     if (!candidate) {
       if (budgetG !== undefined && forecast.entries.length > 0) {
         const cheapest = forecast.entries.reduce((a, b) =>
@@ -1081,7 +1109,9 @@ export class Scheduler {
       budgetG !== undefined
         ? forecast.entries.filter((e) => intensityToGrams(e.carbonIntensityGCo2PerKwh, specModel) <= budgetG)
         : forecast.entries;
-    const candidate = pickBestWindow(survivors, deadline);
+    // Shared selection (§2.1): same cleanest-tolerance-band tie-break as
+    // the recommend path, so committed provider-call tasks spread too.
+    const candidate = selectWindow(survivors, deadline, { rng: this.rng })?.chosen;
     if (!candidate) {
       if (budgetG !== undefined && forecast.entries.length > 0) {
         const cheapest = forecast.entries.reduce((a, b) =>
@@ -1585,27 +1615,22 @@ function normalizeDeadline(d: DeferOptions["deadline"]): Date {
   return parsed;
 }
 
+/**
+ * @deprecated Strict-minimum window pick, retained for API compat. Every
+ * committing scheduler path now uses the shared {@link selectWindow}
+ * (randomized cleanest-tolerance-band tie-break) so committed tasks spread
+ * across the clean band instead of all colliding on the single trough hour
+ * (§2.1). This helper still returns the strict minimum: it delegates to
+ * `selectWindow` with an rng pinned to 0, which always picks the first
+ * (cheapest) entry in the sorted band. Prefer `selectWindow` for new code.
+ */
 export function pickBestWindow(
   entries: GridForecastEntry[],
   deadline: Date,
 ): GridForecastEntry | undefined {
-  const now = Date.now();
-  const usable = entries.filter((e) => {
-    const t = new Date(e.datetime).getTime();
-    // Forecast entries mark the *start* of an hour, so the entry covering
-    // `now` started up to an hour ago — it is still a valid (dispatch-now)
-    // candidate. Excluding it made "run right now" unpickable even when
-    // the current hour is the cleanest inside the deadline.
-    return t >= now - 3_600_000 && t <= deadline.getTime();
-  });
-  if (usable.length === 0) return undefined;
-  let best = usable[0]!;
-  for (const e of usable) {
-    if (e.carbonIntensityGCo2PerKwh < best.carbonIntensityGCo2PerKwh) {
-      best = e;
-    }
-  }
-  return best;
+  // rng pinned to 0 → floor(0 * band.length) === 0 → the cheapest entry,
+  // reproducing the historical strict-minimum behaviour exactly.
+  return selectWindow(entries, deadline, { rng: () => 0 })?.chosen;
 }
 
 /**

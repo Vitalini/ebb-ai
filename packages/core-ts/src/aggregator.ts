@@ -6,9 +6,9 @@
  * `~/.ebb-ai/queue.db`). Output is pure data — no I/O. Renderers
  * (CLI / dashboard) layer formatting on top.
  *
- * Scope of v0.8 (local-only): aggregates exactly what is stored on
- * receipts today. Cross-user counters and ranked leaderboards are
- * deferred to v0.9 once a privacy-conscious telemetry endpoint exists.
+ * Scope (local-only): aggregates exactly what is stored on receipts
+ * today. Cross-user counters and ranked leaderboards remain out of scope
+ * unless/until a privacy-conscious telemetry endpoint exists.
  */
 
 import { LEGACY_KWH_PER_TASK } from "./energy.js";

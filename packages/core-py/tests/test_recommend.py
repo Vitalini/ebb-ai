@@ -124,11 +124,16 @@ async def test_reasoning_mentions_cleaner_than_now_when_savings_high() -> None:
 async def test_reasoning_generic_when_savings_low() -> None:
     now = datetime(2026, 5, 12, 10, 0, 0, tzinfo=UTC)
     feed = _StaticFeed(now, [(0, 300), (1, 290)])
+    # Pin the tie-break to the strict cheapest (rng -> 0) so we exercise the
+    # low-savings branch of the "cleanest in-deadline window" wording rather
+    # than a random band pick (§2.1). 290 vs the 300 "now" cell is only ~3%,
+    # below the 30% savings-tail threshold.
     r = await recommend_window(
         deadline=now + timedelta(hours=2),
         region="US-CAL-CISO",
         feed=feed,
         now=lambda: now,
+        rng=lambda: 0.0,
     )
     assert "cleaner than dispatching now" not in r.reasoning
     assert "cleanest in-deadline window" in r.reasoning

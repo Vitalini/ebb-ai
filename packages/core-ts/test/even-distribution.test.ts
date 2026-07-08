@@ -26,6 +26,7 @@
 
 import { describe, it, expect } from "vitest";
 import { recommendWindow } from "../src/recommend.js";
+import { Scheduler } from "../src/scheduler.js";
 import { mockGridFeed } from "../src/grid.js";
 
 // Simple mulberry32 PRNG so the test is deterministic on every machine.
@@ -105,5 +106,66 @@ describe("even-distribution simulation", () => {
     // staying comfortably above the current best.
     expect(maxBucket / N).toBeLessThan(0.2);
     expect(emptyBuckets).toBe(0);
+  });
+
+  it("spreads COMMITTED dispatch hours too — via enqueueProviderCall, not just recommend (§2.1)", async () => {
+    // The pre-§2.1 gap: the even-distribution guarantee only covered the
+    // non-committing recommend path; the scheduler's committing paths used
+    // strict-minimum pickBestWindow, so every committed task in a region
+    // still collapsed onto one trough hour. This drives the REAL committing
+    // path (enqueueProviderCall) and asserts the same spread holds.
+    //
+    // The Scheduler scores against Date.now() (no injectable clock), so we
+    // vary region + deadline instead of submit time. Regions have distinct
+    // phase offsets in the mock curve, so cleanest hours differ across them;
+    // the randomized tolerance-band tie-break spreads within each region.
+    const N = 400;
+    const rnd = seeded(31415926);
+    const tieRnd = seeded(27182818);
+    const feed = mockGridFeed();
+    const sched = new Scheduler({ feed, rng: tieRnd });
+
+    const hourBuckets = new Array(24).fill(0);
+    let counted = 0;
+    for (let i = 0; i < N; i++) {
+      const deadlineHrs = 6 + Math.floor(rnd() * 66); // 6h–72h
+      const region = REGIONS[Math.floor(rnd() * REGIONS.length)]!;
+      const deadline = new Date(
+        Date.now() + deadlineHrs * 3600 * 1000,
+      ).toISOString();
+      const rec = await sched.enqueueProviderCall(
+        {
+          type: "provider_call",
+          provider: "anthropic",
+          model: "claude-sonnet-4-5",
+          prompt: `task ${i}`,
+        },
+        { deadline, region, taskId: `commit-${i}` },
+      );
+      if (!rec.scheduledFor) continue;
+      hourBuckets[new Date(rec.scheduledFor).getUTCHours()]! += 1;
+      counted += 1;
+    }
+    sched.shutdown();
+
+    const maxBucket = Math.max(...hourBuckets);
+    /* eslint-disable no-console */
+    console.log(
+      `[sim/commit] committed dispatch histogram (N=${counted}):`,
+      hourBuckets
+        .map((n, h) => `${String(h).padStart(2, "0")}:${String(n).padStart(4)}`)
+        .join(" "),
+    );
+    console.log(
+      `[sim/commit] max=${maxBucket} (${((maxBucket / counted) * 100).toFixed(1)}%)`,
+    );
+    /* eslint-enable no-console */
+
+    // The committing path must spread just like recommend. A generous 45%
+    // ceiling (well below the pre-fix 66.9%+ collapse) catches a regression
+    // back to strict-minimum selection without being flaky on the smaller
+    // committed-task sample.
+    expect(counted).toBeGreaterThan(0);
+    expect(maxBucket / counted).toBeLessThan(0.45);
   });
 });

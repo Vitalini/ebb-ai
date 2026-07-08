@@ -29,6 +29,16 @@ export {
 export type { SchedulerOptions } from "./scheduler.js";
 export { recommendWindow } from "./recommend.js";
 export {
+  selectWindow,
+  inDeadlineEntries,
+  TOLERANCE_FLOOR_G,
+  TOLERANCE_FRACTION,
+} from "./select-window.js";
+export type {
+  SelectWindowOptions,
+  SelectWindowResult,
+} from "./select-window.js";
+export {
   ASSUMED_KWH_PER_CALL,
   classifyBand,
   aggregateStats,
