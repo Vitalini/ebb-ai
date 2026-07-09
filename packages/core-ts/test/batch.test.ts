@@ -10,9 +10,26 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mockGridFeed, Scheduler } from "../src/index.js";
+
+/**
+ * The cross-language raw-row test writes the PY schema with the
+ * node:sqlite builtin directly (no better-sqlite3 fallback like the
+ * core's own store has). node:sqlite ships in Node >= 22.5, but CI's
+ * Node 20 matrix leg lacks it — skip there; the Node 22 leg and the
+ * Python suite keep the cross-language handoff covered.
+ */
+const nodeSqliteAvailable = (() => {
+  try {
+    createRequire(import.meta.url)("node:sqlite");
+    return true;
+  } catch {
+    return false;
+  }
+})();
 import type {
   BatchRetrieveResult,
   ProviderAdapter,
@@ -277,13 +294,12 @@ describe("Batch API routing (§0.1)", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("cross-language: a PY-submitted row is completed by a TS tick", async () => {
+  it.skipIf(!nodeSqliteAvailable)("cross-language: a PY-submitted row is completed by a TS tick", async () => {
     // Reproduce the exact PY port's column layout (packages/core-py/src/
     // ebb_ai/scheduler.py _SCHEMA) — identical to the TS schema — with a
     // raw node:sqlite write, then read + poll it with the TS scheduler.
     // (createRequire dodges vitest's ESM resolver, which can't map the
     // "node:sqlite" builtin.)
-    const { createRequire } = await import("node:module");
     const require = createRequire(import.meta.url);
     const { DatabaseSync } = require("node:sqlite") as {
       DatabaseSync: new (path: string) => {
