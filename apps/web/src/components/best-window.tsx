@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CarbonBandBadge } from "./carbon-band";
 import type { BestWindow } from "@/lib/grid";
 import type { Region } from "@/lib/regions";
@@ -20,6 +20,15 @@ export function BestWindowResult({
   best,
   cheapestUnreachable,
 }: Props) {
+  // Mounted gate for locale/timezone-dependent text. The server (UTC on
+  // Vercel) and the visitor's browser disagree on both locale and TZ, so
+  // rendering `toLocaleString` output during SSR caused hydration text
+  // mismatches (React #418). Until mounted we render a deterministic UTC
+  // fallback that the server and the client's first render produce
+  // identically; the effect then swaps in the visitor's local rendering.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   if (!best) {
     return (
       <div className="rounded-xl border border-danger/40 bg-danger/5 p-6">
@@ -46,21 +55,27 @@ export function BestWindowResult({
   }
 
   const when = new Date(best.entry.datetime);
-  const tz = when.toLocaleString(undefined, { timeZoneName: "short" }).split(" ").pop() ?? "";
-  const localTime = when.toLocaleString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  const deadlineStr = deadline.toLocaleString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const tz = mounted
+    ? (when.toLocaleString(undefined, { timeZoneName: "short" }).split(" ").pop() ?? "")
+    : "UTC";
+  const localTime = mounted
+    ? when.toLocaleString(undefined, {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : formatUtcFallback(when);
+  const deadlineStr = mounted
+    ? deadline.toLocaleString(undefined, {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : formatUtcFallback(deadline);
 
   return (
     <div className="space-y-6">
@@ -70,14 +85,11 @@ export function BestWindowResult({
             <p className="font-mono text-xs uppercase tracking-wider text-accent">
               recommended window
             </p>
-            <h3
-              suppressHydrationWarning
-              className="mt-1 font-mono text-2xl font-semibold tracking-tight text-fg"
-            >
+            <h3 className="mt-1 font-mono text-2xl font-semibold tracking-tight text-fg">
               {localTime}{" "}
               <span className="text-base font-normal text-fg-muted">{tz}</span>
             </h3>
-            <p suppressHydrationWarning className="mt-1 text-sm text-fg-muted">
+            <p className="mt-1 text-sm text-fg-muted">
               {best.hourOffset === 0
                 ? "dispatch immediately — current hour is best"
                 : `in ${best.hourOffset} h, well inside your deadline (${deadlineStr})`}
@@ -108,6 +120,16 @@ export function BestWindowResult({
       />
     </div>
   );
+}
+
+/**
+ * Deterministic UTC rendering ("2026-07-10 05:00") used during SSR and
+ * the first client render, before the visitor's locale/timezone can be
+ * applied. Derived from toISOString() so it never depends on the
+ * runtime's ICU data, locale, or TZ database.
+ */
+function formatUtcFallback(d: Date): string {
+  return d.toISOString().slice(0, 16).replace("T", " ");
 }
 
 function Stat({
