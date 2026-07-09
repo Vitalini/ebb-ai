@@ -1,6 +1,6 @@
 {
   "name": "@ebb-ai/core",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "Carbon-aware scheduling for agentic AI workflows — core TypeScript library.",
   "license": "Apache-2.0",
   "author": "Vitalii Borovyk",

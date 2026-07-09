@@ -10,7 +10,7 @@ a one-command Claude Code plugin.*
 [![npm (core)](https://img.shields.io/npm/v/%40ebb-ai%2Fcore?label=%40ebb-ai%2Fcore&color=cb3837)](https://www.npmjs.com/package/@ebb-ai/core)
 [![npm (mcp)](https://img.shields.io/npm/v/%40ebb-ai%2Fmcp?label=%40ebb-ai%2Fmcp&color=cb3837)](https://www.npmjs.com/package/@ebb-ai/mcp)
 [![npm (cli)](https://img.shields.io/npm/v/%40ebb-ai%2Fcli?label=%40ebb-ai%2Fcli&color=cb3837)](https://www.npmjs.com/package/@ebb-ai/cli)
-[![Tests](https://img.shields.io/badge/tests-333%20passing-22c55e)](#tests)
+[![Tests](https://img.shields.io/badge/tests-605%20passing-22c55e)](#tests)
 [![MCP tools](https://img.shields.io/badge/MCP-9%20tools-5eead4)](https://www.ebb-ai.com/docs)
 [![Hosts](https://img.shields.io/badge/MCP%20hosts-13-5eead4)](https://www.ebb-ai.com/docs#install)
 [![Website](https://img.shields.io/badge/website-ebb--ai.com-5eead4)](https://www.ebb-ai.com)
@@ -72,7 +72,7 @@ Windsurf, OpenClaw, OpenAI Codex CLI, Pi). The agent asks
 `recommend_window`, sees the plan, then commits via `schedule_task`
 — or doesn't.
 
-> **Status:** v0.11.0 · 2026-05-30 · `@ebb-ai/{core,mcp,cli}` published
+> **Status:** v0.12.0 · 2026-07-08 · `@ebb-ai/{core,mcp,cli}` published
 > to npm under the `@ebb-ai` org; `ebb-ai` on PyPI; `@vitalini/ebb`
 > OpenClaw plugin shares the queue. **One-command Claude Code plugin**
 > via `/plugin marketplace add Vitalini/ebb-ai && /plugin install ebb-ai`.
@@ -86,14 +86,24 @@ Windsurf, OpenClaw, OpenAI Codex CLI, Pi). The agent asks
 > placeholder. **v0.11:** Ed25519-signed carbon receipts (offline
 > verifiable via `ebb verify`) plus WAL multi-writer SQLite so
 > `ebb tick` and the MCP server can share `~/.ebb-ai/queue.db`.
-> Anthropic + OpenAI Batch adapters, Python port at parity, live
-> dashboard, `recommend_window` planning endpoint, always-on `ebb tick`
-> CLI with macOS launchd + Linux systemd + pmset/rtcwake wake events,
-> full control surface (`cancel_task` / `expedite_task` /
-> `update_deadline` / `retry_task` / `cancel_all`), receipt redaction,
-> file output, retry-with-backoff. **333 tests passing** (213 TS +
-> 120 Python) across 5 packages and 2 languages. See
-> [QUICKSTART.md](./QUICKSTART.md).
+> **v0.12 ("trust repairs"):** Batch API routing is real — deferrable
+> tasks (deadline > 24h) are submitted to the provider's Batch API and
+> polled to completion (`submitted` status), instead of the previous
+> dead-code gate; receipts record grid-data provenance (intensity, feed
+> source — synthetic mock is disclosed, not silently signed) and the
+> energy-coefficient confidence tier; Python- and TS-signed receipts
+> verify in either language (one canonical signing form, JCS numbers);
+> daemons installed by `ebb install` actually dispatch (real
+> node/script paths, `~/.config/ebb/env` secrets); hardened ledger
+> (0600, redacted `body_json`); honest feed labeling
+> (forecast vs persistence). Anthropic + OpenAI Batch adapters, Python
+> port at parity, live dashboard, `recommend_window` planning endpoint,
+> always-on `ebb tick` CLI with macOS launchd + Linux systemd +
+> pmset/rtcwake wake events, full control surface (`cancel_task` /
+> `expedite_task` / `update_deadline` / `retry_task` / `cancel_all`),
+> receipt redaction, file output, retry-with-backoff. **605 tests
+> passing** (368 TS + 237 Python) across 5 packages and 2 languages.
+> See [QUICKSTART.md](./QUICKSTART.md).
 
 ### Live demo
 
@@ -101,13 +111,14 @@ Windsurf, OpenClaw, OpenAI Codex CLI, Pi). The agent asks
 
 Or visit the maintainer-hosted dashboard at
 **[ebb-ai.com](https://ebb-ai.com)** to see live grid-load and
-carbon-intensity forecasts across the seven regions where the major
-LLM providers run inference (CAISO, ERCOT, ISO-NE, PJM, Great Britain,
-France, Germany) and to try the best-window planner without installing
-anything. Great Britain is powered by the free
+carbon-intensity forecasts across 31 grid regions (NA / EU / APAC —
+CAISO, ERCOT, ISO-NE, PJM, Great Britain, France, Germany, and more)
+and to try the best-window planner without installing anything.
+Great Britain is powered by the free
 [National Grid ESO Carbon Intensity API](https://carbonintensity.org.uk/)
-(real data, no key required); the other zones use Electricity Maps when
-a key is configured and a deterministic mock otherwise.
+(real data, no key required); US ISOs use the EIA open-data feed, EU
+zones ENTSO-E, with Electricity Maps as the universal fallback and a
+clearly-labelled deterministic mock when no key is configured.
 
 ---
 

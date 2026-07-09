@@ -9,6 +9,185 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (Nothing pending — see version sections below.)
 
+## [0.12.0] — 2026-07-08
+
+**Theme:** "Trust repairs." Implements the 2026-07-07 fresh-eyes audit —
+the headline features that were dead code now actually run, and every
+number a receipt asserts is now covered by the signature.
+
+> **Operator note:** the OpenClaw plugin does not auto-update. Run
+> `openclaw plugins update @vitalini/ebb` to pull 0.12.0.
+
+### Added
+
+- **Real Batch API routing.** The "50% cheaper auto-Batch" headline was
+  dead code: the gate compared `scheduledFor` to `now` at dispatch time,
+  unsatisfiable from every public path (`tick` only dispatches due tasks;
+  expedite/retry force `now`). Batch is now the *deferral* mechanism,
+  decided against the persisted deadline. `tick()` gains a **submit
+  sweep** (scheduled rows with `preferBatch`, a batch-capable adapter and
+  `deadline − now > 24h` are claimed and submitted immediately — the
+  provider owns the execution hour inside its 24h SLA) and a **poll
+  sweep** (`claimSubmitted` → `retrieveBatch`; completed builds the full
+  receipt from real usage tokens with provenance/signing/redaction/output
+  file; failed/expired → `failed`, `retryTask` re-dispatches sync and
+  clears `batchId`). New adapter surface `retrieveBatch` for Anthropic
+  (`messages.batches` results iteration) and OpenAI (output-file JSONL).
+  New `submitted` status + `batch_id` column (cross-language schema
+  parity); expedite/retry on `submitted` reject clearly; `cancel` warns
+  the provider-side batch may still bill. `TickResult` reports
+  `batchSubmitted` / `batchPolled`. Tested through public paths only in
+  both languages, including two racing ticks completing a submitted row
+  exactly once and TS↔PY row handoff. (§0.1)
+- **Receipt provenance, covered by the signature.** Receipts now record
+  `intensityGCo2PerKwh` + `gridSource` (mock = **synthetic**, disclosed)
+  + `energySource` confidence tier. `recommend_window` discloses
+  SYNTHETIC grid data in its reasoning; `ebb stats` classifies the stored
+  intensity instead of back-deriving it from grams (which skewed
+  per-model receipts up to 6.9×). Every provenance field is inside the
+  signed payload. (§0.4)
+
+### Changed
+
+- **One cross-language canonical signing form.** The Ed25519 signature
+  previously bound dialect-specific key names (snake_case in Python,
+  camelCase in TS), making cross-port verification mathematically
+  impossible (legacy-unsigned or false "tampered"). Canonical form is now
+  the camelCase wire rendering in both languages (algorithmic
+  snake→camel, no field list), with RFC 8785 / JCS-style number
+  serialization — Python's `es_number()` fuzz-verified byte-identical to
+  Node `JSON.stringify` across 9k values. **`signedAt` is now inside the
+  signed payload** (it was documented as replay defence while being
+  freely forgeable; the replay note now correctly requires ledger-side
+  uniqueness). Verify accepts either key rendering and falls back through
+  the legacy v0.11 canonical forms, so existing receipts keep verifying
+  (the reason notes the legacy form). Key files are written temp+rename,
+  making the "atomic" comment true. Shared cross-language test-vector
+  fixture (4 vectors incl. a numbers torture case) exercised byte-exact
+  by both suites. (§0.3)
+- **A paid provider call can never become `failed`.** The `try` is
+  narrowed to the billed call only; receipt-side fetch/sign/upsert
+  failures are fail-soft (no zombie `running` row, no hung awaiter, no
+  crashed tick). (T0/T1)
+- **Multi-process correctness pack.** `busy_timeout = 5000`; per-candidate
+  claim guard in `tick`; expedite/retry go through `claimScheduled` (no
+  double dispatch versus a racing cron); duplicate `taskId` checked
+  against the store (an id reuse can no longer silently destroy a signed
+  ledger row; Python gains `exists_sync`); cancel-while-running keeps the
+  cancelled row (cancel-overwrite guard). (T0/T1)
+- **Ledger hardening.** DB `0600` / dir `0700`; `body_json` redacted at
+  `completed`/`cancelled` (failed keeps the original for retry);
+  vendor-shaped redaction patterns (AKIA / ghp / AIza / xox / JWT)
+  replace the prose-mangling generic rule. (T0/T1)
+- **Honest grid feeds.** EIA / ENTSO-E persistence tiling is now anchored
+  by each observation's own UTC hour-of-day, so publication lag no longer
+  phase-rotates the served diurnal curve (a 4h lag previously shifted
+  every window hours off the real trough); histories under 24h refuse to
+  synthesise instead of tiling a short tail. Forecasts carry
+  `kind: forecast | persistence` so downstream surfaces can disclose
+  naive forecasts. ENTSO-E parser: consumption `TimeSeries`
+  (`outBiddingZone`, pumped storage) excluded from the generation mix,
+  `Point` positions honored (A03 gaps leave holes instead of shifting
+  later hours), per-`Period` parsing, `Acknowledgement` error documents
+  throw to the mock fallback. UK feed pages a second `/fw48h` request for
+  72h horizons and aligns buckets to top-of-hour. (§0.4)
+- **Current hour is a scheduling candidate.** "Run now" is recommendable,
+  and the committing paths honor it. (T0/T1)
+- **Planning and committing finally agree.** `recommendWindow`'s
+  randomized cleanest-tolerance-band tie-break (built to stop fleet-wide
+  collapse onto a single trough hour) existed only on the non-committing
+  recommend path; every task actually scheduled via
+  `enqueueProviderCall` / `defer` still hit the strict-minimum hour. One
+  shared **`selectWindow`** (in-deadline incl. current hour, band
+  `max(15%, 30g)`, injectable rng) now drives `recommendWindow` **and**
+  all committing scheduler paths in both languages — Python's recommend
+  gains the band+rng logic it never had. `pickBestWindow` kept as a
+  deprecated strict-min delegate. Even-distribution now verified through
+  the committed path: N=400 `enqueueProviderCall`, max-bucket
+  concentration **11.0%** (recommend-path 10.6%). `previewProviderCall`
+  reports its `cleanBandSize`. (§2.1)
+- **CLI daemons that actually dispatch.** `ebb install` resolved the
+  daemon binary to a hardcoded `/usr/local/bin/ebb` and relied on
+  env-node with launchd's bare PATH — dead on Apple Silicon and nvm.
+  Units are now built from `[process.execPath, realpathSync(argv[1]),
+  tick …]` with existence checks. Secrets: `~/.config/ebb/env` (0600,
+  commented template created at install) is loaded by `tick` at startup
+  for any unset keys — one mechanism across launchd / systemd / cron —
+  and `tick` warns loudly when pending provider tasks exist without the
+  needed key. Laptop wake-chain fixed (register-wake no longer fed the
+  table separator; `--db` propagates; `sudo -n` attempt prints the exact
+  sudoers one-liner). Dropped the six-versions-stale "planned for v0.5"
+  Windows fiction; README rewritten from its frozen v0.4 state (Linux
+  systemd is supported). `receipts`/`verify` render provenance
+  (intensity, grid source with a MOCK DATA banner, energy tier).
+  `engines >= 20`. (§0.6/P16)
+- **OpenClaw dispatch from gateway boot + provider inference.** The
+  background dispatch loop only started on the first tool call, so after
+  a gateway restart persisted tasks missed their clean-grid window until
+  a user happened to invoke any ebb tool. The dispatcher now bootstraps
+  at module load (guarded, unref'd; the SDK exposes no init hook —
+  documented), and `runDispatchTick` skips-not-fails tasks whose provider
+  has no adapter yet (keys may be absent at boot), restoring them to
+  `scheduled`. `schedule_task` no longer hardcodes `anthropic`: optional
+  `provider` param, inference from the model prefix (`gpt-*`/`oN` →
+  openai, `claude-*` → anthropic), hard reject on the api-key path when
+  the chosen provider has no key. Response parity with the MCP server
+  (SYNTHETIC warning + receipt provenance); queue rendering handles
+  `submitted` (+ batch id); expedite/retry relay core rejections
+  verbatim. `engines >= 22.5` declared (node:sqlite). (§0.7/§1.10)
+- **MCP restart visibility, schemas from zod, honest fallback.**
+  `check_queue_status` and `cancel_all` now read `listPersistedTasks()` —
+  after an MCP-host restart they saw an empty in-memory map while
+  `queue.db` held scheduled tasks that `ebb tick` would still dispatch.
+  Advertised `inputSchema`s are derived from the zod validators
+  (`zod-to-json-schema`): `schedule_task`'s five undiscoverable params
+  (`dry_run`, `dispatch`, `provider`, `output_path`, `redact_in_receipt`)
+  are advertised again, with a parity test over live `tools/list`. The
+  "falling back to in-memory" message now actually falls back instead of
+  crashing on a dead DB path. Responses carry the carbon data already on
+  the record (estimated carbon, window, grid source, delta, energy tier)
+  plus a loud SYNTHETIC warning on mock data — the plugin template
+  previously forced the model to fabricate these numbers. `SERVER_VERSION`
+  read from `package.json`; `server.ts` exports `createEbbServer(deps)`.
+  (§0.10/§1.9/§1.11)
+- **Site fixes.** `/plan` resolves the visitor's `datetime-local`
+  deadline in the *browser* (hidden UTC ISO field) — previously parsed in
+  server TZ (UTC on Vercel), skewing every result by the visitor's
+  offset. Copy-paste blocks emit things that exist (`/ebb-ai:defer` +
+  `schedule_task` MCP JSON; the advertised `npx @ebb-ai/cli schedule`
+  never existed). `/forecast`, `/plan` and the API route use the 5-min
+  cached `getGridForecast` (stops burning the Electricity Maps 100 req/day
+  quota per view). `/map` sparklines are server-rendered inline SVG —
+  recharts stays only on interactive routes (first-load JS 209kB →
+  106kB). Ed25519 moved to "shipped" in About; `llms.txt` 7 → 31 regions.
+  (§0.9/P18-20)
+- **Python parity + PY-specific fixes.** Mirrors the TS correctness pack
+  (provenance, paid-call-never-failed, multi-process pack, redaction,
+  0600/0700, current-hour candidacy, `deadline` column). PY-specific:
+  `TaskCancelledError` replaces the `asyncio.CancelledError` abuse
+  (catchable, no TaskGroup unwinding); retry-with-backoff ported (429/5xx/
+  pre-connect only); `shutdown()` settles pending `defer()` awaiters with
+  `SchedulerShutdownError`; hourly re-entry keeps the committed window on
+  transient forecast failures instead of dispatching into a possibly-dirty
+  hour; `enqueue` validates the running loop before mutating state;
+  `output_path` + `writeOutputFile` ported (TS-enqueued rows now deliver
+  files under a Python tick); o-series/gpt-5 `max_completion_tokens`, SDK
+  `max_retries=0`. Stale "TS port is still in-memory" fiction removed.
+
+### Changed — version bumps (lockstep)
+
+- `@ebb-ai/core` 0.11.0 → 0.12.0
+- `@ebb-ai/cli` 0.11.0 → 0.12.0
+- `@ebb-ai/mcp` 0.11.0 → 0.12.0 (`SERVER_VERSION` synced)
+- Claude Code plugin manifest + marketplace 0.11.0 → 0.12.0
+- `ebb_ai` PyPI 0.11.0 → 0.12.0
+- OpenClaw plugin (`@vitalini/ebb`) 0.11.0 → 0.12.0
+
+### Tests
+
+- **605 tests** (368 TS + 237 Python). TS: 251 core + 61 cli + 21 mcp +
+  35 openclaw. Up from 333 at v0.11.0.
+
 ## [0.11.0] — 2026-05-30
 
 **Theme:** "Auditable receipts." Ed25519 signing + WAL multi-writer SQLite.

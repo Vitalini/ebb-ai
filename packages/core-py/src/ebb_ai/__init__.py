@@ -97,7 +97,7 @@ from .types import (
     TickResultEntry,
 )
 
-__version__ = "0.11.0"
+__version__ = "0.12.0"
 
 __all__ = [
     "DEFAULT_PUE",
