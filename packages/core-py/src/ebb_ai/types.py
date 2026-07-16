@@ -39,9 +39,9 @@ GridSource = Literal[
 """Source of the carbon-intensity forecast.
 
 Mirrors the TS ``GridForecast["source"]`` union. The Python feed module
-currently only emits ``electricityMaps`` / ``mock``, but the wider set is
-accepted so a record persisted by the TS port (``ukCarbonIntensity`` /
-``eia`` / ``entsoe``) round-trips through the Python types unchanged.
+emits every source except ``wattTime`` (roadmap); ``wattTime`` is still
+accepted so a record persisted by a future TS build round-trips through
+the Python types unchanged.
 """
 
 IntensitySource = Literal["scored", "current", "expedited"]

@@ -1,0 +1,280 @@
+"""Fixture-level regression tests for the ported grid feeds (§ROADMAP 5).
+
+Ports ``packages/core-ts/test/grid-feeds-fixtures.test.ts`` 1:1 against the
+SAME shared fixtures under ``packages/core-ts/test/fixtures/`` so both
+language cores parse identical payloads to identical forecasts:
+
+  - entsoe-a75-de.xml          ENTSO-E realised generation (A75) with a
+                               consumption TimeSeries (outBiddingZone), a
+                               multi-Period TimeSeries, and a Point-position
+                               gap (curveType A03).
+  - entsoe-acknowledgement.xml ENTSO-E "no data" error envelope.
+  - eia-fuel-mix-lagged.json   EIA hourly fuel mix whose last observation is
+                               4h behind the test's faked "now" — the
+                               phase-rotation regression fixture.
+  - uk-fw48h-page1/2.json      Two UK Carbon Intensity /fw48h pages with a
+                               misaligned leading half-period and an
+                               overlapping boundary period.
+"""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
+from math import floor
+from pathlib import Path
+
+import httpx
+import pytest
+
+from ebb_ai.grid import (
+    eia_feed,
+    entsoe_feed,
+    parse_entsoe_xml,
+    uk_carbon_intensity_feed,
+)
+
+_FIXTURES = Path(__file__).resolve().parents[2] / "core-ts" / "test" / "fixtures"
+
+
+def _fixture(name: str) -> str:
+    return (_FIXTURES / name).read_text()
+
+
+def _patch_client(
+    monkeypatch: pytest.MonkeyPatch,
+    handler: Callable[[httpx.Request], httpx.Response],
+) -> None:
+    """Route every AsyncClient request in ``ebb_ai.grid`` through a
+    MockTransport, mirroring the TS tests' ``globalThis.fetch`` stub.
+    """
+    real_client = httpx.AsyncClient
+
+    class _Patched(real_client):  # type: ignore[misc, valid-type]
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            kwargs["transport"] = httpx.MockTransport(handler)
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr("ebb_ai.grid.httpx.AsyncClient", _Patched)
+
+
+def _freeze_now(monkeypatch: pytest.MonkeyPatch, iso: str) -> None:
+    dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+    monkeypatch.setattr("ebb_ai.grid._now_utc", lambda: dt)
+
+
+# ---------------------------------------------------------------------------
+# ENTSO-E A75 XML
+# ---------------------------------------------------------------------------
+
+
+def test_parse_entsoe_skips_consumption_series() -> None:
+    series = parse_entsoe_xml(_fixture("entsoe-a75-de.xml"))
+    # Fixture has 3 TimeSeries; the B11 pumped-storage-pumping one is
+    # marked with outBiddingZone_Domain.mRID and must be excluded.
+    assert [s.psr_type for s in series] == ["B14", "B05"]
+
+
+def test_parse_entsoe_multi_period() -> None:
+    series = parse_entsoe_xml(_fixture("entsoe-a75-de.xml"))
+    nuclear = next(s for s in series if s.psr_type == "B14")
+    assert len(nuclear.periods) == 2
+    assert nuclear.periods[0].start == "2026-05-13T10:00Z"
+    assert nuclear.periods[1].start == "2026-05-13T22:00Z"
+    assert len(nuclear.periods[0].points) == 12
+    assert len(nuclear.periods[1].points) == 12
+
+
+def test_parse_entsoe_position_gap_stays_hole() -> None:
+    series = parse_entsoe_xml(_fixture("entsoe-a75-de.xml"))
+    coal = next(s for s in series if s.psr_type == "B05")
+    positions = [pos for pos, _q in coal.periods[0].points]
+    assert 3 not in positions
+    assert 4 in positions
+    assert len(positions) == 23
+
+
+def test_parse_entsoe_acknowledgement_raises() -> None:
+    with pytest.raises(RuntimeError, match=r"Acknowledgement.*No matching data found"):
+        parse_entsoe_xml(_fixture("entsoe-acknowledgement.xml"))
+
+
+def _entsoe_expected(hour_of_day: int) -> int:
+    # Fixture mix per hour: nuclear 1000 MW (12 g) + coal 1000 MW (820 g)
+    # -> (12 + 820) / 2 = 416 g — EXCEPT the coal gap hour (position 3 ->
+    # period start 10:00Z + 2h = 12:00Z), which is nuclear-only -> 12 g.
+    return 12 if hour_of_day == 12 else 416
+
+
+@pytest.mark.asyncio
+async def test_entsoe_excludes_consumption_and_keeps_gap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def handler(_req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=_fixture("entsoe-a75-de.xml").encode())
+
+    _patch_client(monkeypatch, handler)
+    fc = await entsoe_feed("test-token").fetch_forecast("DE", 24)
+    assert fc.source == "entsoe"
+    assert fc.kind == "persistence"
+    assert len(fc.entries) == 24
+    for e in fc.entries:
+        hod = datetime.fromisoformat(e.datetime.replace("Z", "+00:00")).hour
+        assert e.carbon_intensity_g_co2_per_kwh == _entsoe_expected(hod), e.datetime
+
+    def _at(hod: int) -> int:
+        e = next(
+            e
+            for e in fc.entries
+            if datetime.fromisoformat(e.datetime.replace("Z", "+00:00")).hour == hod
+        )
+        return e.carbon_intensity_g_co2_per_kwh
+
+    # Regression pin for the index-based bucketing bug: ignoring <position>
+    # shifted every post-gap coal hour one hour earlier.
+    assert _at(12) == 12
+    assert _at(9) == 416
+
+
+@pytest.mark.asyncio
+async def test_entsoe_falls_back_on_acknowledgement(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def handler(_req: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, content=_fixture("entsoe-acknowledgement.xml").encode()
+        )
+
+    _patch_client(monkeypatch, handler)
+    with caplog.at_level("WARNING"):
+        fc = await entsoe_feed("test-token").fetch_forecast("DE", 6)
+    assert fc.source == "mock"
+    assert len(fc.entries) == 6
+    assert any("Acknowledgement" in r.getMessage() for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# EIA fuel mix — publication-lag phase regression
+# ---------------------------------------------------------------------------
+
+
+def _eia_expected(hour_of_day: int) -> int:
+    # Fixture: COL = hod MW, NUC = (24 - hod) MW, so each observation's
+    # intensity uniquely encodes its hour-of-day.
+    return floor((hour_of_day * 820 + (24 - hour_of_day) * 12) / 24 + 0.5)
+
+
+@pytest.mark.asyncio
+async def test_eia_serves_by_hour_of_day_despite_lag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # "Now" is 4h after the last observation (2026-05-14T21).
+    _freeze_now(monkeypatch, "2026-05-15T01:20:00Z")
+
+    def handler(_req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=_fixture("eia-fuel-mix-lagged.json").encode())
+
+    _patch_client(monkeypatch, handler)
+    fc = await eia_feed("test-key").fetch_forecast("US-CAL-CISO", 72)
+    assert fc.source == "eia"
+    assert fc.kind == "persistence"
+    assert len(fc.entries) == 72
+    assert fc.entries[0].datetime == "2026-05-15T01:00:00.000Z"
+    for e in fc.entries:
+        hod = datetime.fromisoformat(e.datetime.replace("Z", "+00:00")).hour
+        assert e.carbon_intensity_g_co2_per_kwh == _eia_expected(hod), e.datetime
+    # Phase pin: the old tiling anchored the last-24 tail at wall-clock
+    # "now", so the 01:00 slot got the 4h-stale 22:00 observation.
+    assert fc.entries[0].carbon_intensity_g_co2_per_kwh == _eia_expected(1)  # 46
+    assert fc.entries[0].carbon_intensity_g_co2_per_kwh != _eia_expected(22)  # 753
+
+
+@pytest.mark.asyncio
+async def test_eia_degrades_when_fewer_than_24_hours(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    full = json.loads(_fixture("eia-fuel-mix-lagged.json"))
+    # Keep only the first 10 hours (2 rows per hour) — a short tail must
+    # not be tiled onto a 24h diurnal cycle.
+    full["response"]["data"] = full["response"]["data"][:20]
+
+    def handler(_req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=json.dumps(full).encode())
+
+    _patch_client(monkeypatch, handler)
+    with caplog.at_level("WARNING"):
+        fc = await eia_feed("test-key").fetch_forecast("US-CAL-CISO", 24)
+    assert fc.source == "mock"
+    assert any("hours-of-day" in r.getMessage() for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# UK Carbon Intensity — 72h pagination + top-of-hour alignment
+# ---------------------------------------------------------------------------
+
+
+def _uk_handler(calls: list[str]) -> Callable[[httpx.Request], httpx.Response]:
+    def handler(req: httpx.Request) -> httpx.Response:
+        url = str(req.url)
+        calls.append(url)
+        if "/intensity/2026-05-14T12:00Z/fw48h" in url:
+            return httpx.Response(200, content=_fixture("uk-fw48h-page1.json").encode())
+        if "/intensity/2026-05-16T12:00Z/fw48h" in url:
+            return httpx.Response(200, content=_fixture("uk-fw48h-page2.json").encode())
+        return httpx.Response(404, json={"error": f"unexpected URL: {url}"})
+
+    return handler
+
+
+@pytest.mark.asyncio
+async def test_uk_two_page_72h_aligned(monkeypatch: pytest.MonkeyPatch) -> None:
+    _freeze_now(monkeypatch, "2026-05-14T12:05:00Z")
+    calls: list[str] = []
+    _patch_client(monkeypatch, _uk_handler(calls))
+
+    fc = await uk_carbon_intensity_feed().fetch_forecast("GB", 72)
+    assert len(calls) == 2
+    assert "/intensity/2026-05-16T12:00Z/fw48h" in calls[1]
+
+    assert fc.source == "ukCarbonIntensity"
+    assert fc.kind == "forecast"
+    assert len(fc.entries) == 72
+    base = datetime(2026, 5, 14, 12, tzinfo=UTC)
+    for i, e in enumerate(fc.entries):
+        t = datetime.fromisoformat(e.datetime.replace("Z", "+00:00"))
+        # Buckets must be aligned to [HH:00, HH+1:00) and hourly-contiguous.
+        assert t.minute == 0, e.datetime
+        want = base + timedelta(hours=i)
+        assert e.datetime == want.strftime("%Y-%m-%dT%H:%M:%S") + ".000Z"
+        assert e.carbon_intensity_g_co2_per_kwh == 20 * i + 5, e.datetime
+    assert fc.entries[71].datetime == "2026-05-17T11:00:00.000Z"
+    assert fc.entries[71].carbon_intensity_g_co2_per_kwh == 1425
+
+
+@pytest.mark.asyncio
+async def test_uk_drops_misaligned_leading_half_period(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _freeze_now(monkeypatch, "2026-05-14T12:05:00Z")
+    _patch_client(monkeypatch, _uk_handler([]))
+
+    fc = await uk_carbon_intensity_feed().fetch_forecast("GB", 72)
+    # If the 11:30 period (9999) were paired in, bucket 0 would be
+    # avg(9999, 0) ~= 5000 at 11:30 instead of avg(0, 10) = 5 at 12:00.
+    assert fc.entries[0].datetime == "2026-05-14T12:00:00.000Z"
+    assert fc.entries[0].carbon_intensity_g_co2_per_kwh == 5
+
+
+@pytest.mark.asyncio
+async def test_uk_single_page_within_48h(monkeypatch: pytest.MonkeyPatch) -> None:
+    _freeze_now(monkeypatch, "2026-05-14T12:05:00Z")
+    calls: list[str] = []
+    _patch_client(monkeypatch, _uk_handler(calls))
+
+    fc = await uk_carbon_intensity_feed().fetch_forecast("GB", 48)
+    assert len(calls) == 1
+    assert len(fc.entries) == 48
+    assert fc.entries[0].carbon_intensity_g_co2_per_kwh == 5
