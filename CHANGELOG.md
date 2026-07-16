@@ -7,7 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-(Nothing pending — see version sections below.)
+**Theme:** "One source of truth." The structural consolidation cycle the
+0.12.0 audit resolution honestly deferred (§2.2–§2.4) plus the §1.8
+energy-table remainder.
+
+### Added
+
+- **Shared tool surface** (`@ebb-ai/core` `tool-surface.ts`, audit §2.2).
+  The canonical list of all 10 tool definitions — names, descriptions,
+  parameter descriptors, host applicability — now lives in core in a
+  schema-library-neutral form; the MCP server renders it into strict zod
+  validators (→ JSON Schema) and the OpenClaw plugin renders it into its
+  historical looser TypeBox shapes. The four silent divergences the audit
+  found (per-host `region` requiredness, MCP-only `recommend_window.model`,
+  MCP-only `hours` bounds, drifted description texts) are now explicit
+  per-host declarations guarded by a snapshot canary; descriptions
+  converged to one canonical text. Wire contracts unchanged on both hosts.
+- **SSOT data tables** (audit §2.4). Energy coefficients, synthetic-curve
+  region floors/offsets, and band thresholds moved to hand-edited JSON in
+  `packages/core-ts/src/data/`; `scripts/gen-data.mjs` generates the TS
+  module and the Python `_data.py` (byte-identical numbers), and a new CI
+  `data-ssot` job + `pnpm gen:data:check` (also in `preflight`) fail on
+  drift. Unifying the curve fixed two latent TS↔PY divergences: Python
+  never applied per-region UTC offsets and could go negative below a low
+  floor. Last version hardcode (`ebb_ai.__version__`) now reads package
+  metadata.
+- **Model-id normalization + family fallback** (§1.8 remainder, TS + PY
+  parity). `normalizeModelName` now strips path provider prefixes
+  (`anthropic/…`), Bedrock `us.anthropic.….:0` forms, and canonicalizes
+  Claude word order (`claude-3-5-sonnet` → `claude-sonnet-3-5`). New
+  `resolveModelEnergy` returns coefficients plus a provenance tier; an
+  unknown-but-recognizable id now uses its family representative's
+  coefficients instead of the flat legacy constant. Receipts gain
+  **`energyResolution`** (`exact` | `normalized` | `family-fallback` |
+  `default`) alongside the existing `energySource` confidence tier;
+  surfaced on CLI / MCP / OpenClaw receipt views. Cross-language parity
+  locked by a 27-id shared fixture both suites read.
+
+### Changed
+
+- **apps/web consumes `@ebb-ai/core`** (audit §2.3). New browser-safe
+  subpath exports `@ebb-ai/core/{grid,energy,types}` (no Node built-ins
+  in their import graphs); the web app's ~680 duplicated-and-drifted
+  lines of grid/energy/types logic are deleted in favor of a workspace
+  dependency. The site thereby converges on core's audit-fixed behavior:
+  phase-correct EIA persistence, the 5-zone ENTSO-E parser (ES/IT/NL gain
+  real data), UK 96h pagination, per-region-offset mock curve.
+  Web-only display metadata (`regions.ts`) and geo logic stay local.
+
+- **Per-region synthetic-curve floors/offsets for all 31 zones.** The
+  mock feed's `regionFloors`/`regionUtcOffsets` SSOT grew from 9 zones to
+  all 31 (stylized annual-average intensities — NO-NO1 ≈ 30 up to
+  IN-WE/ZA ≈ 700), so the /map fallback view no longer renders ~20
+  identical default curves.
+
+Tests: 605 → 684+ (413+ TS + 271 PY).
 
 ## [0.12.0] — 2026-07-08
 
