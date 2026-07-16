@@ -1,73 +1,23 @@
 /**
- * Dashboard-local copies of the @ebb-ai/core-ts public types.
+ * Grid/forecast types for the dashboard — re-exported from @ebb-ai/core.
  *
- * These intentionally duplicate `packages/core-ts/src/types.ts` so the
- * dashboard has zero workspace-package dependencies in v0.2 (we don't want
- * to fight the TypeScript ESM/CJS interop story while the dashboard is
- * still under heavy iteration).
+ * These used to be a hand-maintained copy of `packages/core-ts/src/types.ts`
+ * (v0.2's "zero workspace deps" stance). As of audit §2.3 the dashboard is a
+ * real consumer of core: the types now come straight from `@ebb-ai/core/types`
+ * (a browser-safe subpath that pulls in no Node-only modules), so they can
+ * never drift again.
  *
- * If/when the dashboard starts calling the MCP server or core-ts directly
- * (planned for v0.3 per `ROADMAP.md` §4.4), replace these with an import
- * from `@ebb-ai/core` and delete this file.
+ * `CarbonBand` is the one local convenience: core inlines the band union on
+ * `GridForecastEntry["band"]` rather than exporting a named alias, so we derive
+ * the alias here for the components that annotate with it.
  */
 
-export type TaskStatus =
-  | "queued"
-  | "scheduled"
-  | "running"
-  | "completed"
-  | "failed";
+export type {
+  GridForecast,
+  GridForecastEntry,
+} from "@ebb-ai/core/types";
 
-export type CarbonBand =
-  | "very_clean"
-  | "clean"
-  | "average"
-  | "dirty"
-  | "very_dirty";
+import type { GridForecastEntry } from "@ebb-ai/core/types";
 
-export interface GridForecastEntry {
-  /** ISO-8601 start of this hour. */
-  datetime: string;
-  /** Grams CO2-equivalent per kWh — marginal or average, see source. */
-  carbonIntensityGCo2PerKwh: number;
-  band: CarbonBand;
-}
-
-export interface GridForecast {
-  region: string;
-  source:
-    | "electricityMaps"
-    | "ukCarbonIntensity"
-    | "eia"
-    | "entsoe"
-    | "wattTime"
-    | "mock";
-  /** ISO-8601 timestamp when this forecast was generated. */
-  generatedAt: string;
-  entries: GridForecastEntry[];
-}
-
-export interface CarbonReceipt {
-  taskId: string;
-  ranAt: string;
-  region: string;
-  estimatedCarbonGCo2: number;
-  provider?: string;
-  model?: string;
-  /** Wall-clock duration of the dispatched call, in milliseconds. */
-  durationMs?: number;
-}
-
-export interface TaskRecord<T = unknown> {
-  taskId: string;
-  status: TaskStatus;
-  enqueuedAt: string;
-  scheduledFor?: string;
-  completedAt?: string;
-  region: string;
-  carbonBudgetG?: number;
-  result?: T;
-  error?: string;
-  receipt?: CarbonReceipt;
-  intensitySource?: "scored" | "current";
-}
+/** The five carbon-intensity bands, as classified on each forecast entry. */
+export type CarbonBand = GridForecastEntry["band"];

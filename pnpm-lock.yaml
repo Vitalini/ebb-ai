@@ -24,6 +24,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@ebb-ai/core':
+        specifier: workspace:*
+        version: link:../../packages/core-ts
       lucide-react:
         specifier: ^1.16.0
         version: 1.16.0(react@19.2.6)
