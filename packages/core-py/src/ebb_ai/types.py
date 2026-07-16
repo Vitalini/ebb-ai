@@ -54,8 +54,12 @@ scored the window against; ``current`` means we dispatched immediately
 and the scheduler used the current-hour intensity from a fresh forecast.
 """
 
-Provider = Literal["anthropic", "openai"]
-"""Provider identifier for :class:`ProviderCallSpec`."""
+Provider = Literal["anthropic", "openai", "gemini", "ollama"]
+"""Provider identifier for :class:`ProviderCallSpec`.
+
+``anthropic`` and ``openai`` are batch-capable (Batch APIs); ``gemini`` and
+``ollama`` are sync-only (see their adapters for why). Adding a value here is
+backward-compatible — existing callers keep working."""
 
 ForecastKind = Literal["forecast", "persistence"]
 """How a :class:`GridForecast` series was produced (v0.12+).

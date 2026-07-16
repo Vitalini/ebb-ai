@@ -183,6 +183,14 @@ export interface TaskRecord<T = unknown> {
 }
 
 /**
+ * The providers a task can be dispatched through. `anthropic` and `openai`
+ * are batch-capable (Batch APIs); `gemini` and `ollama` are sync-only (see
+ * their adapters for why). Adding a value here is backward-compatible —
+ * existing callers keep working.
+ */
+export type ProviderName = "anthropic" | "openai" | "gemini" | "ollama";
+
+/**
  * JSON-serializable provider-call body. Persisted in the SQLite ledger as
  * `body_json`. The cron-tick CLI rehydrates this struct and dispatches it
  * against the matching provider adapter, so a task survives the
@@ -190,7 +198,7 @@ export interface TaskRecord<T = unknown> {
  */
 export interface ProviderCallSpec {
   type: "provider_call";
-  provider: "anthropic" | "openai";
+  provider: ProviderName;
   model: string;
   prompt: string;
   systemPrompt?: string;

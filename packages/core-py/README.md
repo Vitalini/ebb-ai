@@ -257,23 +257,41 @@ Supported region codes match Electricity Maps' zone codes
 ### Provider adapters
 
 ```python
-from ebb_ai.providers import AnthropicAdapter, OpenAIAdapter, DispatchOptions
+from ebb_ai.providers import (
+    AnthropicAdapter,
+    OpenAIAdapter,
+    GeminiAdapter,
+    OllamaAdapter,
+    DispatchOptions,
+)
 ```
 
-Both adapters implement:
+Every adapter implements the sync path:
 
 ```python
 async def dispatch(model: str, prompt: str,
                    options: DispatchOptions | None = None) -> DispatchResult: ...
-
-async def dispatch_batch(model: str, prompts: list[str],
-                         options: DispatchOptions | None = None) -> BatchHandle: ...
 ```
 
-Both modules import cleanly even when the vendor SDK isn't installed —
-construction is what raises a clear error. This means you can write
-code that *references* the adapters without forcing a dependency on
-both SDKs.
+`AnthropicAdapter` and `OpenAIAdapter` are additionally batch-capable
+(`dispatch_batch` + `retrieve_batch`, a flat 50% discount, 24h SLA). `GeminiAdapter`
+and `OllamaAdapter` are sync-only and inherit the base batch stubs — the
+scheduler feature-detects that and keeps their tasks on the sync path:
+
+- **`GeminiAdapter`** — Google's Generative Language API
+  (`generativelanguage.googleapis.com`). Reads `GEMINI_API_KEY`, falling back to
+  `GOOGLE_API_KEY`. Batch is deliberately unsupported: Gemini's batch modes do
+  not map onto the submit → poll → results contract (Vertex batch needs
+  GCS/BigQuery; the Developer-API batch is a long-running operation keyed by an
+  operation name, not a batch id).
+- **`OllamaAdapter`** — a local Ollama server over HTTP (default
+  `http://localhost:11434`, override with `OLLAMA_HOST`). Keyless. Uses
+  `/api/chat` and reports `prompt_eval_count` / `eval_count` token counts. No
+  batch (local inference).
+
+The Anthropic / OpenAI modules import cleanly even when the vendor SDK isn't
+installed — construction is what raises a clear error. Gemini and Ollama use
+`httpx` directly (already a core dependency), so they need no extra SDK.
 
 ---
 

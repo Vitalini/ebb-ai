@@ -8,15 +8,14 @@
  *   import { AnthropicAdapter, OpenAIAdapter } from "@ebb-ai/core";
  *   import { TaskStore } from "@ebb-ai/core";
  *
- * Highlights: Anthropic + OpenAI provider adapters, SQLite-backed
- * durable queue with a cross-process audit ledger, per-model energy
- * coefficients, Ed25519-signed carbon receipts, multi-source grid
- * feeds with a deterministic mock fallback.
+ * Highlights: Anthropic + OpenAI + Gemini + Ollama provider adapters,
+ * SQLite-backed durable queue with a cross-process audit ledger,
+ * per-model energy coefficients, Ed25519-signed carbon receipts,
+ * multi-source grid feeds with a deterministic mock fallback.
  *
  * Still out of scope (tracked in ROADMAP.md):
  *   - Cross-provider routing.
  *   - WattTime marginal-emissions feed.
- *   - Gemini / local-Ollama adapters.
  */
 
 export {
@@ -26,7 +25,7 @@ export {
   pickBestWindow,
   Scheduler,
 } from "./scheduler.js";
-export type { SchedulerOptions } from "./scheduler.js";
+export type { SchedulerOptions, TickAdapters } from "./scheduler.js";
 export { recommendWindow } from "./recommend.js";
 export {
   selectWindow,
@@ -67,6 +66,7 @@ export type {
   GridForecastEntry,
   CarbonReceipt,
   ProviderCallSpec,
+  ProviderName,
   RecommendAlternative,
   RecommendOptions,
   RecommendResult,
@@ -78,6 +78,8 @@ export type {
 export {
   AnthropicAdapter,
   OpenAIAdapter,
+  GeminiAdapter,
+  OllamaAdapter,
 } from "./providers/index.js";
 export type {
   BatchHandle,

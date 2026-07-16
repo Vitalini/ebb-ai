@@ -17,7 +17,13 @@
  * a clear error instead of being left stuck in `scheduled`.
  */
 
-import type { DispatchOptions, DispatchResult, ProviderAdapter } from "@ebb-ai/core";
+import {
+  GeminiAdapter,
+  OllamaAdapter,
+  type DispatchOptions,
+  type DispatchResult,
+  type ProviderAdapter,
+} from "@ebb-ai/core";
 
 /**
  * The dispatcher only runs prompts synchronously, so an adapter needs
@@ -29,6 +35,8 @@ export type DispatchAdapter = Pick<ProviderAdapter, "provider" | "ready" | "disp
 export type DispatchAdapters = {
   anthropic?: DispatchAdapter;
   openai?: DispatchAdapter;
+  gemini?: DispatchAdapter;
+  ollama?: DispatchAdapter;
 };
 
 /** How scheduled tasks will be executed in the current environment. */
@@ -279,16 +287,28 @@ function openaiAdapter(apiKey: string): DispatchAdapter {
 export function buildAdapters(
   env: Record<string, string | undefined> = process.env,
 ): DispatchAdapters {
+  const adapters: DispatchAdapters = {};
   if (bridgeComplete) {
     // The bridge routes through the gateway's own model — register it for
-    // both providers so tick finds an adapter whatever the task asked for.
-    return { anthropic: bridgeAdapter("anthropic"), openai: bridgeAdapter("openai") };
+    // both hosted providers so tick finds an adapter whatever the task asked
+    // for. (Gemini / Ollama are NOT gateway models, so they never ride the
+    // bridge; they are added below from their own configuration.)
+    adapters.anthropic = bridgeAdapter("anthropic");
+    adapters.openai = bridgeAdapter("openai");
+  } else {
+    const anthropicKey = env.ANTHROPIC_API_KEY?.trim();
+    if (anthropicKey) adapters.anthropic = anthropicAdapter(anthropicKey);
+    const openaiKey = env.OPENAI_API_KEY?.trim();
+    if (openaiKey) adapters.openai = openaiAdapter(openaiKey);
   }
-  const adapters: DispatchAdapters = {};
-  const anthropicKey = env.ANTHROPIC_API_KEY?.trim();
-  if (anthropicKey) adapters.anthropic = anthropicAdapter(anthropicKey);
-  const openaiKey = env.OPENAI_API_KEY?.trim();
-  if (openaiKey) adapters.openai = openaiAdapter(openaiKey);
+  // Gemini and Ollama are distinct providers the gateway bridge cannot
+  // represent, so build direct adapters whenever they are configured —
+  // regardless of the bridge. Gemini reads GEMINI_API_KEY (else GOOGLE_API_KEY);
+  // Ollama is local + keyless, gated on an explicit OLLAMA_HOST opt-in.
+  const geminiKey = env.GEMINI_API_KEY?.trim() || env.GOOGLE_API_KEY?.trim();
+  if (geminiKey) adapters.gemini = new GeminiAdapter({ apiKey: geminiKey });
+  const ollamaHost = env.OLLAMA_HOST?.trim();
+  if (ollamaHost) adapters.ollama = new OllamaAdapter({ host: ollamaHost });
   return adapters;
 }
 
@@ -297,31 +317,64 @@ export function dispatchCapability(
   env: Record<string, string | undefined> = process.env,
 ): DispatchCapability {
   if (bridgeComplete) return "openclaw-runtime";
-  if (env.ANTHROPIC_API_KEY?.trim() || env.OPENAI_API_KEY?.trim()) return "api-key";
+  if (
+    env.ANTHROPIC_API_KEY?.trim() ||
+    env.OPENAI_API_KEY?.trim() ||
+    env.GEMINI_API_KEY?.trim() ||
+    env.GOOGLE_API_KEY?.trim() ||
+    env.OLLAMA_HOST?.trim()
+  ) {
+    return "api-key";
+  }
   return "unconfigured";
 }
 
-export type Provider = "anthropic" | "openai";
+export type Provider = "anthropic" | "openai" | "gemini" | "ollama";
 
 /**
- * Infer the provider from a model identifier. OpenAI models are `gpt-*` or
- * `o<digit>*` (o1, o3-mini, o4, …); everything Anthropic is `claude-*`.
+ * Parse the configured Ollama model allow-list from `OLLAMA_MODELS`
+ * (comma-separated model ids). A model in this list infers to the `ollama`
+ * provider. Empty / unset → no models map to Ollama by inference (an explicit
+ * `provider: "ollama"` still works).
+ */
+function ollamaModelSet(
+  env: Record<string, string | undefined> = process.env,
+): ReadonlySet<string> {
+  return new Set(
+    (env.OLLAMA_MODELS ?? "")
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter((s) => s.length > 0),
+  );
+}
+
+/**
+ * Infer the provider from a model identifier:
+ *   - `gpt-*` / `o<digit>*` (o1, o3-mini, …) → openai
+ *   - `gemini-*` → gemini
+ *   - a model listed in `OLLAMA_MODELS` → ollama
+ *   - `claude-*` → anthropic
  * Anything unrecognised defaults to `anthropic` (the historical default and
  * the safest fallback for a gateway that has an Anthropic key). Case- and
- * whitespace-insensitive.
+ * whitespace-insensitive. An explicit `provider` param always wins over this.
  */
-export function inferProvider(model: string | undefined): Provider {
+export function inferProvider(
+  model: string | undefined,
+  env: Record<string, string | undefined> = process.env,
+): Provider {
   const m = (model ?? "").trim().toLowerCase();
   if (m.startsWith("gpt-") || m.startsWith("gpt") || /^o\d/.test(m)) return "openai";
+  if (m.startsWith("gemini")) return "gemini";
+  if (m.length > 0 && ollamaModelSet(env).has(m)) return "ollama";
   if (m.startsWith("claude")) return "anthropic";
   return "anthropic";
 }
 
 /**
  * Which providers can actually be dispatched in the current environment.
- * With the runtime bridge captured, BOTH providers are dispatchable (the
- * bridge routes through the gateway's own model regardless of the requested
- * provider). Otherwise it is exactly the set of providers with an API key.
+ * With the runtime bridge captured, both hosted providers are dispatchable
+ * (the bridge routes through the gateway's own model). Gemini / Ollama are
+ * dispatchable whenever their own configuration is present, bridge or not.
  */
 export function availableProviders(
   env: Record<string, string | undefined> = process.env,
@@ -330,9 +383,11 @@ export function availableProviders(
   if (bridgeComplete) {
     set.add("anthropic");
     set.add("openai");
-    return set;
+  } else {
+    if (env.ANTHROPIC_API_KEY?.trim()) set.add("anthropic");
+    if (env.OPENAI_API_KEY?.trim()) set.add("openai");
   }
-  if (env.ANTHROPIC_API_KEY?.trim()) set.add("anthropic");
-  if (env.OPENAI_API_KEY?.trim()) set.add("openai");
+  if (env.GEMINI_API_KEY?.trim() || env.GOOGLE_API_KEY?.trim()) set.add("gemini");
+  if (env.OLLAMA_HOST?.trim()) set.add("ollama");
   return set;
 }

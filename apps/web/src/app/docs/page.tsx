@@ -512,7 +512,15 @@ const ENVS: Array<{ name: string; desc: string }> = [
   },
   {
     name: "ANTHROPIC_API_KEY · OPENAI_API_KEY",
-    desc: "Required only if you want ebb-ai to actually dispatch provider calls (vs. just queueing them). Either is enough.",
+    desc: "Required only if you want ebb-ai to actually dispatch provider calls (vs. just queueing them). Either is enough. anthropic and openai can auto-route through a 50%-cheaper Batch API when the deadline allows.",
+  },
+  {
+    name: "GEMINI_API_KEY · GOOGLE_API_KEY",
+    desc: "Dispatch through Google Gemini (generativelanguage.googleapis.com). GEMINI_API_KEY is preferred; GOOGLE_API_KEY is the fallback. Sync-only (no Batch API).",
+  },
+  {
+    name: "OLLAMA_HOST · OLLAMA_MODELS",
+    desc: "Dispatch through a local Ollama server (default http://localhost:11434). Keyless — setting OLLAMA_HOST opts the ollama provider in. OLLAMA_MODELS (comma-separated) lets schedule_task infer the ollama provider from a bare model name. Sync-only.",
   },
 ];
 

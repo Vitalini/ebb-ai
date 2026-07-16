@@ -36,6 +36,7 @@ import type {
   GridForecast,
   GridForecastEntry,
   ProviderCallSpec,
+  ProviderName,
   TaskRecord,
   TickResult,
   TickResultEntry,
@@ -43,6 +44,22 @@ import type {
 
 const DEFAULT_REGION = "US-CAL-CISO";
 const MAX_HORIZON_HOURS = 72;
+
+/**
+ * The adapters map `tick` (and the expedite / retry / batch helpers) accept:
+ * a provider name → adapter. A partial record so a caller can supply only the
+ * providers it has configured; an unmapped provider fails the task with a
+ * clear "no adapter configured" error rather than silently dropping it.
+ */
+export type TickAdapters = Partial<Record<ProviderName, ProviderAdapter>>;
+
+/** Providers `enqueueProviderCall` accepts. Keep in sync with {@link ProviderName}. */
+const SUPPORTED_PROVIDERS: ReadonlySet<ProviderName> = new Set([
+  "anthropic",
+  "openai",
+  "gemini",
+  "ollama",
+]);
 
 /** Thrown when no candidate window meets the user-supplied carbon budget. */
 export class CarbonBudgetExceededError extends Error {
@@ -251,7 +268,7 @@ export class Scheduler {
         `enqueueProviderCall: spec.type must be "provider_call", got ${JSON.stringify((spec as { type?: unknown }).type)}`,
       );
     }
-    if (spec.provider !== "anthropic" && spec.provider !== "openai") {
+    if (!SUPPORTED_PROVIDERS.has(spec.provider)) {
       throw new Error(
         `enqueueProviderCall: unsupported provider ${JSON.stringify(spec.provider)}`,
       );
@@ -309,10 +326,7 @@ export class Scheduler {
    * (`enqueue` / `defer`) are NOT touched by this method — only this
    * process can run those.
    */
-  async tick(adapters: {
-    anthropic?: ProviderAdapter;
-    openai?: ProviderAdapter;
-  }): Promise<TickResult> {
+  async tick(adapters: TickAdapters): Promise<TickResult> {
     const results: TickResultEntry[] = [];
     let dispatched = 0;
     let failed = 0;
@@ -461,10 +475,7 @@ export class Scheduler {
    * (deadline − now) > 24h. Legacy rows with no persisted deadline are
    * skipped (they fall through to the sync due-sweep), never errored.
    */
-  private collectBatchSubmitCandidates(adapters: {
-    anthropic?: ProviderAdapter;
-    openai?: ProviderAdapter;
-  }): TaskRecord<unknown>[] {
+  private collectBatchSubmitCandidates(adapters: TickAdapters): TaskRecord<unknown>[] {
     const now = Date.now();
     const out: TaskRecord<unknown>[] = [];
     const seen = new Set<string>();
@@ -613,7 +624,7 @@ export class Scheduler {
    */
   async expediteTask(
     taskId: string,
-    adapters: { anthropic?: ProviderAdapter; openai?: ProviderAdapter },
+    adapters: TickAdapters,
   ): Promise<TickResultEntry> {
     const record = this.resolveTask(taskId);
     if (!record) {
@@ -709,7 +720,7 @@ export class Scheduler {
    */
   async retryTask(
     taskId: string,
-    adapters: { anthropic?: ProviderAdapter; openai?: ProviderAdapter },
+    adapters: TickAdapters,
   ): Promise<TickResultEntry> {
     const record = this.resolveTask(taskId);
     if (!record) {
@@ -1145,7 +1156,7 @@ export class Scheduler {
 
   private async dispatchProviderCall(
     record: TaskRecord<unknown>,
-    adapters: { anthropic?: ProviderAdapter; openai?: ProviderAdapter },
+    adapters: TickAdapters,
   ): Promise<TickResultEntry> {
     let spec: ProviderCallSpec;
     try {
@@ -1338,7 +1349,7 @@ export class Scheduler {
    */
   private async submitBatch(
     record: TaskRecord<unknown>,
-    adapters: { anthropic?: ProviderAdapter; openai?: ProviderAdapter },
+    adapters: TickAdapters,
   ): Promise<TickResultEntry> {
     let spec: ProviderCallSpec;
     try {
@@ -1349,7 +1360,8 @@ export class Scheduler {
       return { taskId: record.taskId, status: "failed", error: msg };
     }
     const adapter = adapters[spec.provider];
-    if (!adapter || typeof adapter.dispatchBatch !== "function") {
+    const dispatchBatch = adapter?.dispatchBatch;
+    if (!adapter || typeof dispatchBatch !== "function") {
       // Should not happen — collectBatchSubmitCandidates already filtered
       // — but stay defensive: fall back to a clear failure.
       const msg = `tick: batch submit selected but adapter/dispatchBatch missing for ${spec.provider}`;
@@ -1358,7 +1370,7 @@ export class Scheduler {
     }
     try {
       const handle = await retryWithBackoff(() =>
-        adapter.dispatchBatch(spec.model, [spec.prompt], {
+        dispatchBatch.call(adapter, spec.model, [spec.prompt], {
           temperature: spec.temperature,
           maxTokens: spec.maxTokens,
           system: spec.systemPrompt,
@@ -1397,7 +1409,7 @@ export class Scheduler {
    */
   private async pollBatch(
     record: TaskRecord<unknown>,
-    adapters: { anthropic?: ProviderAdapter; openai?: ProviderAdapter },
+    adapters: TickAdapters,
   ): Promise<TickResultEntry> {
     let spec: ProviderCallSpec;
     try {
