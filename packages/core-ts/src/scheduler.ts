@@ -1024,10 +1024,12 @@ export class Scheduler {
     }
     let actualIntensityG: number | undefined;
     let gridSource: GridForecast["source"] | undefined;
+    let signalType: GridForecast["signalType"];
     try {
       const current = await this.fetchCurrentIntensity(record.region, ranAt);
       actualIntensityG = current.intensityG;
       gridSource = current.source;
+      signalType = current.signalType;
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn(
@@ -1065,6 +1067,7 @@ export class Scheduler {
         // fallback tier.
         intensityGCo2PerKwh: actualIntensityG,
         gridSource,
+        signalType,
         energySource: "fallback",
         energyResolution: "default",
       });
@@ -1239,10 +1242,12 @@ export class Scheduler {
 
     let intensityG: number | undefined;
     let gridSource: GridForecast["source"] | undefined;
+    let signalType: GridForecast["signalType"];
     try {
       const current = await this.fetchCurrentIntensity(record.region, ranAt);
       intensityG = current.intensityG;
       gridSource = current.source;
+      signalType = current.signalType;
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn(
@@ -1304,6 +1309,7 @@ export class Scheduler {
         // schedule-time estimate.
         intensityGCo2PerKwh: intensityG,
         gridSource,
+        signalType,
         energySource: resolveModelEnergy(actualModel).coeffs.source,
         energyResolution: resolveModelEnergy(actualModel).tier,
       });
@@ -1489,10 +1495,12 @@ export class Scheduler {
 
     let intensityG: number | undefined;
     let gridSource: GridForecast["source"] | undefined;
+    let signalType: GridForecast["signalType"];
     try {
       const current = await this.fetchCurrentIntensity(record.region, ranAt);
       intensityG = current.intensityG;
       gridSource = current.source;
+      signalType = current.signalType;
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn(
@@ -1536,6 +1544,7 @@ export class Scheduler {
         totalTokens,
         intensityGCo2PerKwh: intensityG,
         gridSource,
+        signalType,
         energySource: resolveModelEnergy(actualModel).coeffs.source,
         energyResolution: resolveModelEnergy(actualModel).tier,
       });
@@ -1573,7 +1582,11 @@ export class Scheduler {
   private async fetchCurrentIntensity(
     region: string,
     at: Date,
-  ): Promise<{ intensityG: number; source: GridForecast["source"] }> {
+  ): Promise<{
+    intensityG: number;
+    source: GridForecast["source"];
+    signalType: GridForecast["signalType"];
+  }> {
     const forecast = await this.feed.fetchForecast(region, 24);
     const target = at.getTime();
     let best: GridForecastEntry | undefined;
@@ -1588,6 +1601,9 @@ export class Scheduler {
     return {
       intensityG: best?.carbonIntensityGCo2PerKwh ?? 400,
       source: forecast.source,
+      // Prefer the chosen entry's signal (WattTime sets it per-entry),
+      // fall back to the forecast-level marker.
+      signalType: best?.signalType ?? forecast.signalType,
     };
   }
 }

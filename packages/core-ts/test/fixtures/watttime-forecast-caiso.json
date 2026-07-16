@@ -1,0 +1,16 @@
+{
+  "meta": {
+    "data_point_period_seconds": 300,
+    "region": "CAISO_NORTH",
+    "signal_type": "co2_moer",
+    "units": "lbs_co2_per_mwh",
+    "generated_at": "2026-05-14T12:00:00+00:00",
+    "warnings": []
+  },
+  "data": [
+    { "point_time": "2026-05-14T12:00:00+00:00", "value": 900.0 },
+    { "point_time": "2026-05-14T12:05:00+00:00", "value": 1100.0 },
+    { "point_time": "2026-05-14T13:00:00+00:00", "value": 600.0 },
+    { "point_time": "2026-05-14T13:05:00+00:00", "value": 400.0 }
+  ]
+}

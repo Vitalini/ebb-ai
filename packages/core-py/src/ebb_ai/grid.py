@@ -11,10 +11,11 @@ Built-in sources (ported 1:1 from ``packages/core-ts/src/grid.ts``):
   required; realised data served as a persistence forecast).
 - :func:`entsoe_feed` — ENTSO-E realised generation for EU bidding zones
   (token required; realised data served as a persistence forecast).
+- :func:`watttime_feed` — WattTime v3 marginal (co2_moer) forecasts for US
+  ISO/RTO zones (username+password required; a real MARGINAL forecast,
+  disclosed via signal_type="marginal").
 - :func:`multi_source_grid_feed` — routes per zone across the feeds above.
 - :func:`build_default_grid_feed` — best free feed per zone, mock fallback.
-
-A WattTime marginal-emissions source is tracked on the roadmap.
 
 Feeds that return a genuine forward-looking series carry
 ``kind="forecast"``; feeds that project realised observations forward
@@ -979,6 +980,217 @@ def entsoe_feed(
 
 
 # --------------------------------------------------------------------------- #
+# WattTime API v3 — ``api.watttime.org``.
+#
+# Marginal operating emissions rate (MOER, signal_type=co2_moer) FORECASTS
+# for US ISO/RTO zones. Unlike every other feed (which report the grid's
+# blended AVERAGE intensity), WattTime reports the emissions rate of the
+# generator that responds to a marginal change in load — the signal a
+# deferral decision actually moves. Because it is a genuine forward
+# forecast, it takes precedence over the EIA persistence heuristic for the
+# US zones it covers when credentials are configured. Ported 1:1 from the
+# TS ``wattTimeFeed``.
+#
+# Auth: HTTP Basic to ``GET /login`` (WATTTIME_USERNAME / WATTTIME_PASSWORD)
+# returns a short-lived bearer token, cached in-process on the instance. On
+# a 401/403 we re-login ONCE and retry; any further failure falls through
+# to the next feed in the chain (EIA → mock).
+#
+# Forecast: ``GET /v3/forecast?region=<R>&signal_type=co2_moer`` returns
+# sub-hourly (typically 5-minute) MOER points in **lbs CO2 / MWh**. We
+# average the points in each UTC hour and convert to gCO2/kWh
+# (x 453.592 / 1000). Marginal intensity routinely exceeds average — the
+# band classifier is intensity-based and signal-agnostic, so that is
+# expected.
+#
+# Zone → WattTime v3 region mapping. WattTime v3 does NOT expose clean
+# ISO-level codes; its regions are granular grid-balancing sub-regions.
+# Only ``CAISO_NORTH`` is VERIFIED against WattTime's live public v3 docs
+# (the free-tier default region in every official example). The remaining
+# five are the long-standing WattTime BA abbreviations but could NOT be
+# confirmed against the auth-gated /v3/my-access + /maps endpoints — they
+# are marked UNVERIFIED-AGAINST-LIVE-API. A wrong region code simply 404s
+# and falls through to EIA, so an unverified guess degrades safely.
+#
+# Docs: https://docs.watttime.org/
+
+
+#: Electricity-Maps-style zone → WattTime v3 region code.
+WATTTIME_REGION_BY_ZONE: Final[dict[str, str]] = {
+    # VERIFIED (WattTime v3 public docs, 2026-07): free-tier default region.
+    "US-CAL-CISO": "CAISO_NORTH",
+    # UNVERIFIED-AGAINST-LIVE-API — believed-correct WattTime BA
+    # abbreviations; confirm against /v3/my-access with real credentials.
+    # Bad codes 404 and fall through to EIA.
+    "US-TEX-ERCO": "ERCOT_EASTTX",  # UNVERIFIED
+    "US-NE-ISNE": "ISONE_WCMA",  # UNVERIFIED
+    "US-NY-NYIS": "NYISO_NYC",  # UNVERIFIED
+    "US-MIDA-PJM": "PJM_ROTO",  # UNVERIFIED
+    "US-MIDW-MISO": "MISO_INDIANAPOLIS",  # UNVERIFIED
+}
+
+#: lbs CO2 / MWh → g CO2 / kWh: 453.592 g per lb, 1000 kWh per MWh.
+_WATTTIME_LBS_PER_MWH_TO_G_PER_KWH: Final[float] = 453.592 / 1000
+_WATTTIME_FETCH_TIMEOUT_S: Final[float] = 8.0
+_WATTTIME_LOGIN_URL: Final[str] = "https://api.watttime.org/login"
+_WATTTIME_FORECAST_URL: Final[str] = "https://api.watttime.org/v3/forecast"
+
+
+class _WattTimeFeed(GridFeed):
+    """WattTime v3 marginal (co2_moer) forecast feed for US ISO/RTO zones.
+
+    Caches the bearer token on the instance and re-logs in once on a
+    401/403; any other failure (network, bad region, empty body) falls
+    through to ``fallback``.
+    """
+
+    source: GridSource = "wattTime"
+
+    def __init__(
+        self,
+        username: str,
+        password: str,
+        *,
+        fallback: GridFeed,
+        timeout_s: float = _WATTTIME_FETCH_TIMEOUT_S,
+    ) -> None:
+        self._username = username
+        self._password = password
+        self._fallback = fallback
+        self._timeout_s = timeout_s
+        self._token: str | None = None
+
+    async def _login(self, client: httpx.AsyncClient) -> str:
+        res = await client.get(
+            _WATTTIME_LOGIN_URL, auth=(self._username, self._password)
+        )
+        if not res.is_success:
+            raise RuntimeError(f"WattTime login returned {res.status_code}")
+        payload = res.json()
+        token = payload.get("token") if isinstance(payload, dict) else None
+        if not token:
+            raise RuntimeError("WattTime login returned no token")
+        return str(token)
+
+    async def _fetch_forecast_res(
+        self, client: httpx.AsyncClient, region: str, bearer: str
+    ) -> httpx.Response:
+        return await client.get(
+            _WATTTIME_FORECAST_URL,
+            params={"region": region, "signal_type": "co2_moer"},
+            headers={"Authorization": f"Bearer {bearer}"},
+        )
+
+    async def fetch_forecast(self, region: str, hours: int) -> GridForecast:
+        wt_region = WATTTIME_REGION_BY_ZONE.get(region)
+        if wt_region is None:
+            # Zone WattTime doesn't cover — fall through the existing chain.
+            return await self._fallback.fetch_forecast(region, hours)
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(self._timeout_s)
+            ) as client:
+                if self._token is None:
+                    self._token = await self._login(client)
+                res = await self._fetch_forecast_res(client, wt_region, self._token)
+                if res.status_code in (401, 403):
+                    # Token expired or revoked — re-login ONCE and retry.
+                    self._token = await self._login(client)
+                    res = await self._fetch_forecast_res(
+                        client, wt_region, self._token
+                    )
+                if not res.is_success:
+                    raise RuntimeError(
+                        f"WattTime forecast returned {res.status_code}"
+                    )
+                payload = res.json()
+            points = (
+                payload.get("data") or [] if isinstance(payload, dict) else []
+            )
+            if not points:
+                raise RuntimeError("WattTime returned an empty forecast")
+
+            # co2_moer forecasts are sub-hourly (typically 5-minute). Average
+            # every point into the UTC hour that contains it, then convert
+            # lbs CO2/MWh → gCO2/kWh.
+            by_hour: dict[datetime, dict[str, float]] = {}
+            for p in points:
+                if not isinstance(p, dict):
+                    continue
+                t = _parse_iso(str(p.get("point_time")))
+                val = p.get("value")
+                if t is None or not isinstance(val, (int, float)):
+                    continue
+                fval = float(val)
+                if not math.isfinite(fval):
+                    continue
+                hr = t.replace(minute=0, second=0, microsecond=0)
+                cell = by_hour.setdefault(hr, {"sum": 0.0, "n": 0.0})
+                cell["sum"] += fval
+                cell["n"] += 1
+
+            entries: list[GridForecastEntry] = []
+            for hr in sorted(by_hour):
+                if len(entries) >= hours:
+                    break
+                cell = by_hour[hr]
+                lbs_per_mwh = cell["sum"] / cell["n"]
+                g = _round_half_up(
+                    lbs_per_mwh * _WATTTIME_LBS_PER_MWH_TO_G_PER_KWH
+                )
+                entries.append(
+                    GridForecastEntry(
+                        datetime=_iso_utc(hr),
+                        carbon_intensity_g_co2_per_kwh=g,
+                        band=_classify(g),
+                        signal_type="marginal",
+                    )
+                )
+            if not entries:
+                raise RuntimeError("WattTime returned no usable forecast points")
+            return GridForecast(
+                region=region,
+                source="wattTime",
+                generated_at=_iso_utc(_now_utc()),
+                # A genuine forward MOER forecast, not realised/persistence data.
+                kind="forecast",
+                signal_type="marginal",
+                entries=entries,
+            )
+        except (httpx.HTTPError, RuntimeError, ValueError, KeyError) as err:
+            _log.warning(
+                "[ebb-ai/grid] watttime fetch failed (%s); falling through to %s",
+                err,
+                self._fallback.source,
+            )
+            return await self._fallback.fetch_forecast(region, hours)
+
+
+def watttime_feed(
+    username: str | None = None,
+    password: str | None = None,
+    *,
+    fallback: GridFeed | None = None,
+    timeout_s: float = _WATTTIME_FETCH_TIMEOUT_S,
+) -> GridFeed:
+    """Construct a WattTime v3 marginal (co2_moer) forecast feed.
+
+    Reads WATTTIME_USERNAME / WATTTIME_PASSWORD from the environment when
+    not passed. With no credentials the returned feed *is* ``fallback``
+    (transparent pass-through) so wiring ``watttime_feed(fallback=eia_feed())``
+    into the router is a no-op for users who never configured WattTime —
+    the existing chain and its reported ``source`` are unchanged. Mirrors
+    the TS ``wattTimeFeed``.
+    """
+    user = username or os.environ.get("WATTTIME_USERNAME")
+    pw = password or os.environ.get("WATTTIME_PASSWORD")
+    fb = fallback if fallback is not None else mock_grid_feed()
+    if not user or not pw:
+        return fb
+    return _WattTimeFeed(user, pw, fallback=fb, timeout_s=timeout_s)
+
+
+# --------------------------------------------------------------------------- #
 # Composition
 
 
@@ -1026,7 +1238,10 @@ def build_default_grid_feed() -> GridFeed:
 
     Selection logic (per zone):
       - ``"GB"`` → UK Carbon Intensity (free, no key)
-      - EIA-eligible US zones → EIA when ``EBB_EIA_API_KEY`` is set
+      - EIA-eligible US zones → WattTime marginal FORECAST when
+        WATTTIME_USERNAME/PASSWORD are set (a real marginal forecast beats
+        an hour-of-day EIA persistence heuristic), else EIA when
+        ``EBB_EIA_API_KEY`` is set
       - EU zones → ENTSO-E when ``EBB_ENTSOE_SECURITY_TOKEN`` is set
       - everything else → Electricity Maps when
         ``EBB_ELECTRICITY_MAPS_API_KEY`` is set
@@ -1037,8 +1252,12 @@ def build_default_grid_feed() -> GridFeed:
     field reports the actual origin. Mirrors the TS ``buildDefaultGridFeed``.
     """
     feeds: dict[str, GridFeed] = {"GB": uk_carbon_intensity_feed()}
+    # US ISO/RTO zones: WattTime marginal FORECAST takes precedence when its
+    # credentials are set; watttime_feed falls through to EIA (which in turn
+    # falls through to the mock) otherwise. With no WattTime creds the
+    # wrapper collapses to eia_feed(), so behaviour is unchanged.
     for zone in EIA_RESPONDENT_BY_ZONE:
-        feeds[zone] = eia_feed()
+        feeds[zone] = watttime_feed(fallback=eia_feed())
     for zone in ENTSOE_BIDDING_ZONE_BY_REGION:
         feeds[zone] = entsoe_feed()
     return multi_source_grid_feed(feeds=feeds, fallback=electricity_maps_feed())
@@ -1047,6 +1266,7 @@ def build_default_grid_feed() -> GridFeed:
 __all__ = [
     "EIA_RESPONDENT_BY_ZONE",
     "ENTSOE_BIDDING_ZONE_BY_REGION",
+    "WATTTIME_REGION_BY_ZONE",
     "EntsoePeriod",
     "EntsoeTimeSeries",
     "GridFeed",
@@ -1058,4 +1278,5 @@ __all__ = [
     "multi_source_grid_feed",
     "parse_entsoe_xml",
     "uk_carbon_intensity_feed",
+    "watttime_feed",
 ]

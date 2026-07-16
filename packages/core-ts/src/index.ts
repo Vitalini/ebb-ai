@@ -15,7 +15,6 @@
  *
  * Still out of scope (tracked in ROADMAP.md):
  *   - Cross-provider routing.
- *   - WattTime marginal-emissions feed.
  */
 
 export {
@@ -57,6 +56,7 @@ export {
   ukCarbonIntensityFeed,
   eiaFeed,
   entsoeFeed,
+  wattTimeFeed,
   multiSourceGridFeed,
   buildDefaultGridFeed,
 } from "./grid.js";
@@ -64,6 +64,7 @@ export type {
   DeferOptions,
   GridForecast,
   GridForecastEntry,
+  GridSignalType,
   CarbonReceipt,
   ProviderCallSpec,
   ProviderName,

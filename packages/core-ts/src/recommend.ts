@@ -190,8 +190,10 @@ export async function recommendWindow(
     batchEligible,
     alternatives,
     gridSource: forecast.source,
+    signalType: forecast.signalType,
     reasoning: withSourceDisclosure(
       forecast.source,
+      forecast.signalType,
       buildReasoning({
         chosen,
         savingsPct,
@@ -227,8 +229,10 @@ function buildResultFromSingle(
     batchEligible: false,
     alternatives: [],
     gridSource: forecast.source,
+    signalType: forecast.signalType,
     reasoning: withSourceDisclosure(
       forecast.source,
+      forecast.signalType,
       `no in-deadline windows; best available is ${formatHour(head.datetime)} UTC`,
     ),
   };
@@ -237,16 +241,22 @@ function buildResultFromSingle(
 /**
  * Prefix the reasoning with a loud disclosure when the plan was scored
  * against the synthetic mock curve, so an LLM caller (and the human it
- * relays to) cannot mistake a keyless fallback for live grid data.
+ * relays to) cannot mistake a keyless fallback for live grid data. Also
+ * discloses when the intensity is a MARGINAL signal (WattTime co2_moer)
+ * rather than the usual average — the two numbers are not interchangeable,
+ * so the reasoning must say which it reasoned over.
  */
 function withSourceDisclosure(
   source: GridForecast["source"],
+  signalType: GridForecast["signalType"],
   reasoning: string,
 ): string {
+  const marginalPrefix =
+    signalType === "marginal" ? "MARGINAL-emissions signal — " : "";
   if (source === "mock") {
-    return `SYNTHETIC (mock) grid data — ${reasoning}`;
+    return `SYNTHETIC (mock) grid data — ${marginalPrefix}${reasoning}`;
   }
-  return reasoning;
+  return `${marginalPrefix}${reasoning}`;
 }
 
 function isBatchEligible(now: Date, deadline: Date): boolean {

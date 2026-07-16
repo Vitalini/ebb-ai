@@ -29,11 +29,14 @@ import httpx
 import pytest
 
 from ebb_ai.grid import (
+    GridFeed,
     eia_feed,
     entsoe_feed,
     parse_entsoe_xml,
     uk_carbon_intensity_feed,
+    watttime_feed,
 )
+from ebb_ai.types import GridForecast, GridForecastEntry
 
 _FIXTURES = Path(__file__).resolve().parents[2] / "core-ts" / "test" / "fixtures"
 
@@ -278,3 +281,177 @@ async def test_uk_single_page_within_48h(monkeypatch: pytest.MonkeyPatch) -> Non
     assert len(calls) == 1
     assert len(fc.entries) == 48
     assert fc.entries[0].carbon_intensity_g_co2_per_kwh == 5
+
+
+# ---------------------------------------------------------------------------
+# WattTime v3 — marginal (co2_moer) forecast, unit conversion, auth refresh,
+# fallthrough + precedence-over-EIA routing (ROADMAP item 2). Ports the TS
+# wattTimeFeed fixture tests 1:1 against the same shared fixtures.
+# ---------------------------------------------------------------------------
+
+_LOGIN_URL = "https://api.watttime.org/login"
+_FORECAST_HOST = "api.watttime.org"
+
+
+class _MarkerFallback(GridFeed):
+    """A stub fallback feed with a distinguishable source, for fallthrough."""
+
+    def __init__(self, source: str = "eia") -> None:
+        self.source = source  # type: ignore[assignment]
+        self.calls: list[tuple[str, int]] = []
+
+    async def fetch_forecast(self, region: str, hours: int) -> GridForecast:
+        self.calls.append((region, hours))
+        return GridForecast(
+            region=region,
+            source=self.source,
+            generated_at="2026-05-14T12:00:00.000Z",
+            kind="persistence",
+            entries=[
+                GridForecastEntry(
+                    datetime=f"2026-05-14T{12 + i:02d}:00:00.000Z",
+                    carbon_intensity_g_co2_per_kwh=111,
+                    band="clean",
+                )
+                for i in range(hours)
+            ],
+        )
+
+
+def _watttime_handler(
+    login_calls: list[int],
+    *,
+    forecast_status: list[int] | None = None,
+) -> Callable[[httpx.Request], httpx.Response]:
+    """MockTransport handler: /login returns the token fixture; /v3/forecast
+    returns the CAISO fixture (or a queued status code per call).
+    """
+    fc_calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if url.startswith(_LOGIN_URL):
+            login_calls.append(1)
+            return httpx.Response(200, text=_fixture("watttime-login.json"))
+        # forecast
+        fc_calls["n"] += 1
+        if forecast_status is not None:
+            idx = min(fc_calls["n"] - 1, len(forecast_status) - 1)
+            status = forecast_status[idx]
+            if status != 200:
+                return httpx.Response(status, text="err")
+        assert "signal_type=co2_moer" in url
+        return httpx.Response(200, text=_fixture("watttime-forecast-caiso.json"))
+
+    return handler
+
+
+@pytest.mark.asyncio
+async def test_watttime_converts_lbs_to_g_into_hourly_buckets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    login: list[int] = []
+    _patch_client(monkeypatch, _watttime_handler(login))
+
+    fc = await watttime_feed("u", "p").fetch_forecast("US-CAL-CISO", 24)
+    assert fc.source == "wattTime"
+    assert fc.kind == "forecast"
+    assert fc.signal_type == "marginal"
+    assert len(fc.entries) == 2
+    # 12:00Z bucket avg(900,1100)=1000 lbs/MWh x 453.592/1000 = 453.592 -> 454.
+    assert fc.entries[0].datetime == "2026-05-14T12:00:00.000Z"
+    assert fc.entries[0].carbon_intensity_g_co2_per_kwh == 454
+    assert fc.entries[0].signal_type == "marginal"
+    # 13:00Z bucket avg(600,400)=500 lbs/MWh x 453.592/1000 = 226.796 -> 227.
+    assert fc.entries[1].carbon_intensity_g_co2_per_kwh == 227
+    assert len(login) == 1
+
+
+@pytest.mark.asyncio
+async def test_watttime_caches_bearer_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    login: list[int] = []
+    _patch_client(monkeypatch, _watttime_handler(login))
+
+    feed = watttime_feed("u", "p")
+    await feed.fetch_forecast("US-CAL-CISO", 24)
+    await feed.fetch_forecast("US-CAL-CISO", 24)
+    assert len(login) == 1
+
+
+@pytest.mark.asyncio
+async def test_watttime_relogin_once_on_401(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    login: list[int] = []
+    # First forecast attempt 401, second 200.
+    _patch_client(
+        monkeypatch, _watttime_handler(login, forecast_status=[401, 200])
+    )
+
+    fc = await watttime_feed("u", "p").fetch_forecast("US-CAL-CISO", 24)
+    assert fc.source == "wattTime"
+    assert fc.entries[0].carbon_intensity_g_co2_per_kwh == 454
+    # One initial login + one refresh after the 401 = 2.
+    assert len(login) == 2
+
+
+@pytest.mark.asyncio
+async def test_watttime_falls_through_on_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    login: list[int] = []
+    # 500 is not 401/403, so no refresh — straight to fallthrough.
+    _patch_client(monkeypatch, _watttime_handler(login, forecast_status=[500]))
+
+    fallback = _MarkerFallback("eia")
+    fc = await watttime_feed("u", "p", fallback=fallback).fetch_forecast(
+        "US-CAL-CISO", 24
+    )
+    assert fc.source == "eia"
+    assert fc.entries[0].carbon_intensity_g_co2_per_kwh == 111
+    assert fallback.calls == [("US-CAL-CISO", 24)]
+
+
+@pytest.mark.asyncio
+async def test_watttime_uncovered_zone_uses_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    login: list[int] = []
+    _patch_client(monkeypatch, _watttime_handler(login))
+
+    fallback = _MarkerFallback("entsoe")
+    fc = await watttime_feed("u", "p", fallback=fallback).fetch_forecast(
+        "FR", 24
+    )
+    assert fc.source == "entsoe"
+    assert len(login) == 0
+
+
+@pytest.mark.asyncio
+async def test_watttime_no_creds_is_fallback() -> None:
+    fallback = _MarkerFallback("eia")
+    # No username/password, no env — must collapse to the fallback so
+    # build_default_grid_feed's watttime_feed(fallback=eia_feed()) == eia_feed().
+    feed = watttime_feed(fallback=fallback)
+    assert feed is fallback
+    fc = await feed.fetch_forecast("US-CAL-CISO", 24)
+    assert fc.source == "eia"
+
+
+@pytest.mark.asyncio
+async def test_watttime_precedence_over_eia_when_credentialed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    login: list[int] = []
+    _patch_client(monkeypatch, _watttime_handler(login))
+
+    eia = _MarkerFallback("eia")
+    fc = await watttime_feed("u", "p", fallback=eia).fetch_forecast(
+        "US-CAL-CISO", 24
+    )
+    assert fc.source == "wattTime"
+    assert fc.signal_type == "marginal"
+    # EIA fallback must NOT have been consulted when WattTime succeeds.
+    assert eia.calls == []
