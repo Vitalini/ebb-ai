@@ -27,7 +27,17 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
+from . import _data
+
 EnergySourceTier = Literal["measured", "estimated", "fallback"]
+
+#: How a coefficient was resolved for a given model id (v0.13+). Orthogonal
+#: to :data:`EnergySourceTier` (the number's confidence). ``exact`` — the id
+#: matched a table key verbatim; ``normalized`` — matched after stripping
+#: dated / provider / word-order variance; ``family-fallback`` — unknown id,
+#: known family, representative coefficients used; ``default`` — fully
+#: unrecognized, flat legacy constant.
+EnergyResolutionTier = Literal["exact", "normalized", "family-fallback", "default"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,14 +50,22 @@ class ModelEnergyCoefficients:
     params_b: float | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class ResolvedModelEnergy:
+    """Coefficients plus the provenance tier describing how they matched."""
+
+    coeffs: ModelEnergyCoefficients
+    tier: EnergyResolutionTier
+
+
 #: Industry-average Power Usage Effectiveness for hyperscaler data centres.
-DEFAULT_PUE: float = 1.15
+DEFAULT_PUE: float = _data.DEFAULT_PUE
 
 #: Backwards-compatible flat estimate. Used when no model is provided.
-LEGACY_KWH_PER_TASK: float = 0.0015
+LEGACY_KWH_PER_TASK: float = _data.LEGACY_KWH_PER_TASK
 
-_TYPICAL_INPUT_TOKENS: int = 500
-_TYPICAL_OUTPUT_TOKENS: int = 500
+_TYPICAL_INPUT_TOKENS: int = _data.TYPICAL_INPUT_TOKENS
+_TYPICAL_OUTPUT_TOKENS: int = _data.TYPICAL_OUTPUT_TOKENS
 
 _FALLBACK = ModelEnergyCoefficients(
     wh_per_input_token=LEGACY_KWH_PER_TASK
@@ -60,111 +78,100 @@ _FALLBACK = ModelEnergyCoefficients(
 )
 
 
-def _coef(
-    wi: float,
-    wo: float,
-    *,
-    params_b: float,
-    source: EnergySourceTier,
-) -> ModelEnergyCoefficients:
-    return ModelEnergyCoefficients(
-        wh_per_input_token=wi,
-        wh_per_output_token=wo,
-        source=source,
-        params_b=params_b,
-    )
-
-
 #: Per-model coefficient table. Keys are canonical lowercase names (no
-#: dated suffixes; see ``normalize_model_name``).
+#: dated suffixes; see ``normalize_model_name``). Built from the JSON SSOT
+#: via the generated ``_data`` module.
 MODEL_ENERGY_COEFFICIENTS: dict[str, ModelEnergyCoefficients] = {
-    # ---------- Anthropic (closed, estimated) ----------
-    "claude-opus-4": _coef(0.0030, 0.0150, params_b=400, source="estimated"),
-    "claude-opus-4-7": _coef(0.0030, 0.0150, params_b=400, source="estimated"),
-    "claude-opus-4-6": _coef(0.0030, 0.0150, params_b=400, source="estimated"),
-    "claude-opus-4-1": _coef(0.0030, 0.0150, params_b=400, source="estimated"),
-    "claude-opus-3-5": _coef(0.0030, 0.0150, params_b=400, source="estimated"),
-    "claude-opus-3": _coef(0.0030, 0.0150, params_b=400, source="estimated"),
-    "claude-sonnet-4": _coef(0.0010, 0.0050, params_b=70, source="estimated"),
-    "claude-sonnet-4-6": _coef(0.0010, 0.0050, params_b=70, source="estimated"),
-    "claude-sonnet-4-5": _coef(0.0010, 0.0050, params_b=70, source="estimated"),
-    "claude-sonnet-3-7": _coef(0.0010, 0.0050, params_b=70, source="estimated"),
-    "claude-sonnet-3-5": _coef(0.0010, 0.0050, params_b=70, source="estimated"),
-    "claude-sonnet-3": _coef(0.0010, 0.0050, params_b=70, source="estimated"),
-    "claude-haiku-4-5": _coef(0.0003, 0.0015, params_b=13, source="estimated"),
-    "claude-haiku-3-5": _coef(0.0003, 0.0015, params_b=13, source="estimated"),
-    "claude-haiku-3": _coef(0.0003, 0.0015, params_b=13, source="estimated"),
-    # ---------- OpenAI (closed, estimated) ----------
-    "gpt-4o": _coef(0.0020, 0.0100, params_b=200, source="estimated"),
-    "gpt-4o-mini": _coef(0.0006, 0.0030, params_b=30, source="estimated"),
-    "gpt-4-turbo": _coef(0.0030, 0.0150, params_b=400, source="estimated"),
-    "gpt-4": _coef(0.0050, 0.0250, params_b=1000, source="estimated"),
-    "gpt-3-5-turbo": _coef(0.0003, 0.0015, params_b=20, source="estimated"),
-    "o1": _coef(0.0030, 0.0150, params_b=400, source="estimated"),
-    "o1-mini": _coef(0.0006, 0.0030, params_b=30, source="estimated"),
-    "o3": _coef(0.0030, 0.0150, params_b=400, source="estimated"),
-    "o3-mini": _coef(0.0006, 0.0030, params_b=30, source="estimated"),
-    # ---------- Google (closed, estimated) ----------
-    "gemini-1-5-pro": _coef(0.0020, 0.0100, params_b=200, source="estimated"),
-    "gemini-1-5-flash": _coef(0.0003, 0.0015, params_b=20, source="estimated"),
-    "gemini-2-0-flash": _coef(0.0003, 0.0015, params_b=20, source="estimated"),
-    "gemini-2-0-pro": _coef(0.0020, 0.0100, params_b=200, source="estimated"),
-    # ---------- Open-weight (measured via HF AI Energy Score / Luccioni 2024) ----------
-    "llama-3-1-405b": _coef(0.0050, 0.0250, params_b=405, source="measured"),
-    "llama-3-1-70b": _coef(0.0010, 0.0050, params_b=70, source="measured"),
-    "llama-3-1-8b": _coef(0.0002, 0.0010, params_b=8, source="measured"),
-    "llama-3-70b": _coef(0.0010, 0.0050, params_b=70, source="measured"),
-    "llama-3-8b": _coef(0.0002, 0.0010, params_b=8, source="measured"),
-    "mistral-7b": _coef(0.0002, 0.0010, params_b=7, source="measured"),
-    "mixtral-8x7b": _coef(0.0006, 0.0030, params_b=47, source="measured"),
-    "mixtral-8x22b": _coef(0.0015, 0.0075, params_b=141, source="measured"),
+    name: ModelEnergyCoefficients(
+        wh_per_input_token=c["wh_per_input_token"],
+        wh_per_output_token=c["wh_per_output_token"],
+        source=c["source"],
+        params_b=c["params_b"],
+    )
+    for name, c in _data.COEFFICIENTS.items()
 }
 
+#: Ordered family-fallback rules (from the JSON SSOT).
+MODEL_FAMILIES: list[dict[str, object]] = _data.FAMILIES
 
 #: Citation metadata for the coefficient table.
-ENERGY_SOURCES: dict[str, dict[str, str]] = {
-    "patterson2021": {
-        "citation": "Patterson et al. 2021, 'Carbon Emissions and Large Neural Network Training'",
-        "arxiv": "2104.10350",
-    },
-    "luccioni2024": {
-        "citation": "Luccioni, Jernite, Strubell 2024, 'Power Hungry Processing'",
-        "venue": "FAccT 2024",
-        "arxiv": "2311.16863",
-    },
-    "huggingface": {
-        "citation": "Hugging Face AI Energy Score",
-        "url": "https://huggingface.co/AIEnergyScore",
-    },
-}
+ENERGY_SOURCES: dict[str, dict[str, str]] = _data.ENERGY_SOURCES
 
 
 _DATED_SUFFIX = re.compile(r"-\d{4}-?\d{2}-?\d{2}$")
 _LATEST_PREVIEW = re.compile(r"-(latest|preview)$")
 _VERSION_SUFFIX = re.compile(r"-v\d+$")
 _NUMERIC_SUFFIX = re.compile(r"-\d{3,4}$")
+_PROVIDER_DOTTED = re.compile(
+    r"^(?:us|eu|apac)\.(?:anthropic|meta|amazon|cohere|mistral|ai21|stability)\."
+)
+_BEDROCK_TAG = re.compile(r":\d+$")
+_CLAUDE_REORDER = re.compile(r"^claude-(\d+(?:-\d+)*)-(opus|sonnet|haiku)(-.*)?$")
 
 
 def normalize_model_name(model: str) -> str:
-    """Strip version-date suffixes and normalise punctuation.
+    """Strip provider prefixes, version-date suffixes and normalise
+    punctuation and word order.
 
-    Callers can pass ``"claude-sonnet-4-5-20251022"`` or
-    ``"gpt-4o-2024-11-20"`` and still hit the canonical entry.
+    Callers can pass ``"claude-sonnet-4-5-20251022"``,
+    ``"anthropic/claude-3.5-sonnet"``, ``"gpt-4o-2024-11-20"`` or
+    ``"us.anthropic.claude-opus-4-7-v1:0"`` and still hit the canonical entry.
     """
     name = model.strip().lower()
+    if "/" in name:
+        name = name.rsplit("/", 1)[1]
+    name = _PROVIDER_DOTTED.sub("", name)
+    name = _BEDROCK_TAG.sub("", name)
     name = name.replace(".", "-")
     name = _DATED_SUFFIX.sub("", name)
     name = _LATEST_PREVIEW.sub("", name)
     name = _VERSION_SUFFIX.sub("", name)
     name = _NUMERIC_SUFFIX.sub("", name)
+    m = _CLAUDE_REORDER.match(name)
+    if m:
+        name = f"claude-{m.group(2)}-{m.group(1)}{m.group(3) or ''}"
     return name
+
+
+def _family_representative(normalized: str) -> ModelEnergyCoefficients | None:
+    """Coefficients of the first family rule that matches, else ``None``."""
+    for fam in MODEL_FAMILIES:
+        prefix = fam.get("prefix")
+        if prefix is not None and not normalized.startswith(prefix):
+            continue
+        contains = fam.get("contains")
+        if contains is not None and not all(t in normalized for t in contains):
+            continue
+        regex = fam.get("regex")
+        if regex is not None and re.search(regex, normalized) is None:
+            continue
+        return MODEL_ENERGY_COEFFICIENTS[fam["representative"]]
+    return None
+
+
+def resolve_model_energy(model: str | None = None) -> ResolvedModelEnergy:
+    """Resolve a (possibly messy) model id to coefficients + provenance tier.
+
+    See :data:`EnergyResolutionTier`.
+    """
+    if not model:
+        return ResolvedModelEnergy(_FALLBACK, "default")
+    exact = MODEL_ENERGY_COEFFICIENTS.get(model.strip().lower())
+    if exact is not None:
+        return ResolvedModelEnergy(exact, "exact")
+    normalized = normalize_model_name(model)
+    norm = MODEL_ENERGY_COEFFICIENTS.get(normalized)
+    if norm is not None:
+        return ResolvedModelEnergy(norm, "normalized")
+    family = _family_representative(normalized)
+    if family is not None:
+        return ResolvedModelEnergy(family, "family-fallback")
+    return ResolvedModelEnergy(_FALLBACK, "default")
 
 
 def lookup_model_energy(model: str | None = None) -> ModelEnergyCoefficients:
     """Look up coefficients for a (possibly suffixed) model name."""
-    if not model:
-        return _FALLBACK
-    return MODEL_ENERGY_COEFFICIENTS.get(normalize_model_name(model), _FALLBACK)
+    return resolve_model_energy(model).coeffs
 
 
 def estimate_energy_kwh(
@@ -187,10 +194,15 @@ def estimate_energy_kwh(
     if model is None and input_tokens is None and output_tokens is None:
         return LEGACY_KWH_PER_TASK
 
-    coeffs = lookup_model_energy(model)
+    resolved = resolve_model_energy(model)
+    coeffs = resolved.coeffs
 
+    # Only fully-unrecognized models with no token counts fall back to the
+    # flat legacy constant. A family-recognized unknown (tier
+    # ``family-fallback``) instead uses the family representative's
+    # coefficients — the §1.8 family fallback.
     if (
-        coeffs.source == "fallback"
+        resolved.tier == "default"
         and input_tokens is None
         and output_tokens is None
     ):
@@ -227,10 +239,14 @@ __all__ = [
     "ENERGY_SOURCES",
     "LEGACY_KWH_PER_TASK",
     "MODEL_ENERGY_COEFFICIENTS",
+    "MODEL_FAMILIES",
+    "EnergyResolutionTier",
     "EnergySourceTier",
     "ModelEnergyCoefficients",
+    "ResolvedModelEnergy",
     "estimate_energy_kwh",
     "grams_for_intensity",
     "lookup_model_energy",
     "normalize_model_name",
+    "resolve_model_energy",
 ]

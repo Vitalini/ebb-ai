@@ -45,7 +45,7 @@ from typing import TYPE_CHECKING, Any, Final, Generic, TypeVar
 import aiosqlite
 import httpx
 
-from .energy import grams_for_intensity, lookup_model_energy
+from .energy import grams_for_intensity, resolve_model_energy
 from .errors import (
     CarbonBudgetExceededError,
     InvalidDeadlineError,
@@ -872,6 +872,7 @@ def _row_to_record(row: Any) -> TaskRecord:
             intensity_g_co2_per_kwh=data.get("intensity_g_co2_per_kwh"),
             grid_source=data.get("grid_source"),
             energy_source=data.get("energy_source"),
+            energy_resolution=data.get("energy_resolution"),
             signature=data.get("signature"),
             signer_public_key=data.get("signer_public_key"),
             signed_at=data.get("signed_at"),
@@ -2110,6 +2111,7 @@ class Scheduler:
                     intensity_g_co2_per_kwh=actual_intensity_g,
                     grid_source=grid_source,
                     energy_source="fallback",
+                    energy_resolution="default",
                 )
             )
         except Exception as err:
@@ -2508,7 +2510,8 @@ class Scheduler:
                     # estimate.
                     intensity_g_co2_per_kwh=intensity_g,
                     grid_source=grid_source,
-                    energy_source=lookup_model_energy(actual_model).source,
+                    energy_source=resolve_model_energy(actual_model).coeffs.source,
+                    energy_resolution=resolve_model_energy(actual_model).tier,
                 )
             )
         except Exception as err:
@@ -2802,7 +2805,8 @@ class Scheduler:
                     total_tokens=total_tokens,
                     intensity_g_co2_per_kwh=intensity_g,
                     grid_source=grid_source,
-                    energy_source=lookup_model_energy(actual_model).source,
+                    energy_source=resolve_model_energy(actual_model).coeffs.source,
+                    energy_resolution=resolve_model_energy(actual_model).tier,
                 )
             )
         except Exception as err:

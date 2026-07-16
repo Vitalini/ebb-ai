@@ -30,17 +30,24 @@ See ``packages/core-py/README.md`` for the full API reference.
 
 from __future__ import annotations
 
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
+
 from .energy import (
     DEFAULT_PUE,
     ENERGY_SOURCES,
     LEGACY_KWH_PER_TASK,
     MODEL_ENERGY_COEFFICIENTS,
+    MODEL_FAMILIES,
+    EnergyResolutionTier,
     EnergySourceTier,
     ModelEnergyCoefficients,
+    ResolvedModelEnergy,
     estimate_energy_kwh,
     grams_for_intensity,
     lookup_model_energy,
     normalize_model_name,
+    resolve_model_energy,
 )
 from .errors import (
     CarbonBudgetExceededError,
@@ -83,6 +90,7 @@ from .types import (
     Band,
     CarbonReceipt,
     DeferOptions,
+    EnergyResolution,
     EnergySource,
     ForecastKind,
     GridForecast,
@@ -97,7 +105,12 @@ from .types import (
     TickResultEntry,
 )
 
-__version__ = "0.12.0"
+# The package version is declared once, in pyproject.toml. Read it back from
+# the installed metadata rather than hard-coding a second copy here.
+try:
+    __version__ = _pkg_version("ebb-ai")
+except PackageNotFoundError:  # pragma: no cover - source tree without install
+    __version__ = "0+unknown"
 
 __all__ = [
     "DEFAULT_PUE",
@@ -107,6 +120,7 @@ __all__ = [
     "LEGACY_KWH_PER_TASK",
     "MAX_HORIZON_HOURS",
     "MODEL_ENERGY_COEFFICIENTS",
+    "MODEL_FAMILIES",
     "TOLERANCE_FLOOR_G",
     "TOLERANCE_FRACTION",
     "Band",
@@ -114,6 +128,8 @@ __all__ = [
     "CarbonReceipt",
     "DeferOptions",
     "DeferrableTask",
+    "EnergyResolution",
+    "EnergyResolutionTier",
     "EnergySource",
     "EnergySourceTier",
     "ForecastKind",
@@ -128,6 +144,7 @@ __all__ = [
     "ProviderCallSpec",
     "RecommendAlternative",
     "RecommendResult",
+    "ResolvedModelEnergy",
     "Scheduler",
     "SchedulerShutdownError",
     "SelectWindowResult",
@@ -154,6 +171,7 @@ __all__ = [
     "normalize_model_name",
     "pick_best_window",
     "recommend_window",
+    "resolve_model_energy",
     "select_window",
     "sign_receipt",
     "verify_receipt",

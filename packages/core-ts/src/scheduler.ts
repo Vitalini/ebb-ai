@@ -18,7 +18,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { gramsForIntensity, lookupModelEnergy } from "./energy.js";
+import { gramsForIntensity, resolveModelEnergy } from "./energy.js";
 import { mockGridFeed } from "./grid.js";
 import type { ProviderAdapter } from "./providers/base.js";
 import { selectWindow } from "./select-window.js";
@@ -1055,6 +1055,7 @@ export class Scheduler {
         intensityGCo2PerKwh: actualIntensityG,
         gridSource,
         energySource: "fallback",
+        energyResolution: "default",
       });
     } catch (err) {
       // eslint-disable-next-line no-console
@@ -1292,7 +1293,8 @@ export class Scheduler {
         // schedule-time estimate.
         intensityGCo2PerKwh: intensityG,
         gridSource,
-        energySource: lookupModelEnergy(actualModel).source,
+        energySource: resolveModelEnergy(actualModel).coeffs.source,
+        energyResolution: resolveModelEnergy(actualModel).tier,
       });
     } catch (err) {
       // eslint-disable-next-line no-console
@@ -1522,7 +1524,8 @@ export class Scheduler {
         totalTokens,
         intensityGCo2PerKwh: intensityG,
         gridSource,
-        energySource: lookupModelEnergy(actualModel).source,
+        energySource: resolveModelEnergy(actualModel).coeffs.source,
+        energyResolution: resolveModelEnergy(actualModel).tier,
       });
     } catch (err) {
       // eslint-disable-next-line no-console

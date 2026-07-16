@@ -8,6 +8,7 @@ import {
   gramsForIntensity,
   lookupModelEnergy,
   normalizeModelName,
+  resolveModelEnergy,
 } from "../src/energy.js";
 
 describe("normalizeModelName", () => {
@@ -30,6 +31,35 @@ describe("normalizeModelName", () => {
   it("leaves canonical names untouched", () => {
     expect(normalizeModelName("claude-opus-4-7")).toBe("claude-opus-4-7");
     expect(normalizeModelName("llama-3-1-8b")).toBe("llama-3-1-8b");
+  });
+
+  it("strips provider prefixes (path and Bedrock styles)", () => {
+    expect(normalizeModelName("anthropic/claude-opus-4-7")).toBe("claude-opus-4-7");
+    expect(normalizeModelName("meta-llama/Llama-3.1-8B")).toBe("llama-3-1-8b");
+    expect(normalizeModelName("us.anthropic.claude-opus-4-1-v1:0")).toBe("claude-opus-4-1");
+  });
+
+  it("canonicalizes claude word order", () => {
+    expect(normalizeModelName("claude-3-5-sonnet")).toBe("claude-sonnet-3-5");
+    expect(normalizeModelName("claude-3-5-sonnet-20241022")).toBe("claude-sonnet-3-5");
+  });
+});
+
+describe("resolveModelEnergy", () => {
+  it("reports the resolution tier", () => {
+    expect(resolveModelEnergy("claude-opus-4-7").tier).toBe("exact");
+    expect(resolveModelEnergy("claude-sonnet-4-5-20251022").tier).toBe("normalized");
+    expect(resolveModelEnergy("claude-sonnet-9").tier).toBe("family-fallback");
+    expect(resolveModelEnergy("totally-unknown").tier).toBe("default");
+    expect(resolveModelEnergy(undefined).tier).toBe("default");
+  });
+
+  it("family fallback uses the representative's coefficients", () => {
+    const rep = MODEL_ENERGY_COEFFICIENTS["claude-sonnet-4"]!;
+    const got = resolveModelEnergy("claude-sonnet-9").coeffs;
+    expect(got.whPerInputToken).toBe(rep.whPerInputToken);
+    expect(got.whPerOutputToken).toBe(rep.whPerOutputToken);
+    expect(got.source).toBe("estimated");
   });
 });
 
@@ -67,6 +97,13 @@ describe("estimateEnergyKwh — backwards compatibility", () => {
 
   it("returns LEGACY_KWH_PER_TASK for an unknown model with no token counts", () => {
     expect(estimateEnergyKwh({ model: "ghost-model" })).toBe(LEGACY_KWH_PER_TASK);
+  });
+
+  it("family-recognized unknown uses the family estimate, not the legacy flat", () => {
+    // claude-sonnet-9 → sonnet representative typical-token estimate (§1.8).
+    const got = estimateEnergyKwh({ model: "claude-sonnet-9" });
+    expect(got).toBeCloseTo(0.00345, 6);
+    expect(got).not.toBe(LEGACY_KWH_PER_TASK);
   });
 });
 

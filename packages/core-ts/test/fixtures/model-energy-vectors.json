@@ -1,0 +1,35 @@
+{
+  "$comment": "Shared cross-language model-energy resolution vectors (audit §1.8). This fixture is the single source of truth for tricky model-id resolution: it is read byte-for-byte by BOTH packages/core-ts/test/energy-parity.test.ts and packages/core-py/tests/test_energy_parity.py. Each vector asserts that resolveModelEnergy / resolve_model_energy return identical (whPerInputToken, whPerOutputToken, source, resolution) in both languages. If TS and PY normalization/family logic drift, one suite goes red.",
+  "vectors": [
+    { "id": "claude-opus-4-7", "whPerInputToken": 0.003, "whPerOutputToken": 0.015, "source": "estimated", "resolution": "exact" },
+    { "id": "gpt-4o", "whPerInputToken": 0.002, "whPerOutputToken": 0.01, "source": "estimated", "resolution": "exact" },
+    { "id": "llama-3-1-70b", "whPerInputToken": 0.001, "whPerOutputToken": 0.005, "source": "measured", "resolution": "exact" },
+    { "id": "GPT-4O", "whPerInputToken": 0.002, "whPerOutputToken": 0.01, "source": "estimated", "resolution": "exact" },
+    { "id": "  Claude-Opus-4-7  ", "whPerInputToken": 0.003, "whPerOutputToken": 0.015, "source": "estimated", "resolution": "exact" },
+
+    { "id": "claude-sonnet-4-5-20251022", "whPerInputToken": 0.001, "whPerOutputToken": 0.005, "source": "estimated", "resolution": "normalized" },
+    { "id": "gpt-4o-2024-11-20", "whPerInputToken": 0.002, "whPerOutputToken": 0.01, "source": "estimated", "resolution": "normalized" },
+    { "id": "gpt-3.5-turbo", "whPerInputToken": 0.0003, "whPerOutputToken": 0.0015, "source": "estimated", "resolution": "normalized" },
+    { "id": "claude-haiku-3-5-latest", "whPerInputToken": 0.0003, "whPerOutputToken": 0.0015, "source": "estimated", "resolution": "normalized" },
+    { "id": "anthropic/claude-opus-4-7", "whPerInputToken": 0.003, "whPerOutputToken": 0.015, "source": "estimated", "resolution": "normalized" },
+    { "id": "meta-llama/Llama-3.1-8B", "whPerInputToken": 0.0002, "whPerOutputToken": 0.001, "source": "measured", "resolution": "normalized" },
+    { "id": "claude-3-5-sonnet", "whPerInputToken": 0.001, "whPerOutputToken": 0.005, "source": "estimated", "resolution": "normalized" },
+    { "id": "claude-3-5-sonnet-20241022", "whPerInputToken": 0.001, "whPerOutputToken": 0.005, "source": "estimated", "resolution": "normalized" },
+    { "id": "us.anthropic.claude-opus-4-1-v1:0", "whPerInputToken": 0.003, "whPerOutputToken": 0.015, "source": "estimated", "resolution": "normalized" },
+
+    { "id": "claude-sonnet-9", "whPerInputToken": 0.001, "whPerOutputToken": 0.005, "source": "estimated", "resolution": "family-fallback" },
+    { "id": "claude-opus-5", "whPerInputToken": 0.003, "whPerOutputToken": 0.015, "source": "estimated", "resolution": "family-fallback" },
+    { "id": "claude-haiku-neo", "whPerInputToken": 0.0003, "whPerOutputToken": 0.0015, "source": "estimated", "resolution": "family-fallback" },
+    { "id": "gpt-4o-nano", "whPerInputToken": 0.002, "whPerOutputToken": 0.01, "source": "estimated", "resolution": "family-fallback" },
+    { "id": "gpt-4-omega", "whPerInputToken": 0.005, "whPerOutputToken": 0.025, "source": "estimated", "resolution": "family-fallback" },
+    { "id": "o5-preview", "whPerInputToken": 0.003, "whPerOutputToken": 0.015, "source": "estimated", "resolution": "family-fallback" },
+    { "id": "gemini-3-0-flash", "whPerInputToken": 0.0003, "whPerOutputToken": 0.0015, "source": "estimated", "resolution": "family-fallback" },
+    { "id": "gemini-9-ultra", "whPerInputToken": 0.002, "whPerOutputToken": 0.01, "source": "estimated", "resolution": "family-fallback" },
+    { "id": "llama-4-scout", "whPerInputToken": 0.001, "whPerOutputToken": 0.005, "source": "measured", "resolution": "family-fallback" },
+    { "id": "mixtral-8x99b", "whPerInputToken": 0.0006, "whPerOutputToken": 0.003, "source": "measured", "resolution": "family-fallback" },
+
+    { "id": "totally-unknown-model", "whPerInputToken": 0.0015, "whPerOutputToken": 0.0015, "source": "fallback", "resolution": "default" },
+    { "id": "gpt", "whPerInputToken": 0.0015, "whPerOutputToken": 0.0015, "source": "fallback", "resolution": "default" },
+    { "id": "", "whPerInputToken": 0.0015, "whPerOutputToken": 0.0015, "source": "fallback", "resolution": "default" }
+  ]
+}

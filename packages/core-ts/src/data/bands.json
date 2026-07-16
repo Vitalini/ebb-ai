@@ -1,0 +1,10 @@
+{
+  "$comment": "SSOT for grid carbon-intensity band thresholds (gCO2/kWh). Ordered ascending by maxExclusive; a value g maps to the first band whose maxExclusive it is strictly below, else `defaultBand`. Hand-edited; regenerate with `pnpm gen:data`.",
+  "thresholds": [
+    { "maxExclusive": 100, "band": "very_clean" },
+    { "maxExclusive": 250, "band": "clean" },
+    { "maxExclusive": 450, "band": "average" },
+    { "maxExclusive": 700, "band": "dirty" }
+  ],
+  "defaultBand": "very_dirty"
+}

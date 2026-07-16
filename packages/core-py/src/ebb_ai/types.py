@@ -74,6 +74,17 @@ EnergySource = Literal["measured", "estimated", "fallback"]
 unknown model (or closure task), flat legacy constant.
 """
 
+EnergyResolution = Literal["exact", "normalized", "family-fallback", "default"]
+"""How the per-model coefficients were resolved (v0.13+), orthogonal to
+:data:`EnergySource`'s confidence tier.
+
+``exact`` — the model id matched a table key verbatim; ``normalized`` —
+matched after stripping dated / provider / word-order variance;
+``family-fallback`` — unknown id, but a known family's representative
+coefficients were used; ``default`` — fully unrecognized, flat legacy
+constant. Lets a receipt disclose a family-fallback estimate honestly.
+"""
+
 
 @dataclass(slots=True)
 class DeferOptions:
@@ -196,6 +207,10 @@ class CarbonReceipt:
     (v0.12+): ``"measured"`` (open-weight, published measurements),
     ``"estimated"`` (closed models, size-class estimates), ``"fallback"``
     (unknown model or closure task, flat legacy constant)."""
+    energy_resolution: EnergyResolution | None = None
+    """How those coefficients were resolved (v0.13+), orthogonal to
+    ``energy_source``: ``"exact"``, ``"normalized"``, ``"family-fallback"``
+    or ``"default"``. See :data:`EnergyResolution`."""
     signature: str | None = None
     """Base64 Ed25519 signature over the canonical JSON encoding of every
     other field on this receipt (v0.11+). ``None`` on unsigned dispatches
@@ -243,6 +258,8 @@ class CarbonReceipt:
             d["gridSource"] = self.grid_source
         if self.energy_source is not None:
             d["energySource"] = self.energy_source
+        if self.energy_resolution is not None:
+            d["energyResolution"] = self.energy_resolution
         if self.signature is not None:
             d["signature"] = self.signature
         if self.signer_public_key is not None:
@@ -442,6 +459,7 @@ __all__ = [
     "Band",
     "CarbonReceipt",
     "DeferOptions",
+    "EnergyResolution",
     "EnergySource",
     "ForecastKind",
     "GridForecast",

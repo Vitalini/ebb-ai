@@ -40,8 +40,36 @@
  * reports 1.10, AWS ~1.15, Azure ~1.18). Callers can override.
  */
 
+import {
+  DEFAULT_PUE as DEFAULT_PUE_DATA,
+  ENERGY_SOURCES as ENERGY_SOURCES_DATA,
+  LEGACY_KWH_PER_TASK as LEGACY_KWH_PER_TASK_DATA,
+  MODEL_ENERGY_COEFFICIENTS as MODEL_ENERGY_COEFFICIENTS_DATA,
+  MODEL_FAMILIES as MODEL_FAMILIES_DATA,
+  TYPICAL_INPUT_TOKENS,
+  TYPICAL_OUTPUT_TOKENS,
+} from "./data/tables.generated.js";
+
 /** Confidence tier for a coefficient entry. */
 export type EnergySourceTier = "measured" | "estimated" | "fallback";
+
+/**
+ * How a coefficient was resolved for a given model id (v0.13+). This is
+ * the receipt's `energyResolution` provenance — orthogonal to the
+ * `EnergySourceTier` confidence of the number itself:
+ *
+ *   - `exact`          — the id matched a table key verbatim (case-folded).
+ *   - `normalized`     — matched after stripping dated / provider / order
+ *                        variance (see `normalizeModelName`).
+ *   - `family-fallback`— the id is unknown but its family is known, so a
+ *                        family representative's coefficients were used.
+ *   - `default`        — fully unrecognized; the flat legacy constant.
+ */
+export type EnergyResolutionTier =
+  | "exact"
+  | "normalized"
+  | "family-fallback"
+  | "default";
 
 /** Per-model inference energy coefficients (chip-level Wh, no PUE applied). */
 export interface ModelEnergyCoefficients {
@@ -55,21 +83,47 @@ export interface ModelEnergyCoefficients {
   source: EnergySourceTier;
 }
 
+/**
+ * A family-fallback rule. When a model id is unknown but recognizably a
+ * member of a family, the family's `representative` supplies coefficients.
+ * Sourced from the JSON SSOT; a rule matches when every present condition
+ * (`contains` / `prefix` / `regex`) holds against the normalized id.
+ */
+export interface ModelFamily {
+  id: string;
+  representative: string;
+  contains?: readonly string[];
+  prefix?: string;
+  regex?: string;
+}
+
+/** The outcome of resolving a model id to coefficients + a provenance tier. */
+export interface ResolvedModelEnergy {
+  coeffs: ModelEnergyCoefficients;
+  tier: EnergyResolutionTier;
+}
+
 /** Industry-average Power Usage Effectiveness for hyperscaler data centres. */
-export const DEFAULT_PUE = 1.15;
+export const DEFAULT_PUE = DEFAULT_PUE_DATA;
 
 /** Backwards-compatible flat estimate. Used when no model is provided. */
-export const LEGACY_KWH_PER_TASK = 0.0015;
+export const LEGACY_KWH_PER_TASK = LEGACY_KWH_PER_TASK_DATA;
 
 /**
- * Typical token shape used when a caller names a model but supplies
- * no token counts. 500 input + 500 output is the median across the
- * sample of real ebb-ai dispatched tasks in the v0.9 telemetry. The
- * receipt is later overwritten with actual counts at dispatch time
- * when the provider returns usage data.
+ * Per-model coefficient table. Keys are canonical lowercase names
+ * (no version-date suffixes; see `normalizeModelName`). Sourced from the
+ * JSON SSOT via the generated data module.
  */
-const TYPICAL_INPUT_TOKENS = 500;
-const TYPICAL_OUTPUT_TOKENS = 500;
+export const MODEL_ENERGY_COEFFICIENTS = MODEL_ENERGY_COEFFICIENTS_DATA;
+
+/** Ordered family-fallback rules (from the JSON SSOT). */
+export const MODEL_FAMILIES = MODEL_FAMILIES_DATA;
+
+/**
+ * Citation metadata for the coefficient table. Exported so dashboards
+ * and receipts can render attribution alongside numbers.
+ */
+export const ENERGY_SOURCES = ENERGY_SOURCES_DATA;
 
 const FALLBACK_COEFFICIENTS: ModelEnergyCoefficients = {
   whPerInputToken: LEGACY_KWH_PER_TASK * 1000 / (TYPICAL_INPUT_TOKENS + TYPICAL_OUTPUT_TOKENS),
@@ -78,84 +132,22 @@ const FALLBACK_COEFFICIENTS: ModelEnergyCoefficients = {
 };
 
 /**
- * Per-model coefficient table. Keys are canonical lowercase names
- * (no version-date suffixes; see `normalizeModelName`).
- */
-export const MODEL_ENERGY_COEFFICIENTS: Readonly<
-  Record<string, ModelEnergyCoefficients>
-> = Object.freeze({
-  // ---------- Anthropic (closed, estimated) ----------
-  "claude-opus-4": { whPerInputToken: 0.0030, whPerOutputToken: 0.0150, paramsB: 400, source: "estimated" },
-  "claude-opus-4-7": { whPerInputToken: 0.0030, whPerOutputToken: 0.0150, paramsB: 400, source: "estimated" },
-  "claude-opus-4-6": { whPerInputToken: 0.0030, whPerOutputToken: 0.0150, paramsB: 400, source: "estimated" },
-  "claude-opus-4-1": { whPerInputToken: 0.0030, whPerOutputToken: 0.0150, paramsB: 400, source: "estimated" },
-  "claude-opus-3-5": { whPerInputToken: 0.0030, whPerOutputToken: 0.0150, paramsB: 400, source: "estimated" },
-  "claude-opus-3": { whPerInputToken: 0.0030, whPerOutputToken: 0.0150, paramsB: 400, source: "estimated" },
-  "claude-sonnet-4": { whPerInputToken: 0.0010, whPerOutputToken: 0.0050, paramsB: 70, source: "estimated" },
-  "claude-sonnet-4-6": { whPerInputToken: 0.0010, whPerOutputToken: 0.0050, paramsB: 70, source: "estimated" },
-  "claude-sonnet-4-5": { whPerInputToken: 0.0010, whPerOutputToken: 0.0050, paramsB: 70, source: "estimated" },
-  "claude-sonnet-3-7": { whPerInputToken: 0.0010, whPerOutputToken: 0.0050, paramsB: 70, source: "estimated" },
-  "claude-sonnet-3-5": { whPerInputToken: 0.0010, whPerOutputToken: 0.0050, paramsB: 70, source: "estimated" },
-  "claude-sonnet-3": { whPerInputToken: 0.0010, whPerOutputToken: 0.0050, paramsB: 70, source: "estimated" },
-  "claude-haiku-4-5": { whPerInputToken: 0.0003, whPerOutputToken: 0.0015, paramsB: 13, source: "estimated" },
-  "claude-haiku-3-5": { whPerInputToken: 0.0003, whPerOutputToken: 0.0015, paramsB: 13, source: "estimated" },
-  "claude-haiku-3": { whPerInputToken: 0.0003, whPerOutputToken: 0.0015, paramsB: 13, source: "estimated" },
-
-  // ---------- OpenAI (closed, estimated) ----------
-  "gpt-4o": { whPerInputToken: 0.0020, whPerOutputToken: 0.0100, paramsB: 200, source: "estimated" },
-  "gpt-4o-mini": { whPerInputToken: 0.0006, whPerOutputToken: 0.0030, paramsB: 30, source: "estimated" },
-  "gpt-4-turbo": { whPerInputToken: 0.0030, whPerOutputToken: 0.0150, paramsB: 400, source: "estimated" },
-  "gpt-4": { whPerInputToken: 0.0050, whPerOutputToken: 0.0250, paramsB: 1000, source: "estimated" },
-  "gpt-3-5-turbo": { whPerInputToken: 0.0003, whPerOutputToken: 0.0015, paramsB: 20, source: "estimated" },
-  "o1": { whPerInputToken: 0.0030, whPerOutputToken: 0.0150, paramsB: 400, source: "estimated" },
-  "o1-mini": { whPerInputToken: 0.0006, whPerOutputToken: 0.0030, paramsB: 30, source: "estimated" },
-  "o3": { whPerInputToken: 0.0030, whPerOutputToken: 0.0150, paramsB: 400, source: "estimated" },
-  "o3-mini": { whPerInputToken: 0.0006, whPerOutputToken: 0.0030, paramsB: 30, source: "estimated" },
-
-  // ---------- Google (closed, estimated) ----------
-  "gemini-1-5-pro": { whPerInputToken: 0.0020, whPerOutputToken: 0.0100, paramsB: 200, source: "estimated" },
-  "gemini-1-5-flash": { whPerInputToken: 0.0003, whPerOutputToken: 0.0015, paramsB: 20, source: "estimated" },
-  "gemini-2-0-flash": { whPerInputToken: 0.0003, whPerOutputToken: 0.0015, paramsB: 20, source: "estimated" },
-  "gemini-2-0-pro": { whPerInputToken: 0.0020, whPerOutputToken: 0.0100, paramsB: 200, source: "estimated" },
-
-  // ---------- Open-weight (measured via HF AI Energy Score / Luccioni 2024) ----------
-  "llama-3-1-405b": { whPerInputToken: 0.0050, whPerOutputToken: 0.0250, paramsB: 405, source: "measured" },
-  "llama-3-1-70b": { whPerInputToken: 0.0010, whPerOutputToken: 0.0050, paramsB: 70, source: "measured" },
-  "llama-3-1-8b": { whPerInputToken: 0.0002, whPerOutputToken: 0.0010, paramsB: 8, source: "measured" },
-  "llama-3-70b": { whPerInputToken: 0.0010, whPerOutputToken: 0.0050, paramsB: 70, source: "measured" },
-  "llama-3-8b": { whPerInputToken: 0.0002, whPerOutputToken: 0.0010, paramsB: 8, source: "measured" },
-  "mistral-7b": { whPerInputToken: 0.0002, whPerOutputToken: 0.0010, paramsB: 7, source: "measured" },
-  "mixtral-8x7b": { whPerInputToken: 0.0006, whPerOutputToken: 0.0030, paramsB: 47, source: "measured" },
-  "mixtral-8x22b": { whPerInputToken: 0.0015, whPerOutputToken: 0.0075, paramsB: 141, source: "measured" },
-});
-
-/**
- * Citation metadata for the coefficient table. Exported so dashboards
- * and receipts can render attribution alongside numbers.
- */
-export const ENERGY_SOURCES = Object.freeze({
-  patterson2021: {
-    citation: "Patterson et al. 2021, 'Carbon Emissions and Large Neural Network Training'",
-    arxiv: "2104.10350",
-  },
-  luccioni2024: {
-    citation: "Luccioni, Jernite, Strubell 2024, 'Power Hungry Processing'",
-    venue: "FAccT 2024",
-    arxiv: "2311.16863",
-  },
-  huggingface: {
-    citation: "Hugging Face AI Energy Score",
-    url: "https://huggingface.co/AIEnergyScore",
-  },
-});
-
-/**
- * Strip version-date suffixes and normalise punctuation so callers
- * can pass `"claude-sonnet-4-5-20251022"` or `"gpt-4o-2024-11-20"`
- * and still hit the canonical entry.
+ * Strip provider prefixes, version-date suffixes and normalise punctuation
+ * and word order so callers can pass `"claude-sonnet-4-5-20251022"`,
+ * `"anthropic/claude-3.5-sonnet"`, `"gpt-4o-2024-11-20"` or
+ * `"us.anthropic.claude-opus-4-7-v1:0"` and still hit the canonical entry.
  */
 export function normalizeModelName(model: string): string {
   let name = model.trim().toLowerCase();
+  // Strip a path-style provider prefix ("anthropic/…", "meta-llama/…").
+  if (name.includes("/")) name = name.slice(name.lastIndexOf("/") + 1);
+  // Strip a Bedrock region.vendor. prefix ("us.anthropic.…").
+  name = name.replace(
+    /^(?:us|eu|apac)\.(?:anthropic|meta|amazon|cohere|mistral|ai21|stability)\./,
+    "",
+  );
+  // Strip a Bedrock trailing version tag (":0", ":1").
+  name = name.replace(/:\d+$/, "");
   // Replace dots with dashes (`gpt-3.5-turbo` → `gpt-3-5-turbo`).
   name = name.replace(/\./g, "-");
   // Strip Anthropic / OpenAI dated suffix (-YYYYMMDD or -YYYY-MM-DD).
@@ -164,14 +156,56 @@ export function normalizeModelName(model: string): string {
   name = name.replace(/-(latest|preview)$/, "");
   name = name.replace(/-v\d+$/, "");
   name = name.replace(/-\d{3,4}$/, "");
+  // Canonicalize Claude word order: "claude-3-5-sonnet" → "claude-sonnet-3-5".
+  const reordered = name.match(
+    /^claude-(\d+(?:-\d+)*)-(opus|sonnet|haiku)(-.*)?$/,
+  );
+  if (reordered) {
+    name = `claude-${reordered[2]}-${reordered[1]}${reordered[3] ?? ""}`;
+  }
   return name;
+}
+
+/**
+ * Return the coefficients of the family representative for a normalized
+ * model id, or `undefined` if no family rule matches. The first matching
+ * rule (in `MODEL_FAMILIES` order) wins.
+ */
+function familyRepresentative(
+  normalized: string,
+): ModelEnergyCoefficients | undefined {
+  for (const fam of MODEL_FAMILIES) {
+    if (fam.prefix !== undefined && !normalized.startsWith(fam.prefix)) continue;
+    if (fam.contains && !fam.contains.every((t) => normalized.includes(t))) {
+      continue;
+    }
+    if (fam.regex !== undefined && !new RegExp(fam.regex).test(normalized)) {
+      continue;
+    }
+    return MODEL_ENERGY_COEFFICIENTS[fam.representative];
+  }
+  return undefined;
+}
+
+/**
+ * Resolve a (possibly messy) model id to coefficients plus the provenance
+ * tier describing *how* the match was made. See {@link EnergyResolutionTier}.
+ */
+export function resolveModelEnergy(model?: string): ResolvedModelEnergy {
+  if (!model) return { coeffs: FALLBACK_COEFFICIENTS, tier: "default" };
+  const exact = MODEL_ENERGY_COEFFICIENTS[model.trim().toLowerCase()];
+  if (exact) return { coeffs: exact, tier: "exact" };
+  const normalized = normalizeModelName(model);
+  const norm = MODEL_ENERGY_COEFFICIENTS[normalized];
+  if (norm) return { coeffs: norm, tier: "normalized" };
+  const family = familyRepresentative(normalized);
+  if (family) return { coeffs: family, tier: "family-fallback" };
+  return { coeffs: FALLBACK_COEFFICIENTS, tier: "default" };
 }
 
 /** Look up coefficients for a (possibly suffixed) model name. */
 export function lookupModelEnergy(model?: string): ModelEnergyCoefficients {
-  if (!model) return FALLBACK_COEFFICIENTS;
-  const normalized = normalizeModelName(model);
-  return MODEL_ENERGY_COEFFICIENTS[normalized] ?? FALLBACK_COEFFICIENTS;
+  return resolveModelEnergy(model).coeffs;
 }
 
 export interface EstimateEnergyOpts {
@@ -211,14 +245,16 @@ export function estimateEnergyKwh(opts: EstimateEnergyOpts = {}): number {
     return LEGACY_KWH_PER_TASK;
   }
 
-  const coeffs = lookupModelEnergy(model);
+  const { coeffs, tier } = resolveModelEnergy(model);
 
-  // Path 2: model named but unknown to the table → still legacy flat.
+  // Path 2: fully-unrecognized model with no token counts → legacy flat.
   // The fallback entry intentionally encodes the same total energy as
   // `LEGACY_KWH_PER_TASK` when summed across typical token counts; this
   // keeps "unknown model" identical to "no model" so dashboards don't
-  // accidentally show a behavioural change for unmodelled traffic.
-  if (coeffs.source === "fallback" && inputTokens === undefined && outputTokens === undefined) {
+  // accidentally show a behavioural change for unmodelled traffic. A
+  // *family-recognized* unknown (tier "family-fallback") instead uses the
+  // family representative's coefficients — the §1.8 family fallback.
+  if (tier === "default" && inputTokens === undefined && outputTokens === undefined) {
     return LEGACY_KWH_PER_TASK;
   }
 
