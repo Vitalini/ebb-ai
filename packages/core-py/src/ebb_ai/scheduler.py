@@ -1313,7 +1313,7 @@ class Scheduler:
             raise ValueError(
                 f'enqueue_provider_call: spec.type must be "provider_call", got {spec.type!r}'
             )
-        if spec.provider not in ("anthropic", "openai"):
+        if spec.provider not in ("anthropic", "openai", "gemini", "ollama"):
             raise ValueError(
                 f"enqueue_provider_call: unsupported provider {spec.provider!r}"
             )

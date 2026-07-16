@@ -75,6 +75,16 @@ describe("tool surface — shape and invariants", () => {
     expect(() => getToolDefOrThrow("nope")).toThrow(/unknown ebb-ai tool/);
   });
 
+  it("the schedule_task provider enum offers all four providers", () => {
+    const provider = getToolDefOrThrow("schedule_task").params.find(
+      (p) => p.name === "provider",
+    )!;
+    expect(provider.kind).toBe("enum");
+    // Backward-compatible: anthropic/openai retained, gemini/ollama ADDED.
+    expect(provider.values).toEqual(["anthropic", "openai", "gemini", "ollama"]);
+    expect(provider.optional).toBe(true);
+  });
+
   it("models the intentional per-host divergences explicitly", () => {
     // region: required on MCP, optional on OpenClaw for the read tools.
     for (const name of ["get_grid_forecast", "recommend_window"]) {

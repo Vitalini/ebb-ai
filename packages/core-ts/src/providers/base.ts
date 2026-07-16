@@ -100,8 +100,18 @@ export interface ProviderAdapter {
     options?: DispatchOptions,
   ): Promise<DispatchResult>;
 
-  /** Submit a batch of prompts; resolves once the batch is registered. */
-  dispatchBatch(
+  /**
+   * Submit a batch of prompts; resolves once the batch is registered.
+   *
+   * Optional: a provider whose Batch API does not map cleanly onto this
+   * submit → poll → results contract (e.g. Gemini, whose Developer-API
+   * batch mode is a long-running operation keyed by an operation name and
+   * whose Vertex batch path requires GCS/BigQuery I/O), or a local provider
+   * with no batch API at all (Ollama), simply omits this method. The
+   * scheduler feature-detects `typeof adapter.dispatchBatch === "function"`
+   * and keeps batch-incapable adapters on the sync path.
+   */
+  dispatchBatch?(
     model: string,
     prompts: string[],
     options?: DispatchOptions,

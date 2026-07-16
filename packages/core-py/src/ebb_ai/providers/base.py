@@ -130,14 +130,25 @@ class ProviderAdapter(ABC):
     ) -> DispatchResult:
         """Send a single prompt through the provider's sync API."""
 
-    @abstractmethod
     async def dispatch_batch(
         self,
         model: str,
         prompts: list[str],
         options: DispatchOptions | None = None,
     ) -> BatchHandle:
-        """Submit a batch of prompts to the provider's batch API."""
+        """Submit a batch of prompts to the provider's batch API.
+
+        Optional: a provider whose Batch API does not map cleanly onto this
+        submit → poll → results contract (Gemini) or that has no batch API at
+        all (local Ollama) leaves this — and :meth:`retrieve_batch` — as the
+        base stubs, which raise. The scheduler feature-detects a real
+        ``retrieve_batch`` override before routing a task through the batch
+        path (:func:`ebb_ai.scheduler._has_batch_support`), so a sync-only
+        adapter is never asked to batch.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not implement dispatch_batch"
+        )
 
     async def retrieve_batch(self, batch_id: str) -> BatchRetrieveResult:
         """Poll a submitted batch by id.

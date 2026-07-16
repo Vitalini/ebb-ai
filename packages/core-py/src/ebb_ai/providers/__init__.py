@@ -19,6 +19,8 @@ from .base import (
     DispatchResult,
     ProviderAdapter,
 )
+from .gemini import GeminiAdapter
+from .ollama import OllamaAdapter
 from .openai import OpenAIAdapter
 
 __all__ = [
@@ -26,6 +28,8 @@ __all__ = [
     "BatchHandle",
     "DispatchOptions",
     "DispatchResult",
+    "GeminiAdapter",
+    "OllamaAdapter",
     "OpenAIAdapter",
     "ProviderAdapter",
 ]

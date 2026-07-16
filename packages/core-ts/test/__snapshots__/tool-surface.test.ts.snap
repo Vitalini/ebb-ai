@@ -95,13 +95,15 @@ exports[`tool surface — divergence canary > per-host neutral schema snapshot (
           "required": false,
         },
         {
-          "description": "Which provider to dispatch this task through: 'anthropic' or 'openai'. Defaults to 'anthropic'.",
+          "description": "Which provider to dispatch this task through: 'anthropic', 'openai', 'gemini', or 'ollama' (local). Defaults to 'anthropic'. 'anthropic' and 'openai' can auto-route through a 50%-cheaper Batch API when the deadline allows; 'gemini' and 'ollama' always dispatch synchronously.",
           "kind": "enum",
           "name": "provider",
           "required": false,
           "values": [
             "anthropic",
             "openai",
+            "gemini",
+            "ollama",
           ],
         },
         {
@@ -306,13 +308,15 @@ exports[`tool surface — divergence canary > per-host neutral schema snapshot (
           "required": false,
         },
         {
-          "description": "Which provider to dispatch this task through: 'anthropic' or 'openai'. Defaults to 'anthropic'.",
+          "description": "Which provider to dispatch this task through: 'anthropic', 'openai', 'gemini', or 'ollama' (local). Defaults to 'anthropic'. 'anthropic' and 'openai' can auto-route through a 50%-cheaper Batch API when the deadline allows; 'gemini' and 'ollama' always dispatch synchronously.",
           "kind": "enum",
           "name": "provider",
           "required": false,
           "values": [
             "anthropic",
             "openai",
+            "gemini",
+            "ollama",
           ],
         },
         {

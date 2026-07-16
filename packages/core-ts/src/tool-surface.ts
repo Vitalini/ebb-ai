@@ -123,10 +123,10 @@ const carbonBudgetParam: ToolParam = {
 const providerParam: ToolParam = {
   name: "provider",
   kind: "enum",
-  values: ["anthropic", "openai"],
+  values: ["anthropic", "openai", "gemini", "ollama"],
   optional: true,
   description:
-    "Which provider to dispatch this task through: 'anthropic' or 'openai'. Defaults to 'anthropic'.",
+    "Which provider to dispatch this task through: 'anthropic', 'openai', 'gemini', or 'ollama' (local). Defaults to 'anthropic'. 'anthropic' and 'openai' can auto-route through a 50%-cheaper Batch API when the deadline allows; 'gemini' and 'ollama' always dispatch synchronously.",
 };
 
 const modelParam = (opts: { hosts?: readonly ToolHost[]; description: string }): ToolParam => ({
