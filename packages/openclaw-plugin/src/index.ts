@@ -59,6 +59,7 @@ import { defineToolPlugin } from "openclaw/plugin-sdk/tool-plugin";
 
 import {
   buildDefaultGridFeed,
+  getToolDefOrThrow,
   recommendWindow,
   resolveRegion,
   Scheduler,
@@ -68,6 +69,13 @@ import {
   type TaskRecord,
   type TickResult,
 } from "@ebb-ai/core";
+
+import { openclawToolParameters } from "./tool-schemas.js";
+
+/** The canonical description for a tool, from the shared surface (audit §2.2). */
+function toolDescription(name: string): string {
+  return getToolDefOrThrow(name).description;
+}
 
 import {
   availableProviders,
@@ -461,96 +469,8 @@ export default defineToolPlugin({
     tool({
       name: "schedule_task",
       label: "Schedule task at cleanest grid hour",
-      description:
-        "Queue an AI task to dispatch at the cleanest grid hour inside the given deadline. " +
-        '**Invoke whenever the user phrases a request with deferral language:** "do this later", ' +
-        '"by tomorrow", "tonight", "overnight", "by EOD", "sometime this week", "when you have a ' +
-        'moment", "remind me to", "queue this up", "schedule this", "no rush", "not urgent". ' +
-        "Convert the user's wording to an ISO-8601 deadline and pass the task description as the " +
-        "prompt. The scheduler picks the cleanest electricity-grid hour inside the deadline " +
-        "(40-70 % lower carbon vs running immediately) and writes a per-task carbon receipt. " +
-        "Returns task_id, scheduled UTC time, and region. Good fits: nightly digests, batch " +
-        "summaries, research sweeps, evaluator runs, report generation — anything the user is " +
-        "fine waiting on. Do NOT invoke for live chat, interactive code edits, or any task the " +
-        "user is actively waiting to see complete. Batch routing (50% cheaper via a provider " +
-        "Batch API) applies only on the direct API-key dispatch path and only when the deadline " +
-        "is far enough out (>24h); the OpenClaw runtime-bridge path cannot batch (its adapter has " +
-        "no batch surface) and runs the task synchronously at the chosen hour.",
-      parameters: Type.Object({
-        prompt: Type.String({
-          description:
-            "The user's task description — what should run when the cleanest hour fires.",
-        }),
-        deadline: Type.String({
-          description: "ISO-8601 timestamp by which the task must complete. Required.",
-          format: "date-time",
-        }),
-        region: Type.Optional(
-          Type.String({
-            description:
-              "Optional grid-region override. Defaults to the configured defaultRegion, else a timezone guess, else GB.",
-          }),
-        ),
-        carbon_budget_g: Type.Optional(
-          Type.Number({
-            description:
-              "Optional hard cap on grams CO2e for this task. Windows above the cap are dropped before selection.",
-          }),
-        ),
-        model: Type.Optional(
-          Type.String({
-            description:
-              "Optional provider model identifier. Pair the model with its provider: " +
-              "Anthropic models are 'claude-*' (e.g. 'claude-sonnet-4-6', 'claude-opus-4-1'); " +
-              "OpenAI models are 'gpt-*' or 'o<n>*' (e.g. 'gpt-4o', 'o3-mini'). When `provider` " +
-              "is omitted it is inferred from this prefix (gpt-*/o<n>* → openai, claude-* → " +
-              "anthropic; default anthropic). Honoured only on the direct API-key dispatch path; " +
-              "the OpenClaw runtime bridge always uses the gateway agent's own model.",
-          }),
-        ),
-        provider: Type.Optional(
-          Type.Union([Type.Literal("anthropic"), Type.Literal("openai")], {
-            description:
-              "Which provider dispatches this task on the API-key path. If omitted, inferred " +
-              "from the model prefix (gpt-*/o<n>* → openai, claude-* → anthropic; default " +
-              "anthropic). On the OpenClaw runtime-bridge path the gateway's own model runs " +
-              "regardless, so this only matters when dispatching via ANTHROPIC_API_KEY / " +
-              "OPENAI_API_KEY.",
-          }),
-        ),
-        deliver: Type.Optional(
-          Type.Array(
-            Type.Union([
-              Type.Literal("chat"),
-              Type.Literal("telegram"),
-              Type.Literal("webhook"),
-              Type.Literal("file"),
-              Type.Literal("queue"),
-            ]),
-            {
-              description:
-                "How to deliver the result when the task completes — one or more of: chat (the user's active OpenClaw chat), telegram, webhook, file, queue. If omitted, ASK the user (see next_step in the result) then call set_delivery. Default: chat.",
-            },
-          ),
-        ),
-        webhook_url: Type.Optional(
-          Type.String({ description: "Target URL when deliver includes 'webhook'." }),
-        ),
-        file_path: Type.Optional(
-          Type.String({ description: "Output path when deliver includes 'file'." }),
-        ),
-        file_format: Type.Optional(
-          Type.Union(
-            [
-              Type.Literal("md"),
-              Type.Literal("html"),
-              Type.Literal("txt"),
-              Type.Literal("json"),
-            ],
-            { description: "Report format for 'file' delivery. Default: md." },
-          ),
-        ),
-      }),
+      description: toolDescription("schedule_task"),
+      parameters: openclawToolParameters("schedule_task"),
       async execute(
         params: {
           prompt: string;
@@ -698,19 +618,8 @@ export default defineToolPlugin({
     tool({
       name: "recommend_window",
       label: "Preview cleanest dispatch window",
-      description:
-        "Preview the cleanest in-deadline window WITHOUT queueing the task. Returns the chosen " +
-        "hour, the projected carbon footprint, the % savings vs dispatching right now, and the " +
-        "top alternatives. Use this when the user is uncertain about deferring — show them the " +
-        "cleanest available hour before they commit. Read-only; does not touch the task queue.",
-      parameters: Type.Object({
-        deadline: Type.String({
-          description: "ISO-8601 timestamp by which the task must complete.",
-          format: "date-time",
-        }),
-        region: Type.Optional(Type.String()),
-        carbon_budget_g: Type.Optional(Type.Number()),
-      }),
+      description: toolDescription("recommend_window"),
+      parameters: openclawToolParameters("recommend_window"),
       async execute(
         params: { deadline: string; region?: string; carbon_budget_g?: number },
         config: PluginConfig,
@@ -733,15 +642,8 @@ export default defineToolPlugin({
     tool({
       name: "check_queue_status",
       label: "Check ebb-ai queue status",
-      description:
-        "List all ebb-ai tasks (no args) or fetch detail + carbon receipt for one task (pass " +
-        "task_id). Use when the user asks 'what's in my queue', 'did that task run', 'show me my " +
-        "receipts', or wants to verify a scheduled task. Read-only.",
-      parameters: Type.Object({
-        task_id: Type.Optional(
-          Type.String({ description: "Optional — the id of one task to detail." }),
-        ),
-      }),
+      description: toolDescription("check_queue_status"),
+      parameters: openclawToolParameters("check_queue_status"),
       async execute(
         params: { task_id?: string },
         config: PluginConfig,
@@ -793,14 +695,8 @@ export default defineToolPlugin({
     tool({
       name: "cancel_task",
       label: "Cancel an ebb-ai task",
-      description:
-        "Cancel a queued or scheduled ebb-ai task. Idempotent — calling it on a task that is " +
-        "already completed/failed/cancelled returns the existing status without error. Throws " +
-        "only if task_id is unknown. Use when the user says 'cancel that task', 'never mind, " +
-        "drop it', 'I don't need that anymore'.",
-      parameters: Type.Object({
-        task_id: Type.String({ description: "The id of the task to cancel." }),
-      }),
+      description: toolDescription("cancel_task"),
+      parameters: openclawToolParameters("cancel_task"),
       async execute(
         params: { task_id: string },
         config: PluginConfig,
@@ -821,24 +717,8 @@ export default defineToolPlugin({
     tool({
       name: "get_grid_forecast",
       label: "Forecast grid carbon intensity",
-      description:
-        "Return the projected electricity-grid carbon intensity for a region, hour by hour. " +
-        "Use this when deciding whether to run an expensive AI task now or defer it — intensity " +
-        "is grams CO2e per kWh with a categorical band (very_clean / clean / average / dirty / " +
-        "very_dirty). Read-only; does not touch the task queue.",
-      parameters: Type.Object({
-        region: Type.Optional(
-          Type.String({
-            description:
-              "Grid region (e.g. GB, US-CAL-CISO, FR). Defaults to the configured defaultRegion, else a timezone guess, else GB.",
-          }),
-        ),
-        hours: Type.Optional(
-          Type.Number({
-            description: "How many hours ahead to forecast. Defaults to 24.",
-          }),
-        ),
-      }),
+      description: toolDescription("get_grid_forecast"),
+      parameters: openclawToolParameters("get_grid_forecast"),
       async execute(
         params: { region?: string; hours?: number },
         config: PluginConfig,
@@ -858,18 +738,8 @@ export default defineToolPlugin({
     tool({
       name: "update_deadline",
       label: "Move a task's deadline",
-      description:
-        "Move the deadline of a queued or scheduled ebb-ai task; the scheduler re-picks the " +
-        "cleanest window inside the new deadline. Only queued/scheduled tasks can change — " +
-        "running/completed/failed/cancelled tasks throw. Use when the user says 'I need that " +
-        "sooner' or 'push that task to next week'.",
-      parameters: Type.Object({
-        task_id: Type.String({ description: "The id of the task to reschedule." }),
-        deadline: Type.String({
-          description: "New ISO-8601 deadline for the task.",
-          format: "date-time",
-        }),
-      }),
+      description: toolDescription("update_deadline"),
+      parameters: openclawToolParameters("update_deadline"),
       async execute(
         params: { task_id: string; deadline: string },
         config: PluginConfig,
@@ -894,17 +764,8 @@ export default defineToolPlugin({
     tool({
       name: "cancel_all",
       label: "Cancel all queued tasks",
-      description:
-        "Cancel every queued and scheduled ebb-ai task at once, optionally filtered to one " +
-        "status. Use when the user says 'clear my queue', 'cancel everything', 'drop all my " +
-        "pending tasks'. Already-terminal tasks (completed/failed/cancelled) are left untouched.",
-      parameters: Type.Object({
-        status: Type.Optional(
-          Type.Union([Type.Literal("queued"), Type.Literal("scheduled")], {
-            description: "Optional — cancel only tasks in this status.",
-          }),
-        ),
-      }),
+      description: toolDescription("cancel_all"),
+      parameters: openclawToolParameters("cancel_all"),
       async execute(
         params: { status?: "queued" | "scheduled" },
         config: PluginConfig,
@@ -940,42 +801,8 @@ export default defineToolPlugin({
     tool({
       name: "set_delivery",
       label: "Set how a task's result is delivered",
-      description:
-        "Set or change how a scheduled task's result is delivered when it completes. Call this " +
-        "right after schedule_task, once you have ASKED the user how they want the result. The " +
-        "user may pick several modes. Modes: chat (their active OpenClaw chat), telegram, webhook " +
-        "(needs webhook_url), file (needs file_path; format md/html/txt/json), queue (no push — " +
-        "retrievable via check_queue_status). Default if the user is unsure: chat.",
-      parameters: Type.Object({
-        task_id: Type.String({ description: "The id returned by schedule_task." }),
-        deliver: Type.Array(
-          Type.Union([
-            Type.Literal("chat"),
-            Type.Literal("telegram"),
-            Type.Literal("webhook"),
-            Type.Literal("file"),
-            Type.Literal("queue"),
-          ]),
-          { description: "One or more delivery modes the user chose." },
-        ),
-        webhook_url: Type.Optional(
-          Type.String({ description: "Target URL when deliver includes 'webhook'." }),
-        ),
-        file_path: Type.Optional(
-          Type.String({ description: "Output path when deliver includes 'file'." }),
-        ),
-        file_format: Type.Optional(
-          Type.Union(
-            [
-              Type.Literal("md"),
-              Type.Literal("html"),
-              Type.Literal("txt"),
-              Type.Literal("json"),
-            ],
-            { description: "Report format for 'file' delivery. Default: md." },
-          ),
-        ),
-      }),
+      description: toolDescription("set_delivery"),
+      parameters: openclawToolParameters("set_delivery"),
       async execute(
         params: {
           task_id: string;
@@ -1005,17 +832,8 @@ export default defineToolPlugin({
     tool({
       name: "expedite_task",
       label: "Dispatch a task immediately",
-      description:
-        "Dispatch a queued or scheduled ebb-ai task RIGHT NOW, bypassing the scheduler's chosen " +
-        "clean-grid window. Use when the user says 'run it now', 'don't wait', 'I need that " +
-        "immediately'. This forgoes the carbon saving — the receipt records " +
-        "intensitySource='expedited'. Only provider-call tasks still queued/scheduled can be " +
-        "expedited; running, submitted (awaiting Batch API results), or terminal " +
-        "(completed/failed/cancelled) tasks are rejected by the scheduler with an explanatory " +
-        "error.",
-      parameters: Type.Object({
-        task_id: Type.String({ description: "The id of the task to dispatch now." }),
-      }),
+      description: toolDescription("expedite_task"),
+      parameters: openclawToolParameters("expedite_task"),
       async execute(
         params: { task_id: string },
         config: PluginConfig,
@@ -1066,15 +884,8 @@ export default defineToolPlugin({
     tool({
       name: "retry_task",
       label: "Retry a failed task",
-      description:
-        "Re-dispatch an ebb-ai task that previously FAILED. Only valid when the task's current " +
-        "status is 'failed' — queued/scheduled/running/submitted/completed tasks are rejected by " +
-        "the scheduler with an explanatory error. The new run overwrites the old receipt. Use " +
-        "when the user says 'try that again', 'retry that task', 'that one errored — run it once " +
-        "more'.",
-      parameters: Type.Object({
-        task_id: Type.String({ description: "The id of the failed task to retry." }),
-      }),
+      description: toolDescription("retry_task"),
+      parameters: openclawToolParameters("retry_task"),
       async execute(
         params: { task_id: string },
         config: PluginConfig,
