@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@ebb-ai/core": "workspace:*",
     "lucide-react": "^1.16.0",
     "next": "^15.5.18",
     "react": "^19.2.6",
