@@ -153,6 +153,9 @@ function renderHuman(receipt: CarbonReceipt, res: ReturnType<typeof verifyReceip
   if (receipt.energySource !== undefined) {
     lines.push(`energy_source     ${receipt.energySource}`);
   }
+  if (receipt.energyResolution !== undefined) {
+    lines.push(`energy_resolution ${receipt.energyResolution}`);
+  }
   if (receipt.model) lines.push(`model             ${receipt.model}`);
   if (receipt.provider) lines.push(`provider          ${receipt.provider}`);
   if (res.signerPublicKey) {
