@@ -179,6 +179,7 @@ job — the standard OpenAI batch flow.
 | `Scheduler` | class | Explicit scheduler; supports SQLite persistence. |
 | `mock_grid_feed()` | function | Deterministic synthetic feed for dev/tests. |
 | `electricity_maps_feed(api_key=None)` | function | Electricity Maps free-tier API client. |
+| `watttime_feed(username=None, password=None, *, fallback=None)` | function | WattTime v3 marginal (co2_moer) forecast feed for US ISOs (`WATTTIME_USERNAME`/`WATTTIME_PASSWORD`). Takes precedence over EIA where covered; falls through to `fallback` otherwise. |
 | `pick_best_window(entries, deadline)` | pure function | Picks the lowest-intensity entry inside `[now, deadline]`. |
 | `normalize_deadline(d)` | function | Parses + validates a user-supplied deadline. |
 | `CarbonBudgetExceededError` | exception | Raised when no candidate window meets the user budget. |
@@ -362,8 +363,9 @@ The test suite covers:
 - **v0.2 (this release)** — scheduler, grid feeds, SQLite persistence,
   Anthropic + OpenAI adapters with Batch API.
 - **v0.3** — per-model energy coefficients; WattTime marginal-emissions
-  feed; multi-writer DB with WAL mode; richer receipt fields (model,
-  provider, token counts) propagated by the scheduler itself.
+  feed (shipped: `watttime_feed`, disclosed via `signal_type="marginal"`);
+  multi-writer DB with WAL mode; richer receipt fields (model, provider,
+  token counts) propagated by the scheduler itself.
 - **v0.4** — Gemini adapter; local-Ollama route; MCP spec PRs for
   `priority` / `deadline` / `carbon_budget` fields.
 

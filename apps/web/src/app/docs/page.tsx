@@ -500,7 +500,11 @@ const TOOLS: Tool[] = [
 const ENVS: Array<{ name: string; desc: string }> = [
   {
     name: "EBB_EIA_API_KEY",
-    desc: "U.S. Energy Information Administration. Unlocks live data for the six US ISOs (CISO, ERCO, ISNE, MIDA-PJM, NY-NYIS, MIDW-MISO). Free at eia.gov/opendata/register.php.",
+    desc: "U.S. Energy Information Administration. Unlocks live AVERAGE-emissions data for the six US ISOs (CISO, ERCO, ISNE, MIDA-PJM, NY-NYIS, MIDW-MISO). Free at eia.gov/opendata/register.php.",
+  },
+  {
+    name: "WATTTIME_USERNAME · WATTTIME_PASSWORD",
+    desc: "WattTime v3 account. Unlocks live MARGINAL-emissions (co2_moer) forecasts for the US ISOs — the honest signal for time-shifting. Takes precedence over EIA where covered and falls through to EIA on any error; the marginal signal is disclosed as signalType:\"marginal\" on forecasts and receipts. Free account at watttime.org.",
   },
   {
     name: "EBB_ENTSOE_SECURITY_TOKEN",

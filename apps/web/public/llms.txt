@@ -61,7 +61,8 @@ Full reference with args at https://www.ebb-ai.com/docs#commands.
 
 ## Optional API keys (live data; mock fallback otherwise)
 
-- `EBB_EIA_API_KEY` — U.S. ISOs via U.S. EIA (free)
+- `EBB_EIA_API_KEY` — U.S. ISOs via U.S. EIA, average emissions (free)
+- `WATTTIME_USERNAME` + `WATTTIME_PASSWORD` — U.S. ISOs via WattTime v3, marginal emissions (co2_moer); takes precedence over EIA where covered (free account)
 - `EBB_ENTSOE_SECURITY_TOKEN` — European zones via ENTSO-E (free)
 - `EBB_ELECTRICITY_MAPS_API_KEY` — universal fallback (free tier)
 

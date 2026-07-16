@@ -16,9 +16,10 @@
  *     also reports the chosen entry's offset for chart highlighting.
  *   - `intensityToGrams`: a rounded single-number projection for the UI.
  *
- * `buildDefaultGridFeed` reads the same feed env vars the old copy did
- * (EBB_EIA_API_KEY, EBB_ENTSOE_SECURITY_TOKEN, EBB_ELECTRICITY_MAPS_API_KEY)
- * and falls back to the deterministic mock so the dashboard never goes dark.
+ * `buildDefaultGridFeed` reads the feed env vars (EBB_EIA_API_KEY,
+ * EBB_ENTSOE_SECURITY_TOKEN, EBB_ELECTRICITY_MAPS_API_KEY, and
+ * WATTTIME_USERNAME/WATTTIME_PASSWORD for the US ISOs' marginal feed) and
+ * falls back to the deterministic mock so the dashboard never goes dark.
  */
 
 import { unstable_cache } from "next/cache";
@@ -30,9 +31,10 @@ import type { GridForecast, GridForecastEntry } from "./types";
 
 /**
  * The zone-routing feed: GB → UK Carbon Intensity (free); the major US ISOs →
- * EIA; the EU bidding zones → ENTSO-E; everything else → Electricity Maps;
- * any missing key or failure → deterministic mock. Each leaf reports its own
- * `source`, so the UI can still distinguish "live" from "mock".
+ * WattTime marginal forecast when its credentials are set, else EIA; the EU
+ * bidding zones → ENTSO-E; everything else → Electricity Maps; any missing
+ * key or failure → deterministic mock. Each leaf reports its own `source`,
+ * so the UI can still distinguish "live" from "mock".
  */
 const feed = buildDefaultGridFeed();
 
