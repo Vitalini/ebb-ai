@@ -7,7 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-(Nothing pending — see version sections below.)
+### Added
+
+- **Gemini and Ollama provider adapters** (TS + PY, roadmap item 3 —
+  prerequisite for cross-provider routing, which is NOT yet built).
+  `GeminiAdapter`: Generative Language API `generateContent`, key via
+  `GEMINI_API_KEY` (falls back to `GOOGLE_API_KEY`), real
+  `usageMetadata` token counts; **sync-only** — Gemini's batch modes
+  (GCS-backed Vertex batch / operation-keyed Developer-API batch) do not
+  map onto the shared submit→poll batch contract, so batch capability is
+  honestly omitted rather than faked. `OllamaAdapter`: local
+  `/api/chat` via `OLLAMA_HOST` (default `localhost:11434`), keyless,
+  `prompt_eval_count`/`eval_count` tokens, no batch (local). The
+  `provider` enum grows to `anthropic|openai|gemini|ollama` everywhere
+  (tool-surface → MCP zod + OpenClaw typebox derive automatically;
+  additive only); `dispatchBatch` is now optional on the adapter
+  interface; MCP/CLI `buildAdapters` and OpenClaw provider inference
+  (`gemini-*` prefix; `OLLAMA_MODELS` list) wire the new providers in.
+- **Python grid-feed parity** (roadmap item 5). `core-py` gains 1:1
+  ports of the UK Carbon Intensity (96h pagination, top-of-hour
+  alignment), EIA (phase-correct hour-of-day persistence,
+  `kind=persistence`) and ENTSO-E (multi-period XML parser with
+  position/consumption handling) feeds plus `build_default_grid_feed`
+  with the same env vars and mock fallback chain as TS. Feed fixtures
+  are shared with the TS suite — both languages parse identical payloads
+  into identical forecasts. No new dependencies (existing httpx).
+  With this and the already-shipped `select_window` tie-break, the
+  Python core has **full behavioral parity** with TypeScript.
 
 ## [0.13.0] — 2026-07-16
 
