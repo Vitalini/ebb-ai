@@ -49,6 +49,22 @@ jobs:
       - if: matrix.node == '22'
         run: pnpm --filter "@vitalini/ebb" test
 
+  data-ssot:
+    name: data SSOT drift check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+      # The generator is dependency-free (Node built-ins only), so no
+      # install step is needed. Regenerate the TS + PY data modules from the
+      # JSON SSOT and fail if the committed copies drift.
+      - name: regenerate data modules from JSON SSOT
+        run: node scripts/gen-data.mjs
+      - name: fail if generated tables are stale
+        run: git diff --exit-code -- packages/core-ts/src/data/tables.generated.ts packages/core-py/src/ebb_ai/_data.py
+
   python:
     name: python (3.11 + 3.12)
     runs-on: ubuntu-latest

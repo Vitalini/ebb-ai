@@ -106,6 +106,16 @@ export interface CarbonReceipt {
    */
   energySource?: "measured" | "estimated" | "fallback";
   /**
+   * How the per-model energy coefficients were resolved (v0.13+),
+   * orthogonal to `energySource`'s confidence tier: "exact" (id matched a
+   * table key verbatim), "normalized" (matched after stripping dated /
+   * provider / word-order variance), "family-fallback" (unknown id, but a
+   * known family's representative coefficients were used), or "default"
+   * (fully unrecognized — flat legacy constant). Lets a receipt disclose a
+   * family-fallback estimate instead of silently passing it off as exact.
+   */
+  energyResolution?: "exact" | "normalized" | "family-fallback" | "default";
+  /**
    * Ed25519 signature over the canonical JSON encoding of every other
    * field on this receipt. Base64-encoded raw 64-byte signature. v0.11+.
    * Pre-v0.11 receipts (and unsigned-by-config dispatches) leave this

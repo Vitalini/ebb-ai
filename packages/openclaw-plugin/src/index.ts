@@ -142,6 +142,8 @@ function receiptProvenance(
       out.grid_source_note = "SYNTHETIC (mock) grid data, not a measurement";
   }
   if (receipt.energySource !== undefined) out.energy_source = receipt.energySource;
+  if (receipt.energyResolution !== undefined)
+    out.energy_resolution = receipt.energyResolution;
   return out;
 }
 

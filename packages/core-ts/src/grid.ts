@@ -16,14 +16,21 @@
  * WattTime marginal-emissions support is tracked on the roadmap.
  */
 
+import {
+  BAND_THRESHOLDS,
+  DEFAULT_BAND,
+  DEFAULT_REGION_FLOOR,
+  REGION_FLOORS,
+  REGION_UTC_OFFSETS,
+  SYNTHETIC_AMPLITUDE,
+} from "./data/tables.generated.js";
 import type { GridFeed, GridForecast, GridForecastEntry } from "./types.js";
 
 function classify(g: number): GridForecastEntry["band"] {
-  if (g < 100) return "very_clean";
-  if (g < 250) return "clean";
-  if (g < 450) return "average";
-  if (g < 700) return "dirty";
-  return "very_dirty";
+  for (const t of BAND_THRESHOLDS) {
+    if (g < t.maxExclusive) return t.band;
+  }
+  return DEFAULT_BAND;
 }
 
 /**
@@ -35,41 +42,15 @@ function classify(g: number): GridForecastEntry["band"] {
  * 05:00 local and peaks at 17:00 local.
  */
 function syntheticIntensityForHour(date: Date, region: string): number {
-  // Region-specific midpoint so different regions look distinct.
-  const regionFloor: Record<string, number> = {
-    "US-CAL-CISO": 280, // California — lots of solar daytime, gas overnight
-    "US-TEX-ERCO": 340, // Texas — wind off-peak, gas peak
-    "US-NE-ISNE": 320, // New England
-    "US-NY-NYIS": 360,
-    "US-MIDA-PJM": 420,
-    "US-MIDW-MISO": 460,
-    "FR": 60, // mostly nuclear
-    "DE": 380,
-    "GB": 220,
-  };
-  // Per-region phase offset in UTC hours: each region's local-time
-  // trough (≈ 05:00 local) translates to a different UTC hour. Without
-  // this offset, every region shares the same 05:00 UTC trough and
-  // multi-region simulations pile every "cleanest hour" choice into
+  // Region-specific midpoint + per-region UTC offset come from the JSON
+  // SSOT (packages/core-ts/src/data/regions.json). The offset shifts each
+  // region's local-time trough (≈ 05:00 local) to a distinct UTC hour so
+  // multi-region simulations don't pile every "cleanest hour" choice into
   // the same bucket (the even-distribution.test.ts pathology shown
-  // pre-v0.8.1: 66.9 % of dispatch in a single hour). The offset is
-  // approximate — real local clock varies with DST, but a single
-  // canonical UTC offset is sufficient for the synthetic curve to
-  // exhibit per-region trough variation.
-  const regionUtcOffsetHours: Record<string, number> = {
-    "US-CAL-CISO": -8,
-    "US-TEX-ERCO": -6,
-    "US-MIDW-MISO": -6,
-    "US-NE-ISNE": -5,
-    "US-NY-NYIS": -5,
-    "US-MIDA-PJM": -5,
-    "GB": 0,
-    "FR": 1,
-    "DE": 1,
-  };
-  const floor = regionFloor[region] ?? 380;
-  const offsetH = regionUtcOffsetHours[region] ?? 0;
-  const amplitude = 220;
+  // pre-v0.8.1: 66.9 % of dispatch in a single hour).
+  const floor = REGION_FLOORS[region] ?? DEFAULT_REGION_FLOOR;
+  const offsetH = REGION_UTC_OFFSETS[region] ?? 0;
+  const amplitude = SYNTHETIC_AMPLITUDE;
   // Local-clock trough at 05:00, peak at 17:00. Phase 0 ⇒ peak.
   const utcHour = date.getUTCHours();
   const localHour = ((utcHour + offsetH) % 24 + 24) % 24;

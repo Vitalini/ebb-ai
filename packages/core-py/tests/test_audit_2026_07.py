@@ -188,10 +188,13 @@ async def test_provider_receipt_records_provenance(tmp_path: Path) -> None:
         assert receipt.intensity_g_co2_per_kwh > 0
         assert receipt.grid_source == "mock"
         assert receipt.energy_source == "estimated"
+        # claude-sonnet-4-5 is an exact table hit (§1.8 resolution tier).
+        assert receipt.energy_resolution == "exact"
         # The camelCase (cross-language) rendering carries the new keys.
         camel = receipt.to_camel_dict()
         assert camel["gridSource"] == "mock"
         assert camel["energySource"] == "estimated"
+        assert camel["energyResolution"] == "exact"
         assert camel["intensityGCo2PerKwh"] == receipt.intensity_g_co2_per_kwh
 
 
@@ -208,6 +211,25 @@ async def test_unknown_model_receipt_gets_fallback_energy_tier() -> None:
         rec = s.get_task("prov:2")
         assert rec is not None and rec.receipt is not None
         assert rec.receipt.energy_source == "fallback"
+        assert rec.receipt.energy_resolution == "default"
+
+
+async def test_family_fallback_receipt_is_honest() -> None:
+    # An unknown Sonnet-family id resolves to the sonnet representative's
+    # (estimated) coefficients and the receipt discloses the family fallback.
+    async with Scheduler(feed=mock_grid_feed()) as s:
+        await s.enqueue_provider_call(
+            ProviderCallSpec(
+                provider="anthropic", model="claude-sonnet-9", prompt="hi"
+            ),
+            DeferOptions(deadline=_in_hours(1), task_id="prov:fam"),
+        )
+        await _force_due(s, "prov:fam")
+        await s.tick({"anthropic": FakeAdapter()})
+        rec = s.get_task("prov:fam")
+        assert rec is not None and rec.receipt is not None
+        assert rec.receipt.energy_source == "estimated"
+        assert rec.receipt.energy_resolution == "family-fallback"
 
 
 async def test_closure_receipt_records_provenance() -> None:
@@ -222,6 +244,7 @@ async def test_closure_receipt_records_provenance() -> None:
         assert rec.receipt is not None
         assert rec.receipt.grid_source == "mock"
         assert rec.receipt.energy_source == "fallback"
+        assert rec.receipt.energy_resolution == "default"
         assert rec.receipt.intensity_g_co2_per_kwh is not None
 
 

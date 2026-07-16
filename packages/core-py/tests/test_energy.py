@@ -13,6 +13,7 @@ from ebb_ai.energy import (
     grams_for_intensity,
     lookup_model_energy,
     normalize_model_name,
+    resolve_model_energy,
 )
 
 
@@ -33,6 +34,36 @@ class TestNormalizeModelName:
     def test_canonical_untouched(self) -> None:
         assert normalize_model_name("claude-opus-4-7") == "claude-opus-4-7"
         assert normalize_model_name("llama-3-1-8b") == "llama-3-1-8b"
+
+    def test_strips_provider_prefixes(self) -> None:
+        assert normalize_model_name("anthropic/claude-opus-4-7") == "claude-opus-4-7"
+        assert normalize_model_name("meta-llama/Llama-3.1-8B") == "llama-3-1-8b"
+        assert (
+            normalize_model_name("us.anthropic.claude-opus-4-1-v1:0")
+            == "claude-opus-4-1"
+        )
+
+    def test_canonicalizes_claude_word_order(self) -> None:
+        assert normalize_model_name("claude-3-5-sonnet") == "claude-sonnet-3-5"
+        assert (
+            normalize_model_name("claude-3-5-sonnet-20241022") == "claude-sonnet-3-5"
+        )
+
+
+class TestResolveModelEnergy:
+    def test_tiers(self) -> None:
+        assert resolve_model_energy("claude-opus-4-7").tier == "exact"
+        assert resolve_model_energy("claude-sonnet-4-5-20251022").tier == "normalized"
+        assert resolve_model_energy("claude-sonnet-9").tier == "family-fallback"
+        assert resolve_model_energy("totally-unknown").tier == "default"
+        assert resolve_model_energy(None).tier == "default"
+
+    def test_family_fallback_uses_representative_coeffs(self) -> None:
+        rep = MODEL_ENERGY_COEFFICIENTS["claude-sonnet-4"]
+        got = resolve_model_energy("claude-sonnet-9").coeffs
+        assert got.wh_per_input_token == rep.wh_per_input_token
+        assert got.wh_per_output_token == rep.wh_per_output_token
+        assert got.source == "estimated"
 
 
 class TestLookupModelEnergy:
@@ -61,6 +92,13 @@ class TestEstimateEnergyKwhBackwardsCompat:
 
     def test_unknown_model_no_tokens_is_legacy_flat(self) -> None:
         assert estimate_energy_kwh(model="ghost-model") == LEGACY_KWH_PER_TASK
+
+    def test_family_fallback_no_tokens_uses_family_estimate(self) -> None:
+        # A Sonnet-family unknown is no longer the flat legacy constant: it
+        # uses the sonnet representative's typical-token estimate (§1.8).
+        got = estimate_energy_kwh(model="claude-sonnet-9")
+        assert got == pytest.approx(0.00345, abs=1e-6)
+        assert got != LEGACY_KWH_PER_TASK
 
 
 class TestEstimateEnergyKwhPerModel:

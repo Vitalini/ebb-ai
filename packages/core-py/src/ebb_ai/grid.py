@@ -32,23 +32,23 @@ from urllib.parse import quote
 
 import httpx
 
+from ._data import (
+    BAND_THRESHOLDS,
+    DEFAULT_BAND,
+    DEFAULT_REGION_FLOOR,
+    REGION_FLOORS,
+    REGION_UTC_OFFSETS,
+    SYNTHETIC_AMPLITUDE,
+)
 from .types import Band, GridForecast, GridForecastEntry, GridSource
 
 _log = logging.getLogger(__name__)
 
-_REGION_FLOOR: Final[dict[str, int]] = {
-    "US-CAL-CISO": 280,  # California — lots of solar daytime, gas overnight
-    "US-TEX-ERCO": 340,  # Texas — wind off-peak, gas peak
-    "US-NE-ISNE": 320,  # New England
-    "US-NY-NYIS": 360,
-    "US-MIDA-PJM": 420,
-    "US-MIDW-MISO": 460,
-    "FR": 60,  # mostly nuclear
-    "DE": 380,
-    "GB": 220,
-}
-_DEFAULT_FLOOR: Final[int] = 380
-_AMPLITUDE: Final[int] = 220
+# Synthetic-curve params come from the JSON SSOT (regions.json / bands.json)
+# via the generated ``_data`` module, shared byte-for-byte with the TS port.
+_REGION_FLOOR: Final[dict[str, int]] = REGION_FLOORS
+_DEFAULT_FLOOR: Final[int] = DEFAULT_REGION_FLOOR
+_AMPLITUDE: Final[int] = SYNTHETIC_AMPLITUDE
 
 _ELECTRICITY_MAPS_ENDPOINT: Final[str] = (
     "https://api.electricitymap.org/v3/carbon-intensity/forecast"
@@ -59,18 +59,13 @@ _FETCH_TIMEOUT_S: Final[float] = 5.0
 def _classify(g: float) -> Band:
     """Bucket a gCO2/kWh value into a coarse band.
 
-    Thresholds mirror the TS implementation exactly so JSON output round
-    -trips.
+    Thresholds come from the JSON SSOT (bands.json) shared with the TS
+    port, so JSON output round-trips.
     """
-    if g < 100:
-        return "very_clean"
-    if g < 250:
-        return "clean"
-    if g < 450:
-        return "average"
-    if g < 700:
-        return "dirty"
-    return "very_dirty"
+    for max_exclusive, band in BAND_THRESHOLDS:
+        if g < max_exclusive:
+            return band  # type: ignore[return-value]
+    return DEFAULT_BAND  # type: ignore[return-value]
 
 
 def _synthetic_intensity_for_hour(dt: datetime, region: str) -> int:
@@ -79,16 +74,17 @@ def _synthetic_intensity_for_hour(dt: datetime, region: str) -> int:
     Real grid intensity in the US typically dips overnight (lots of
     base-load nuclear and hydro, plus wind) and peaks late afternoon
     (residential AC, gas peaker plants). We mimic that shape with a
-    sinusoid that bottoms at 03:00 UTC and peaks at 17:00 UTC.
-
-    UTC is intentional: the curve is deterministic across CI and
-    developer machines, and the ISO timestamps we emit are also UTC.
+    sinusoid whose trough sits at ~05:00 *local* time, using each
+    region's UTC offset from the SSOT so the trough lands on a distinct
+    UTC hour per region (matches the TS port exactly).
     """
     floor = _REGION_FLOOR.get(region, _DEFAULT_FLOOR)
-    hour = dt.astimezone(UTC).hour
-    phase = (hour - 17) * (math.pi / 12)
+    offset_h = REGION_UTC_OFFSETS.get(region, 0)
+    utc_hour = dt.astimezone(UTC).hour
+    local_hour = (utc_hour + offset_h) % 24
+    phase = (local_hour - 17) * (math.pi / 12)
     value = floor + _AMPLITUDE * math.cos(phase)
-    return round(value)
+    return max(0, round(value))
 
 
 def _iso_utc(dt: datetime) -> str:

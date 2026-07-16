@@ -1,0 +1,27 @@
+{
+  "$comment": "SSOT for the synthetic grid-curve parameters shared by the TS and PY mock feeds. Hand-edited; regenerate data modules with `pnpm gen:data`. Floors are the per-region diurnal midpoint (gCO2/kWh); utcOffsets shift each region's local-time trough (~05:00 local) to its UTC hour so multi-region simulations don't pile every cleanest-hour choice into one bucket.",
+  "defaultFloor": 380,
+  "amplitude": 220,
+  "regionFloors": {
+    "US-CAL-CISO": 280,
+    "US-TEX-ERCO": 340,
+    "US-NE-ISNE": 320,
+    "US-NY-NYIS": 360,
+    "US-MIDA-PJM": 420,
+    "US-MIDW-MISO": 460,
+    "FR": 60,
+    "DE": 380,
+    "GB": 220
+  },
+  "regionUtcOffsets": {
+    "US-CAL-CISO": -8,
+    "US-TEX-ERCO": -6,
+    "US-MIDW-MISO": -6,
+    "US-NE-ISNE": -5,
+    "US-NY-NYIS": -5,
+    "US-MIDA-PJM": -5,
+    "GB": 0,
+    "FR": 1,
+    "DE": 1
+  }
+}

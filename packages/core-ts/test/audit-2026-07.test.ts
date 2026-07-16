@@ -156,8 +156,10 @@ describe("receipt provenance (§0.2, §1.6, §1.8)", () => {
     const receipt = s.getTask(rec.taskId)?.receipt;
     expect(receipt?.intensityGCo2PerKwh).toBe(120);
     expect(receipt?.gridSource).toBe("mock");
-    // claude-sonnet-4-5 has closed-model (estimated) coefficients.
+    // claude-sonnet-4-5 has closed-model (estimated) coefficients, resolved
+    // by an exact table hit (§1.8 resolution provenance).
     expect(receipt?.energySource).toBe("estimated");
+    expect(receipt?.energyResolution).toBe("exact");
     s.shutdown();
   });
 
@@ -170,6 +172,24 @@ describe("receipt provenance (§0.2, §1.6, §1.8)", () => {
     );
     await s.expediteTask(rec.taskId, { anthropic: adapter });
     expect(s.getTask(rec.taskId)?.receipt?.energySource).toBe("fallback");
+    expect(s.getTask(rec.taskId)?.receipt?.energyResolution).toBe("default");
+    s.shutdown();
+  });
+
+  it("marks family-fallback receipts honestly (§1.8): estimated + family-fallback", async () => {
+    // An unknown Sonnet-family id resolves to the sonnet representative's
+    // coefficients — an estimate — and the receipt discloses it was a
+    // family fallback rather than an exact hit.
+    const s = new Scheduler({ feed: staticFeed([[0.2, 120]]) });
+    const adapter = fakeAdapter({ echoModel: "claude-sonnet-9" });
+    const rec = await s.enqueueProviderCall(
+      { ...providerSpec(), model: "claude-sonnet-9" },
+      { deadline: hoursFromNow(2), region: "US-CAL-CISO" },
+    );
+    await s.expediteTask(rec.taskId, { anthropic: adapter });
+    const receipt = s.getTask(rec.taskId)?.receipt;
+    expect(receipt?.energySource).toBe("estimated");
+    expect(receipt?.energyResolution).toBe("family-fallback");
     s.shutdown();
   });
 
@@ -181,6 +201,7 @@ describe("receipt provenance (§0.2, §1.6, §1.8)", () => {
     expect(record.receipt?.intensityGCo2PerKwh).toBe(90);
     expect(record.receipt?.gridSource).toBe("mock");
     expect(record.receipt?.energySource).toBe("fallback");
+    expect(record.receipt?.energyResolution).toBe("default");
     s.shutdown();
   });
 

@@ -99,15 +99,20 @@ export {
   DEFAULT_PUE,
   LEGACY_KWH_PER_TASK,
   MODEL_ENERGY_COEFFICIENTS,
+  MODEL_FAMILIES,
   ENERGY_SOURCES,
   normalizeModelName,
   lookupModelEnergy,
+  resolveModelEnergy,
   estimateEnergyKwh,
   gramsForIntensity,
 } from "./energy.js";
 export type {
   EnergySourceTier,
+  EnergyResolutionTier,
   ModelEnergyCoefficients,
+  ModelFamily,
+  ResolvedModelEnergy,
   EstimateEnergyOpts,
 } from "./energy.js";
 export {

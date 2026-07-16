@@ -808,6 +808,8 @@ export function formatTask(task: TaskRecord<unknown> | undefined): string {
       );
     if (task.receipt.energySource !== undefined)
       lines.push(`  energy_source: ${task.receipt.energySource}`);
+    if (task.receipt.energyResolution !== undefined)
+      lines.push(`  energy_resolution: ${task.receipt.energyResolution}`);
     if (task.receipt.durationMs)
       lines.push(`  duration_ms: ${task.receipt.durationMs}`);
   }
