@@ -36,10 +36,14 @@ export function envFileTemplate(): string {
 #OPENAI_API_KEY=
 #
 # Per-region grid-data feed keys (only for the regions you schedule into):
-#EBB_ELECTRICITYMAPS_API_KEY=
+#EBB_ELECTRICITY_MAPS_API_KEY=
 #EBB_EIA_API_KEY=
-#EBB_WATTTIME_API_KEY=
-#EBB_ENTSOE_API_KEY=
+#EBB_ENTSOE_SECURITY_TOKEN=
+# WattTime marginal-emissions (US ISOs) — HTTP Basic login, takes
+# precedence over EIA for the zones it covers. Username + password, not
+# a single key:
+#WATTTIME_USERNAME=
+#WATTTIME_PASSWORD=
 `;
 }
 
