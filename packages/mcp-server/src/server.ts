@@ -36,13 +36,18 @@ import {
   AnthropicAdapter,
   buildDefaultGridFeed,
   OpenAIAdapter,
+  paramOptionalForHost,
+  paramsForHost,
   recommendWindow,
   resolveRegion,
   Scheduler,
+  toolsForHost,
+  type CanonicalToolDef,
   type GridForecast,
   type ProviderAdapter,
   type ProviderCallSpec,
   type TaskRecord,
+  type ToolParam,
 } from "@ebb-ai/core";
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
@@ -108,210 +113,92 @@ function buildAdapters(): { anthropic?: ProviderAdapter; openai?: ProviderAdapte
   return out;
 }
 
-// ─── Tool input schemas (zod = single source of truth) ─────────────────────
+// ─── Tool input schemas (derived from @ebb-ai/core's canonical surface) ─────
 //
-// The advertised MCP inputSchema for every tool is derived from these via
-// zod-to-json-schema, so a parameter added to a validator is automatically
-// discoverable by LLM clients. (Audit §1.9: the previous hand-written JSON
-// schema for schedule_task silently omitted 5 implemented parameters.)
+// The tool surface — names, descriptions, parameter sets, requiredness — is
+// the single source of truth shared with the OpenClaw plugin
+// (`@ebb-ai/core`'s tool-surface module, audit §2.2). Here we render each
+// tool's neutral parameter descriptors into the zod validators the MCP server
+// both parses incoming arguments with AND advertises (via zod-to-json-schema).
+//
+// The MCP renderer is the STRICT one: it applies every facet the descriptor
+// carries (date-time format, string min-length, integer bounds, positivity),
+// so `.parse()` accepts/rejects exactly what it always did. (Audit §1.9: the
+// previous hand-written JSON schema for schedule_task silently omitted 5
+// implemented parameters — deriving the schema forecloses that class of drift.)
 
-const getGridForecastInput = z.object({
-  region: z
-    .string()
-    .describe(
-      "Electricity Maps zone code, e.g. 'US-CAL-CISO', 'US-TEX-ERCO', 'FR', 'DE'.",
-    ),
-  hours: z
-    .number()
-    .int()
-    .min(1)
-    .max(72)
-    .optional()
-    .describe("Forecast horizon in hours (1-72). Defaults to 24."),
-});
+/** Render one neutral parameter descriptor into its MCP zod validator. */
+function buildZodField(param: ToolParam): z.ZodTypeAny {
+  let base: z.ZodTypeAny;
+  switch (param.kind) {
+    case "string": {
+      let s = z.string();
+      if (param.minLength !== undefined) s = s.min(param.minLength);
+      if (param.format === "date-time") s = s.datetime({ offset: true });
+      base = s;
+      break;
+    }
+    case "number": {
+      let n = z.number();
+      if (param.integer) n = n.int();
+      if (param.min !== undefined) n = n.min(param.min);
+      if (param.max !== undefined) n = n.max(param.max);
+      if (param.positive) n = n.positive();
+      base = n;
+      break;
+    }
+    case "boolean":
+      base = z.boolean();
+      break;
+    case "enum":
+      base = z.enum(param.values as [string, ...string[]]);
+      break;
+    case "array":
+      base =
+        param.itemKind === "enum"
+          ? z.array(z.enum(param.values as [string, ...string[]]))
+          : z.array(z.string());
+      break;
+  }
+  base = base.describe(param.description);
+  return paramOptionalForHost(param, "mcp") ? base.optional() : base;
+}
 
-const scheduleTaskInput = z.object({
-  prompt: z
-    .string()
-    .min(1)
-    .describe("The prompt or instruction to dispatch when the window arrives."),
-  deadline: z
-    .string()
-    .datetime({ offset: true })
-    .describe(
-      "ISO-8601 timestamp (e.g. '2026-05-13T08:00:00-04:00') by which the task must have completed. Must be in the future. Required.",
-    ),
-  model: z
-    .string()
-    .optional()
-    .describe(
-      "Model name to dispatch with (e.g. 'claude-sonnet-4-6'). Required when dispatch=true.",
-    ),
-  region: z
-    .string()
-    .optional()
-    .describe(
-      "Grid region override (Electricity Maps zone code such as 'US-CAL-CISO'). Defaults to the server's default region.",
-    ),
-  carbon_budget_g: z
-    .number()
-    .positive()
-    .optional()
-    .describe(
-      "Hard cap on estimated grams CO2-equivalent for this task. If set and no window inside the deadline meets the cap, the task fails rather than dispatching to a dirty window.",
-    ),
-  dry_run: z
-    .boolean()
-    .optional()
-    .describe(
-      "If true, return the planned dispatch (recommended window + carbon estimate) WITHOUT persisting anything. Useful for confirmation flows.",
-    ),
-  dispatch: z
-    .boolean()
-    .optional()
-    .describe(
-      "If true (default in v0.7.1+), persist a provider_call task body that `ebb tick` (CLI) or scheduler.tick (library) can dispatch via the configured provider. Set to false only to enqueue a placeholder prompt without a dispatchable body (legacy in-memory mode).",
-    ),
-  provider: z
-    .enum(["anthropic", "openai"])
-    .optional()
-    .describe("Provider to dispatch through when dispatch=true. Defaults to 'anthropic'."),
-  output_path: z
-    .string()
-    .optional()
-    .describe(
-      "Optional absolute file path. When the task completes, ebb-ai writes { taskId, result, receipt } as JSON to this path.",
-    ),
-  redact_in_receipt: z
-    .array(z.string())
-    .optional()
-    .describe(
-      "Optional regex patterns to strip from the prompt before storing on the receipt. Default behavior (omit field) redacts API-key-looking strings.",
-    ),
-});
-
-const taskIdOnlyInput = z.object({
-  task_id: z.string().min(1).describe("Task identifier returned by schedule_task."),
-});
-
-const updateDeadlineInput = z.object({
-  task_id: z.string().min(1).describe("Task identifier returned by schedule_task."),
-  deadline: z
-    .string()
-    .datetime({ offset: true })
-    .describe("New ISO-8601 deadline. Must be in the future."),
-});
-
-const checkQueueStatusInput = z.object({
-  task_id: z
-    .string()
-    .optional()
-    .describe(
-      "If present, return only this task. If omitted, return a queue summary.",
-    ),
-});
-
-const recommendWindowInput = z.object({
-  deadline: z
-    .string()
-    .datetime({ offset: true })
-    .describe(
-      "ISO-8601 timestamp (e.g. '2026-05-13T08:00:00-04:00') by which the task must have completed. Must be in the future. Required.",
-    ),
-  region: z
-    .string()
-    .min(1)
-    .describe(
-      "Electricity Maps zone code (e.g. 'US-CAL-CISO', 'FR'). Required — recommend_window is intentionally explicit about which grid it reasons over.",
-    ),
-  carbon_budget_g: z
-    .number()
-    .positive()
-    .optional()
-    .describe(
-      "Optional grams CO2-equivalent cap. Windows above the budget are dropped before the cheapest is chosen.",
-    ),
-  model: z
-    .string()
-    .optional()
-    .describe(
-      "Optional vendor model name (e.g. 'claude-sonnet-4-5'). Affects the reasoning string only.",
-    ),
-});
-
-const cancelAllInput = z.object({
-  status: z
-    .enum(["queued", "scheduled"])
-    .optional()
-    .describe(
-      "Optional. If set, cancel only tasks in this status. Valid: 'queued', 'scheduled'. Defaults to both.",
-    ),
-});
+/** Render a canonical tool's MCP parameters into a zod object validator. */
+function buildMcpSchema(def: CanonicalToolDef): z.ZodObject<z.ZodRawShape> {
+  const shape: z.ZodRawShape = {};
+  for (const param of paramsForHost(def, "mcp")) {
+    shape[param.name] = buildZodField(param);
+  }
+  return z.object(shape);
+}
 
 /** One advertised MCP tool: name + description + the zod validator that is
- *  also used to parse incoming arguments. */
+ *  also used to parse incoming arguments. Derived from the shared surface. */
 export interface ToolDefinition {
   name: string;
   description: string;
   schema: z.ZodObject<z.ZodRawShape>;
 }
 
-export const TOOL_DEFINITIONS: ReadonlyArray<ToolDefinition> = [
-  {
-    name: "get_grid_forecast",
-    description:
-      "Return the projected electricity-grid carbon intensity for a region, hour by hour. Use this when deciding whether to run an expensive AI task now or defer it. Carbon intensity is reported in grams CO2-equivalent per kWh, with a categorical band (very_clean / clean / average / dirty / very_dirty).",
-    schema: getGridForecastInput,
-  },
-  {
-    name: "recommend_window",
-    description:
-      "Return the optimal carbon-aware execution window for a task WITHOUT scheduling it. Use this for non-committal planning — when you want to see *when* the cleanest grid moment falls inside the deadline (and what the savings vs running now would be) before deciding whether to commit via schedule_task. Returns the chosen window, top 3 alternatives, batch_eligible flag, grid_source (which feed produced the forecast — 'mock' means synthetic data), and a one-line reasoning string.",
-    schema: recommendWindowInput,
-  },
-  {
-    name: "schedule_task",
-    description:
-      "Queue an AI task to run during off-peak hours inside the given deadline. Four parallel wins: (1) **lighter on the electricity grid** — US AI compute is projected to reach 6.7-12% of national grid load by 2028 (DOE 2024); deferring non-urgent tasks smooths that demand. (2) **50% cheaper** — auto-routes through Anthropic/OpenAI Batch APIs when the deadline allows. (3) **faster sync calls** — Anthropic explicitly expanded off-peak capacity (doubled usage limits outside peak hours), shorter queues = lower observed latency. (4) **40-70% lower carbon** — dispatch at the cleanest electricity-grid hour. **Invoke this tool whenever the user phrases a request with deferral language:** \"do this later\", \"by tomorrow\", \"tonight\", \"overnight\", \"by EOD\", \"sometime this week\", \"when you have a moment\", \"remind me to\", \"queue this up\", \"schedule this\", \"no rush\", \"not urgent\". Convert the user's wording to an ISO-8601 deadline and pass the task as the prompt. Returns a task_id that can later be checked with check_queue_status. Extras: pass `dry_run: true` to preview the planned window + carbon estimate without persisting anything (confirmation flows); `provider` to route dispatch through 'anthropic' or 'openai'; `output_path` to have the result + receipt written to a file on completion (file-watcher delivery instead of polling); `redact_in_receipt` to strip sensitive patterns from the prompt before it is stored on the receipt. Good fits: nightly digests, batch summaries, research sweeps, evaluator runs, multi-step report generation, anything the user is fine waiting on. Do NOT use for: live chat, interactive code edits, or any task the user is actively waiting to see complete.",
-    schema: scheduleTaskInput,
-  },
-  {
-    name: "check_queue_status",
-    description:
-      "Report on the ebb-ai task queue. With no arguments, returns a compact summary of all known tasks (including tasks persisted by previous sessions — the queue survives MCP host restarts). With task_id, returns full detail for one task including any carbon receipt (estimated vs actual grams, grid_source, energy_source).",
-    schema: checkQueueStatusInput,
-  },
-  {
-    name: "cancel_task",
-    description:
-      "Cancel a queued/scheduled task. Idempotent — if the task is already completed/failed/cancelled this returns the existing status without error. Throws only if task_id is unknown.",
-    schema: taskIdOnlyInput,
-  },
-  {
-    name: "expedite_task",
-    description:
-      "Dispatch a queued/scheduled provider-call task immediately, bypassing the scheduler's chosen carbon window. The resulting receipt records intensitySource='expedited'. Only valid for tasks that were created with dispatch=true.",
-    schema: taskIdOnlyInput,
-  },
-  {
-    name: "update_deadline",
-    description:
-      "Re-score and reschedule a queued/scheduled task against a new deadline. Throws if the task is already running or terminal, or if the new deadline is invalid/in the past.",
-    schema: updateDeadlineInput,
-  },
-  {
-    name: "retry_task",
-    description:
-      "Re-dispatch a failed provider-call task. Only valid when the task's current status is 'failed'. New receipt overwrites the old.",
-    schema: taskIdOnlyInput,
-  },
-  {
-    name: "cancel_all",
-    description:
-      "Bulk-cancel every task in the queue that is still cancellable (status `queued` or `scheduled`). Running/completed/failed/cancelled tasks are left alone. Optionally filter by status. Returns the number of tasks cancelled.",
-    schema: cancelAllInput,
-  },
-];
+export const TOOL_DEFINITIONS: ReadonlyArray<ToolDefinition> = toolsForHost(
+  "mcp",
+).map((def) => ({
+  name: def.name,
+  description: def.description,
+  schema: buildMcpSchema(def),
+}));
+
+/** The zod validator for a tool, by name. */
+const SCHEMA_BY_NAME: ReadonlyMap<string, z.ZodObject<z.ZodRawShape>> = new Map(
+  TOOL_DEFINITIONS.map((d) => [d.name, d.schema]),
+);
+
+function schemaOf(name: string): z.ZodObject<z.ZodRawShape> {
+  const schema = SCHEMA_BY_NAME.get(name);
+  if (!schema) throw new Error(`no MCP schema for tool: ${name}`);
+  return schema;
+}
 
 /**
  * Convert a zod object validator into the JSON schema advertised over MCP.
@@ -437,7 +324,10 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
 
     try {
       if (name === "get_grid_forecast") {
-        const parsed = getGridForecastInput.parse(args);
+        const parsed = schemaOf("get_grid_forecast").parse(args) as {
+          region: string;
+          hours?: number;
+        };
         const hours = parsed.hours ?? 24;
         const forecast = await feed.fetchForecast(parsed.region, hours);
         return {
@@ -451,7 +341,12 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
       }
 
       if (name === "recommend_window") {
-        const parsed = recommendWindowInput.parse(args);
+        const parsed = schemaOf("recommend_window").parse(args) as {
+          deadline: string;
+          region: string;
+          carbon_budget_g?: number;
+          model?: string;
+        };
         try {
           const result = await recommendWindow(
             {
@@ -479,7 +374,18 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
       }
 
       if (name === "schedule_task") {
-        const parsed = scheduleTaskInput.parse(args);
+        const parsed = schemaOf("schedule_task").parse(args) as {
+          prompt: string;
+          deadline: string;
+          model?: string;
+          region?: string;
+          carbon_budget_g?: number;
+          dry_run?: boolean;
+          dispatch?: boolean;
+          provider?: "anthropic" | "openai";
+          output_path?: string;
+          redact_in_receipt?: string[];
+        };
         try {
           // dry_run: return the planned dispatch without persisting.
           if (parsed.dry_run) {
@@ -615,7 +521,9 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
       }
 
       if (name === "check_queue_status") {
-        const parsed = checkQueueStatusInput.parse(args);
+        const parsed = schemaOf("check_queue_status").parse(args) as {
+          task_id?: string;
+        };
         if (parsed.task_id) {
           // getTask consults the persisted store too, so a task scheduled
           // by a previous MCP-host session is still addressable.
@@ -643,7 +551,7 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
       }
 
       if (name === "cancel_task") {
-        const parsed = taskIdOnlyInput.parse(args);
+        const parsed = schemaOf("cancel_task").parse(args) as { task_id: string };
         try {
           const rec = scheduler.cancelTask(parsed.task_id);
           return {
@@ -663,7 +571,7 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
       }
 
       if (name === "expedite_task") {
-        const parsed = taskIdOnlyInput.parse(args);
+        const parsed = schemaOf("expedite_task").parse(args) as { task_id: string };
         try {
           const adapters = buildAdapters();
           if (!adapters.anthropic && !adapters.openai) {
@@ -698,7 +606,10 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
       }
 
       if (name === "update_deadline") {
-        const parsed = updateDeadlineInput.parse(args);
+        const parsed = schemaOf("update_deadline").parse(args) as {
+          task_id: string;
+          deadline: string;
+        };
         try {
           const rec = await scheduler.updateDeadline(parsed.task_id, parsed.deadline);
           return {
@@ -720,7 +631,9 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
       }
 
       if (name === "cancel_all") {
-        const parsed = cancelAllInput.parse(args);
+        const parsed = schemaOf("cancel_all").parse(args) as {
+          status?: "queued" | "scheduled";
+        };
         // Persisted ledger first (audit §0.10: the in-memory map is empty
         // after an MCP-host restart while queue.db still holds scheduled
         // tasks); in-memory fallback when the scheduler has no store.
@@ -756,7 +669,7 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
       }
 
       if (name === "retry_task") {
-        const parsed = taskIdOnlyInput.parse(args);
+        const parsed = schemaOf("retry_task").parse(args) as { task_id: string };
         try {
           const adapters = buildAdapters();
           if (!adapters.anthropic && !adapters.openai) {

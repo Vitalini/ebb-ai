@@ -1,0 +1,498 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`tool surface — divergence canary > per-host neutral schema snapshot (review any change on BOTH hosts) 1`] = `
+{
+  "mcp": [
+    {
+      "description": "Return the projected electricity-grid carbon intensity for a region, hour by hour. Use this when deciding whether to run an expensive AI task now or defer it — intensity is reported in grams CO2-equivalent per kWh with a categorical band (very_clean / clean / average / dirty / very_dirty). Read-only; does not touch the task queue.",
+      "name": "get_grid_forecast",
+      "params": [
+        {
+          "description": "Electricity Maps grid zone code (e.g. 'US-CAL-CISO', 'US-TEX-ERCO', 'GB', 'FR', 'DE'). On hosts that allow omitting it, defaults to the configured region, else a host-timezone guess, else GB.",
+          "kind": "string",
+          "name": "region",
+          "required": true,
+        },
+        {
+          "description": "Forecast horizon in hours (1-72). Defaults to 24.",
+          "integer": true,
+          "kind": "number",
+          "max": 72,
+          "min": 1,
+          "name": "hours",
+          "required": false,
+        },
+      ],
+    },
+    {
+      "description": "Return the optimal carbon-aware execution window for a task WITHOUT scheduling it. Use this for non-committal planning — to see when the cleanest grid moment falls inside the deadline (and the savings vs running now) before deciding whether to commit via schedule_task. Returns the chosen window, top alternatives, a batch_eligible flag, the grid_source (which feed produced the forecast — 'mock' means synthetic data), and a one-line reasoning string. Read-only; does not touch the task queue.",
+      "name": "recommend_window",
+      "params": [
+        {
+          "description": "ISO-8601 timestamp (e.g. '2026-05-13T08:00:00-04:00') by which the task must have completed. Must be in the future. Required.",
+          "format": "date-time",
+          "kind": "string",
+          "name": "deadline",
+          "required": true,
+        },
+        {
+          "description": "Electricity Maps grid zone code (e.g. 'US-CAL-CISO', 'FR') the recommendation reasons over. On hosts that allow omitting it, defaults to the configured region, else a host-timezone guess, else GB.",
+          "kind": "string",
+          "minLength": 1,
+          "name": "region",
+          "required": true,
+        },
+        {
+          "description": "Optional hard cap on estimated grams CO2-equivalent for this task. Windows above the cap are dropped before the cleanest is chosen; if none inside the deadline meets the cap the task fails rather than dispatching to a dirty window.",
+          "kind": "number",
+          "name": "carbon_budget_g",
+          "positive": true,
+          "required": false,
+        },
+        {
+          "description": "Optional vendor model name (e.g. 'claude-sonnet-4-5'). Affects the reasoning string only.",
+          "kind": "string",
+          "name": "model",
+          "required": false,
+        },
+      ],
+    },
+    {
+      "description": "Queue an AI task to run during off-peak hours inside the given deadline. Four parallel wins: (1) lighter on the electricity grid — deferring non-urgent tasks smooths projected AI compute demand; (2) up to 50% cheaper — auto-routes through Anthropic/OpenAI Batch APIs when the deadline allows; (3) faster sync calls — off-peak queues are shorter; (4) 40-70% lower carbon — dispatch at the cleanest electricity-grid hour. Invoke this tool whenever the user phrases a request with deferral language: "do this later", "by tomorrow", "tonight", "overnight", "by EOD", "sometime this week", "when you have a moment", "remind me to", "queue this up", "schedule this", "no rush", "not urgent". Convert the user's wording to an ISO-8601 deadline and pass the task as the prompt. Returns a task_id you can later check with check_queue_status. Good fits: nightly digests, batch summaries, research sweeps, evaluator runs, multi-step report generation — anything the user is fine waiting on. Do NOT use for live chat, interactive code edits, or any task the user is actively waiting to see complete.",
+      "name": "schedule_task",
+      "params": [
+        {
+          "description": "The prompt or task description to dispatch when the chosen window arrives.",
+          "kind": "string",
+          "minLength": 1,
+          "name": "prompt",
+          "required": true,
+        },
+        {
+          "description": "ISO-8601 timestamp (e.g. '2026-05-13T08:00:00-04:00') by which the task must have completed. Must be in the future. Required.",
+          "format": "date-time",
+          "kind": "string",
+          "name": "deadline",
+          "required": true,
+        },
+        {
+          "description": "Grid-region override (Electricity Maps zone code such as 'US-CAL-CISO'). Defaults to the host's configured region, else a host-timezone guess, else GB.",
+          "kind": "string",
+          "name": "region",
+          "required": false,
+        },
+        {
+          "description": "Optional hard cap on estimated grams CO2-equivalent for this task. Windows above the cap are dropped before the cleanest is chosen; if none inside the deadline meets the cap the task fails rather than dispatching to a dirty window.",
+          "kind": "number",
+          "name": "carbon_budget_g",
+          "positive": true,
+          "required": false,
+        },
+        {
+          "description": "Model to dispatch with (e.g. 'claude-sonnet-4-6' for Anthropic, 'gpt-4o' for OpenAI). Defaults to the chosen provider's flagship model.",
+          "kind": "string",
+          "name": "model",
+          "required": false,
+        },
+        {
+          "description": "Which provider to dispatch this task through: 'anthropic' or 'openai'. Defaults to 'anthropic'.",
+          "kind": "enum",
+          "name": "provider",
+          "required": false,
+          "values": [
+            "anthropic",
+            "openai",
+          ],
+        },
+        {
+          "description": "If true, return the planned dispatch (recommended window + carbon estimate) WITHOUT persisting anything. Useful for confirmation flows.",
+          "kind": "boolean",
+          "name": "dry_run",
+          "required": false,
+        },
+        {
+          "description": "If true (default), persist a provider_call task body that \`ebb tick\` (CLI) or scheduler.tick (library) can dispatch. Set to false only to enqueue a placeholder prompt without a dispatchable body (legacy in-memory mode).",
+          "kind": "boolean",
+          "name": "dispatch",
+          "required": false,
+        },
+        {
+          "description": "Optional absolute file path. When the task completes, ebb-ai writes { taskId, result, receipt } as JSON to this path.",
+          "kind": "string",
+          "name": "output_path",
+          "required": false,
+        },
+        {
+          "description": "Optional regex patterns to strip from the prompt before storing it on the receipt. Omit to use the default redaction of API-key-looking strings.",
+          "itemKind": "string",
+          "kind": "array",
+          "name": "redact_in_receipt",
+          "required": false,
+        },
+      ],
+    },
+    {
+      "description": "Report on the ebb-ai task queue. With no arguments, returns a summary of all known tasks (including tasks persisted by previous sessions — the queue survives host restarts). With task_id, returns full detail for one task including any carbon receipt (estimated vs actual grams, grid_source, energy_source). Read-only.",
+      "name": "check_queue_status",
+      "params": [
+        {
+          "description": "If present, return only this task. If omitted, return a queue summary.",
+          "kind": "string",
+          "name": "task_id",
+          "required": false,
+        },
+      ],
+    },
+    {
+      "description": "Cancel a queued or scheduled task. Idempotent — if the task is already completed/failed/cancelled this returns the existing status without error. Throws only if task_id is unknown.",
+      "name": "cancel_task",
+      "params": [
+        {
+          "description": "The id of the task to cancel.",
+          "kind": "string",
+          "minLength": 1,
+          "name": "task_id",
+          "required": true,
+        },
+      ],
+    },
+    {
+      "description": "Dispatch a queued or scheduled provider-call task immediately, bypassing the scheduler's chosen carbon window. The resulting receipt records intensitySource='expedited'. Only provider-call tasks still queued/scheduled can be expedited; running, submitted (awaiting Batch API results), or terminal (completed/failed/cancelled) tasks are rejected with an explanatory error.",
+      "name": "expedite_task",
+      "params": [
+        {
+          "description": "The id of the task to dispatch now.",
+          "kind": "string",
+          "minLength": 1,
+          "name": "task_id",
+          "required": true,
+        },
+      ],
+    },
+    {
+      "description": "Re-score and reschedule a queued or scheduled task against a new deadline; the scheduler re-picks the cleanest window inside it. Throws if the task is already running or terminal, or if the new deadline is invalid or in the past.",
+      "name": "update_deadline",
+      "params": [
+        {
+          "description": "The id of the task to reschedule.",
+          "kind": "string",
+          "minLength": 1,
+          "name": "task_id",
+          "required": true,
+        },
+        {
+          "description": "New ISO-8601 deadline. Must be in the future.",
+          "format": "date-time",
+          "kind": "string",
+          "name": "deadline",
+          "required": true,
+        },
+      ],
+    },
+    {
+      "description": "Re-dispatch a failed provider-call task. Only valid when the task's current status is 'failed' — queued/scheduled/running/submitted/completed tasks are rejected with an explanatory error. The new run's receipt overwrites the old.",
+      "name": "retry_task",
+      "params": [
+        {
+          "description": "The id of the failed task to retry.",
+          "kind": "string",
+          "minLength": 1,
+          "name": "task_id",
+          "required": true,
+        },
+      ],
+    },
+    {
+      "description": "Bulk-cancel every task in the queue that is still cancellable (status queued or scheduled). Running/completed/failed/cancelled tasks are left untouched. Optionally filter by status. Returns the number of tasks cancelled.",
+      "name": "cancel_all",
+      "params": [
+        {
+          "description": "Optional. If set, cancel only tasks in this status. Valid: 'queued', 'scheduled'. Defaults to both.",
+          "kind": "enum",
+          "name": "status",
+          "required": false,
+          "values": [
+            "queued",
+            "scheduled",
+          ],
+        },
+      ],
+    },
+  ],
+  "openclaw": [
+    {
+      "description": "Return the projected electricity-grid carbon intensity for a region, hour by hour. Use this when deciding whether to run an expensive AI task now or defer it — intensity is reported in grams CO2-equivalent per kWh with a categorical band (very_clean / clean / average / dirty / very_dirty). Read-only; does not touch the task queue.",
+      "name": "get_grid_forecast",
+      "params": [
+        {
+          "description": "Electricity Maps grid zone code (e.g. 'US-CAL-CISO', 'US-TEX-ERCO', 'GB', 'FR', 'DE'). On hosts that allow omitting it, defaults to the configured region, else a host-timezone guess, else GB.",
+          "kind": "string",
+          "name": "region",
+          "required": false,
+        },
+        {
+          "description": "Forecast horizon in hours (1-72). Defaults to 24.",
+          "integer": true,
+          "kind": "number",
+          "max": 72,
+          "min": 1,
+          "name": "hours",
+          "required": false,
+        },
+      ],
+    },
+    {
+      "description": "Return the optimal carbon-aware execution window for a task WITHOUT scheduling it. Use this for non-committal planning — to see when the cleanest grid moment falls inside the deadline (and the savings vs running now) before deciding whether to commit via schedule_task. Returns the chosen window, top alternatives, a batch_eligible flag, the grid_source (which feed produced the forecast — 'mock' means synthetic data), and a one-line reasoning string. Read-only; does not touch the task queue.",
+      "name": "recommend_window",
+      "params": [
+        {
+          "description": "ISO-8601 timestamp (e.g. '2026-05-13T08:00:00-04:00') by which the task must have completed. Must be in the future. Required.",
+          "format": "date-time",
+          "kind": "string",
+          "name": "deadline",
+          "required": true,
+        },
+        {
+          "description": "Electricity Maps grid zone code (e.g. 'US-CAL-CISO', 'FR') the recommendation reasons over. On hosts that allow omitting it, defaults to the configured region, else a host-timezone guess, else GB.",
+          "kind": "string",
+          "minLength": 1,
+          "name": "region",
+          "required": false,
+        },
+        {
+          "description": "Optional hard cap on estimated grams CO2-equivalent for this task. Windows above the cap are dropped before the cleanest is chosen; if none inside the deadline meets the cap the task fails rather than dispatching to a dirty window.",
+          "kind": "number",
+          "name": "carbon_budget_g",
+          "positive": true,
+          "required": false,
+        },
+      ],
+    },
+    {
+      "description": "Queue an AI task to run during off-peak hours inside the given deadline. Four parallel wins: (1) lighter on the electricity grid — deferring non-urgent tasks smooths projected AI compute demand; (2) up to 50% cheaper — auto-routes through Anthropic/OpenAI Batch APIs when the deadline allows; (3) faster sync calls — off-peak queues are shorter; (4) 40-70% lower carbon — dispatch at the cleanest electricity-grid hour. Invoke this tool whenever the user phrases a request with deferral language: "do this later", "by tomorrow", "tonight", "overnight", "by EOD", "sometime this week", "when you have a moment", "remind me to", "queue this up", "schedule this", "no rush", "not urgent". Convert the user's wording to an ISO-8601 deadline and pass the task as the prompt. Returns a task_id you can later check with check_queue_status. Good fits: nightly digests, batch summaries, research sweeps, evaluator runs, multi-step report generation — anything the user is fine waiting on. Do NOT use for live chat, interactive code edits, or any task the user is actively waiting to see complete.",
+      "name": "schedule_task",
+      "params": [
+        {
+          "description": "The prompt or task description to dispatch when the chosen window arrives.",
+          "kind": "string",
+          "minLength": 1,
+          "name": "prompt",
+          "required": true,
+        },
+        {
+          "description": "ISO-8601 timestamp (e.g. '2026-05-13T08:00:00-04:00') by which the task must have completed. Must be in the future. Required.",
+          "format": "date-time",
+          "kind": "string",
+          "name": "deadline",
+          "required": true,
+        },
+        {
+          "description": "Grid-region override (Electricity Maps zone code such as 'US-CAL-CISO'). Defaults to the host's configured region, else a host-timezone guess, else GB.",
+          "kind": "string",
+          "name": "region",
+          "required": false,
+        },
+        {
+          "description": "Optional hard cap on estimated grams CO2-equivalent for this task. Windows above the cap are dropped before the cleanest is chosen; if none inside the deadline meets the cap the task fails rather than dispatching to a dirty window.",
+          "kind": "number",
+          "name": "carbon_budget_g",
+          "positive": true,
+          "required": false,
+        },
+        {
+          "description": "Model to dispatch with (e.g. 'claude-sonnet-4-6' for Anthropic, 'gpt-4o' for OpenAI). Defaults to the chosen provider's flagship model.",
+          "kind": "string",
+          "name": "model",
+          "required": false,
+        },
+        {
+          "description": "Which provider to dispatch this task through: 'anthropic' or 'openai'. Defaults to 'anthropic'.",
+          "kind": "enum",
+          "name": "provider",
+          "required": false,
+          "values": [
+            "anthropic",
+            "openai",
+          ],
+        },
+        {
+          "description": "How to deliver the result when the task completes — one or more of: chat (the user's active OpenClaw chat), telegram, webhook, file, queue. Default: chat.",
+          "itemKind": "enum",
+          "kind": "array",
+          "name": "deliver",
+          "required": false,
+          "values": [
+            "chat",
+            "telegram",
+            "webhook",
+            "file",
+            "queue",
+          ],
+        },
+        {
+          "description": "Target URL when deliver includes 'webhook'.",
+          "kind": "string",
+          "name": "webhook_url",
+          "required": false,
+        },
+        {
+          "description": "Output path when deliver includes 'file'.",
+          "kind": "string",
+          "name": "file_path",
+          "required": false,
+        },
+        {
+          "description": "Report format for 'file' delivery. Default: md.",
+          "kind": "enum",
+          "name": "file_format",
+          "required": false,
+          "values": [
+            "md",
+            "html",
+            "txt",
+            "json",
+          ],
+        },
+      ],
+    },
+    {
+      "description": "Report on the ebb-ai task queue. With no arguments, returns a summary of all known tasks (including tasks persisted by previous sessions — the queue survives host restarts). With task_id, returns full detail for one task including any carbon receipt (estimated vs actual grams, grid_source, energy_source). Read-only.",
+      "name": "check_queue_status",
+      "params": [
+        {
+          "description": "If present, return only this task. If omitted, return a queue summary.",
+          "kind": "string",
+          "name": "task_id",
+          "required": false,
+        },
+      ],
+    },
+    {
+      "description": "Cancel a queued or scheduled task. Idempotent — if the task is already completed/failed/cancelled this returns the existing status without error. Throws only if task_id is unknown.",
+      "name": "cancel_task",
+      "params": [
+        {
+          "description": "The id of the task to cancel.",
+          "kind": "string",
+          "minLength": 1,
+          "name": "task_id",
+          "required": true,
+        },
+      ],
+    },
+    {
+      "description": "Dispatch a queued or scheduled provider-call task immediately, bypassing the scheduler's chosen carbon window. The resulting receipt records intensitySource='expedited'. Only provider-call tasks still queued/scheduled can be expedited; running, submitted (awaiting Batch API results), or terminal (completed/failed/cancelled) tasks are rejected with an explanatory error.",
+      "name": "expedite_task",
+      "params": [
+        {
+          "description": "The id of the task to dispatch now.",
+          "kind": "string",
+          "minLength": 1,
+          "name": "task_id",
+          "required": true,
+        },
+      ],
+    },
+    {
+      "description": "Re-score and reschedule a queued or scheduled task against a new deadline; the scheduler re-picks the cleanest window inside it. Throws if the task is already running or terminal, or if the new deadline is invalid or in the past.",
+      "name": "update_deadline",
+      "params": [
+        {
+          "description": "The id of the task to reschedule.",
+          "kind": "string",
+          "minLength": 1,
+          "name": "task_id",
+          "required": true,
+        },
+        {
+          "description": "New ISO-8601 deadline. Must be in the future.",
+          "format": "date-time",
+          "kind": "string",
+          "name": "deadline",
+          "required": true,
+        },
+      ],
+    },
+    {
+      "description": "Re-dispatch a failed provider-call task. Only valid when the task's current status is 'failed' — queued/scheduled/running/submitted/completed tasks are rejected with an explanatory error. The new run's receipt overwrites the old.",
+      "name": "retry_task",
+      "params": [
+        {
+          "description": "The id of the failed task to retry.",
+          "kind": "string",
+          "minLength": 1,
+          "name": "task_id",
+          "required": true,
+        },
+      ],
+    },
+    {
+      "description": "Bulk-cancel every task in the queue that is still cancellable (status queued or scheduled). Running/completed/failed/cancelled tasks are left untouched. Optionally filter by status. Returns the number of tasks cancelled.",
+      "name": "cancel_all",
+      "params": [
+        {
+          "description": "Optional. If set, cancel only tasks in this status. Valid: 'queued', 'scheduled'. Defaults to both.",
+          "kind": "enum",
+          "name": "status",
+          "required": false,
+          "values": [
+            "queued",
+            "scheduled",
+          ],
+        },
+      ],
+    },
+    {
+      "description": "Set or change how a scheduled task's result is delivered when it completes. Call this right after schedule_task, once you have ASKED the user how they want the result. The user may pick several modes. Modes: chat (their active OpenClaw chat), telegram, webhook (needs webhook_url), file (needs file_path; format md/html/txt/json), queue (no push — retrievable via check_queue_status). Default if the user is unsure: chat.",
+      "name": "set_delivery",
+      "params": [
+        {
+          "description": "The id returned by schedule_task.",
+          "kind": "string",
+          "minLength": 1,
+          "name": "task_id",
+          "required": true,
+        },
+        {
+          "description": "One or more delivery modes the user chose.",
+          "itemKind": "enum",
+          "kind": "array",
+          "name": "deliver",
+          "required": true,
+          "values": [
+            "chat",
+            "telegram",
+            "webhook",
+            "file",
+            "queue",
+          ],
+        },
+        {
+          "description": "Target URL when deliver includes 'webhook'.",
+          "kind": "string",
+          "name": "webhook_url",
+          "required": false,
+        },
+        {
+          "description": "Output path when deliver includes 'file'.",
+          "kind": "string",
+          "name": "file_path",
+          "required": false,
+        },
+        {
+          "description": "Report format for 'file' delivery. Default: md.",
+          "kind": "enum",
+          "name": "file_format",
+          "required": false,
+          "values": [
+            "md",
+            "html",
+            "txt",
+            "json",
+          ],
+        },
+      ],
+    },
+  ],
+}
+`;
