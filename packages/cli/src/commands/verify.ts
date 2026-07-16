@@ -146,8 +146,12 @@ function renderHuman(receipt: CarbonReceipt, res: ReturnType<typeof verifyReceip
   }
   if (receipt.gridSource !== undefined) {
     const mock = receipt.gridSource === "mock";
+    const marginal =
+      receipt.signalType === "marginal"
+        ? "   (marginal-emissions signal — not an average-grid figure)"
+        : "";
     lines.push(
-      `grid_source       ${receipt.gridSource}${mock ? "   !! MOCK DATA (synthetic — carbon is illustrative, not measured)" : ""}`,
+      `grid_source       ${receipt.gridSource}${mock ? "   !! MOCK DATA (synthetic — carbon is illustrative, not measured)" : ""}${marginal}`,
     );
   }
   if (receipt.energySource !== undefined) {

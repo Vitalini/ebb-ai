@@ -10,10 +10,11 @@
  *     realised data served as a persistence forecast).
  *   - entsoeFeed: ENTSO-E realised generation for EU bidding zones
  *     (token required; realised data served as a persistence forecast).
+ *   - wattTimeFeed: WattTime v3 marginal operating emissions rate (MOER)
+ *     forecasts for US ISO/RTO zones (username+password required; a real
+ *     MARGINAL forecast, disclosed via signalType:"marginal").
  *   - multiSourceGridFeed: routes per zone across the feeds above.
  *   - buildDefaultGridFeed: best free feed per zone, mock fallback.
- *
- * WattTime marginal-emissions support is tracked on the roadmap.
  */
 
 import {
@@ -846,6 +847,204 @@ export function entsoeFeed(securityToken?: string): GridFeed {
 }
 
 /**
+ * WattTime API v3 — `api.watttime.org`.
+ *
+ * Marginal operating emissions rate (MOER) forecasts: the emissions rate
+ * of the generator that responds to a marginal change in load — the
+ * signal a deferral decision actually moves, as opposed to the grid's
+ * blended AVERAGE intensity that every other feed reports. Because it is
+ * a genuine forward FORECAST (not an hour-of-day persistence heuristic),
+ * it takes precedence over EIA for the US zones it covers when
+ * credentials are configured.
+ *
+ * Auth: HTTP Basic to `GET /login` (WATTTIME_USERNAME / WATTTIME_PASSWORD)
+ * returns a short-lived bearer token, cached in-process here. On a 401/403
+ * we re-login ONCE and retry; any further failure falls through to the
+ * next feed in the chain (EIA → mock), so a lapsed token never hard-fails
+ * a scheduling decision.
+ *
+ * Forecast: `GET /v3/forecast?region=<R>&signal_type=co2_moer` returns
+ * sub-hourly (typically 5-minute) MOER points in **lbs CO2 / MWh**. We
+ * average the points falling in each UTC hour and convert to gCO2/kWh
+ * (× 453.592 / 1000): 453.592 g per lb, 1000 kWh per MWh. Marginal
+ * intensity routinely exceeds average (the marginal unit is usually a
+ * gas/coal peaker) — the band classifier is intensity-based and
+ * signal-agnostic, so this is expected, not a bug.
+ *
+ * Zone → WattTime v3 region mapping. WattTime v3 does NOT expose clean
+ * ISO-level codes; its regions are granular grid-balancing sub-regions.
+ * Only `CAISO_NORTH` could be VERIFIED against WattTime's live public v3
+ * docs this session (it is the free-tier default region in every official
+ * example). The remaining five are the long-standing WattTime
+ * balancing-authority abbreviations but could NOT be confirmed against the
+ * auth-gated /v3/my-access + /maps endpoints — they are marked
+ * UNVERIFIED-AGAINST-LIVE-API below. A wrong region code simply yields a
+ * 404 and falls through to EIA, so an unverified guess degrades safely
+ * rather than corrupting data.
+ *
+ * Docs: https://docs.watttime.org/  ·  register for credentials there.
+ */
+const WATTTIME_REGION_BY_ZONE: Record<string, string> = {
+  // VERIFIED (WattTime v3 public docs, 2026-07): free-tier default region.
+  "US-CAL-CISO": "CAISO_NORTH",
+  // UNVERIFIED-AGAINST-LIVE-API — believed-correct WattTime BA abbreviations;
+  // confirm against /v3/my-access with real credentials before relying on
+  // the marginal number. Bad codes 404 and fall through to EIA.
+  "US-TEX-ERCO": "ERCOT_EASTTX", // UNVERIFIED
+  "US-NE-ISNE": "ISONE_WCMA", // UNVERIFIED
+  "US-NY-NYIS": "NYISO_NYC", // UNVERIFIED
+  "US-MIDA-PJM": "PJM_ROTO", // UNVERIFIED
+  "US-MIDW-MISO": "MISO_INDIANAPOLIS", // UNVERIFIED
+};
+
+/** lbs CO2 / MWh → g CO2 / kWh: 453.592 g per lb, 1000 kWh per MWh. */
+const WATTTIME_LBS_PER_MWH_TO_G_PER_KWH = 453.592 / 1000;
+
+interface WattTimeForecastPoint {
+  point_time: string;
+  value: number;
+}
+
+/**
+ * Carbon-intensity feed backed by WattTime v3 marginal (co2_moer)
+ * forecasts. Opt-in via WATTTIME_USERNAME / WATTTIME_PASSWORD.
+ *
+ * With no credentials the returned feed *is* `fallback` (transparent
+ * pass-through), so wiring `wattTimeFeed({ fallback: eiaFeed() })` into
+ * the router is a no-op for users who never configured WattTime — the
+ * existing chain and its reported `source` are unchanged.
+ */
+export function wattTimeFeed(options?: {
+  username?: string;
+  password?: string;
+  /**
+   * Feed to delegate to for zones WattTime doesn't cover and on any
+   * WattTime failure (401-after-retry, network, bad region, empty body).
+   * Defaults to the mock feed.
+   */
+  fallback?: GridFeed;
+}): GridFeed {
+  const username = options?.username ?? process.env.WATTTIME_USERNAME;
+  const password = options?.password ?? process.env.WATTTIME_PASSWORD;
+  const fallback = options?.fallback ?? mockGridFeed();
+
+  // Opt-in by credentials, same pattern as EIA/ENTSO-E. Without both, the
+  // feed collapses to `fallback` so precedence wiring is inert.
+  if (!username || !password) {
+    return fallback;
+  }
+
+  // In-process bearer-token cache, shared across fetchForecast calls.
+  let token: string | undefined;
+
+  const login = async (): Promise<string> => {
+    const res = await fetch("https://api.watttime.org/login", {
+      headers: {
+        Authorization:
+          "Basic " + Buffer.from(`${username}:${password}`).toString("base64"),
+      },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) {
+      throw new Error(`WattTime login returned ${res.status}`);
+    }
+    const json = (await res.json()) as { token?: string };
+    if (!json.token) {
+      throw new Error("WattTime login returned no token");
+    }
+    return json.token;
+  };
+
+  const fetchForecastRes = (region: string, bearer: string): Promise<Response> => {
+    const params = new URLSearchParams({
+      region,
+      signal_type: "co2_moer",
+    });
+    return fetch(`https://api.watttime.org/v3/forecast?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${bearer}` },
+      signal: AbortSignal.timeout(8_000),
+    });
+  };
+
+  return {
+    source: "wattTime",
+    async fetchForecast(region, hours) {
+      const wtRegion = WATTTIME_REGION_BY_ZONE[region];
+      if (!wtRegion) {
+        // Zone WattTime doesn't cover — fall through the existing chain
+        // unchanged (its own source is reported on the returned forecast).
+        return fallback.fetchForecast(region, hours);
+      }
+      try {
+        token ??= await login();
+        let res = await fetchForecastRes(wtRegion, token);
+        if (res.status === 401 || res.status === 403) {
+          // Token expired or revoked — re-login ONCE and retry.
+          token = await login();
+          res = await fetchForecastRes(wtRegion, token);
+        }
+        if (!res.ok) {
+          throw new Error(`WattTime forecast returned ${res.status}`);
+        }
+        const json = (await res.json()) as {
+          data?: WattTimeForecastPoint[];
+        };
+        const points = json.data ?? [];
+        if (points.length === 0) {
+          throw new Error("WattTime returned an empty forecast");
+        }
+        // co2_moer forecasts are sub-hourly (typically 5-minute). Average
+        // every point into the UTC hour that contains it, then convert
+        // lbs CO2/MWh → gCO2/kWh.
+        const byHour = new Map<number, { sum: number; n: number }>();
+        for (const p of points) {
+          const t = new Date(p.point_time).getTime();
+          if (!Number.isFinite(t) || typeof p.value !== "number") continue;
+          if (!Number.isFinite(p.value)) continue;
+          const hr = Math.floor(t / 3_600_000) * 3_600_000;
+          const cell = byHour.get(hr) ?? { sum: 0, n: 0 };
+          cell.sum += p.value;
+          cell.n += 1;
+          byHour.set(hr, cell);
+        }
+        const sortedHours = [...byHour.keys()].sort((a, b) => a - b);
+        const entries: GridForecastEntry[] = [];
+        for (const hr of sortedHours) {
+          if (entries.length >= hours) break;
+          const cell = byHour.get(hr)!;
+          const lbsPerMwh = cell.sum / cell.n;
+          const g = Math.round(lbsPerMwh * WATTTIME_LBS_PER_MWH_TO_G_PER_KWH);
+          entries.push({
+            datetime: new Date(hr).toISOString(),
+            carbonIntensityGCo2PerKwh: g,
+            band: classify(g),
+            signalType: "marginal",
+          });
+        }
+        if (entries.length === 0) {
+          throw new Error("WattTime returned no usable forecast points");
+        }
+        return {
+          region,
+          source: "wattTime",
+          generatedAt: new Date().toISOString(),
+          // A genuine forward MOER forecast, not realised/persistence data.
+          kind: "forecast",
+          signalType: "marginal",
+          entries,
+        };
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[ebb-ai/grid] watttime fetch failed (${(err as Error).message}); falling through to ${fallback.source}`,
+        );
+        return fallback.fetchForecast(region, hours);
+      }
+    },
+  };
+}
+
+/**
  * Compose multiple feeds with per-zone routing.
  *
  * @example
@@ -884,7 +1083,9 @@ export function multiSourceGridFeed(options: {
  * Selection logic (per zone):
  *   - "GB"                              → UK Carbon Intensity (free, no key)
  *   - "US-CAL-CISO" / ERCO / ISNE /
- *     MIDA-PJM / NY-NYIS / MIDW-MISO    → EIA when EBB_EIA_API_KEY is set
+ *     MIDA-PJM / NY-NYIS / MIDW-MISO    → WattTime marginal FORECAST when
+ *                                         WATTTIME_USERNAME/PASSWORD are set,
+ *                                         else EIA when EBB_EIA_API_KEY is set
  *   - "FR" / "DE" / "ES" / "IT" / "NL"  → ENTSO-E when EBB_ENTSOE_SECURITY_TOKEN is set
  *   - everything else                   → Electricity Maps when EBB_ELECTRICITY_MAPS_API_KEY is set
  *   - any zone without a configured key → deterministic mock curve
@@ -902,8 +1103,14 @@ export function buildDefaultGridFeed(): GridFeed {
   const feeds: Record<string, GridFeed> = {
     GB: ukCarbonIntensityFeed(),
   };
+  // US ISO/RTO zones: WattTime marginal FORECAST takes precedence when its
+  // credentials are set (a real marginal forecast beats an hour-of-day EIA
+  // persistence heuristic). wattTimeFeed falls through to EIA — which in
+  // turn falls through to the mock — when WattTime is unconfigured, the
+  // zone is uncovered, or the request errors. With no WattTime creds the
+  // wrapper collapses to eiaFeed(), so behaviour is byte-identical to before.
   for (const zone of Object.keys(EIA_RESPONDENT_BY_ZONE)) {
-    feeds[zone] = eiaFeed();
+    feeds[zone] = wattTimeFeed({ fallback: eiaFeed() });
   }
   for (const zone of Object.keys(ENTSOE_BIDDING_ZONE_BY_REGION)) {
     feeds[zone] = entsoeFeed();

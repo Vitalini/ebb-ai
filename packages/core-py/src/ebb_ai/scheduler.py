@@ -59,6 +59,7 @@ from .types import (
     DeferOptions,
     GridForecast,
     GridForecastEntry,
+    GridSignalType,
     GridSource,
     ProviderCallSpec,
     TaskRecord,
@@ -871,6 +872,7 @@ def _row_to_record(row: Any) -> TaskRecord:
             total_tokens=data.get("total_tokens"),
             intensity_g_co2_per_kwh=data.get("intensity_g_co2_per_kwh"),
             grid_source=data.get("grid_source"),
+            signal_type=data.get("signal_type"),
             energy_source=data.get("energy_source"),
             energy_resolution=data.get("energy_resolution"),
             signature=data.get("signature"),
@@ -2058,10 +2060,13 @@ class Scheduler:
             source = "current"
         actual_intensity_g: float | None = None
         grid_source: GridSource | None = None
+        signal_type: GridSignalType | None = None
         try:
-            actual_intensity_g, grid_source = await self._fetch_current_intensity(
-                record.region, ran_at
-            )
+            (
+                actual_intensity_g,
+                grid_source,
+                signal_type,
+            ) = await self._fetch_current_intensity(record.region, ran_at)
         except asyncio.CancelledError:
             raise
         except Exception as err:
@@ -2110,6 +2115,7 @@ class Scheduler:
                     # coefficients are the flat legacy fallback tier.
                     intensity_g_co2_per_kwh=actual_intensity_g,
                     grid_source=grid_source,
+                    signal_type=signal_type,
                     energy_source="fallback",
                     energy_resolution="default",
                 )
@@ -2143,7 +2149,7 @@ class Scheduler:
 
     async def _fetch_current_intensity(
         self, region: str, at: datetime
-    ) -> tuple[float, GridSource]:
+    ) -> tuple[float, GridSource, GridSignalType | None]:
         """Look up the intensity figure (and its feed provenance) used
         for the actual side of a receipt: re-fetch the forecast and pick
         the entry closest to the moment the task ran.
@@ -2161,7 +2167,13 @@ class Scheduler:
                 best = entry
                 best_delta = d
         intensity = best.carbon_intensity_g_co2_per_kwh if best is not None else 400.0
-        return intensity, forecast.source
+        # Prefer the chosen entry's signal (WattTime sets it per-entry),
+        # fall back to the forecast-level marker.
+        signal_type = (
+            best.signal_type if best is not None and best.signal_type is not None
+            else forecast.signal_type
+        )
+        return intensity, forecast.source, signal_type
 
     # ----- v0.5 helpers ------------------------------------------------ #
 
@@ -2425,10 +2437,13 @@ class Scheduler:
 
         intensity_g: float | None = None
         grid_source: GridSource | None = None
+        signal_type: GridSignalType | None = None
         try:
-            intensity_g, grid_source = await self._fetch_current_intensity(
-                record.region, ran_at
-            )
+            (
+                intensity_g,
+                grid_source,
+                signal_type,
+            ) = await self._fetch_current_intensity(record.region, ran_at)
         except asyncio.CancelledError:
             raise
         except Exception as err:
@@ -2510,6 +2525,7 @@ class Scheduler:
                     # estimate.
                     intensity_g_co2_per_kwh=intensity_g,
                     grid_source=grid_source,
+                    signal_type=signal_type,
                     energy_source=resolve_model_energy(actual_model).coeffs.source,
                     energy_resolution=resolve_model_energy(actual_model).tier,
                 )
@@ -2743,10 +2759,13 @@ class Scheduler:
 
         intensity_g: float | None = None
         grid_source: GridSource | None = None
+        signal_type: GridSignalType | None = None
         try:
-            intensity_g, grid_source = await self._fetch_current_intensity(
-                record.region, ran_at
-            )
+            (
+                intensity_g,
+                grid_source,
+                signal_type,
+            ) = await self._fetch_current_intensity(record.region, ran_at)
         except asyncio.CancelledError:
             raise
         except Exception as err:
@@ -2805,6 +2824,7 @@ class Scheduler:
                     total_tokens=total_tokens,
                     intensity_g_co2_per_kwh=intensity_g,
                     grid_source=grid_source,
+                    signal_type=signal_type,
                     energy_source=resolve_model_energy(actual_model).coeffs.source,
                     energy_resolution=resolve_model_energy(actual_model).tier,
                 )

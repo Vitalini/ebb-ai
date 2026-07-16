@@ -85,7 +85,10 @@ Add to `~/.openclaw/mcp.json`:
 
 | Var | Purpose |
 |---|---|
-| `EBB_ELECTRICITY_MAPS_API_KEY` | API key from [electricitymaps.com](https://www.electricitymaps.com/free-tier-api). If unset, the server falls back to deterministic mock data so you can still run the whole stack locally. |
+| `EBB_ELECTRICITY_MAPS_API_KEY` | API key from [electricitymaps.com](https://www.electricitymaps.com/free-tier-api). Universal fallback. If unset (and no zone-specific feed is configured), the server falls back to deterministic mock data so you can still run the whole stack locally. |
+| `EBB_EIA_API_KEY` | Free [US EIA](https://www.eia.gov/opendata/) key. Enables average-emissions intensity for the US ISO zones (CAISO / ERCOT / ISO-NE / NYISO / PJM / MISO). |
+| `EBB_ENTSOE_SECURITY_TOKEN` | Free [ENTSO-E](https://transparency.entsoe.eu/) token. Enables EU zone intensity (FR / DE / ES / IT / NL). |
+| `WATTTIME_USERNAME` + `WATTTIME_PASSWORD` | Free [WattTime v3](https://watttime.org/) account. Enables **marginal**-emissions (co2_moer) forecasts for the US ISO zones — takes precedence over EIA where covered, falls through to EIA on any error. The marginal signal is disclosed as `signalType: "marginal"` on forecasts and receipts. |
 | `EBB_DEFAULT_REGION` | Electricity Maps zone code, default `US-CAL-CISO`. |
 | `ANTHROPIC_API_KEY` | Enables the `anthropic` provider (batch-capable). |
 | `OPENAI_API_KEY` | Enables the `openai` provider (batch-capable). |

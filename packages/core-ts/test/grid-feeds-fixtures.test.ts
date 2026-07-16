@@ -21,7 +21,9 @@ import {
   entsoeFeed,
   parseEntsoeXml,
   ukCarbonIntensityFeed,
+  wattTimeFeed,
 } from "../src/grid.js";
+import type { GridFeed } from "../src/types.js";
 
 const fixture = (name: string): string =>
   readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
@@ -254,5 +256,185 @@ describe("ukCarbonIntensityFeed (two-page fw48h fixtures)", () => {
     expect(stub).toHaveBeenCalledTimes(1);
     expect(fc.entries.length).toBe(48);
     expect(fc.entries[0]?.carbonIntensityGCo2PerKwh).toBe(5);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WattTime v3 — marginal (co2_moer) forecast, unit conversion, auth refresh,
+// fallthrough + precedence-over-EIA routing (roadmap item 2).
+// ---------------------------------------------------------------------------
+
+describe("wattTimeFeed (v3 marginal MOER)", () => {
+  const CREDS = { username: "u", password: "p" } as const;
+  const LOGIN_URL = "https://api.watttime.org/login";
+  const FORECAST_URL = "https://api.watttime.org/v3/forecast";
+
+  /** A stub fallback feed with a distinguishable source, for fallthrough. */
+  function markerFallback(source = "eia"): GridFeed {
+    return {
+      source: source as GridFeed["source"],
+      fetchForecast: vi.fn(async (region: string, hours: number) => ({
+        region,
+        source: source as GridFeed["source"],
+        generatedAt: "2026-05-14T12:00:00.000Z",
+        kind: "persistence" as const,
+        entries: Array.from({ length: hours }, (_, i) => ({
+          datetime: new Date(Date.UTC(2026, 4, 14, 12 + i)).toISOString(),
+          carbonIntensityGCo2PerKwh: 111,
+          band: "clean" as const,
+        })),
+      })),
+    };
+  }
+
+  it("logs in, fetches co2_moer, and converts lbs/MWh → gCO2/kWh into hourly buckets", async () => {
+    const login = vi.fn();
+    globalThis.fetch = (async (input: unknown) => {
+      const url = String(input);
+      if (url.startsWith(LOGIN_URL)) {
+        login();
+        return new Response(fixture("watttime-login.json"), { status: 200 });
+      }
+      if (url.startsWith(FORECAST_URL)) {
+        // Assert the request targeted the co2_moer signal + mapped region.
+        expect(url).toContain("signal_type=co2_moer");
+        expect(url).toContain("region=CAISO_NORTH");
+        return new Response(fixture("watttime-forecast-caiso.json"), {
+          status: 200,
+        });
+      }
+      throw new Error(`unexpected URL: ${url}`);
+    }) as typeof fetch;
+
+    const fc = await wattTimeFeed(CREDS).fetchForecast("US-CAL-CISO", 24);
+    expect(fc.source).toBe("wattTime");
+    expect(fc.kind).toBe("forecast");
+    expect(fc.signalType).toBe("marginal");
+    expect(fc.entries.length).toBe(2);
+    // 12:00Z bucket avg(900,1100)=1000 lbs/MWh × 453.592/1000 = 453.592 → 454.
+    expect(fc.entries[0]?.datetime).toBe("2026-05-14T12:00:00.000Z");
+    expect(fc.entries[0]?.carbonIntensityGCo2PerKwh).toBe(454);
+    expect(fc.entries[0]?.signalType).toBe("marginal");
+    // 13:00Z bucket avg(600,400)=500 lbs/MWh × 453.592/1000 = 226.796 → 227.
+    expect(fc.entries[1]?.carbonIntensityGCo2PerKwh).toBe(227);
+    expect(login).toHaveBeenCalledTimes(1);
+  });
+
+  it("caches the bearer token across calls (single login for two forecasts)", async () => {
+    const login = vi.fn();
+    globalThis.fetch = (async (input: unknown) => {
+      const url = String(input);
+      if (url.startsWith(LOGIN_URL)) {
+        login();
+        return new Response(fixture("watttime-login.json"), { status: 200 });
+      }
+      return new Response(fixture("watttime-forecast-caiso.json"), {
+        status: 200,
+      });
+    }) as typeof fetch;
+
+    const feed = wattTimeFeed(CREDS);
+    await feed.fetchForecast("US-CAL-CISO", 24);
+    await feed.fetchForecast("US-CAL-CISO", 24);
+    expect(login).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-logs in exactly once on a 401 and retries the forecast", async () => {
+    const login = vi.fn();
+    let forecastCalls = 0;
+    globalThis.fetch = (async (input: unknown) => {
+      const url = String(input);
+      if (url.startsWith(LOGIN_URL)) {
+        login();
+        return new Response(fixture("watttime-login.json"), { status: 200 });
+      }
+      forecastCalls += 1;
+      // First forecast attempt: token rejected. Second: succeeds.
+      if (forecastCalls === 1) {
+        return new Response("unauthorized", { status: 401 });
+      }
+      return new Response(fixture("watttime-forecast-caiso.json"), {
+        status: 200,
+      });
+    }) as typeof fetch;
+
+    const fc = await wattTimeFeed(CREDS).fetchForecast("US-CAL-CISO", 24);
+    expect(fc.source).toBe("wattTime");
+    expect(fc.entries[0]?.carbonIntensityGCo2PerKwh).toBe(454);
+    // One initial login + one refresh after the 401 = 2.
+    expect(login).toHaveBeenCalledTimes(2);
+    expect(forecastCalls).toBe(2);
+  });
+
+  it("falls through to the fallback feed on a persistent forecast error", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    globalThis.fetch = (async (input: unknown) => {
+      const url = String(input);
+      if (url.startsWith(LOGIN_URL)) {
+        return new Response(fixture("watttime-login.json"), { status: 200 });
+      }
+      // 500 is not a 401/403, so no refresh — straight to fallthrough.
+      return new Response("boom", { status: 500 });
+    }) as typeof fetch;
+
+    const fallback = markerFallback("eia");
+    const fc = await wattTimeFeed({ ...CREDS, fallback }).fetchForecast(
+      "US-CAL-CISO",
+      24,
+    );
+    expect(fc.source).toBe("eia");
+    expect(fc.entries[0]?.carbonIntensityGCo2PerKwh).toBe(111);
+    expect(fallback.fetchForecast).toHaveBeenCalledWith("US-CAL-CISO", 24);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("watttime"));
+  });
+
+  it("routes zones WattTime does not cover straight to the fallback (no login)", async () => {
+    const login = vi.fn();
+    globalThis.fetch = (async (input: unknown) => {
+      if (String(input).startsWith(LOGIN_URL)) login();
+      return new Response(fixture("watttime-login.json"), { status: 200 });
+    }) as typeof fetch;
+
+    const fallback = markerFallback("entsoe");
+    const fc = await wattTimeFeed({ ...CREDS, fallback }).fetchForecast(
+      "FR",
+      24,
+    );
+    expect(fc.source).toBe("entsoe");
+    expect(login).not.toHaveBeenCalled();
+  });
+
+  it("with no credentials the feed IS the fallback (precedence wiring is inert)", async () => {
+    const fallback = markerFallback("eia");
+    // No username/password, no env — must collapse to the fallback so
+    // buildDefaultGridFeed's wattTimeFeed({fallback: eiaFeed()}) === eiaFeed().
+    const feed = wattTimeFeed({ fallback });
+    expect(feed).toBe(fallback);
+    const fc = await feed.fetchForecast("US-CAL-CISO", 24);
+    expect(fc.source).toBe("eia");
+  });
+
+  it("takes precedence over EIA for a covered zone when credentials are present", async () => {
+    // Precedence-over-EIA routing test: same zone, same fallback (EIA),
+    // WattTime succeeds → the marginal WattTime forecast wins.
+    globalThis.fetch = (async (input: unknown) => {
+      const url = String(input);
+      if (url.startsWith(LOGIN_URL)) {
+        return new Response(fixture("watttime-login.json"), { status: 200 });
+      }
+      return new Response(fixture("watttime-forecast-caiso.json"), {
+        status: 200,
+      });
+    }) as typeof fetch;
+
+    const eia = markerFallback("eia");
+    const fc = await wattTimeFeed({ ...CREDS, fallback: eia }).fetchForecast(
+      "US-CAL-CISO",
+      24,
+    );
+    expect(fc.source).toBe("wattTime");
+    expect(fc.signalType).toBe("marginal");
+    // EIA fallback must NOT have been consulted when WattTime succeeds.
+    expect(eia.fetchForecast).not.toHaveBeenCalled();
   });
 });

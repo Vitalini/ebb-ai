@@ -258,13 +258,28 @@ function listKnownTasks(scheduler: Scheduler): TaskRecord<unknown>[] {
 async function fetchGridSource(
   feed: GridFeed,
   region: string,
-): Promise<GridForecast["source"] | undefined> {
+): Promise<
+  { source: GridForecast["source"]; signalType: GridForecast["signalType"] } | undefined
+> {
   try {
     const forecast = await feed.fetchForecast(region, 1);
-    return forecast.source;
+    return { source: forecast.source, signalType: forecast.signalType };
   } catch {
     return undefined;
   }
+}
+
+/** Render a grid_source line, disclosing mock + marginal signals honestly. */
+function formatGridSourceLine(
+  info: Awaited<ReturnType<typeof fetchGridSource>>,
+): string {
+  const source = info?.source ?? "unknown";
+  const mockTail = source === "mock" ? `\n${SYNTHETIC_GRID_WARNING}` : "";
+  const marginalTail =
+    info?.signalType === "marginal"
+      ? " (marginal-emissions signal — not an average-grid figure)"
+      : "";
+  return `grid_source: ${source}${marginalTail}${mockTail}`;
 }
 
 const SYNTHETIC_GRID_WARNING =
@@ -430,8 +445,7 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
                     `band: ${plan.band}\n` +
                     `estimated_carbon_g_co2: ${plan.estimatedCarbonGCo2}\n` +
                     `batch_eligible: ${plan.batchEligible}\n` +
-                    `grid_source: ${gridSource ?? "unknown"}` +
-                    (gridSource === "mock" ? `\n${SYNTHETIC_GRID_WARNING}` : ``),
+                    formatGridSourceLine(gridSource),
                 },
               ],
             };
@@ -469,8 +483,7 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
                     `scheduled_for: ${record.scheduledFor ?? "(immediate)"}\n` +
                     `deadline: ${parsed.deadline}\n` +
                     `estimated_carbon_g_co2: ${record.estimatedCarbonGCo2 ?? "(not scored)"}\n` +
-                    `grid_source: ${gridSource ?? "unknown"}\n` +
-                    (gridSource === "mock" ? `${SYNTHETIC_GRID_WARNING}\n` : ``) +
+                    `${formatGridSourceLine(gridSource)}\n` +
                     `persisted_to: ${persistedAt}\n` +
                     `\n` +
                     `To actually dispatch tasks at their windows, run the\n` +
@@ -732,6 +745,11 @@ export function formatForecast(forecast: GridForecast): string {
   const lines: string[] = [];
   lines.push(`Region: ${forecast.region}`);
   lines.push(`Source: ${forecast.source}`);
+  if (forecast.signalType === "marginal") {
+    lines.push(
+      `Signal: marginal (co2_moer — the marginal generator's rate, not the average-grid figure)`,
+    );
+  }
   lines.push(`Generated: ${forecast.generatedAt}`);
   lines.push("");
   lines.push("Hour | gCO2/kWh | band");
@@ -771,6 +789,9 @@ export function formatRecommendation(
     // Provenance (v0.12+): which grid feed produced the forecast this
     // plan was scored against. "mock" = SYNTHETIC data — surface that.
     grid_source: r.gridSource ?? null,
+    // Signal type (v0.14+): "marginal" (WattTime co2_moer) or null ⇒
+    // average. The reasoning string discloses it in prose too.
+    signal_type: r.signalType ?? null,
     alternatives: r.alternatives.map((a) => ({
       scheduled_for: a.scheduledFor,
       intensity_g_co2_per_kwh: a.intensityGCo2PerKwh,
@@ -814,6 +835,9 @@ export function formatTask(task: TaskRecord<unknown> | undefined): string {
         `  grid_source: ${task.receipt.gridSource}` +
           (task.receipt.gridSource === "mock"
             ? " — SYNTHETIC (mock) grid data, not a measurement"
+            : "") +
+          (task.receipt.signalType === "marginal"
+            ? " (marginal-emissions signal — not an average-grid figure)"
             : ""),
       );
     if (task.receipt.energySource !== undefined)

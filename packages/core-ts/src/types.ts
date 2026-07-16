@@ -32,13 +32,29 @@ export interface DeferOptions {
   taskId?: string;
 }
 
+/**
+ * Whether an intensity figure is an AVERAGE-emissions signal (the grid's
+ * blended intensity across all generation) or a MARGINAL-emissions signal
+ * (the emissions rate of the generator that would respond to a change in
+ * load — what a marginal-consumption/deferral decision actually moves).
+ * Absent means "average", so every pre-WattTime feed is unchanged. Bands
+ * are intensity-based and signal-agnostic, so this field never affects
+ * classification — it is a pure honesty/disclosure marker.
+ */
+export type GridSignalType = "average" | "marginal";
+
 export interface GridForecastEntry {
   /** ISO-8601 start of this hour. */
   datetime: string;
-  /** Grams CO2-equivalent per kWh — marginal or average, see source. */
+  /** Grams CO2-equivalent per kWh — marginal or average, see signalType. */
   carbonIntensityGCo2PerKwh: number;
   /** Convenience: same value classified into a band. */
   band: "very_clean" | "clean" | "average" | "dirty" | "very_dirty";
+  /**
+   * Optional per-entry signal type (v0.14+). Absent ⇒ "average". Only the
+   * WattTime marginal feed sets "marginal"; all other feeds omit it.
+   */
+  signalType?: GridSignalType;
 }
 
 export interface GridForecast {
@@ -60,6 +76,13 @@ export interface GridForecast {
    * disclose it.
    */
   kind?: "forecast" | "persistence";
+  /**
+   * Optional forecast-level signal type (v0.14+): "marginal" when the
+   * whole series is a marginal-emissions signal (WattTime co2_moer),
+   * absent ⇒ "average" (every other feed). Set redundantly with the
+   * per-entry `signalType` so a consumer can read it off either level.
+   */
+  signalType?: GridSignalType;
   entries: GridForecastEntry[];
 }
 
@@ -98,6 +121,14 @@ export interface CarbonReceipt {
    * receipt can no longer silently attest mock-derived carbon.
    */
   gridSource?: GridForecast["source"];
+  /**
+   * Signal type of the grid intensity on this receipt (v0.14+):
+   * "marginal" when the intensity came from a marginal-emissions feed
+   * (WattTime co2_moer), absent ⇒ "average". Covered by the signature so
+   * a signed receipt discloses honestly whether its carbon is a marginal
+   * or average figure — the two are not interchangeable.
+   */
+  signalType?: GridSignalType;
   /**
    * Confidence tier of the per-model energy coefficients used (v0.12+):
    * "measured" (open-weight, published measurements), "estimated"
@@ -332,4 +363,10 @@ export interface RecommendResult {
    * data — surface this to the caller.
    */
   gridSource?: GridForecast["source"];
+  /**
+   * Signal type of the forecast this plan was scored against (v0.14+):
+   * "marginal" (WattTime co2_moer) or absent ⇒ "average". The `reasoning`
+   * string discloses it in prose; this field exposes it structurally.
+   */
+  signalType?: GridSignalType;
 }

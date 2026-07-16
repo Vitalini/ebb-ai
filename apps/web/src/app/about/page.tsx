@@ -278,8 +278,9 @@ export default function AboutPage() {
         <p className="leading-relaxed text-fg-muted">
           The public surface is still pre-1.0: API shapes can change in minor
           versions. Still on the roadmap: upstream MCP spec PR, opt-in aggregate
-          leaderboard, WattTime marginal-emissions feed, cross-provider
-          routing. v1.0 will freeze the API surface.
+          leaderboard, cross-provider routing. v1.0 will freeze the API surface.
+          (WattTime marginal-emissions forecasts shipped as the fifth grid
+          feed.)
         </p>
       </section>
 

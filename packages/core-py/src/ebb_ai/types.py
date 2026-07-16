@@ -33,6 +33,15 @@ results actually arrive.
 Band = Literal["very_clean", "clean", "average", "dirty", "very_dirty"]
 """Classifier for grid carbon intensity, matching the TS implementation."""
 
+GridSignalType = Literal["average", "marginal"]
+"""Whether an intensity figure is an AVERAGE-emissions signal (the grid's
+blended intensity) or a MARGINAL-emissions signal (the rate of the
+generator that responds to a change in load — what a deferral decision
+actually moves). ``None`` ⇒ ``"average"``, so every pre-WattTime feed is
+unchanged. Bands are intensity-based and signal-agnostic, so this never
+affects classification — it is a pure honesty/disclosure marker. Mirrors
+the TS ``GridSignalType``."""
+
 GridSource = Literal[
     "electricityMaps", "ukCarbonIntensity", "eia", "entsoe", "wattTime", "mock"
 ]
@@ -126,13 +135,26 @@ class GridForecastEntry:
     """ISO-8601 start of this hour, with UTC offset."""
 
     carbon_intensity_g_co2_per_kwh: float
-    """Grams CO2-equivalent per kWh — marginal or average, see source."""
+    """Grams CO2-equivalent per kWh — marginal or average, see signal_type."""
 
     band: Band
     """Convenience: same value classified into a band."""
 
+    signal_type: GridSignalType | None = None
+    """Optional per-entry signal type (v0.14+). ``None`` ⇒ ``"average"``.
+    Only the WattTime marginal feed sets ``"marginal"``."""
+
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        # Emit ``signal_type`` only when set, mirroring how the TS port
+        # drops ``undefined`` — keeps average-feed JSON byte-identical.
+        d: dict[str, Any] = {
+            "datetime": self.datetime,
+            "carbon_intensity_g_co2_per_kwh": self.carbon_intensity_g_co2_per_kwh,
+            "band": self.band,
+        }
+        if self.signal_type is not None:
+            d["signal_type"] = self.signal_type
+        return d
 
 
 @dataclass(slots=True)
@@ -151,6 +173,11 @@ class GridForecast:
     (``"forecast"``) or realised observations tiled onto future hours
     (``"persistence"``). ``None`` on forecasts persisted before v0.12."""
 
+    signal_type: GridSignalType | None = None
+    """Forecast-level signal type (v0.14+): ``"marginal"`` (WattTime
+    co2_moer) or ``None`` ⇒ ``"average"``. Set redundantly with each
+    entry's ``signal_type`` so a consumer can read it off either level."""
+
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
             "region": self.region,
@@ -160,6 +187,8 @@ class GridForecast:
         }
         if self.kind is not None:
             d["kind"] = self.kind
+        if self.signal_type is not None:
+            d["signal_type"] = self.signal_type
         return d
 
 
@@ -206,6 +235,11 @@ class CarbonReceipt:
     the number is SYNTHETIC — the feed had no key or errored and fell
     back to the deterministic curve. Covered by the signature, so a
     signed receipt can no longer silently attest mock-derived carbon."""
+    signal_type: GridSignalType | None = None
+    """Signal type of the grid intensity on this receipt (v0.14+):
+    ``"marginal"`` (WattTime co2_moer) or ``None`` ⇒ ``"average"``.
+    Covered by the signature so a signed receipt discloses honestly
+    whether its carbon is a marginal or an average figure."""
     energy_source: EnergySource | None = None
     """Confidence tier of the per-model energy coefficients used
     (v0.12+): ``"measured"`` (open-weight, published measurements),
@@ -260,6 +294,8 @@ class CarbonReceipt:
             d["intensityGCo2PerKwh"] = self.intensity_g_co2_per_kwh
         if self.grid_source is not None:
             d["gridSource"] = self.grid_source
+        if self.signal_type is not None:
+            d["signalType"] = self.signal_type
         if self.energy_source is not None:
             d["energySource"] = self.energy_source
         if self.energy_resolution is not None:

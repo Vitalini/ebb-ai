@@ -67,6 +67,7 @@ from .grid import (
     multi_source_grid_feed,
     parse_entsoe_xml,
     uk_carbon_intensity_feed,
+    watttime_feed,
 )
 from .recommend import (
     RecommendAlternative,
@@ -107,6 +108,7 @@ from .types import (
     ForecastKind,
     GridForecast,
     GridForecastEntry,
+    GridSignalType,
     GridSource,
     IntensitySource,
     Provider,
@@ -150,6 +152,7 @@ __all__ = [
     "GridFeed",
     "GridForecast",
     "GridForecastEntry",
+    "GridSignalType",
     "GridSource",
     "IntensitySource",
     "InvalidDeadlineError",
@@ -195,4 +198,5 @@ __all__ = [
     "sign_receipt",
     "uk_carbon_intensity_feed",
     "verify_receipt",
+    "watttime_feed",
 ]

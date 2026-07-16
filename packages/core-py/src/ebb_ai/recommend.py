@@ -37,7 +37,7 @@ from .energy import grams_for_intensity
 from .errors import CarbonBudgetExceededError, InvalidDeadlineError
 from .grid import GridFeed, mock_grid_feed
 from .scheduler import select_window
-from .types import Band, GridForecastEntry, GridSource
+from .types import Band, GridForecastEntry, GridSignalType, GridSource
 
 _log = logging.getLogger(__name__)
 
@@ -85,6 +85,11 @@ class RecommendResult:
     """Which grid feed produced the forecast this plan was scored against
     (v0.12+). ``"mock"`` means the recommendation is based on SYNTHETIC
     data — surface this to the caller."""
+    signal_type: GridSignalType | None = None
+    """Signal type of the forecast this plan was scored against (v0.14+):
+    ``"marginal"`` (WattTime co2_moer) or ``None`` ⇒ ``"average"``. The
+    ``reasoning`` string discloses it in prose; this field exposes it
+    structurally. Mirrors the TS ``RecommendResult.signalType``."""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -97,6 +102,7 @@ class RecommendResult:
             "alternatives": [a.to_dict() for a in self.alternatives],
             "reasoning": self.reasoning,
             "grid_source": self.grid_source,
+            "signal_type": self.signal_type,
         }
 
 
@@ -178,15 +184,22 @@ def _normalize_deadline(
     return parsed
 
 
-def _with_source_disclosure(source: GridSource, reasoning: str) -> str:
+def _with_source_disclosure(
+    source: GridSource,
+    signal_type: GridSignalType | None,
+    reasoning: str,
+) -> str:
     """Prefix the reasoning with a loud disclosure when the plan was
     scored against the synthetic mock curve, so an LLM caller (and the
     human it relays to) cannot mistake a keyless fallback for live grid
-    data. Mirrors the TS ``withSourceDisclosure``.
+    data. Also discloses when the intensity is a MARGINAL signal (WattTime
+    co2_moer) rather than the usual average — the two are not
+    interchangeable. Mirrors the TS ``withSourceDisclosure``.
     """
+    marginal_prefix = "MARGINAL-emissions signal — " if signal_type == "marginal" else ""
     if source == "mock":
-        return f"SYNTHETIC (mock) grid data — {reasoning}"
-    return reasoning
+        return f"SYNTHETIC (mock) grid data — {marginal_prefix}{reasoning}"
+    return f"{marginal_prefix}{reasoning}"
 
 
 def _build_reasoning(
@@ -323,12 +336,14 @@ async def recommend_window(
             alternatives=[],
             reasoning=_with_source_disclosure(
                 forecast.source,
+                forecast.signal_type,
                 (
                     f"no in-deadline windows; best available is "
                     f"{_format_hour(head.datetime)} UTC"
                 ),
             ),
             grid_source=forecast.source,
+            signal_type=forecast.signal_type,
         )
 
     if carbon_budget_g is not None:
@@ -398,6 +413,7 @@ async def recommend_window(
         alternatives=alternatives,
         reasoning=_with_source_disclosure(
             forecast.source,
+            forecast.signal_type,
             _build_reasoning(
                 chosen=chosen,
                 savings_pct=savings_pct,
@@ -413,6 +429,7 @@ async def recommend_window(
             ),
         ),
         grid_source=forecast.source,
+        signal_type=forecast.signal_type,
     )
 
 

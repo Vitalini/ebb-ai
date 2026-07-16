@@ -76,11 +76,13 @@ Windsurf, OpenClaw, OpenAI Codex CLI, Pi). The agent asks
 > to npm under the `@ebb-ai` org; `ebb-ai` on PyPI; `@vitalini/ebb`
 > OpenClaw plugin shares the queue. **One-command Claude Code plugin**
 > via `/plugin marketplace add Vitalini/ebb-ai && /plugin install ebb-ai`.
-> **Four real-data grid feeds** across **31 regions** (NA/EU/APAC):
+> **Five real-data grid feeds** across **31 regions** (NA/EU/APAC):
 > UK National Grid ESO Carbon Intensity API (GB, free no key),
 > US EIA Open Data (CAISO / ERCOT / ISO-NE / PJM, free with key),
 > ENTSO-E Transparency Platform (FR / DE / ES / IT / NL / …, free with
-> token), and Electricity Maps as universal fallback. **v0.10:**
+> token), WattTime v3 marginal-emissions forecasts (US ISOs, free with
+> account — takes precedence over EIA where covered), and Electricity Maps
+> as universal fallback. **v0.10:**
 > per-model Wh/token coefficients across 37 LLMs (Patterson 2021,
 > Luccioni 2024, HF AI Energy Score) replace the v0.1–v0.9 flat
 > placeholder. **v0.11:** Ed25519-signed carbon receipts (offline
@@ -116,9 +118,11 @@ CAISO, ERCOT, ISO-NE, PJM, Great Britain, France, Germany, and more)
 and to try the best-window planner without installing anything.
 Great Britain is powered by the free
 [National Grid ESO Carbon Intensity API](https://carbonintensity.org.uk/)
-(real data, no key required); US ISOs use the EIA open-data feed, EU
-zones ENTSO-E, with Electricity Maps as the universal fallback and a
-clearly-labelled deterministic mock when no key is configured.
+(real data, no key required); US ISOs use WattTime v3 marginal-emissions
+forecasts when a WattTime account is configured (falling through to the
+EIA open-data feed otherwise), EU zones ENTSO-E, with Electricity Maps as
+the universal fallback and a clearly-labelled deterministic mock when no
+key is configured.
 
 ---
 
@@ -228,7 +232,11 @@ macOS):
       "command": "npx",
       "args": ["-y", "@ebb-ai/mcp"],
       "env": {
-        "EBB_ELECTRICITY_MAPS_API_KEY": "optional; falls back to mock data without it. GB is always live via the free UK Carbon Intensity API."
+        "EBB_ELECTRICITY_MAPS_API_KEY": "optional; falls back to mock data without it. GB is always live via the free UK Carbon Intensity API.",
+        "EBB_EIA_API_KEY": "optional; US ISO fuel-mix (average) intensity.",
+        "EBB_ENTSOE_SECURITY_TOKEN": "optional; EU zone intensity.",
+        "WATTTIME_USERNAME": "optional; with WATTTIME_PASSWORD, enables WattTime v3 marginal-emissions forecasts for US ISOs (takes precedence over EIA where covered).",
+        "WATTTIME_PASSWORD": "optional; pairs with WATTTIME_USERNAME."
       }
     }
   }
@@ -315,14 +323,18 @@ GB, FR, DE), 72-hour forecast charts, best-window planner, queue viewer.
 | Zone | Source | Auth | Notes |
 |---|---|---|---|
 | `GB` | [UK National Grid ESO Carbon Intensity API](https://carbonintensity.org.uk/) | None | Real 48h forecast, always on |
-| `US-CAL-CISO`, `US-TEX-ERCO`, `US-NE-ISNE`, `US-MIDA-PJM` | [US EIA Open Data](https://www.eia.gov/opendata/) | Free API key (`EBB_EIA_API_KEY`) | Hourly fuel-mix → carbon intensity via IPCC AR5 factors |
+| `US-CAL-CISO`, `US-TEX-ERCO`, `US-NE-ISNE`, `US-NY-NYIS`, `US-MIDA-PJM`, `US-MIDW-MISO` | [WattTime v3](https://watttime.org/) marginal (co2_moer) | Free account (`WATTTIME_USERNAME` + `WATTTIME_PASSWORD`) | **Marginal**-emissions FORECAST (lbs/MWh → gCO2/kWh). Takes precedence over EIA where covered; falls through to EIA on any error. Signal disclosed as `signalType: "marginal"` on forecasts/receipts |
+| `US-CAL-CISO`, `US-TEX-ERCO`, `US-NE-ISNE`, `US-MIDA-PJM` (+`US-NY-NYIS`, `US-MIDW-MISO`) | [US EIA Open Data](https://www.eia.gov/opendata/) | Free API key (`EBB_EIA_API_KEY`) | Hourly fuel-mix → carbon intensity via IPCC AR5 factors (average signal; used when WattTime is unconfigured) |
 | `FR`, `DE` (plus `ES`, `IT`, `NL` opt-in) | [ENTSO-E Transparency Platform](https://transparency.entsoe.eu/) | Free token (`EBB_ENTSOE_SECURITY_TOKEN`) | Realised generation by type → carbon intensity |
 | any zone (universal fallback) | [Electricity Maps](https://www.electricitymaps.com/) free-tier | `EBB_ELECTRICITY_MAPS_API_KEY` | Used when zone-specific source missing |
 | anything else | Deterministic mock curve | None | Used when no key set or upstream fails |
 
-WattTime marginal-emissions support is on the v0.8 roadmap. Want to add
-another free public source? Each adapter is a single function in
-`packages/core-ts/src/grid.ts` (~80 lines) — open a PR.
+WattTime v3 uses granular sub-BA region codes; only `US-CAL-CISO →
+CAISO_NORTH` is verified against WattTime's live public docs — the other
+US mappings are best-effort and marked unverified in
+`packages/core-ts/src/grid.ts`, degrading safely to EIA if a code is
+rejected. Want to add another free public source? Each adapter is a single
+function in `packages/core-ts/src/grid.ts` — open a PR.
 
 ---
 

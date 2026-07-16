@@ -46,7 +46,8 @@ describe("ensureEnvFile", () => {
     const body = readFileSync(path, "utf8");
     expect(body).toContain("#ANTHROPIC_API_KEY=");
     expect(body).toContain("#OPENAI_API_KEY=");
-    expect(body).toContain("EBB_ELECTRICITYMAPS_API_KEY");
+    expect(body).toContain("EBB_ELECTRICITY_MAPS_API_KEY");
+    expect(body).toContain("#WATTTIME_USERNAME=");
   });
 
   it("is idempotent — never overwrites an existing file", () => {
@@ -102,9 +103,11 @@ describe("envFileTemplate", () => {
     for (const k of [
       "ANTHROPIC_API_KEY",
       "OPENAI_API_KEY",
-      "EBB_ELECTRICITYMAPS_API_KEY",
+      "EBB_ELECTRICITY_MAPS_API_KEY",
       "EBB_EIA_API_KEY",
-      "EBB_WATTTIME_API_KEY",
+      "EBB_ENTSOE_SECURITY_TOKEN",
+      "WATTTIME_USERNAME",
+      "WATTTIME_PASSWORD",
     ]) {
       expect(t).toContain(k);
     }

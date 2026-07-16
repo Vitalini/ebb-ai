@@ -108,8 +108,8 @@
               <!-- grid feeds -->
               <rect x="40" y="400" width="260" height="100" rx="10" fill="#161c25" stroke="#2c3441"/>
               <text x="170" y="424" text-anchor="middle" fill="#8a93a6" font-family="ui-monospace,monospace" font-size="11" letter-spacing="2">GRID FEEDS</text>
-              <text x="170" y="446" text-anchor="middle" fill="#e6e8ee" font-family="ui-sans-serif,system-ui" font-size="13">Electricity Maps · mock fallback</text>
-              <text x="170" y="466" text-anchor="middle" fill="#6b7280" font-family="ui-monospace,monospace" font-size="10">(planned) WattTime marginal</text>
+              <text x="170" y="446" text-anchor="middle" fill="#e6e8ee" font-family="ui-sans-serif,system-ui" font-size="13">UK · EIA · ENTSO-E · WattTime · EM</text>
+              <text x="170" y="466" text-anchor="middle" fill="#8a93a6" font-family="ui-monospace,monospace" font-size="10">WattTime marginal (co2_moer)</text>
               <text x="170" y="486" text-anchor="middle" fill="#6b7280" font-family="ui-monospace,monospace" font-size="10">(planned) GridStatus.io ISO data</text>
 
               <!-- provider adapters -->
@@ -182,7 +182,6 @@
         <h2>What's deliberately not in v0.11</h2>
         <ul class="reasons">
           <li><strong>Cross-provider routing.</strong> ebb-ai picks the cheapest carbon window inside one provider. It doesn't yet weigh "Anthropic vs OpenAI vs Gemini" on a per-task basis. On the roadmap, once the per-provider adapters have stabilized.</li>
-          <li><strong>WattTime marginal-emissions feed.</strong> The honest climate signal for time-shifting is marginal emissions, not average. Electricity Maps / EIA / ENTSO-E give average intensity today; WattTime integration is on the roadmap.</li>
           <li><strong>Local hardware routing.</strong> "If your laptop is plugged in and the grid is clean, use Ollama" is a real product idea, deferred to a later release.</li>
           <li><strong>Multi-region failover.</strong> If your default region's grid is unusually dirty for a sustained window, ebb-ai could route through a different provider region. On the roadmap.</li>
           <li><strong>Global aggregate leaderboard.</strong> Per-user impact is local-only today (privacy-by-default). A signed opt-in telemetry endpoint and aggregate counters are designed — see <code>docs/spec/proposal/v09-leaderboard.md</code>.</li>
