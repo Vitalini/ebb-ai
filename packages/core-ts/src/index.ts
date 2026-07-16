@@ -111,6 +111,24 @@ export type {
   EstimateEnergyOpts,
 } from "./energy.js";
 export {
+  ALL_TOOL_HOSTS,
+  TOOL_SURFACE,
+  getToolDef,
+  getToolDefOrThrow,
+  toolsForHost,
+  paramHosts,
+  paramIncludedForHost,
+  paramsForHost,
+  paramOptionalForHost,
+  neutralSurfaceForHost,
+} from "./tool-surface.js";
+export type {
+  ToolHost,
+  ToolParamKind,
+  ToolParam,
+  CanonicalToolDef,
+} from "./tool-surface.js";
+export {
   canonicalize,
   defaultSigningKeyPath,
   loadOrCreateSigningKey,
