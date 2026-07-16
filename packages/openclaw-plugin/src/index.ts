@@ -64,9 +64,9 @@ import {
   resolveRegion,
   Scheduler,
   TaskStore,
-  type ProviderAdapter,
   type ProviderCallSpec,
   type TaskRecord,
+  type TickAdapters,
   type TickResult,
 } from "@ebb-ai/core";
 
@@ -117,6 +117,34 @@ const SYNTHETIC_GRID_WARNING =
   "⚠ SYNTHETIC (mock) grid data — no live grid feed was available for this region, " +
   "so the carbon numbers above are illustrative, not measured. " +
   "Set EBB_ELECTRICITY_MAPS_API_KEY (or another supported feed key) for real intensity.";
+
+/**
+ * The model a task carries when the caller does not pass one, per provider.
+ * Stored for the direct-API-key path + audit record; the OpenClaw runtime
+ * bridge ignores it and runs the gateway agent's own model. Keeping these
+ * per-provider means a task never carries a foreign model id (e.g. an openai
+ * task with a claude default).
+ */
+const DEFAULT_MODEL_BY_PROVIDER: Record<
+  "anthropic" | "openai" | "gemini" | "ollama",
+  string
+> = {
+  anthropic: "claude-sonnet-4-6",
+  openai: "gpt-4o",
+  gemini: "gemini-2.0-flash",
+  ollama: "llama3.1",
+};
+
+/** The env var that configures each provider's direct-dispatch route. */
+const PROVIDER_KEY_ENV: Record<
+  "anthropic" | "openai" | "gemini" | "ollama",
+  string
+> = {
+  anthropic: "ANTHROPIC_API_KEY",
+  openai: "OPENAI_API_KEY",
+  gemini: "GEMINI_API_KEY",
+  ollama: "OLLAMA_HOST",
+};
 
 /**
  * Surface receipt provenance for a completed/expedited/retried task, mirroring
@@ -289,9 +317,12 @@ export async function runDispatchTick(
     if (!loggedSkippedProviders.has(provider)) {
       loggedSkippedProviders.add(provider);
       // eslint-disable-next-line no-console
+      const keyHint =
+        PROVIDER_KEY_ENV[provider as keyof typeof PROVIDER_KEY_ENV] ??
+        "its provider credential";
       console.warn(
         `[ebb-ai] dispatcher: no adapter for provider "${provider}" yet ` +
-          `(runtime bridge is captured on the first tool call; ${provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY"} is not set). ` +
+          `(runtime bridge is captured on the first tool call; ${keyHint} is not set). ` +
           `Leaving those tasks scheduled; they dispatch once an adapter is available.`,
       );
     }
@@ -300,9 +331,7 @@ export async function runDispatchTick(
   // DispatchAdapter omits dispatchBatch on purpose — Scheduler.tick guards
   // `typeof adapter.dispatchBatch === "function"`, so dispatch stays
   // synchronous. The cast is safe under that runtime guard.
-  const result = await scheduler.tick(
-    adapters as { anthropic?: ProviderAdapter; openai?: ProviderAdapter },
-  );
+  const result = await scheduler.tick(adapters as TickAdapters);
 
   // Undo any "no adapter configured" failure tick may have written: those
   // tasks must stay `scheduled`, not be marked terminal. Drop them from the
@@ -480,7 +509,7 @@ export default defineToolPlugin({
           region?: string;
           carbon_budget_g?: number;
           model?: string;
-          provider?: "anthropic" | "openai";
+          provider?: "anthropic" | "openai" | "gemini" | "ollama";
           deliver?: string[];
           webhook_url?: string;
           file_path?: string;
@@ -495,15 +524,15 @@ export default defineToolPlugin({
         const explicitModel = params.model?.trim();
 
         // Provider: explicit param wins; else infer from the model prefix
-        // (gpt-*/o<n>* → openai, claude-* → anthropic; default anthropic).
+        // (gpt-*/o<n>* → openai, gemini-* → gemini, an OLLAMA_MODELS-listed id
+        // → ollama, claude-* → anthropic; default anthropic).
         const provider = params.provider ?? inferProvider(explicitModel);
         const providerInferred = params.provider === undefined;
         // A concrete model is stored for the direct-API-key path and for the
         // audit record; the OpenClaw runtime bridge ignores it and uses the
         // gateway agent's own model. Default the model to the chosen
-        // provider's flagship so an openai task never carries a claude model.
-        const model =
-          explicitModel || (provider === "openai" ? "gpt-4o" : "claude-sonnet-4-6");
+        // provider's flagship so a task never carries a foreign model.
+        const model = explicitModel || DEFAULT_MODEL_BY_PROVIDER[provider];
 
         // How this task will execute when due: "openclaw-runtime" (gateway
         // model, no key), "api-key", or "unconfigured".
@@ -521,8 +550,7 @@ export default defineToolPlugin({
         if (dispatch === "api-key") {
           const providers = availableProviders();
           if (!providers.has(provider)) {
-            const keyName =
-              provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY";
+            const keyName = PROVIDER_KEY_ENV[provider];
             throw new Error(
               `schedule_task rejected: this task would dispatch via provider "${provider}" ` +
                 `(${providerInferred ? `inferred from model "${model}"` : "explicitly requested"}), ` +
@@ -847,10 +875,7 @@ export default defineToolPlugin({
         try {
           entry = await scheduler.expediteTask(
             params.task_id,
-            buildAdapters() as {
-              anthropic?: ProviderAdapter;
-              openai?: ProviderAdapter;
-            },
+            buildAdapters() as TickAdapters,
           );
         } catch (err) {
           // Surface the scheduler's own rejection message verbatim (e.g. a
@@ -899,10 +924,7 @@ export default defineToolPlugin({
         try {
           entry = await scheduler.retryTask(
             params.task_id,
-            buildAdapters() as {
-              anthropic?: ProviderAdapter;
-              openai?: ProviderAdapter;
-            },
+            buildAdapters() as TickAdapters,
           );
         } catch (err) {
           // Surface the scheduler's own rejection message verbatim (e.g. a

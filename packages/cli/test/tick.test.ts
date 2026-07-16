@@ -9,37 +9,61 @@ import {
 } from "../src/commands/tick.js";
 
 describe("ebb tick", () => {
-  const saved = { a: process.env.ANTHROPIC_API_KEY, o: process.env.OPENAI_API_KEY };
+  const saved = {
+    a: process.env.ANTHROPIC_API_KEY,
+    o: process.env.OPENAI_API_KEY,
+    g: process.env.GEMINI_API_KEY,
+    gg: process.env.GOOGLE_API_KEY,
+    oh: process.env.OLLAMA_HOST,
+  };
 
   beforeEach(() => {
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.GOOGLE_API_KEY;
+    delete process.env.OLLAMA_HOST;
   });
 
   afterEach(() => {
-    if (saved.a !== undefined) process.env.ANTHROPIC_API_KEY = saved.a;
-    else delete process.env.ANTHROPIC_API_KEY;
-    if (saved.o !== undefined) process.env.OPENAI_API_KEY = saved.o;
-    else delete process.env.OPENAI_API_KEY;
+    for (const [k, v] of [
+      ["ANTHROPIC_API_KEY", saved.a],
+      ["OPENAI_API_KEY", saved.o],
+      ["GEMINI_API_KEY", saved.g],
+      ["GOOGLE_API_KEY", saved.gg],
+      ["OLLAMA_HOST", saved.oh],
+    ] as const) {
+      if (v !== undefined) process.env[k] = v;
+      else delete process.env[k];
+    }
   });
 
-  it("exits 0 with a clear message when no provider keys are set", async () => {
+  it("exits 0 with a clear message when no adapters are configured", async () => {
     const r = await runTickOnce({ db: ":memory:", envFile: "/nonexistent/ebb/env" });
     expect(r.exitCode).toBe(0);
-    expect(r.message).toMatch(/no provider keys/i);
+    expect(r.message).toMatch(/no adapters configured/i);
   });
 });
 
 describe("missing-provider-key warning", () => {
   let dir: string;
   let dbPath: string;
-  const saved = { a: process.env.ANTHROPIC_API_KEY, o: process.env.OPENAI_API_KEY };
+  const saved = {
+    a: process.env.ANTHROPIC_API_KEY,
+    o: process.env.OPENAI_API_KEY,
+    g: process.env.GEMINI_API_KEY,
+    gg: process.env.GOOGLE_API_KEY,
+    oh: process.env.OLLAMA_HOST,
+  };
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "ebb-tick-"));
     dbPath = join(dir, "queue.db");
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.GOOGLE_API_KEY;
+    delete process.env.OLLAMA_HOST;
     const store = new TaskStore({ dbPath });
     store.upsert({
       taskId: "pending-anthropic",
@@ -59,10 +83,16 @@ describe("missing-provider-key warning", () => {
 
   afterEach(() => {
     rmSync(dir, { recursive: true, force: true });
-    if (saved.a !== undefined) process.env.ANTHROPIC_API_KEY = saved.a;
-    else delete process.env.ANTHROPIC_API_KEY;
-    if (saved.o !== undefined) process.env.OPENAI_API_KEY = saved.o;
-    else delete process.env.OPENAI_API_KEY;
+    for (const [k, v] of [
+      ["ANTHROPIC_API_KEY", saved.a],
+      ["OPENAI_API_KEY", saved.o],
+      ["GEMINI_API_KEY", saved.g],
+      ["GOOGLE_API_KEY", saved.gg],
+      ["OLLAMA_HOST", saved.oh],
+    ] as const) {
+      if (v !== undefined) process.env[k] = v;
+      else delete process.env[k];
+    }
   });
 
   it("detects the missing key for a pending provider task", () => {

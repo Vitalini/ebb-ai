@@ -378,6 +378,37 @@ describe("ebb OpenClaw plugin — dispatch adapters", () => {
     expect(adapters.openai?.provider).toBe("openai");
     expect(typeof adapters.anthropic?.dispatch).toBe("function");
   });
+
+  it("builds a Gemini adapter from GEMINI_API_KEY, else GOOGLE_API_KEY", () => {
+    expect(buildAdapters({ GEMINI_API_KEY: "g" }).gemini?.provider).toBe("gemini");
+    expect(buildAdapters({ GOOGLE_API_KEY: "g" }).gemini?.provider).toBe("gemini");
+    expect(buildAdapters({}).gemini).toBeUndefined();
+  });
+
+  it("builds an Ollama adapter only when OLLAMA_HOST is set", () => {
+    expect(buildAdapters({ OLLAMA_HOST: "http://localhost:11434" }).ollama?.provider).toBe(
+      "ollama",
+    );
+    expect(buildAdapters({}).ollama).toBeUndefined();
+  });
+
+  it("adds Gemini / Ollama alongside the bridge (they never ride the bridge)", () => {
+    setLlmBridgeForTest(async () => ({ text: "" }));
+    try {
+      const adapters = buildAdapters({
+        GEMINI_API_KEY: "g",
+        OLLAMA_HOST: "http://localhost:11434",
+      });
+      // Bridge covers the two hosted providers…
+      expect(adapters.anthropic?.provider).toBe("anthropic");
+      expect(adapters.openai?.provider).toBe("openai");
+      // …and Gemini / Ollama get their own direct adapters.
+      expect(adapters.gemini?.provider).toBe("gemini");
+      expect(adapters.ollama?.provider).toBe("ollama");
+    } finally {
+      setLlmBridgeForTest(undefined);
+    }
+  });
 });
 
 describe("ebb OpenClaw plugin — provider inference", () => {
@@ -392,6 +423,22 @@ describe("ebb OpenClaw plugin — provider inference", () => {
     expect(inferProvider("claude-opus-4-1")).toBe("anthropic");
   });
 
+  it("infers gemini from gemini-* models", () => {
+    expect(inferProvider("gemini-2.0-flash")).toBe("gemini");
+    expect(inferProvider("gemini-1.5-pro")).toBe("gemini");
+    expect(inferProvider("  GEMINI-2.0-FLASH  ")).toBe("gemini"); // trim + case
+  });
+
+  it("infers ollama only for models in the OLLAMA_MODELS allow-list", () => {
+    const env = { OLLAMA_MODELS: "llama3.1, mistral , qwen2.5" };
+    expect(inferProvider("llama3.1", env)).toBe("ollama");
+    expect(inferProvider("MISTRAL", env)).toBe("ollama"); // case-insensitive
+    // Not listed → falls through to the anthropic default (not ollama).
+    expect(inferProvider("phi3", env)).toBe("anthropic");
+    // No allow-list → an ollama model is NOT inferred (explicit provider only).
+    expect(inferProvider("llama3.1", {})).toBe("anthropic");
+  });
+
   it("defaults unknown / empty models to anthropic", () => {
     expect(inferProvider(undefined)).toBe("anthropic");
     expect(inferProvider("")).toBe("anthropic");
@@ -399,16 +446,26 @@ describe("ebb OpenClaw plugin — provider inference", () => {
     expect(inferProvider("  GPT-4O  ")).toBe("openai"); // trim + case-insensitive
   });
 
-  it("availableProviders reflects API keys, and both providers under the bridge", () => {
+  it("availableProviders reflects API keys, and both hosted providers under the bridge", () => {
     expect([...availableProviders({})]).toEqual([]);
     expect([...availableProviders({ ANTHROPIC_API_KEY: "k" })]).toEqual(["anthropic"]);
     expect(
       [...availableProviders({ OPENAI_API_KEY: "k" })].sort(),
     ).toEqual(["openai"]);
+    // Gemini / Ollama are available from their own config, bridge or not.
+    expect([...availableProviders({ GEMINI_API_KEY: "k" })]).toEqual(["gemini"]);
+    expect([...availableProviders({ GOOGLE_API_KEY: "k" })]).toEqual(["gemini"]);
+    expect([...availableProviders({ OLLAMA_HOST: "http://localhost:11434" })]).toEqual([
+      "ollama",
+    ]);
     setLlmBridgeForTest(async () => ({ text: "" }));
     try {
-      // With the bridge captured, both providers are dispatchable regardless.
+      // With the bridge captured, both hosted providers are dispatchable;
+      // Gemini / Ollama still require their own config.
       expect([...availableProviders({})].sort()).toEqual(["anthropic", "openai"]);
+      expect(
+        [...availableProviders({ OLLAMA_HOST: "http://localhost:11434" })].sort(),
+      ).toEqual(["anthropic", "ollama", "openai"]);
     } finally {
       setLlmBridgeForTest(undefined);
     }
@@ -451,6 +508,30 @@ describe("ebb OpenClaw plugin — schedule_task provider param", () => {
       )) as { provider: string; model: string };
       expect(dflt.provider).toBe("anthropic");
       expect(dflt.model).toBe("claude-sonnet-4-6");
+    } finally {
+      setLlmBridgeForTest(undefined);
+    }
+  });
+
+  it("infers gemini from a gemini-* model and defaults each provider's model", async () => {
+    setLlmBridgeForTest(async () => ({ text: "" }));
+    try {
+      const gem = (await tool("schedule_task").execute(
+        { prompt: "p", deadline: deadlineISO(), region: "GB", model: "gemini-1.5-pro" },
+        { dbPath },
+      )) as { provider: string; provider_source: string; model: string };
+      expect(gem.provider).toBe("gemini");
+      expect(gem.provider_source).toBe("inferred");
+      expect(gem.model).toBe("gemini-1.5-pro");
+
+      // Explicit ollama with no model → default ollama flagship model.
+      const oll = (await tool("schedule_task").execute(
+        { prompt: "p", deadline: deadlineISO(), region: "GB", provider: "ollama" },
+        { dbPath },
+      )) as { provider: string; provider_source: string; model: string };
+      expect(oll.provider).toBe("ollama");
+      expect(oll.provider_source).toBe("request");
+      expect(oll.model).toBe("llama3.1");
     } finally {
       setLlmBridgeForTest(undefined);
     }

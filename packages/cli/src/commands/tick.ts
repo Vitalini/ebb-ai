@@ -9,11 +9,13 @@
 
 import {
   AnthropicAdapter,
+  GeminiAdapter,
+  OllamaAdapter,
   OpenAIAdapter,
   resolveRegion,
   Scheduler,
   TaskStore,
-  type ProviderAdapter,
+  type TickAdapters,
 } from "@ebb-ai/core";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
@@ -56,24 +58,35 @@ export function defaultDbPath(): string {
   return newPath;
 }
 
-function buildAdapters(): {
-  anthropic?: ProviderAdapter;
-  openai?: ProviderAdapter;
-} {
-  const out: { anthropic?: ProviderAdapter; openai?: ProviderAdapter } = {};
+function buildAdapters(): TickAdapters {
+  const out: TickAdapters = {};
   if (process.env.ANTHROPIC_API_KEY) {
     out.anthropic = new AnthropicAdapter();
   }
   if (process.env.OPENAI_API_KEY) {
     out.openai = new OpenAIAdapter();
   }
+  // Gemini reads GEMINI_API_KEY, falling back to GOOGLE_API_KEY.
+  if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) {
+    out.gemini = new GeminiAdapter();
+  }
+  // Ollama is local + keyless: register it only when OLLAMA_HOST is set
+  // (explicit opt-in). The adapter defaults to http://localhost:11434.
+  if (process.env.OLLAMA_HOST) {
+    out.ollama = new OllamaAdapter();
+  }
   return out;
 }
 
-/** Provider key expected in the env for a given provider name. */
+/**
+ * Provider key expected in the env for a given provider name. Ollama has no
+ * key (it is local + keyless), so it is intentionally absent — a pending
+ * Ollama task is never reported as "missing a key".
+ */
 const PROVIDER_KEY: Record<string, string> = {
   anthropic: "ANTHROPIC_API_KEY",
   openai: "OPENAI_API_KEY",
+  gemini: "GEMINI_API_KEY",
 };
 
 /**
@@ -121,8 +134,10 @@ export async function runTickOnce(
 
   const dbPath = opts.db ?? defaultDbPath();
   const adapters = buildAdapters();
-  if (!adapters.anthropic && !adapters.openai) {
-    // Loud warning when pending provider tasks exist but no key is set.
+  if (Object.keys(adapters).length === 0) {
+    // Loud warning when pending provider tasks exist but no adapter is
+    // configured (no ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY /
+    // OLLAMA_HOST).
     const missing = missingProviderKeysForPending(dbPath);
     const detail =
       missing.length > 0
@@ -131,7 +146,7 @@ export async function runTickOnce(
     return {
       exitCode: 0,
       message:
-        `tick: no provider keys (ANTHROPIC_API_KEY / OPENAI_API_KEY); nothing to dispatch${detail}`,
+        `tick: no adapters configured (set ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY, or OLLAMA_HOST for local); nothing to dispatch${detail}`,
     };
   }
   // Even with some keys present, warn about pending tasks needing a key

@@ -47,10 +47,19 @@ read it, so launchd, systemd, and manual cron all pick up keys the same way:
 ```
 ANTHROPIC_API_KEY=sk-...
 OPENAI_API_KEY=sk-...
+GEMINI_API_KEY=...        # or GOOGLE_API_KEY — Gemini (generativelanguage.googleapis.com)
+OLLAMA_HOST=http://localhost:11434   # local Ollama; presence opts the ollama provider in
 ```
 
+Providers: `anthropic` and `openai` are batch-capable (their tasks can
+auto-route through a 50%-cheaper Batch API); `gemini` and `ollama` are
+sync-only. Gemini reads `GEMINI_API_KEY`, falling back to `GOOGLE_API_KEY`.
+Ollama is local and keyless — set `OLLAMA_HOST` (default `http://localhost:11434`)
+to enable it; optionally list local model ids in `OLLAMA_MODELS` (comma-separated)
+so `schedule_task` can infer the `ollama` provider from a bare model name.
+
 `ebb tick` prints a loud warning when pending tasks need a provider key that
-is not set.
+is not set. (Ollama is keyless, so a pending Ollama task is never flagged.)
 
 ## Platform support
 

@@ -35,6 +35,8 @@ import {
 import {
   AnthropicAdapter,
   buildDefaultGridFeed,
+  GeminiAdapter,
+  OllamaAdapter,
   OpenAIAdapter,
   paramOptionalForHost,
   paramsForHost,
@@ -44,9 +46,9 @@ import {
   toolsForHost,
   type CanonicalToolDef,
   type GridForecast,
-  type ProviderAdapter,
   type ProviderCallSpec,
   type TaskRecord,
+  type TickAdapters,
   type ToolParam,
 } from "@ebb-ai/core";
 import { z } from "zod";
@@ -106,10 +108,18 @@ export function resolveStartupDb(explicit = process.env.EBB_DB_PATH): {
   }
 }
 
-function buildAdapters(): { anthropic?: ProviderAdapter; openai?: ProviderAdapter } {
-  const out: { anthropic?: ProviderAdapter; openai?: ProviderAdapter } = {};
+function buildAdapters(): TickAdapters {
+  const out: TickAdapters = {};
   if (process.env.ANTHROPIC_API_KEY) out.anthropic = new AnthropicAdapter();
   if (process.env.OPENAI_API_KEY) out.openai = new OpenAIAdapter();
+  // Gemini reads GEMINI_API_KEY, falling back to GOOGLE_API_KEY.
+  if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) {
+    out.gemini = new GeminiAdapter();
+  }
+  // Ollama is local + keyless: register it only when OLLAMA_HOST is set, an
+  // explicit opt-in that a local server is being run. (The adapter still
+  // defaults to http://localhost:11434 when constructed.)
+  if (process.env.OLLAMA_HOST) out.ollama = new OllamaAdapter();
   return out;
 }
 
@@ -382,7 +392,7 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
           carbon_budget_g?: number;
           dry_run?: boolean;
           dispatch?: boolean;
-          provider?: "anthropic" | "openai";
+          provider?: "anthropic" | "openai" | "gemini" | "ollama";
           output_path?: string;
           redact_in_receipt?: string[];
         };

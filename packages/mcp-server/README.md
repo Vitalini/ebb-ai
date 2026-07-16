@@ -87,6 +87,10 @@ Add to `~/.openclaw/mcp.json`:
 |---|---|
 | `EBB_ELECTRICITY_MAPS_API_KEY` | API key from [electricitymaps.com](https://www.electricitymaps.com/free-tier-api). If unset, the server falls back to deterministic mock data so you can still run the whole stack locally. |
 | `EBB_DEFAULT_REGION` | Electricity Maps zone code, default `US-CAL-CISO`. |
+| `ANTHROPIC_API_KEY` | Enables the `anthropic` provider (batch-capable). |
+| `OPENAI_API_KEY` | Enables the `openai` provider (batch-capable). |
+| `GEMINI_API_KEY` / `GOOGLE_API_KEY` | Enables the `gemini` provider (Generative Language API, sync-only). `GEMINI_API_KEY` is preferred; `GOOGLE_API_KEY` is the fallback. |
+| `OLLAMA_HOST` | Enables the local `ollama` provider (sync-only). Default `http://localhost:11434`; keyless — set this var to opt the provider in. |
 
 ## v0.1 limitations
 
