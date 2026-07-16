@@ -10,7 +10,7 @@
     {
       "name": "ebb-ai",
       "description": "Auto-dispatch any \"do this later / by tomorrow / overnight / when you have a moment\" task to the cleanest grid hour inside the deadline. Invoke when the user defers — queues + scores against live carbon-intensity for 31 grid regions, routes through Anthropic/OpenAI Batch APIs (50% cheaper), writes per-task carbon receipt. Eight slash commands (/ebb-ai:{defer, plan, check, cancel, expedite, reschedule, retry, grid}). Persistent SQLite queue. Apache-2.0.",
-      "version": "0.12.0",
+      "version": "0.13.0",
       "source": "./packages/claude-code-plugin/"
     }
   ]

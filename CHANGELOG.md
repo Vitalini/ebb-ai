@@ -7,9 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+(Nothing pending — see version sections below.)
+
+## [0.13.0] — 2026-07-16
+
 **Theme:** "One source of truth." The structural consolidation cycle the
 0.12.0 audit resolution honestly deferred (§2.2–§2.4) plus the §1.8
 energy-table remainder.
+
+> **Operator note:** the OpenClaw plugin does not auto-update. Run
+> `openclaw plugins update @vitalini/ebb` to pull 0.13.0.
 
 ### Added
 
@@ -1068,7 +1075,9 @@ their mind, and how to mitigate the operational failure modes
   Batches APIs. Direct Batch routing lands in v0.2.
 - Python port (`ebb-ai` PyPI) is a placeholder. v0.2.
 
-[Unreleased]: https://github.com/Vitalini/ebb-ai/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/Vitalini/ebb-ai/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/Vitalini/ebb-ai/compare/v0.12.0...v0.13.0
+[0.12.0]: https://github.com/Vitalini/ebb-ai/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/Vitalini/ebb-ai/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/Vitalini/ebb-ai/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/Vitalini/ebb-ai/compare/v0.8.3...v0.9.0
