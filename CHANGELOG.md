@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **WattTime marginal-emissions feed** (TS + PY, roadmap item 2) — the
+  5th real feed. Opt-in via `WATTTIME_USERNAME`/`WATTTIME_PASSWORD`;
+  for the 6 covered US ISO zones a real marginal (co2_moer) *forecast*
+  takes precedence over EIA hour-of-day persistence; token cached
+  in-process with one 401 re-login, all failures fall through the
+  existing chain (EIA → mock). lbs/MWh → gCO2/kWh conversion pinned by
+  shared TS/PY fixtures. New optional `signalType: "average"|"marginal"`
+  on forecasts, recommendations and receipts — reasoning strings and
+  receipt renders disclose "MARGINAL-emissions signal" honestly; absent
+  field means average, existing feeds unchanged. Zone→WattTime region
+  mapping: CAISO_NORTH verified against public docs; the other five
+  sub-BA codes are marked unverified in code (a wrong code 404s and
+  degrades safely to EIA).
+
 - **Gemini and Ollama provider adapters** (TS + PY, roadmap item 3 —
   prerequisite for cross-provider routing, which is NOT yet built).
   `GeminiAdapter`: Generative Language API `generateContent`, key via
