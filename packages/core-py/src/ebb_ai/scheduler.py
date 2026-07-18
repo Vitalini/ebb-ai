@@ -45,6 +45,14 @@ from typing import TYPE_CHECKING, Any, Final, Generic, TypeVar
 import aiosqlite
 import httpx
 
+from .budget import (
+    CarbonAlert,
+    CarbonBudgetConfig,
+    CarbonBudgetStatus,
+    carbon_budget_usage,
+    receipt_carbon_g,
+    window_bounds,
+)
 from .energy import grams_for_intensity, resolve_model_energy
 from .errors import (
     CarbonBudgetExceededError,
@@ -548,6 +556,24 @@ CREATE TABLE IF NOT EXISTS tasks (
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_enqueued_at ON tasks(enqueued_at);
+
+-- Carbon-budget alert markers (ROADMAP item 4). One row per
+-- (window_kind, window_start, threshold_g) records that the aggregate
+-- carbon budget for that rolling window has already fired an alert. The
+-- composite PRIMARY KEY makes an alert idempotent across restarts and safe
+-- under a multi-process double-fire: a second INSERT with the same key is a
+-- no-op (0 rows changed), so only the first crosser fires. Derived state —
+-- never signed, never part of the receipt ledger proper. Column names match
+-- the TS port exactly; the DB file is shared cross-language.
+CREATE TABLE IF NOT EXISTS carbon_budget_alerts (
+    window_kind   TEXT NOT NULL,
+    window_start  TEXT NOT NULL,
+    threshold_g   REAL NOT NULL,
+    actual_g      REAL NOT NULL,
+    task_id       TEXT,
+    alerted_at    TEXT NOT NULL,
+    PRIMARY KEY (window_kind, window_start, threshold_g)
+);
 """
 
 
@@ -849,6 +875,55 @@ class _TaskStore:
             await conn.commit()
         return rowcount == 1
 
+    async def record_budget_alert(
+        self,
+        window_kind: str,
+        window_start: str,
+        threshold_g: float,
+        actual_g: float,
+        task_id: str | None,
+        alerted_at: str,
+    ) -> bool:
+        """Record a carbon-budget alert marker (ROADMAP item 4).
+
+        Returns ``True`` iff THIS call inserted the row. The composite
+        PRIMARY KEY makes the write idempotent: a second call for the same
+        window+threshold conflicts and changes 0 rows, so exactly one caller
+        — the first crosser, in this process or any other pointed at the same
+        DB file — gets ``True`` and fires the alert. This is the
+        multi-process double-fire guard (mirrors the row-level dispatch
+        claim).
+        """
+        conn = self._require()
+        async with self._lock:
+            cur = await conn.execute(
+                "INSERT INTO carbon_budget_alerts ("
+                "  window_kind, window_start, threshold_g, actual_g, "
+                "  task_id, alerted_at"
+                ") VALUES (?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(window_kind, window_start, threshold_g) "
+                "DO NOTHING",
+                (window_kind, window_start, threshold_g, actual_g, task_id, alerted_at),
+            )
+            rowcount = cur.rowcount
+            await cur.close()
+            await conn.commit()
+        return rowcount == 1
+
+    async def has_budget_alert(
+        self, window_kind: str, window_start: str, threshold_g: float,
+    ) -> bool:
+        """True if an alert has already fired for this (window, threshold)."""
+        conn = self._require()
+        async with conn.execute(
+            "SELECT 1 FROM carbon_budget_alerts "
+            "WHERE window_kind = ? AND window_start = ? AND threshold_g = ? "
+            "LIMIT 1",
+            (window_kind, window_start, threshold_g),
+        ) as cur:
+            row = await cur.fetchone()
+        return row is not None
+
     def exists_sync(self, task_id: str) -> bool:
         """Synchronous existence probe for the duplicate-id guard.
 
@@ -1031,6 +1106,9 @@ class Scheduler:
         db_path: str | None = None,
         signing: bool | dict[str, Any] | None = None,
         rng: Callable[[], float] | None = None,
+        carbon_budget: CarbonBudgetConfig | None = None,
+        on_carbon_alert: Callable[[CarbonAlert], Awaitable[None] | None]
+        | None = None,
     ) -> None:
         self._feed: GridFeed = feed if feed is not None else mock_grid_feed()
         self._default_region = default_region
@@ -1058,6 +1136,17 @@ class Scheduler:
             False if signing is False else (signing or {})
         )
         self._signing_key: SigningKeyPair | None = None
+        # Aggregate carbon-budget alerts (ROADMAP item 4). When set, every
+        # ``tick()`` that completes a receipt checks the configured rolling
+        # window's total consumption (actual, falling back to estimated)
+        # against ``threshold_g`` and, on the first crossing per (window,
+        # threshold), records a DB marker and invokes ``on_carbon_alert``.
+        # Distinct from the per-task ``carbon_budget_g`` hard cap. Requires a
+        # store (``db_path``) — the marker lives in the ledger.
+        self._carbon_budget: CarbonBudgetConfig | None = carbon_budget
+        self._on_carbon_alert: (
+            Callable[[CarbonAlert], Awaitable[None] | None] | None
+        ) = on_carbon_alert
 
     # ----- lifecycle --------------------------------------------------- #
 
@@ -1572,6 +1661,15 @@ class Scheduler:
             else:
                 failed += 1
 
+        # ---- (4) Aggregate carbon-budget alert (ROADMAP item 4) ----
+        # After every receipt this tick wrote (sync due-sweep + batch poll),
+        # check the rolling window against the configured threshold and fire
+        # the alert hook once per (window, threshold). No-op unless a budget
+        # is configured. Fail-soft: never let the check disturb the tick.
+        if self._carbon_budget is not None:
+            completed_ids = [e.task_id for e in results if e.status == "completed"]
+            await self._check_carbon_budget(completed_ids)
+
         return TickResult(
             inspected=inspected,
             dispatched=dispatched,
@@ -1580,6 +1678,128 @@ class Scheduler:
             batch_submitted=batch_submitted,
             batch_polled=batch_polled,
         )
+
+    async def get_carbon_budget_status(
+        self, at: datetime | None = None,
+    ) -> CarbonBudgetStatus | None:
+        """Current aggregate carbon-budget status (ROADMAP item 4) over this
+        scheduler's ledger, or ``None`` when no budget is configured or there
+        is no store to read. Read-only.
+        """
+        budget = self._carbon_budget
+        if budget is None or self._store is None or not self._connected:
+            return None
+        now = at if at is not None else _now_utc()
+        rows = await self._store.list_by_status("completed")
+        usage = carbon_budget_usage(rows, budget.window_kind, now)
+        alerted = False
+        try:
+            alerted = await self._store.has_budget_alert(
+                budget.window_kind, usage.window_start, budget.threshold_g
+            )
+        except Exception:  # noqa: BLE001 — best-effort probe
+            alerted = False
+        pct = (
+            round((usage.used_g / budget.threshold_g) * 100)
+            if budget.threshold_g > 0
+            else 0
+        )
+        return CarbonBudgetStatus(
+            window_kind=budget.window_kind,
+            window_start=usage.window_start,
+            window_end=usage.window_end,
+            threshold_g=budget.threshold_g,
+            used_g=usage.used_g,
+            pct=pct,
+            task_count=usage.task_count,
+            exceeded=usage.used_g >= budget.threshold_g,
+            alerted=alerted,
+        )
+
+    async def _check_carbon_budget(self, completed_task_ids: list[str]) -> None:
+        """Fire the carbon-budget alert hook once per (window, threshold) when
+        this tick's completions push the rolling window over its threshold.
+
+        Called only from :meth:`tick`, so expedite / retry / closure dispatch
+        do NOT fire alerts — they still count toward consumption, but the
+        alert is a tick-time signal. Idempotency + the multi-process
+        double-fire guard live in the DB marker (:meth:`_TaskStore.
+        record_budget_alert`): only the caller that inserts the row invokes
+        the hook. A restart re-runs this harmlessly.
+        """
+        budget = self._carbon_budget
+        if budget is None or self._store is None or not completed_task_ids:
+            return
+        now = _now_utc()
+        try:
+            rows = await self._store.list_by_status("completed")
+        except Exception:  # noqa: BLE001 — a store read failure disables the check
+            return
+        usage = carbon_budget_usage(rows, budget.window_kind, now)
+        if usage.used_g < budget.threshold_g:
+            return
+        # Attribute the crossing honestly: replay this tick's completions on
+        # top of the pre-tick baseline and take the first one to tip it over.
+        start, end = window_bounds(budget.window_kind, now)
+        completed_set = set(completed_task_ids)
+        grams_by_id: dict[str, float] = {}
+        baseline = 0.0
+        for row in rows:
+            if row.receipt is None or not row.receipt.ran_at:
+                continue
+            t = _parse_iso(row.receipt.ran_at)
+            if t is None or t < start or t >= end:
+                continue
+            g = receipt_carbon_g(row.receipt)
+            if row.task_id in completed_set:
+                grams_by_id[row.task_id] = g
+            else:
+                baseline += g
+        running = baseline
+        crossing_id: str | None = None
+        for tid in completed_task_ids:
+            running += grams_by_id.get(tid, 0.0)
+            if running >= budget.threshold_g:
+                crossing_id = tid
+                break
+        if crossing_id is None:
+            crossing_id = completed_task_ids[-1]
+        try:
+            fired = await self._store.record_budget_alert(
+                budget.window_kind,
+                usage.window_start,
+                budget.threshold_g,
+                usage.used_g,
+                crossing_id,
+                _iso_utc(now),
+            )
+        except Exception as err:  # noqa: BLE001
+            _log.warning(
+                "[ebb-ai/scheduler] failed to record carbon-budget alert "
+                "marker: %s",
+                err,
+            )
+            return
+        if not fired:
+            return
+        alert = CarbonAlert(
+            window_kind=budget.window_kind,
+            window_start=usage.window_start,
+            threshold_g=budget.threshold_g,
+            actual_g=usage.used_g,
+            task_id_that_crossed=crossing_id,
+        )
+        try:
+            hook = self._on_carbon_alert
+            if hook is not None:
+                res = hook(alert)
+                if asyncio.iscoroutine(res):
+                    await res
+        except Exception as err:  # noqa: BLE001 — a throwing hook must not break dispatch
+            _log.warning(
+                "[ebb-ai/scheduler] on_carbon_alert hook raised (%s); ignoring",
+                err,
+            )
 
     async def _collect_batch_submit_candidates(
         self, adapters: dict[str, ProviderAdapter | None]

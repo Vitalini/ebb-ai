@@ -76,6 +76,23 @@ CREATE TABLE IF NOT EXISTS tasks (
 );
 CREATE INDEX IF NOT EXISTS tasks_status_idx ON tasks(status);
 CREATE INDEX IF NOT EXISTS tasks_enqueued_idx ON tasks(enqueued_at);
+
+-- Carbon-budget alert markers (ROADMAP item 4). One row per
+-- (window_kind, window_start, threshold_g) records that the aggregate
+-- carbon budget for that rolling window has already fired an alert. The
+-- composite PRIMARY KEY is what makes an alert idempotent across restarts
+-- and safe under a multi-process double-fire: a second INSERT with the
+-- same key is a no-op (0 rows changed), so only the first crosser fires.
+-- Derived state — never signed, never part of the receipt ledger proper.
+CREATE TABLE IF NOT EXISTS carbon_budget_alerts (
+  window_kind   TEXT NOT NULL,
+  window_start  TEXT NOT NULL,
+  threshold_g   REAL NOT NULL,
+  actual_g      REAL NOT NULL,
+  task_id       TEXT,
+  alerted_at    TEXT NOT NULL,
+  PRIMARY KEY (window_kind, window_start, threshold_g)
+);
 `;
 
 /**
@@ -301,6 +318,56 @@ export class TaskStore {
     );
     const res = stmt.run(taskId);
     return Number(res.changes) === 1;
+  }
+
+  /**
+   * Record a carbon-budget alert marker for a (windowKind, windowStart,
+   * thresholdG) triple, returning true iff THIS call inserted the row.
+   *
+   * The composite PRIMARY KEY makes the write idempotent: a second call for
+   * the same window+threshold conflicts and changes 0 rows, so exactly one
+   * caller — the first crosser, in this process or any other pointed at the
+   * same DB file — gets `true` and fires the alert. This is the multi-process
+   * double-fire guard (mirrors the row-level dispatch claim).
+   */
+  recordBudgetAlert(
+    windowKind: string,
+    windowStart: string,
+    thresholdG: number,
+    actualG: number,
+    taskId: string | undefined,
+    alertedAt: string,
+  ): boolean {
+    const stmt = this.db.prepare(`
+      INSERT INTO carbon_budget_alerts (
+        window_kind, window_start, threshold_g, actual_g, task_id, alerted_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(window_kind, window_start, threshold_g) DO NOTHING
+    `);
+    const res = stmt.run(
+      windowKind,
+      windowStart,
+      thresholdG,
+      actualG,
+      taskId ?? null,
+      alertedAt,
+    );
+    return Number(res.changes) === 1;
+  }
+
+  /** True if an alert has already fired for this (windowKind, windowStart, thresholdG). */
+  hasBudgetAlert(
+    windowKind: string,
+    windowStart: string,
+    thresholdG: number,
+  ): boolean {
+    const row = this.db
+      .prepare(
+        `SELECT 1 FROM carbon_budget_alerts
+          WHERE window_kind = ? AND window_start = ? AND threshold_g = ? LIMIT 1`,
+      )
+      .get(windowKind, windowStart, thresholdG);
+    return row !== undefined;
   }
 
   close(): void {
