@@ -60,10 +60,12 @@ import { defineToolPlugin } from "openclaw/plugin-sdk/tool-plugin";
 import {
   buildDefaultGridFeed,
   getToolDefOrThrow,
+  loadCarbonBudgetConfig,
   recommendWindow,
   resolveRegion,
   Scheduler,
   TaskStore,
+  type CarbonAlert,
   type ProviderCallSpec,
   type TaskRecord,
   type TickAdapters,
@@ -88,7 +90,9 @@ import {
 } from "./dispatch.js";
 
 import {
+  deliverCarbonAlert,
   deliverResult,
+  formatCarbonAlertMessage,
   getDeliveryConfig,
   readDeliveryRecord,
   recordDeliveryOutcomes,
@@ -239,11 +243,22 @@ function getQueueRuntime(config: PluginConfig): QueueRuntime {
     );
   }
 
+  // Aggregate carbon-budget alerts (ROADMAP item 4): read the local budget
+  // config (env wins over ~/.ebb-ai/config). When set, a crossing inside
+  // Scheduler.tick routes through the SAME delivery machinery — chat by
+  // default via the captured gateway config — and is logged to the gateway.
+  const carbonBudget = loadCarbonBudgetConfig();
   const scheduler = new Scheduler({
     feed: getGridFeed(),
     store,
     defaultRegion: resolveRegion(undefined, config.defaultRegion).region,
     eager: false,
+    ...(carbonBudget
+      ? {
+          carbonBudget,
+          onCarbonAlert: (alert: CarbonAlert) => onCarbonAlert(alert),
+        }
+      : {}),
   });
   cachedQueueRuntime = { store, scheduler, dbPath };
   // Re-point the background dispatcher at whatever config is now active, so a
@@ -413,6 +428,22 @@ async function deliverCompletedTask(
     await recordDeliveryOutcomes(taskId, cfg, outcomes);
   } catch {
     // best-effort: the result stays retrievable via check_queue_status
+  }
+}
+
+/**
+ * Route a crossed aggregate carbon budget (ROADMAP item 4) through the
+ * gateway. Logs the alert prominently and pushes it through the existing
+ * delivery machinery (chat by default, using the captured gateway config).
+ * Never throws — an alert delivery failure must not disturb the dispatcher.
+ */
+async function onCarbonAlert(alert: CarbonAlert): Promise<void> {
+  // eslint-disable-next-line no-console
+  console.warn(`[ebb-ai] ${formatCarbonAlertMessage(alert).replace(/\n/g, " · ")}`);
+  try {
+    await deliverCarbonAlert(alert, getCapturedOpenClawConfig());
+  } catch {
+    // best-effort: the marker is already persisted; the alert is logged above
   }
 }
 

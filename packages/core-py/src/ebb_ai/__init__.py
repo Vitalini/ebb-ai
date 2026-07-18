@@ -33,6 +33,19 @@ from __future__ import annotations
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
 
+from .budget import (
+    CarbonAlert,
+    CarbonBudgetConfig,
+    CarbonBudgetStatus,
+    CarbonBudgetUsage,
+    CarbonBudgetWindowKind,
+    carbon_budget_config_path,
+    carbon_budget_status,
+    carbon_budget_usage,
+    load_carbon_budget_config,
+    receipt_carbon_g,
+    window_bounds,
+)
 from .energy import (
     DEFAULT_PUE,
     ENERGY_SOURCES,
@@ -138,7 +151,12 @@ __all__ = [
     "TOLERANCE_FLOOR_G",
     "TOLERANCE_FRACTION",
     "Band",
+    "CarbonAlert",
+    "CarbonBudgetConfig",
     "CarbonBudgetExceededError",
+    "CarbonBudgetStatus",
+    "CarbonBudgetUsage",
+    "CarbonBudgetWindowKind",
     "CarbonReceipt",
     "DeferOptions",
     "DeferrableTask",
@@ -176,8 +194,14 @@ __all__ = [
     "VerifyResult",
     "__version__",
     "build_default_grid_feed",
+    "carbon_budget_config_path",
+    "carbon_budget_status",
+    "carbon_budget_usage",
     "default_signing_key_path",
     "defer",
+    "load_carbon_budget_config",
+    "receipt_carbon_g",
+    "window_bounds",
     "eia_feed",
     "electricity_maps_feed",
     "entsoe_feed",

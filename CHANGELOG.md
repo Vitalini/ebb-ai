@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Carbon-budget alerts** (TS + PY, roadmap item 4). An *aggregate*
+  carbon budget over the receipt ledger, distinct from the per-task
+  `carbon_budget_g` hard cap: a threshold on actual (falling back to
+  estimated) receipt grams across a rolling `daily`/`weekly`/`monthly`
+  window. Configured via `~/.ebb-ai/config` (KEY=VALUE, reusing the
+  established secrets-file format — `EBB_CARBON_BUDGET_G` +
+  `EBB_CARBON_BUDGET_WINDOW`; same-named env vars override). The check
+  runs inside `Scheduler.tick` after each receipt write (sync due-sweep
+  + batch poll); crossing a threshold emits an alert exactly once per
+  (window, threshold), guarded by a persisted `carbon_budget_alerts`
+  DB marker (composite PRIMARY KEY → idempotent across restarts, safe
+  against a multi-process double-fire). Core exposes an injectable
+  `onCarbonAlert` hook (`{windowKind, windowStart, thresholdG, actualG,
+  taskIdThatCrossed}`) and `getCarbonBudgetStatus()`. Surfaces: `ebb
+  tick` logs the alert prominently; `ebb stats` shows a used/threshold/
+  percent budget block; the OpenClaw plugin routes the alert through the
+  existing delivery machinery (chat by default); MCP `check_queue_status`
+  adds a `carbon_budget` status block. Purely local — no telemetry, no
+  network. Receipts/signing untouched (an alert is derived state, never
+  a signed artifact).
+
 - **Cross-provider LLM routing** (TS + PY, roadmap item 1). Opt-in and
   honest: `schedule_task` / `recommend_window` gain optional
   `candidates` (`"provider:model"` list — routing activates only with

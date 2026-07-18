@@ -76,6 +76,23 @@ export type {
   BandHistogram,
   Achievement,
 } from "./aggregator.js";
+// Aggregate carbon-budget alerts (ROADMAP item 4).
+export {
+  carbonBudgetConfigPath,
+  carbonBudgetStatus,
+  carbonBudgetUsage,
+  loadCarbonBudgetConfig,
+  receiptCarbonG,
+  windowBounds,
+} from "./budget.js";
+export type {
+  CarbonAlert,
+  CarbonBudgetConfig,
+  CarbonBudgetStatus,
+  CarbonBudgetUsage,
+  CarbonBudgetWindowKind,
+  LoadCarbonBudgetOptions,
+} from "./budget.js";
 export {
   mockGridFeed,
   electricityMapsFeed,

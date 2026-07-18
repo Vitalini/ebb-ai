@@ -18,6 +18,13 @@
  */
 
 import { randomUUID } from "node:crypto";
+import {
+  carbonBudgetUsage,
+  receiptCarbonG,
+  windowBounds,
+  type CarbonAlert,
+  type CarbonBudgetConfig,
+} from "./budget.js";
 import { gramsForIntensity, resolveModelEnergy } from "./energy.js";
 import { mockGridFeed } from "./grid.js";
 import type { ProviderAdapter } from "./providers/base.js";
@@ -124,6 +131,25 @@ export interface SchedulerOptions {
    * (§2.1). A seeded PRNG makes window selection deterministic in tests.
    */
   rng?: () => number;
+  /**
+   * Aggregate carbon-budget alerts (ROADMAP item 4). When set, every
+   * `tick()` that completes a receipt checks the configured rolling
+   * window's total consumption (actual, falling back to estimated) against
+   * `thresholdG` and, on the first crossing per (window, threshold), records
+   * a DB marker and invokes {@link SchedulerOptions.onCarbonAlert}. Distinct
+   * from the per-task `carbonBudgetG` hard cap. Requires a store (dbPath) —
+   * the marker lives in the ledger. Omit to disable.
+   */
+  carbonBudget?: CarbonBudgetConfig;
+  /**
+   * Hook fired exactly once per (window, threshold) when the aggregate
+   * carbon budget is first crossed inside `tick()`. Receives the crossing
+   * window, the threshold, the window's total consumption, and the id of the
+   * task whose completion pushed it over. May be async; a throwing hook is
+   * logged and swallowed so it can never disturb dispatch. No-op unless
+   * `carbonBudget` is also set.
+   */
+  onCarbonAlert?: (alert: CarbonAlert) => void | Promise<void>;
 }
 
 export class Scheduler {
@@ -142,6 +168,10 @@ export class Scheduler {
   // this scheduler instance (see `getSigningKey`).
   private signingConfig: false | { keyPath?: string };
   private signingKey: SigningKeyPair | undefined;
+  private readonly carbonBudget: CarbonBudgetConfig | undefined;
+  private readonly onCarbonAlert:
+    | ((alert: CarbonAlert) => void | Promise<void>)
+    | undefined;
 
   constructor(opts: SchedulerOptions = {}) {
     this.feed = opts.feed ?? mockGridFeed();
@@ -153,6 +183,136 @@ export class Scheduler {
       this.store = new TaskStore({ dbPath: opts.dbPath });
     }
     this.signingConfig = opts.signing ?? {};
+    this.carbonBudget = opts.carbonBudget;
+    this.onCarbonAlert = opts.onCarbonAlert;
+  }
+
+  /**
+   * Compute the current aggregate carbon-budget status (ROADMAP item 4)
+   * over this scheduler's ledger, or `undefined` when no budget is
+   * configured or there is no store to read. Read-only; used by
+   * `check_queue_status` and callers that want the used/threshold/percent
+   * figure without ticking.
+   */
+  getCarbonBudgetStatus(
+    at: Date = new Date(),
+  ): import("./budget.js").CarbonBudgetStatus | undefined {
+    if (!this.carbonBudget || !this.store) return undefined;
+    const rows = this.store.list({ status: "completed" });
+    const usage = carbonBudgetUsage(rows, this.carbonBudget.windowKind, at);
+    let alerted = false;
+    try {
+      alerted = this.store.hasBudgetAlert(
+        this.carbonBudget.windowKind,
+        usage.windowStart,
+        this.carbonBudget.thresholdG,
+      );
+    } catch {
+      // best-effort: a probe failure just reports "not yet alerted"
+    }
+    const pct =
+      this.carbonBudget.thresholdG > 0
+        ? Math.round((usage.usedG / this.carbonBudget.thresholdG) * 100)
+        : 0;
+    return {
+      windowKind: this.carbonBudget.windowKind,
+      windowStart: usage.windowStart,
+      windowEnd: usage.windowEnd,
+      thresholdG: this.carbonBudget.thresholdG,
+      usedG: usage.usedG,
+      pct,
+      taskCount: usage.taskCount,
+      exceeded: usage.usedG >= this.carbonBudget.thresholdG,
+      alerted,
+    };
+  }
+
+  /**
+   * After a `tick()` sweep, check whether this tick's completions pushed the
+   * configured rolling window over its threshold, and fire the alert hook
+   * exactly once per (window, threshold). Called only from `tick` (the sync
+   * due-sweep and the batch-poll sweep both funnel their completed entries
+   * here), so expedite / retry / closure dispatch do NOT fire alerts — they
+   * still count toward consumption, but the alert is a tick-time signal.
+   *
+   * Idempotency + the multi-process double-fire guard live in the DB marker
+   * (`recordBudgetAlert`): only the caller that inserts the row invokes the
+   * hook. A restart re-runs this harmlessly — the marker is already there.
+   */
+  private async checkCarbonBudget(completedTaskIds: string[]): Promise<void> {
+    const budget = this.carbonBudget;
+    if (!budget || !this.store || completedTaskIds.length === 0) return;
+    const at = new Date();
+    let rows: TaskRecord<unknown>[];
+    try {
+      rows = this.store.list({ status: "completed" });
+    } catch {
+      return;
+    }
+    const usage = carbonBudgetUsage(rows, budget.windowKind, at);
+    if (usage.usedG < budget.thresholdG) return;
+    // Attribute the crossing honestly: replay this tick's completions on top
+    // of the pre-tick baseline and take the first one to tip the window over.
+    const { start, end } = windowBounds(budget.windowKind, at);
+    const startMs = start.getTime();
+    const endMs = end.getTime();
+    const completedSet = new Set(completedTaskIds);
+    const gramsById = new Map<string, number>();
+    let baseline = 0;
+    for (const row of rows) {
+      if (!row.receipt?.ranAt) continue;
+      const t = new Date(row.receipt.ranAt).getTime();
+      if (Number.isNaN(t) || t < startMs || t >= endMs) continue;
+      const g = receiptCarbonG(row.receipt);
+      if (completedSet.has(row.taskId)) {
+        gramsById.set(row.taskId, g);
+      } else {
+        baseline += g;
+      }
+    }
+    let running = baseline;
+    let crossingId: string | undefined;
+    for (const id of completedTaskIds) {
+      running += gramsById.get(id) ?? 0;
+      if (running >= budget.thresholdG) {
+        crossingId = id;
+        break;
+      }
+    }
+    crossingId ??= completedTaskIds[completedTaskIds.length - 1]!;
+    let fired = false;
+    try {
+      fired = this.store.recordBudgetAlert(
+        budget.windowKind,
+        usage.windowStart,
+        budget.thresholdG,
+        usage.usedG,
+        crossingId,
+        new Date().toISOString(),
+      );
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[ebb-ai/scheduler] failed to record carbon-budget alert marker: ${describeErr(err)}`,
+      );
+      return;
+    }
+    if (!fired) return;
+    const alert: CarbonAlert = {
+      windowKind: budget.windowKind,
+      windowStart: usage.windowStart,
+      thresholdG: budget.thresholdG,
+      actualG: usage.usedG,
+      taskIdThatCrossed: crossingId,
+    };
+    try {
+      await this.onCarbonAlert?.(alert);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[ebb-ai/scheduler] onCarbonAlert hook threw (${describeErr(err)}); ignoring`,
+      );
+    }
   }
 
   /**
@@ -464,6 +624,18 @@ export class Scheduler {
       if (entry.status === "completed") dispatched++;
       else if (entry.status === "submitted") batchPolled++;
       else failed++;
+    }
+
+    // ---- (4) Aggregate carbon-budget alert (ROADMAP item 4) ----
+    // After every receipt this tick wrote (sync due-sweep + batch poll),
+    // check the rolling window against the configured threshold and fire
+    // the alert hook once per (window, threshold). No-op unless a budget is
+    // configured. Fail-soft: never let the budget check disturb the tick.
+    if (this.carbonBudget) {
+      const completedIds = results
+        .filter((e) => e.status === "completed")
+        .map((e) => e.taskId);
+      await this.checkCarbonBudget(completedIds);
     }
 
     return {

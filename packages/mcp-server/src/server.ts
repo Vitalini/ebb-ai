@@ -40,11 +40,14 @@ import {
   OpenAIAdapter,
   paramOptionalForHost,
   paramsForHost,
+  loadCarbonBudgetConfig,
   recommendWindow,
   resolveRegion,
   Scheduler,
   toolsForHost,
   type CanonicalToolDef,
+  type CarbonBudgetConfig,
+  type CarbonBudgetStatus,
   type GridForecast,
   type ProviderCallSpec,
   type TaskRecord,
@@ -307,6 +310,8 @@ export interface EbbServerDeps {
   dbPath?: string;
   defaultRegion?: string;
   defaultModel?: string;
+  /** Aggregate carbon-budget config (tests). Defaults to `loadCarbonBudgetConfig()`. */
+  carbonBudget?: CarbonBudgetConfig;
 }
 
 /**
@@ -332,12 +337,19 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
   const defaultModel =
     deps.defaultModel ?? process.env.EBB_DEFAULT_MODEL ?? "claude-sonnet-4-6";
   const dbPath = deps.dbPath;
+  // Aggregate carbon-budget config (ROADMAP item 4): loaded so
+  // check_queue_status can render a budget block. The MCP server does not
+  // tick, so no onCarbonAlert hook is wired here — alerts fire from the
+  // tickers (ebb tick / the OpenClaw plugin). Display-only.
+  const carbonBudget: CarbonBudgetConfig | undefined =
+    deps.carbonBudget ?? loadCarbonBudgetConfig();
   const scheduler =
     deps.scheduler ??
     new Scheduler({
       feed,
       defaultRegion,
       ...(dbPath !== undefined ? { dbPath } : {}),
+      ...(carbonBudget ? { carbonBudget } : {}),
     });
   const persistedAt =
     dbPath === undefined || dbPath === ":memory:" ? "(in-memory)" : dbPath;
@@ -590,9 +602,18 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
         // Persisted ledger first (survives MCP-host restarts), in-memory
         // fallback when the scheduler runs without a store.
         const all = listKnownTasks(scheduler);
+        // Aggregate carbon-budget status block (ROADMAP item 4): appended
+        // only when a budget is configured and a store backs the scheduler.
+        const budget = scheduler.getCarbonBudgetStatus();
+        const summary = formatQueueSummary(all);
         return {
           content: [
-            { type: "text", text: formatQueueSummary(all) },
+            {
+              type: "text",
+              text: budget
+                ? `${summary}\n\n${formatCarbonBudget(budget)}`
+                : summary,
+            },
           ],
         };
       }
@@ -962,6 +983,26 @@ export function formatQueueSummary(
       }`,
     );
   }
+  return lines.join("\n");
+}
+
+/**
+ * Render the aggregate carbon-budget status block (ROADMAP item 4) for
+ * check_queue_status: used / threshold / window / alerted. snake_case keys
+ * to match the rest of the MCP text payloads.
+ */
+export function formatCarbonBudget(status: CarbonBudgetStatus): string {
+  const lines = [
+    "carbon_budget:",
+    `  window: ${status.windowKind}`,
+    `  window_start: ${status.windowStart}`,
+    `  used_g: ${status.usedG}`,
+    `  threshold_g: ${status.thresholdG}`,
+    `  percent: ${status.pct}%`,
+    `  tasks: ${status.taskCount}`,
+    `  exceeded: ${status.exceeded}`,
+    `  alerted: ${status.alerted}`,
+  ];
   return lines.join("\n");
 }
 

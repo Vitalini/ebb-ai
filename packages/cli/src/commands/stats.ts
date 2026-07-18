@@ -19,16 +19,21 @@ import {
   aggregateByRegion,
   bandHistogram,
   achievements,
+  carbonBudgetStatus,
+  loadCarbonBudgetConfig,
   type CarbonStats,
   type RegionStats,
   type BandHistogram,
   type Achievement,
+  type CarbonBudgetStatus,
 } from "@ebb-ai/core";
 import { defaultDbPath } from "./tick.js";
 
 export interface StatsCommandOptions {
   db?: string;
   json?: boolean;
+  /** Override the carbon-budget config path (tests). Defaults to ~/.ebb-ai/config. */
+  budgetConfig?: string;
 }
 
 export interface StatsResult {
@@ -37,6 +42,8 @@ export interface StatsResult {
   perRegion: RegionStats[];
   bands: BandHistogram;
   badges: Achievement[];
+  /** Aggregate carbon-budget status when a budget is configured (ROADMAP item 4). */
+  budget?: CarbonBudgetStatus;
 }
 
 function fmtNumber(n: number): string {
@@ -61,11 +68,26 @@ function relativeTime(iso: string | null): string {
 }
 
 export function renderStats(r: StatsResult): string {
-  const { stats, perRegion, bands, badges } = r;
+  const { stats, perRegion, bands, badges, budget } = r;
   const lines: string[] = [];
   lines.push("ebb-ai · personal impact");
   lines.push("=".repeat(48));
   lines.push("");
+
+  if (budget) {
+    const bar = "#".repeat(Math.min(32, Math.round((budget.pct / 100) * 32)));
+    const flag = budget.exceeded ? "  ⚠ OVER BUDGET" : "";
+    lines.push(`carbon budget (${budget.windowKind})`);
+    lines.push("-".repeat(48));
+    lines.push(
+      `  used ${fmtNumber(budget.usedG)} / ${fmtNumber(budget.thresholdG)} g  ` +
+        `(${budget.pct}%)${flag}`,
+    );
+    lines.push(`  ${bar}`);
+    lines.push(`  window started ${budget.windowStart.slice(0, 10)} · ${budget.taskCount} tasks`);
+    if (budget.alerted) lines.push(`  alert fired for this window`);
+    lines.push("");
+  }
   lines.push(`Tasks dispatched          ${fmtNumber(stats.taskCount)}`);
   lines.push(`Estimated CO2e accounted  ${fmtNumber(stats.totalEstimatedCarbonGCo2)} g`);
   lines.push(`Cleanest-window hits      ${stats.scoredHits} (${fmtPercent(stats.scoredHits, stats.taskCount)})`);
@@ -138,11 +160,36 @@ export async function runStats(opts: StatsCommandOptions = {}): Promise<StatsRes
     const perRegion = aggregateByRegion(completed);
     const bands = bandHistogram(completed);
     const badges = achievements(stats, perRegion);
-    const result: StatsResult = { rendered: "", stats, perRegion, bands, badges };
+    // Aggregate carbon-budget status (ROADMAP item 4): only when configured.
+    const budgetConfig = loadCarbonBudgetConfig({ path: opts.budgetConfig });
+    let budget: CarbonBudgetStatus | undefined;
+    if (budgetConfig) {
+      const now = new Date();
+      const status = carbonBudgetStatus(completed, budgetConfig, now, false);
+      let alerted = false;
+      try {
+        alerted = store.hasBudgetAlert(
+          budgetConfig.windowKind,
+          status.windowStart,
+          budgetConfig.thresholdG,
+        );
+      } catch {
+        // best-effort — leave alerted false
+      }
+      budget = { ...status, alerted };
+    }
+    const result: StatsResult = {
+      rendered: "",
+      stats,
+      perRegion,
+      bands,
+      badges,
+      ...(budget ? { budget } : {}),
+    };
     result.rendered = renderStats(result);
     if (opts.json) {
       result.rendered = JSON.stringify(
-        { stats, perRegion, bands, badges },
+        { stats, perRegion, bands, badges, ...(budget ? { budget } : {}) },
         null,
         2,
       );
