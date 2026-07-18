@@ -31,10 +31,16 @@ Tool names match the `@ebb-ai/mcp` MCP-server surface (no `ebb_` prefix).
 
 When a deferred task completes, its result is delivered through the
 mode(s) chosen per task — `chat` (the active OpenClaw chat), `telegram`,
-`webhook` (POST to any URL), `file` (a report in md/html/txt/json), or
-`queue` (no push). The result is always kept in the queue too. Call
-`set_delivery` right after `schedule_task`, once you've asked the user how
-they want the result. Default: `chat`.
+`webhook` (POST to any URL), `file` (a report in md/html/txt/json),
+`queue` (no push), or `os` (a native desktop notification on the gateway
+host). The result is always kept in the queue too. Call `set_delivery`
+right after `schedule_task`, once you've asked the user how they want the
+result. Default: `chat`.
+
+The `os` mode is dependency-free — it spawns the platform's built-in
+notifier (`osascript` on macOS, `notify-send` on Linux, a PowerShell toast
+on Windows). Unsupported platform or a missing binary records an honest
+delivery failure (visible via `check_queue_status`) rather than throwing.
 
 ## Install
 

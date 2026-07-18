@@ -464,7 +464,7 @@ exports[`tool surface — divergence canary > per-host neutral schema snapshot (
           "required": false,
         },
         {
-          "description": "How to deliver the result when the task completes — one or more of: chat (the user's active OpenClaw chat), telegram, webhook, file, queue. Default: chat.",
+          "description": "How to deliver the result when the task completes — one or more of: chat (the user's active OpenClaw chat), telegram, webhook, file, queue, os (a native desktop notification on the gateway host). Default: chat.",
           "itemKind": "enum",
           "kind": "array",
           "name": "deliver",
@@ -475,6 +475,7 @@ exports[`tool surface — divergence canary > per-host neutral schema snapshot (
             "webhook",
             "file",
             "queue",
+            "os",
           ],
         },
         {
@@ -591,7 +592,7 @@ exports[`tool surface — divergence canary > per-host neutral schema snapshot (
       ],
     },
     {
-      "description": "Set or change how a scheduled task's result is delivered when it completes. Call this right after schedule_task, once you have ASKED the user how they want the result. The user may pick several modes. Modes: chat (their active OpenClaw chat), telegram, webhook (needs webhook_url), file (needs file_path; format md/html/txt/json), queue (no push — retrievable via check_queue_status). Default if the user is unsure: chat.",
+      "description": "Set or change how a scheduled task's result is delivered when it completes. Call this right after schedule_task, once you have ASKED the user how they want the result. The user may pick several modes. Modes: chat (their active OpenClaw chat), telegram, webhook (needs webhook_url), file (needs file_path; format md/html/txt/json), queue (no push — retrievable via check_queue_status), os (a native desktop notification on the gateway host). Default if the user is unsure: chat.",
       "name": "set_delivery",
       "params": [
         {
@@ -613,6 +614,7 @@ exports[`tool surface — divergence canary > per-host neutral schema snapshot (
             "webhook",
             "file",
             "queue",
+            "os",
           ],
         },
         {

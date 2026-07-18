@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,9 +18,12 @@ import {
   setLlmBridgeForTest,
 } from "../src/dispatch.js";
 import {
+  __setSpawnForTest,
   deliverResult,
   formatReport,
   getDeliveryConfig,
+  notificationContent,
+  osNotifyCommand,
   readDeliveryRecord,
   recordDeliveryOutcomes,
   scanDeliveryOptions,
@@ -842,6 +846,93 @@ describe("ebb OpenClaw plugin — result delivery", () => {
     } finally {
       delete process.env.EBB_DELIVERY_FILE;
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // ── OS-notification delivery (ROADMAP item 7) ──────────────────────────────
+
+  it("scanDeliveryOptions advertises the os mode", () => {
+    const opts = scanDeliveryOptions({});
+    const os = opts.find((o) => o.mode === "os");
+    expect(os).toBeDefined();
+    // On the CI/dev host (darwin/linux/win32) os is supported.
+    expect(typeof os?.available).toBe("boolean");
+  });
+
+  it("osNotifyCommand builds the correct binary + args per platform", () => {
+    const title = "ebb-ai — task t-1 complete";
+    const body = 'line "one"\n42 gCO2e';
+
+    const mac = osNotifyCommand("darwin", title, body)!;
+    expect(mac.cmd).toBe("osascript");
+    expect(mac.args[0]).toBe("-e");
+    // AppleScript: quotes in the payload are backslash-escaped, title embedded.
+    expect(mac.args[1]).toContain('with title "ebb-ai — task t-1 complete"');
+    expect(mac.args[1]).toContain('\\"one\\"');
+
+    const linux = osNotifyCommand("linux", title, body)!;
+    expect(linux.cmd).toBe("notify-send");
+    expect(linux.args).toEqual([title, body]);
+
+    const win = osNotifyCommand("win32", title, body)!;
+    expect(win.cmd).toBe("powershell");
+    expect(win.args).toContain("-Command");
+    expect(win.args[win.args.length - 1]).toContain("ToastNotification");
+
+    // Unsupported platform → null (caller records an honest failure).
+    expect(osNotifyCommand("aix" as NodeJS.Platform, title, body)).toBeNull();
+  });
+
+  it("notificationContent truncates, redacts secrets, and includes grams", () => {
+    const task = {
+      ...completedTask,
+      taskId: "t-notify",
+      result: { text: `secret sk-ant-${"a".repeat(30)} then ${"x".repeat(300)}` },
+    } as unknown as Parameters<typeof formatReport>[0];
+    const { title, body } = notificationContent(task);
+    expect(title).toContain("t-notify");
+    expect(body).not.toContain("sk-ant-");
+    expect(body).toContain("[REDACTED]");
+    expect(body).toContain("gCO2e");
+    // preview is truncated with an ellipsis
+    expect(body).toContain("…");
+  });
+
+  it("deliverResult os mode succeeds via a mocked spawn (exit 0)", async () => {
+    const calls: Array<{ cmd: string; args: string[] }> = [];
+    __setSpawnForTest(((cmd: string, args: string[]) => {
+      calls.push({ cmd, args });
+      const child = new EventEmitter();
+      queueMicrotask(() => child.emit("close", 0));
+      return child;
+    }) as never);
+    try {
+      const outcomes = await deliverResult(completedTask, { modes: ["os"] }, {});
+      expect(outcomes[0].mode).toBe("os");
+      expect(outcomes[0].ok).toBe(true);
+      expect(calls.length).toBe(1);
+    } finally {
+      __setSpawnForTest(undefined);
+    }
+  });
+
+  it("deliverResult os mode records an honest failure when the binary is missing", async () => {
+    __setSpawnForTest((() => {
+      const child = new EventEmitter();
+      queueMicrotask(() => {
+        const err = new Error("spawn notify-send ENOENT") as NodeJS.ErrnoException;
+        err.code = "ENOENT";
+        child.emit("error", err);
+      });
+      return child;
+    }) as never);
+    try {
+      const outcomes = await deliverResult(completedTask, { modes: ["os"] }, {});
+      expect(outcomes[0].mode).toBe("os");
+      expect(outcomes[0].ok).toBe(false);
+      expect(outcomes[0].detail).toMatch(/not found/);
+    } finally {
+      __setSpawnForTest(undefined);
     }
   });
 });

@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **OS-notification delivery mode** (`deliver: ["os"]`, OpenClaw plugin,
+  roadmap item 7). A native desktop notification on the gateway host when
+  a deferred task completes. Dependency-free, per-platform spawn: macOS →
+  `osascript`, Linux → `notify-send`, Windows → a PowerShell toast. An
+  unsupported platform or a missing binary records an honest delivery
+  failure through the existing outcome machinery (surfaced via
+  `check_queue_status`) — it never throws into the scheduler. The
+  notification body carries the task id, a truncated result preview
+  (API-key/token-looking strings scrubbed), and a carbon-receipt grams
+  one-liner. Added to the shared `deliverModes` tool-surface enum; the
+  divergence-canary snapshot is updated deliberately.
+
 - **Carbon-budget alerts** (TS + PY, roadmap item 4). An *aggregate*
   carbon budget over the receipt ledger, distinct from the per-task
   `carbon_budget_g` hard cap: a threshold on actual (falling back to

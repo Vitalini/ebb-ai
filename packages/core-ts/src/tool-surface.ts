@@ -171,7 +171,7 @@ const taskIdRequired: ToolParam = {
   description: "Task identifier returned by schedule_task.",
 };
 
-const deliverModes = ["chat", "telegram", "webhook", "file", "queue"] as const;
+const deliverModes = ["chat", "telegram", "webhook", "file", "queue", "os"] as const;
 const reportFormats = ["md", "html", "txt", "json"] as const;
 
 const deliverParam = (optional: boolean): ToolParam => ({
@@ -182,7 +182,7 @@ const deliverParam = (optional: boolean): ToolParam => ({
   optional,
   hosts: ["openclaw"],
   description:
-    "How to deliver the result when the task completes — one or more of: chat (the user's active OpenClaw chat), telegram, webhook, file, queue. Default: chat.",
+    "How to deliver the result when the task completes — one or more of: chat (the user's active OpenClaw chat), telegram, webhook, file, queue, os (a native desktop notification on the gateway host). Default: chat.",
 });
 
 const webhookUrlParam: ToolParam = {
@@ -400,7 +400,7 @@ export const TOOL_SURFACE: readonly CanonicalToolDef[] = [
     name: "set_delivery",
     hosts: ["openclaw"],
     description:
-      "Set or change how a scheduled task's result is delivered when it completes. Call this right after schedule_task, once you have ASKED the user how they want the result. The user may pick several modes. Modes: chat (their active OpenClaw chat), telegram, webhook (needs webhook_url), file (needs file_path; format md/html/txt/json), queue (no push — retrievable via check_queue_status). Default if the user is unsure: chat.",
+      "Set or change how a scheduled task's result is delivered when it completes. Call this right after schedule_task, once you have ASKED the user how they want the result. The user may pick several modes. Modes: chat (their active OpenClaw chat), telegram, webhook (needs webhook_url), file (needs file_path; format md/html/txt/json), queue (no push — retrievable via check_queue_status), os (a native desktop notification on the gateway host). Default if the user is unsure: chat.",
     params: [
       { ...taskIdRequired, description: "The id returned by schedule_task." },
       { ...deliverParam(false), description: "One or more delivery modes the user chose." },
