@@ -23,7 +23,7 @@ import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
-import type { CarbonReceipt, TaskRecord } from "@ebb-ai/core";
+import type { CarbonAlert, CarbonReceipt, TaskRecord } from "@ebb-ai/core";
 
 export type DeliveryMode = "chat" | "telegram" | "webhook" | "file" | "queue";
 export type ReportFormat = "md" | "html" | "txt" | "json";
@@ -408,11 +408,12 @@ async function deliverFile(
   }
 }
 
-async function deliverTelegram(
-  task: CompletedTask,
+/** Post a plain text message to a Telegram chat — shared by task-result and
+ *  carbon-alert delivery so both use the exact same channel. */
+async function postTelegram(
   target: { token: string; chatId: string },
-  mode: DeliveryMode,
-): Promise<DeliveryOutcome> {
+  text: string,
+): Promise<{ ok: boolean; detail: string }> {
   try {
     const res = await fetch(
       `https://api.telegram.org/bot${target.token}/sendMessage`,
@@ -421,22 +422,27 @@ async function deliverTelegram(
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           chat_id: target.chatId,
-          text: formatChatMessage(task),
+          text,
           disable_web_page_preview: true,
         }),
       },
     );
     if (!res.ok) {
-      return { mode, ok: false, detail: `Telegram HTTP ${res.status}` };
+      return { ok: false, detail: `Telegram HTTP ${res.status}` };
     }
-    return { mode, ok: true, detail: `Telegram DM → ${target.chatId}` };
+    return { ok: true, detail: `Telegram DM → ${target.chatId}` };
   } catch (err) {
-    return {
-      mode,
-      ok: false,
-      detail: err instanceof Error ? err.message : String(err),
-    };
+    return { ok: false, detail: err instanceof Error ? err.message : String(err) };
   }
+}
+
+async function deliverTelegram(
+  task: CompletedTask,
+  target: { token: string; chatId: string },
+  mode: DeliveryMode,
+): Promise<DeliveryOutcome> {
+  const res = await postTelegram(target, formatChatMessage(task));
+  return { mode, ok: res.ok, detail: res.detail };
 }
 
 /**
@@ -484,6 +490,88 @@ export async function deliverResult(
       );
       continue;
     }
+  }
+  return outcomes;
+}
+
+// ── Carbon-budget alert delivery (ROADMAP item 4) ────────────────────────────
+//
+// A crossed aggregate carbon budget is not a task result, but it rides the
+// SAME delivery channels — chat by default, honoring the plugin's configured
+// alert delivery modes. Reuses `telegramTarget` + `postTelegram` (chat),
+// `deliverWebhook`-style POST, and file rendering rather than adding a new
+// delivery path.
+
+/** A compact chat/Telegram message for a crossed carbon budget. */
+export function formatCarbonAlertMessage(alert: CarbonAlert): string {
+  return (
+    `⚠ ebb-ai — ${alert.windowKind} carbon budget crossed\n` +
+    `${alert.actualG} gCO2e used this window vs ${alert.thresholdG} g threshold\n` +
+    `crossed by task ${alert.taskIdThatCrossed} · window since ${alert.windowStart}`
+  );
+}
+
+/**
+ * Deliver a carbon-budget alert through the configured modes (default:
+ * chat). Never throws — every mode's outcome is reported individually, so a
+ * failing channel cannot disturb the dispatcher. `queue` here means "no
+ * push, just logged"; the alert marker already lives in the ledger.
+ */
+export async function deliverCarbonAlert(
+  alert: CarbonAlert,
+  openclawConfig: unknown,
+  config: DeliveryConfig = { modes: ["chat"] },
+): Promise<DeliveryOutcome[]> {
+  const text = formatCarbonAlertMessage(alert);
+  const outcomes: DeliveryOutcome[] = [];
+  for (const mode of config.modes) {
+    if (mode === "queue") {
+      outcomes.push({ mode, ok: true, detail: "logged (marker in ledger)" });
+      continue;
+    }
+    if (mode === "webhook") {
+      if (!config.webhookUrl) {
+        outcomes.push({ mode, ok: false, detail: "no webhook_url" });
+        continue;
+      }
+      try {
+        const res = await fetch(config.webhookUrl, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ source: "ebb-ai", kind: "carbon_budget_alert", alert }),
+        });
+        outcomes.push({
+          mode,
+          ok: res.ok,
+          detail: res.ok ? `POST ${config.webhookUrl} → ${res.status}` : `HTTP ${res.status}`,
+        });
+      } catch (err) {
+        outcomes.push({ mode, ok: false, detail: err instanceof Error ? err.message : String(err) });
+      }
+      continue;
+    }
+    if (mode === "file") {
+      if (!config.filePath) {
+        outcomes.push({ mode, ok: false, detail: "no file_path" });
+        continue;
+      }
+      try {
+        await mkdir(dirname(config.filePath), { recursive: true });
+        await writeFile(config.filePath, `${text}\n`);
+        outcomes.push({ mode, ok: true, detail: `wrote ${config.filePath}` });
+      } catch (err) {
+        outcomes.push({ mode, ok: false, detail: err instanceof Error ? err.message : String(err) });
+      }
+      continue;
+    }
+    // chat / telegram
+    const target = telegramTarget(openclawConfig);
+    if (!target) {
+      outcomes.push({ mode, ok: false, detail: "no chat channel — alert logged only" });
+      continue;
+    }
+    const res = await postTelegram(target, text);
+    outcomes.push({ mode, ok: res.ok, detail: res.detail });
   }
   return outcomes;
 }

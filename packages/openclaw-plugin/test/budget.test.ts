@@ -1,0 +1,131 @@
+/**
+ * Aggregate carbon-budget alerts in the OpenClaw plugin (ROADMAP item 4).
+ *
+ * Covers the alert message/delivery helpers and the end-to-end wiring: a
+ * dispatch that crosses the configured budget records the DB marker and
+ * routes through the delivery machinery.
+ */
+
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { TaskStore, windowBounds, type CarbonAlert } from "@ebb-ai/core";
+
+import ebbPlugin, { runDispatchTick } from "../src/index.js";
+import {
+  deliverCarbonAlert,
+  formatCarbonAlertMessage,
+} from "../src/delivery.js";
+import type { StubResolvedTool } from "./stub-tool-plugin.js";
+
+function tool(name: string): StubResolvedTool {
+  const found = ebbPlugin.tools.find((t) => t.name === name);
+  if (!found) throw new Error(`tool ${name} is not registered`);
+  return found;
+}
+
+function deadlineISO(hoursAhead = 24): string {
+  return new Date(Date.now() + hoursAhead * 60 * 60 * 1000).toISOString();
+}
+
+const ALERT: CarbonAlert = {
+  windowKind: "daily",
+  windowStart: "2026-07-17T00:00:00.000Z",
+  thresholdG: 100,
+  actualG: 123.4,
+  taskIdThatCrossed: "t-x",
+};
+
+describe("carbon-alert delivery helpers", () => {
+  it("formats a compact alert message", () => {
+    const msg = formatCarbonAlertMessage(ALERT);
+    expect(msg).toMatch(/daily carbon budget crossed/);
+    expect(msg).toMatch(/123.4 gCO2e/);
+    expect(msg).toMatch(/100 g threshold/);
+    expect(msg).toMatch(/t-x/);
+  });
+
+  it("chat mode with no channel reports the alert was logged only", async () => {
+    const outcomes = await deliverCarbonAlert(ALERT, undefined, { modes: ["chat"] });
+    expect(outcomes).toHaveLength(1);
+    expect(outcomes[0]!.mode).toBe("chat");
+    expect(outcomes[0]!.ok).toBe(false);
+    expect(outcomes[0]!.detail).toMatch(/no chat channel/);
+  });
+
+  it("queue mode always succeeds (marker already persisted)", async () => {
+    const outcomes = await deliverCarbonAlert(ALERT, undefined, { modes: ["queue"] });
+    expect(outcomes[0]!.ok).toBe(true);
+  });
+
+  it("file mode writes the alert to disk", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "ebb-alert-file-"));
+    const filePath = join(dir, "alert.txt");
+    const outcomes = await deliverCarbonAlert(ALERT, undefined, {
+      modes: ["file"],
+      filePath,
+    });
+    expect(outcomes[0]!.ok).toBe(true);
+    const { readFileSync } = await import("node:fs");
+    expect(readFileSync(filePath, "utf8")).toMatch(/daily carbon budget crossed/);
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("runDispatchTick fires a carbon-budget alert on crossing", () => {
+  let tmp: string;
+  let dbPath: string;
+  const savedG = process.env.EBB_CARBON_BUDGET_G;
+  const savedW = process.env.EBB_CARBON_BUDGET_WINDOW;
+
+  beforeEach(() => {
+    tmp = mkdtempSync(join(tmpdir(), "ebb-plugin-budget-"));
+    dbPath = join(tmp, "queue.db");
+    // Tiny threshold so a single dispatched task crosses it. Env overrides
+    // the ~/.ebb-ai/config file, so the test never touches the real config.
+    process.env.EBB_CARBON_BUDGET_G = "0.0001";
+    process.env.EBB_CARBON_BUDGET_WINDOW = "daily";
+  });
+
+  afterEach(() => {
+    if (savedG !== undefined) process.env.EBB_CARBON_BUDGET_G = savedG;
+    else delete process.env.EBB_CARBON_BUDGET_G;
+    if (savedW !== undefined) process.env.EBB_CARBON_BUDGET_WINDOW = savedW;
+    else delete process.env.EBB_CARBON_BUDGET_WINDOW;
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it("records the alert marker after a crossing dispatch", async () => {
+    const sched = (await tool("schedule_task").execute(
+      { prompt: "budget cross", deadline: deadlineISO(), region: "GB" },
+      { dbPath },
+    )) as { task_id: string };
+
+    // Force the task overdue.
+    const store = new TaskStore({ dbPath });
+    const rec = store.get(sched.task_id);
+    if (!rec) throw new Error("task not persisted");
+    rec.status = "scheduled";
+    rec.scheduledFor = new Date(Date.now() - 60_000).toISOString();
+    store.upsert(rec);
+    store.close();
+
+    const stub = {
+      provider: "anthropic" as const,
+      ready: true,
+      async dispatch(model: string, prompt: string) {
+        return { text: `stub:${prompt}`, model, provider: "anthropic", raw: {} };
+      },
+    };
+    const result = await runDispatchTick({ dbPath }, { anthropic: stub });
+    expect(result.dispatched).toBeGreaterThanOrEqual(1);
+
+    // The alert marker for the current daily window must now exist.
+    const windowStart = windowBounds("daily", new Date()).start.toISOString();
+    const probe = new TaskStore({ dbPath });
+    expect(probe.hasBudgetAlert("daily", windowStart, 0.0001)).toBe(true);
+    probe.close();
+  });
+});

@@ -10,11 +10,13 @@
 import {
   AnthropicAdapter,
   GeminiAdapter,
+  loadCarbonBudgetConfig,
   OllamaAdapter,
   OpenAIAdapter,
   resolveRegion,
   Scheduler,
   TaskStore,
+  type CarbonAlert,
   type TickAdapters,
 } from "@ebb-ai/core";
 import { existsSync } from "node:fs";
@@ -30,6 +32,8 @@ export interface TickCommandOptions {
   region?: string;
   /** Override the secrets file path (tests). Defaults to ~/.config/ebb/env. */
   envFile?: string;
+  /** Override the carbon-budget config path (tests). Defaults to ~/.ebb-ai/config. */
+  budgetConfig?: string;
 }
 
 export interface TickRunResult {
@@ -152,13 +156,32 @@ export async function runTickOnce(
   // Even with some keys present, warn about pending tasks needing a key
   // we do not have (e.g. OpenAI tasks queued but only ANTHROPIC set).
   const missingForPending = missingProviderKeysForPending(dbPath);
+  // Aggregate carbon-budget alerts (ROADMAP item 4): read the local budget
+  // config (env wins over ~/.ebb-ai/config) and log any crossing prominently.
+  const carbonBudget = loadCarbonBudgetConfig({ path: opts.budgetConfig });
+  const firedAlerts: CarbonAlert[] = [];
   const scheduler = new Scheduler({
     dbPath,
     defaultRegion: resolveRegion(undefined, opts.region).region,
+    ...(carbonBudget
+      ? {
+          carbonBudget,
+          onCarbonAlert: (a: CarbonAlert) => {
+            firedAlerts.push(a);
+          },
+        }
+      : {}),
   });
   try {
     const result = await scheduler.tick(adapters);
     let msg = `tick: ${result.inspected} inspected, ${result.dispatched} dispatched, ${result.failed} failed`;
+    for (const a of firedAlerts) {
+      msg +=
+        `\n!! CARBON BUDGET ALERT: ${a.windowKind} carbon budget crossed — ` +
+        `${a.actualG} gCO2e used this window vs ${a.thresholdG} g threshold ` +
+        `(crossed by task ${a.taskIdThatCrossed}). ` +
+        `Window started ${a.windowStart}.`;
+    }
     if (missingForPending.length > 0) {
       msg +=
         `\n!! WARNING: pending tasks need ${missingForPending.join(" / ")} ` +
