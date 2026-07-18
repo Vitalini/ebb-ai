@@ -169,3 +169,48 @@ BAND_THRESHOLDS: list[tuple[int, str]] = [
 
 #: Band for values at or above every threshold.
 DEFAULT_BAND: str = "very_dirty"
+
+#: Month the price table figures were read (see prices.json).
+PRICES_AS_OF: str = "2026-07"
+
+#: Per-model public list prices (USD per million tokens), keyed by the same
+#: canonical lowercase ids as COEFFICIENTS. Ollama-routable open-weight models
+#: are 0 (self-hosted). Used by cross-provider routing's cost dimension.
+MODEL_PRICES: dict[str, dict[str, Any]] = {
+    "claude-opus-4": {"in_usd_per_mtok": 15, "out_usd_per_mtok": 75, "batch_discount": 0.5, "as_of": "2026-07", "source": "Anthropic pricing (anthropic.com/pricing)"},
+    "claude-opus-4-7": {"in_usd_per_mtok": 15, "out_usd_per_mtok": 75, "batch_discount": 0.5, "as_of": "2026-07", "source": "Anthropic pricing (anthropic.com/pricing)"},
+    "claude-opus-4-6": {"in_usd_per_mtok": 15, "out_usd_per_mtok": 75, "batch_discount": 0.5, "as_of": "2026-07", "source": "Anthropic pricing (anthropic.com/pricing)"},
+    "claude-opus-4-1": {"in_usd_per_mtok": 15, "out_usd_per_mtok": 75, "batch_discount": 0.5, "as_of": "2026-07", "source": "Anthropic pricing (anthropic.com/pricing)"},
+    "claude-opus-3-5": {"in_usd_per_mtok": 15, "out_usd_per_mtok": 75, "batch_discount": 0.5, "as_of": "2026-07", "source": "Anthropic pricing (anthropic.com/pricing)"},
+    "claude-opus-3": {"in_usd_per_mtok": 15, "out_usd_per_mtok": 75, "batch_discount": 0.5, "as_of": "2026-07", "source": "Anthropic pricing (anthropic.com/pricing)"},
+    "claude-sonnet-4": {"in_usd_per_mtok": 3, "out_usd_per_mtok": 15, "batch_discount": 0.5, "as_of": "2026-07", "source": "Anthropic pricing (anthropic.com/pricing)"},
+    "claude-sonnet-4-6": {"in_usd_per_mtok": 3, "out_usd_per_mtok": 15, "batch_discount": 0.5, "as_of": "2026-07", "source": "Anthropic pricing (anthropic.com/pricing)"},
+    "claude-sonnet-4-5": {"in_usd_per_mtok": 3, "out_usd_per_mtok": 15, "batch_discount": 0.5, "as_of": "2026-07", "source": "Anthropic pricing (anthropic.com/pricing)"},
+    "claude-sonnet-3-7": {"in_usd_per_mtok": 3, "out_usd_per_mtok": 15, "batch_discount": 0.5, "as_of": "2026-07", "source": "Anthropic pricing (anthropic.com/pricing)"},
+    "claude-sonnet-3-5": {"in_usd_per_mtok": 3, "out_usd_per_mtok": 15, "batch_discount": 0.5, "as_of": "2026-07", "source": "Anthropic pricing (anthropic.com/pricing)"},
+    "claude-sonnet-3": {"in_usd_per_mtok": 3, "out_usd_per_mtok": 15, "batch_discount": 0.5, "as_of": "2026-07", "source": "Anthropic pricing (anthropic.com/pricing)"},
+    "claude-haiku-4-5": {"in_usd_per_mtok": 1, "out_usd_per_mtok": 5, "batch_discount": 0.5, "as_of": "2026-07", "source": "Anthropic pricing (anthropic.com/pricing)"},
+    "claude-haiku-3-5": {"in_usd_per_mtok": 0.8, "out_usd_per_mtok": 4, "batch_discount": 0.5, "as_of": "2026-07", "source": "Anthropic pricing (anthropic.com/pricing)"},
+    "claude-haiku-3": {"in_usd_per_mtok": 0.25, "out_usd_per_mtok": 1.25, "batch_discount": 0.5, "as_of": "2026-07", "source": "Anthropic pricing (anthropic.com/pricing)"},
+    "gpt-4o": {"in_usd_per_mtok": 2.5, "out_usd_per_mtok": 10, "batch_discount": 0.5, "as_of": "2026-07", "source": "OpenAI API pricing (openai.com/api/pricing)"},
+    "gpt-4o-mini": {"in_usd_per_mtok": 0.15, "out_usd_per_mtok": 0.6, "batch_discount": 0.5, "as_of": "2026-07", "source": "OpenAI API pricing (openai.com/api/pricing)"},
+    "gpt-4-turbo": {"in_usd_per_mtok": 10, "out_usd_per_mtok": 30, "batch_discount": 0.5, "as_of": "2026-07", "source": "OpenAI API pricing (openai.com/api/pricing)"},
+    "gpt-4": {"in_usd_per_mtok": 30, "out_usd_per_mtok": 60, "batch_discount": 0.5, "as_of": "2026-07", "source": "OpenAI API pricing (openai.com/api/pricing)"},
+    "gpt-3-5-turbo": {"in_usd_per_mtok": 0.5, "out_usd_per_mtok": 1.5, "batch_discount": 0.5, "as_of": "2026-07", "source": "OpenAI API pricing (openai.com/api/pricing)"},
+    "o1": {"in_usd_per_mtok": 15, "out_usd_per_mtok": 60, "batch_discount": 0.5, "as_of": "2026-07", "source": "OpenAI API pricing (openai.com/api/pricing)"},
+    "o1-mini": {"in_usd_per_mtok": 1.1, "out_usd_per_mtok": 4.4, "batch_discount": 0.5, "as_of": "2026-07", "source": "OpenAI API pricing (openai.com/api/pricing)"},
+    "o3": {"in_usd_per_mtok": 2, "out_usd_per_mtok": 8, "batch_discount": 0.5, "as_of": "2026-07", "source": "OpenAI API pricing (openai.com/api/pricing)"},
+    "o3-mini": {"in_usd_per_mtok": 1.1, "out_usd_per_mtok": 4.4, "batch_discount": 0.5, "as_of": "2026-07", "source": "OpenAI API pricing (openai.com/api/pricing)"},
+    "gemini-1-5-pro": {"in_usd_per_mtok": 1.25, "out_usd_per_mtok": 5, "batch_discount": None, "as_of": "2026-07", "source": "Google Gemini API pricing (ai.google.dev/pricing)"},
+    "gemini-1-5-flash": {"in_usd_per_mtok": 0.075, "out_usd_per_mtok": 0.3, "batch_discount": None, "as_of": "2026-07", "source": "Google Gemini API pricing (ai.google.dev/pricing)"},
+    "gemini-2-0-flash": {"in_usd_per_mtok": 0.1, "out_usd_per_mtok": 0.4, "batch_discount": None, "as_of": "2026-07", "source": "Google Gemini API pricing (ai.google.dev/pricing)"},
+    "gemini-2-0-pro": {"in_usd_per_mtok": 1.25, "out_usd_per_mtok": 5, "batch_discount": None, "as_of": "2026-07", "source": "Google Gemini API pricing (ai.google.dev/pricing)"},
+    "llama-3-1-405b": {"in_usd_per_mtok": 0, "out_usd_per_mtok": 0, "batch_discount": None, "as_of": "2026-07", "source": "Ollama local (self-hosted; no per-token vendor price)"},
+    "llama-3-1-70b": {"in_usd_per_mtok": 0, "out_usd_per_mtok": 0, "batch_discount": None, "as_of": "2026-07", "source": "Ollama local (self-hosted; no per-token vendor price)"},
+    "llama-3-1-8b": {"in_usd_per_mtok": 0, "out_usd_per_mtok": 0, "batch_discount": None, "as_of": "2026-07", "source": "Ollama local (self-hosted; no per-token vendor price)"},
+    "llama-3-70b": {"in_usd_per_mtok": 0, "out_usd_per_mtok": 0, "batch_discount": None, "as_of": "2026-07", "source": "Ollama local (self-hosted; no per-token vendor price)"},
+    "llama-3-8b": {"in_usd_per_mtok": 0, "out_usd_per_mtok": 0, "batch_discount": None, "as_of": "2026-07", "source": "Ollama local (self-hosted; no per-token vendor price)"},
+    "mistral-7b": {"in_usd_per_mtok": 0, "out_usd_per_mtok": 0, "batch_discount": None, "as_of": "2026-07", "source": "Ollama local (self-hosted; no per-token vendor price)"},
+    "mixtral-8x7b": {"in_usd_per_mtok": 0, "out_usd_per_mtok": 0, "batch_discount": None, "as_of": "2026-07", "source": "Ollama local (self-hosted; no per-token vendor price)"},
+    "mixtral-8x22b": {"in_usd_per_mtok": 0, "out_usd_per_mtok": 0, "batch_discount": None, "as_of": "2026-07", "source": "Ollama local (self-hosted; no per-token vendor price)"},
+}
