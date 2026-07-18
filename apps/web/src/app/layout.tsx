@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Nav } from "@/components/nav";
 import "./globals.css";
 
@@ -109,16 +110,21 @@ const jsonLd = {
   ],
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // The middleware-generated per-request nonce. The JSON-LD tag must carry it,
+  // otherwise 'strict-dynamic' blocks this inline script. Reading `headers()`
+  // is also what opts pages into dynamic rendering (see middleware.ts).
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html lang="en">
       <head>
         <script
           type="application/ld+json"
+          nonce={nonce}
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       </head>
