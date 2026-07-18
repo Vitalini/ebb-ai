@@ -24,8 +24,10 @@ import type { ProviderAdapter } from "./providers/base.js";
 import {
   candidateId,
   parseCandidates,
+  previewRouting,
   scoreCandidates,
   type RoutingDecision,
+  type RoutingPreview,
 } from "./routing.js";
 import { selectWindow } from "./select-window.js";
 import {
@@ -786,6 +788,13 @@ export class Scheduler {
      * in-deadline window existed (the "run now" fallback below).
      */
     cleanBandSize?: number;
+    /**
+     * Non-binding cross-provider routing preview (ROADMAP item 1) — the
+     * scored candidate list + provisional pick this dry_run WOULD persist,
+     * scored at the previewed window's intensity. Present only when the spec
+     * carried >= 2 candidates. The binding pick is made at schedule time.
+     */
+    routingPreview?: RoutingPreview;
   }> {
     const deadline = normalizeDeadline(opts.deadline);
     const region = opts.region ?? this.defaultRegion;
@@ -828,6 +837,15 @@ export class Scheduler {
       if (!head) {
         throw new Error("previewProviderCall: forecast returned no entries");
       }
+      // Routing preview at the run-now intensity — same math the commit path's
+      // run-now fallback (`scheduleProviderCall`) uses. No-op unless >= 2
+      // candidates were supplied.
+      const routingPreviewNow = previewRouting(spec.candidates, {
+        intensityGCo2PerKwh: head.carbonIntensityGCo2PerKwh,
+        weights: spec.routeWeights,
+        batchEligible,
+        rng: this.rng,
+      });
       return {
         scheduledFor: new Date().toISOString(),
         estimatedCarbonGCo2:
@@ -836,8 +854,17 @@ export class Scheduler {
         band: head.band,
         batchEligible,
         region,
+        ...(routingPreviewNow ? { routingPreview: routingPreviewNow } : {}),
       };
     }
+    // Routing preview at the CHOSEN window's intensity — the block this
+    // dry_run would persist. No-op unless >= 2 candidates were supplied.
+    const routingPreview = previewRouting(spec.candidates, {
+      intensityGCo2PerKwh: candidate.carbonIntensityGCo2PerKwh,
+      weights: spec.routeWeights,
+      batchEligible,
+      rng: this.rng,
+    });
     return {
       // A candidate whose hour started in the past is the *current* hour —
       // the commit path dispatches now, so the preview says "now" too.
@@ -851,6 +878,7 @@ export class Scheduler {
       batchEligible,
       region,
       cleanBandSize: selection!.band.length,
+      ...(routingPreview ? { routingPreview } : {}),
     };
   }
 

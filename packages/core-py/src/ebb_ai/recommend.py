@@ -36,6 +36,7 @@ from typing import Any
 from .energy import grams_for_intensity
 from .errors import CarbonBudgetExceededError, InvalidDeadlineError
 from .grid import GridFeed, mock_grid_feed
+from .routing import RoutingDecision, preview_routing
 from .scheduler import select_window
 from .types import Band, GridForecastEntry, GridSignalType, GridSource
 
@@ -90,9 +91,15 @@ class RecommendResult:
     ``"marginal"`` (WattTime co2_moer) or ``None`` ⇒ ``"average"``. The
     ``reasoning`` string discloses it in prose; this field exposes it
     structurally. Mirrors the TS ``RecommendResult.signalType``."""
+    routing_preview: RoutingDecision | None = None
+    """Non-binding cross-provider routing preview (ROADMAP item 1). Present
+    only when >= 2 ``candidates`` were supplied: the scored candidate list +
+    provisional pick at THIS previewed window's intensity. The binding
+    decision is made at schedule time and may differ if the forecast shifts.
+    Mirrors the TS ``RecommendResult.routingPreview``."""
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d: dict[str, Any] = {
             "scheduled_for": self.scheduled_for,
             "intensity_g_co2_per_kwh": self.intensity_g_co2_per_kwh,
             "band": self.band,
@@ -104,6 +111,9 @@ class RecommendResult:
             "grid_source": self.grid_source,
             "signal_type": self.signal_type,
         }
+        if self.routing_preview is not None:
+            d["routing_preview"] = self.routing_preview.to_snake_dict()
+        return d
 
 
 # --------------------------------------------------------------------------- #
@@ -248,6 +258,8 @@ async def recommend_window(
     region: str,
     carbon_budget_g: float | None = None,
     model: str | None = None,  # per-model energy coefficients (v0.10); see below
+    candidates: list[str] | None = None,
+    route_weights: dict[str, float] | None = None,
     feed: GridFeed | None = None,
     now: Callable[[], datetime] | None = None,
     rng: Callable[[], float] | None = None,
@@ -321,10 +333,24 @@ async def recommend_window(
         if now_dt - timedelta(hours=1) <= t <= parsed_deadline:
             in_deadline.append(e)
 
+    # Deadline-based Batch API eligibility (24h SLA) — used for the reasoning
+    # string and the routing preview's batch-discount math, so the preview
+    # matches what the committing scheduler would compute.
+    batch_eligible = seconds_out > BATCH_ELIGIBLE_HOURS * 3600
+
     if not in_deadline:
         head = entries[0]
         grams = _round_tenth(
             _intensity_to_grams(head.carbon_intensity_g_co2_per_kwh, model)
+        )
+        # Routing preview at the run-now intensity — same math the committing
+        # scheduler's run-now fallback uses. No-op unless >= 2 candidates.
+        routing_preview = preview_routing(
+            candidates,
+            head.carbon_intensity_g_co2_per_kwh,
+            weights=route_weights,
+            batch_eligible=batch_eligible,
+            rng=rng,
         )
         return RecommendResult(
             scheduled_for=head.datetime,
@@ -344,6 +370,7 @@ async def recommend_window(
             ),
             grid_source=forecast.source,
             signal_type=forecast.signal_type,
+            routing_preview=routing_preview,
         )
 
     if carbon_budget_g is not None:
@@ -384,7 +411,17 @@ async def recommend_window(
     savings_pct = _compute_savings_pct(
         now_intensity, chosen.carbon_intensity_g_co2_per_kwh
     )
-    batch_eligible = seconds_out > BATCH_ELIGIBLE_HOURS * 3600
+
+    # Cross-provider routing preview (ROADMAP item 1): score the caller's
+    # candidates at the CHOSEN window's intensity — the same math the
+    # committing scheduler runs. No-op unless >= 2 candidates were supplied.
+    routing_preview = preview_routing(
+        candidates,
+        chosen.carbon_intensity_g_co2_per_kwh,
+        weights=route_weights,
+        batch_eligible=batch_eligible,
+        rng=rng,
+    )
 
     alternatives = [
         RecommendAlternative(
@@ -430,6 +467,7 @@ async def recommend_window(
         ),
         grid_source=forecast.source,
         signal_type=forecast.signal_type,
+        routing_preview=routing_preview,
     )
 
 

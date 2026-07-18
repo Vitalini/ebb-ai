@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { mockGridFeed, Scheduler } from "../src/index.js";
+import { mockGridFeed, recommendWindow, Scheduler } from "../src/index.js";
 import type { ProviderAdapter } from "../src/providers/base.js";
 import {
   DEFAULT_ROUTE_WEIGHTS,
@@ -19,6 +19,8 @@ import {
   normalizeRouteWeights,
   parseCandidate,
   parseCandidates,
+  previewRouting,
+  ROUTING_PREVIEW_DISCLOSURE,
   scoreCandidates,
 } from "../src/routing.js";
 import { verifyReceipt } from "../src/sign.js";
@@ -169,6 +171,78 @@ describe("routing — batch discount lowers cost", () => {
     // A single candidate keeps the batch latency tier (1) vs sync (0.5).
     expect(sync.considered[0]!.latencyClass).toBe(0.5);
     expect(batch.considered[0]!.latencyClass).toBe(1);
+  });
+});
+
+describe("routing — preview (recommend_window / dry_run)", () => {
+  it("previewRouting wraps scoreCandidates with a preview flag + disclosure", () => {
+    for (const c of vectors.cases) {
+      const preview = previewRouting(c.candidates, {
+        intensityGCo2PerKwh: c.intensityGCo2PerKwh,
+        weights: c.routeWeights,
+        batchEligible: c.batchEligible,
+        rng: () => 0,
+      })!;
+      expect(preview.preview).toBe(true);
+      expect(preview.chosen).toBe(c.expectedChosen);
+      expect(preview.considered).toEqual(c.expectedConsidered);
+      expect(preview.reasoning).toBe(`${ROUTING_PREVIEW_DISCLOSURE}: ${c.expectedReasoning}`);
+      expect(preview.reasoning.startsWith("PREVIEW —")).toBe(true);
+    }
+  });
+
+  it("returns undefined for a single / absent candidate (never inert, never present)", () => {
+    expect(previewRouting(undefined, { intensityGCo2PerKwh: 400 })).toBeUndefined();
+    expect(previewRouting(["anthropic:claude-opus-4"], { intensityGCo2PerKwh: 400 })).toBeUndefined();
+  });
+
+  it("recommend_window emits a routingPreview only when >= 2 candidates", async () => {
+    const base = { deadline: deadline(6), region: "US-CAL-CISO" as const };
+    const none = await recommendWindow(base, { feed: mockGridFeed(), rng: () => 0 });
+    expect(none.routingPreview).toBeUndefined();
+    const one = await recommendWindow(
+      { ...base, candidates: ["anthropic:claude-opus-4"] },
+      { feed: mockGridFeed(), rng: () => 0 },
+    );
+    expect(one.routingPreview).toBeUndefined();
+    const many = await recommendWindow(
+      {
+        ...base,
+        candidates: ["anthropic:claude-opus-4", "ollama:llama-3-1-8b"],
+        routeWeights: { carbon: 1, cost: 0, latency: 0 },
+      },
+      { feed: mockGridFeed(), rng: () => 0 },
+    );
+    expect(many.routingPreview?.preview).toBe(true);
+    expect(many.routingPreview?.reasoning.startsWith("PREVIEW —")).toBe(true);
+    expect(many.routingPreview?.considered).toHaveLength(2);
+  });
+
+  it("preview pick matches the committed pick given identical forecast + seed", async () => {
+    const candidates = [
+      "anthropic:claude-opus-4",
+      "gemini:gemini-2-0-flash",
+      "ollama:llama-3-1-8b",
+    ];
+    const routeWeights = { carbon: 1, cost: 0, latency: 0 };
+    const dl = deadline(6);
+    // Commit path.
+    const s = new Scheduler({ feed: mockGridFeed(), rng: () => 0 });
+    const rec = await s.enqueueProviderCall(
+      { type: "provider_call", provider: "anthropic", model: "claude-opus-4", prompt: "x", candidates, routeWeights },
+      { deadline: dl, region: "US-CAL-CISO", taskId: "cmp-preview" },
+    );
+    const committed = s.getTask(rec.taskId)?.routingDecision;
+    // Preview path — same feed kind, same seed.
+    const r = await recommendWindow(
+      { deadline: dl, region: "US-CAL-CISO", candidates, routeWeights },
+      { feed: mockGridFeed(), rng: () => 0 },
+    );
+    expect(r.routingPreview?.chosen).toBe(committed?.chosen);
+    expect(r.routingPreview?.considered.map((c) => c.score)).toEqual(
+      committed?.considered.map((c) => c.score),
+    );
+    s.shutdown();
   });
 });
 

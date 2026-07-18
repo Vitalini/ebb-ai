@@ -379,6 +379,8 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
           region: string;
           carbon_budget_g?: number;
           model?: string;
+          candidates?: string[];
+          route_weights?: { carbon?: number; cost?: number; latency?: number };
         };
         try {
           const result = await recommendWindow(
@@ -387,6 +389,8 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
               region: parsed.region,
               carbonBudgetG: parsed.carbon_budget_g,
               model: parsed.model,
+              candidates: parsed.candidates,
+              routeWeights: parsed.route_weights,
             },
             { feed },
           );
@@ -457,6 +461,9 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
                     `band: ${plan.band}\n` +
                     `estimated_carbon_g_co2: ${plan.estimatedCarbonGCo2}\n` +
                     `batch_eligible: ${plan.batchEligible}\n` +
+                    (plan.routingPreview
+                      ? `routing_preview: ${JSON.stringify(routingBlockPayload(plan.routingPreview))}\n`
+                      : "") +
                     formatGridSourceLine(gridSource),
                 },
               ],
@@ -817,8 +824,40 @@ export function formatRecommendation(
       estimated_savings_vs_now_pct: a.estimatedSavingsVsNowPct,
     })),
     reasoning: r.reasoning,
+    // Non-binding cross-provider routing preview (ROADMAP item 1) — present
+    // only when >= 2 candidates were supplied. `preview: true` and the
+    // reasoning prefix disclose that the binding pick is decided at schedule
+    // time and may differ if the forecast shifts.
+    ...(r.routingPreview
+      ? { routing_preview: routingBlockPayload(r.routingPreview) }
+      : {}),
   };
   return JSON.stringify(payload, null, 2);
+}
+
+/**
+ * snake_case JSON rendering of a routing decision/preview for the MCP text
+ * payloads. Shared by recommend_window, schedule_task dry_run, and the
+ * committed schedule response so the block reads identically everywhere.
+ */
+export function routingBlockPayload(
+  routing: import("@ebb-ai/core").RoutingDecision & { preview?: true },
+): Record<string, unknown> {
+  return {
+    ...(routing.preview ? { preview: true } : {}),
+    chosen: routing.chosen,
+    ...(routing.fallbackFrom ? { fallback_from: routing.fallbackFrom } : {}),
+    weights: routing.weights,
+    considered: routing.considered.map((c) => ({
+      provider: c.provider,
+      model: c.model,
+      est_carbon_g: c.estCarbonG,
+      est_cost_usd: c.estCostUsd,
+      latency_class: c.latencyClass,
+      score: c.score,
+    })),
+    reasoning: routing.reasoning,
+  };
 }
 
 export function formatTask(task: TaskRecord<unknown> | undefined): string {

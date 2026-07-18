@@ -113,6 +113,21 @@ export interface RoutingDecision {
   reasoning: string;
 }
 
+/**
+ * A NON-BINDING routing preview, returned by `recommend_window` and
+ * `schedule_task` dry_run. Same scored-candidate math as the committing path,
+ * but scored at the PREVIEWED window's intensity — the binding pick is made
+ * at schedule time and may differ if the forecast shifts before commit. The
+ * `preview` flag and the reasoning prefix disclose that plainly.
+ */
+export interface RoutingPreview extends RoutingDecision {
+  preview: true;
+}
+
+/** Disclosure prefix on a preview's reasoning line. */
+export const ROUTING_PREVIEW_DISCLOSURE =
+  "PREVIEW — the binding pick is decided at schedule time and may differ if the forecast shifts before commit";
+
 /** The providers a candidate string may name (keep in sync with {@link ProviderName}). */
 const KNOWN_PROVIDERS: ReadonlySet<string> = new Set([
   "anthropic",
@@ -361,6 +376,29 @@ export function scoreCandidates(opts: ScoreCandidatesOptions): RoutingDecision {
     considered,
     chosen: candidateId(chosen),
     reasoning: buildRoutingReasoning(considered, chosen, weights),
+  };
+}
+
+/**
+ * Non-binding routing preview for the planning surfaces (`recommend_window`,
+ * `schedule_task` dry_run). Runs the SAME scoring as {@link scoreCandidates}
+ * at the previewed window's intensity, then marks the result as a preview and
+ * prefixes the reasoning with {@link ROUTING_PREVIEW_DISCLOSURE}. Returns
+ * `undefined` when fewer than two candidates were supplied (routing is a no-op
+ * — no block is shown, so the params are never inert: they take effect exactly
+ * when >= 2 candidates are present). Throws {@link MissingPriceError} /
+ * {@link InvalidCandidateError} loudly, same as the committing path.
+ */
+export function previewRouting(
+  candidates: readonly string[] | undefined,
+  opts: Omit<ScoreCandidatesOptions, "candidates">,
+): RoutingPreview | undefined {
+  if (!Array.isArray(candidates) || candidates.length < 2) return undefined;
+  const decision = scoreCandidates({ ...opts, candidates: parseCandidates(candidates) });
+  return {
+    ...decision,
+    preview: true,
+    reasoning: `${ROUTING_PREVIEW_DISCLOSURE}: ${decision.reasoning}`,
   };
 }
 

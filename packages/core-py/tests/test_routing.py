@@ -23,14 +23,17 @@ from ebb_ai.providers.base import (
     DispatchResult,
     ProviderAdapter,
 )
+from ebb_ai.recommend import recommend_window
 from ebb_ai.routing import (
     DEFAULT_ROUTE_WEIGHTS,
+    ROUTING_PREVIEW_DISCLOSURE,
     InvalidCandidateError,
     InvalidRouteWeightsError,
     MissingPriceError,
     normalize_route_weights,
     parse_candidate,
     parse_candidates,
+    preview_routing,
     score_candidates,
 )
 from ebb_ai.sign import verify_receipt
@@ -130,6 +133,27 @@ def test_batch_discount_lowers_cost() -> None:
     )
     assert sync.considered[0].latency_class == 0.5
     assert batch.considered[0].latency_class == 1
+
+
+@pytest.mark.parametrize("case", CASES, ids=[c["name"] for c in CASES])
+def test_preview_routing_wraps_score(case: dict[str, Any]) -> None:
+    preview = preview_routing(
+        case["candidates"],
+        case["intensityGCo2PerKwh"],
+        weights=case.get("routeWeights"),
+        batch_eligible=case["batchEligible"],
+        rng=lambda: 0.0,
+    )
+    assert preview is not None
+    assert preview.preview is True
+    assert preview.chosen == case["expectedChosen"]
+    assert preview.reasoning == f"{ROUTING_PREVIEW_DISCLOSURE}: {case['expectedReasoning']}"
+    assert preview.reasoning.startswith("PREVIEW —")
+
+
+def test_preview_routing_none_for_single_or_absent() -> None:
+    assert preview_routing(None, 400) is None
+    assert preview_routing(["anthropic:claude-opus-4"], 400) is None
 
 
 # ── Integration through the real Scheduler ──────────────────────────────────
@@ -270,3 +294,72 @@ async def test_batch_failure_falls_back_to_routed_candidate_sync_path() -> None:
     assert done is not None and done.status == "completed"
     assert done.batch_id is None  # receipt records the actual (sync) path
     assert done.receipt.routing["chosen"] == "openai:gpt-4o"
+
+
+@pytest.mark.asyncio
+async def test_recommend_window_emits_preview_only_when_two_candidates() -> None:
+    dl = _deadline(6)
+    none = await recommend_window(
+        deadline=dl, region="US-CAL-CISO", feed=mock_grid_feed(), rng=lambda: 0.0
+    )
+    assert none.routing_preview is None
+    one = await recommend_window(
+        deadline=dl,
+        region="US-CAL-CISO",
+        candidates=["anthropic:claude-opus-4"],
+        feed=mock_grid_feed(),
+        rng=lambda: 0.0,
+    )
+    assert one.routing_preview is None
+    many = await recommend_window(
+        deadline=dl,
+        region="US-CAL-CISO",
+        candidates=["anthropic:claude-opus-4", "ollama:llama-3-1-8b"],
+        route_weights={"carbon": 1, "cost": 0, "latency": 0},
+        feed=mock_grid_feed(),
+        rng=lambda: 0.0,
+    )
+    assert many.routing_preview is not None
+    assert many.routing_preview.preview is True
+    assert many.routing_preview.reasoning.startswith("PREVIEW —")
+    assert len(many.routing_preview.considered) == 2
+    # to_dict surfaces the snake_case preview block for the MCP JSON payload.
+    assert many.to_dict()["routing_preview"]["preview"] is True
+
+
+@pytest.mark.asyncio
+async def test_recommend_preview_pick_matches_committed_pick() -> None:
+    candidates = [
+        "anthropic:claude-opus-4",
+        "gemini:gemini-2-0-flash",
+        "ollama:llama-3-1-8b",
+    ]
+    weights = {"carbon": 1, "cost": 0, "latency": 0}
+    dl = _deadline(6)
+    # Commit path.
+    s = Scheduler(feed=mock_grid_feed(), rng=lambda: 0.0)
+    rec = await s.enqueue_provider_call(
+        ProviderCallSpec(
+            provider="anthropic",
+            model="claude-opus-4",
+            prompt="x",
+            candidates=candidates,
+            route_weights=weights,
+        ),
+        DeferOptions(deadline=dl, region="US-CAL-CISO", task_id="cmp-preview"),
+    )
+    committed = rec.routing_decision
+    # Preview path — same feed kind, same seed.
+    r = await recommend_window(
+        deadline=dl,
+        region="US-CAL-CISO",
+        candidates=candidates,
+        route_weights=weights,
+        feed=mock_grid_feed(),
+        rng=lambda: 0.0,
+    )
+    assert r.routing_preview is not None
+    assert r.routing_preview.chosen == committed["chosen"]
+    assert [c.score for c in r.routing_preview.considered] == [
+        c["score"] for c in committed["considered"]
+    ]

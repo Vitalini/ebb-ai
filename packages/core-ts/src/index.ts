@@ -26,6 +26,32 @@ export {
 } from "./scheduler.js";
 export type { SchedulerOptions, TickAdapters } from "./scheduler.js";
 export { recommendWindow } from "./recommend.js";
+// Cross-provider routing (ROADMAP item 1).
+export {
+  scoreCandidates,
+  previewRouting,
+  parseCandidate,
+  parseCandidates,
+  candidateId,
+  normalizeRouteWeights,
+  priceForModel,
+  DEFAULT_ROUTE_WEIGHTS,
+  ROUTING_PREVIEW_DISCLOSURE,
+  SCORE_TIE_EPSILON,
+  InvalidCandidateError,
+  InvalidRouteWeightsError,
+  MissingPriceError,
+} from "./routing.js";
+export type {
+  RouteWeights,
+  RoutingCandidate,
+  RoutingDecision,
+  RoutingPreview,
+  ScoredCandidate,
+  LatencyClass,
+  ModelPrice,
+  ScoreCandidatesOptions,
+} from "./routing.js";
 export {
   selectWindow,
   inDeadlineEntries,

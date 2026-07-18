@@ -671,17 +671,27 @@ export default defineToolPlugin({
       description: toolDescription("recommend_window"),
       parameters: openclawToolParameters("recommend_window"),
       async execute(
-        params: { deadline: string; region?: string; carbon_budget_g?: number },
+        params: {
+          deadline: string;
+          region?: string;
+          carbon_budget_g?: number;
+          candidates?: string[];
+          route_weights?: { carbon?: number; cost?: number; latency?: number };
+        },
         config: PluginConfig,
         context?: unknown,
       ) {
         captureOpenClawRuntime(context);
         const { region } = resolveRegion(params.region, config.defaultRegion);
+        // The result carries a non-binding `routingPreview` (scored candidate
+        // list + provisional pick) whenever >= 2 candidates were supplied.
         return await recommendWindow(
           {
             deadline: new Date(params.deadline),
             region,
             carbonBudgetG: params.carbon_budget_g,
+            candidates: params.candidates,
+            routeWeights: params.route_weights,
           },
           { feed: getGridFeed() },
         );

@@ -39,6 +39,12 @@ DEFAULT_ROUTE_WEIGHTS: dict[str, float] = {"carbon": 0.6, "cost": 0.3, "latency"
 #: Ties within this score epsilon are broken with the rng (reproducible given a seed).
 SCORE_TIE_EPSILON = 1e-9
 
+#: Disclosure prefix on a preview's reasoning line.
+ROUTING_PREVIEW_DISCLOSURE = (
+    "PREVIEW — the binding pick is decided at schedule time and may differ "
+    "if the forecast shifts before commit"
+)
+
 _KNOWN_PROVIDERS = frozenset({"anthropic", "openai", "gemini", "ollama"})
 _BATCH_CAPABLE_PROVIDERS = frozenset({"anthropic", "openai"})
 
@@ -101,6 +107,16 @@ class ScoredCandidate:
             "score": self.score,
         }
 
+    def to_snake_dict(self) -> dict[str, Any]:
+        return {
+            "provider": self.provider,
+            "model": self.model,
+            "est_carbon_g": self.est_carbon_g,
+            "est_cost_usd": self.est_cost_usd,
+            "latency_class": self.latency_class,
+            "score": self.score,
+        }
+
 
 @dataclass(slots=True)
 class RoutingDecision:
@@ -113,6 +129,9 @@ class RoutingDecision:
     chosen: str
     reasoning: str
     fallback_from: str | None = None
+    #: True for a NON-BINDING preview (recommend_window / dry_run). Never set
+    #: on a committed / receipt-embedded decision.
+    preview: bool = False
 
     def to_camel_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
@@ -127,6 +146,26 @@ class RoutingDecision:
         }
         if self.fallback_from is not None:
             d["fallbackFrom"] = self.fallback_from
+        if self.preview:
+            d["preview"] = True
+        return d
+
+    def to_snake_dict(self) -> dict[str, Any]:
+        """snake_case rendering for the planning-surface JSON payloads
+        (recommend_window / dry_run), matching the TS ``routingBlockPayload``."""
+        d: dict[str, Any] = {}
+        if self.preview:
+            d["preview"] = True
+        d["chosen"] = self.chosen
+        if self.fallback_from is not None:
+            d["fallback_from"] = self.fallback_from
+        d["weights"] = {
+            "carbon": self.weights["carbon"],
+            "cost": self.weights["cost"],
+            "latency": self.weights["latency"],
+        }
+        d["considered"] = [c.to_snake_dict() for c in self.considered]
+        d["reasoning"] = self.reasoning
         return d
 
 
@@ -321,6 +360,38 @@ def score_candidates(
     )
 
 
+def preview_routing(
+    candidates: list[str] | None,
+    intensity_g_co2_per_kwh: float,
+    *,
+    weights: dict[str, float] | None = None,
+    batch_eligible: bool = False,
+    rng: Callable[[], float] | None = None,
+) -> RoutingDecision | None:
+    """Non-binding routing preview for the planning surfaces
+    (``recommend_window``, ``schedule_task`` dry_run). Runs the SAME scoring
+    as :func:`score_candidates` at the previewed window's intensity, then
+    marks the result ``preview=True`` and prefixes the reasoning with
+    :data:`ROUTING_PREVIEW_DISCLOSURE`. Returns ``None`` when fewer than two
+    candidates were supplied (routing is a no-op — so the params are never
+    inert: they take effect exactly when >= 2 candidates are present). Raises
+    :class:`MissingPriceError` / :class:`InvalidCandidateError` loudly, same
+    as the committing path.
+    """
+    if not isinstance(candidates, list) or len(candidates) < 2:
+        return None
+    decision = score_candidates(
+        parse_candidates(candidates),
+        intensity_g_co2_per_kwh,
+        weights=weights,
+        batch_eligible=batch_eligible,
+        rng=rng,
+    )
+    decision.preview = True
+    decision.reasoning = f"{ROUTING_PREVIEW_DISCLOSURE}: {decision.reasoning}"
+    return decision
+
+
 def _is_min_by(all_c: list[ScoredCandidate], target: ScoredCandidate, key) -> bool:
     lo = min(key(c) for c in all_c)
     return key(target) <= lo + SCORE_TIE_EPSILON
@@ -367,6 +438,7 @@ def _build_reasoning(
 __all__ = [
     "DEFAULT_ROUTE_WEIGHTS",
     "MODEL_PRICES",
+    "ROUTING_PREVIEW_DISCLOSURE",
     "SCORE_TIE_EPSILON",
     "InvalidCandidateError",
     "InvalidRouteWeightsError",
@@ -378,6 +450,7 @@ __all__ = [
     "normalize_route_weights",
     "parse_candidate",
     "parse_candidates",
+    "preview_routing",
     "price_for_model",
     "score_candidates",
 ]

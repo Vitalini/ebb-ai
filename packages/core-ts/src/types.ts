@@ -2,7 +2,7 @@
  * Public + internal types for @ebb-ai/core.
  */
 
-import type { RouteWeights, RoutingDecision } from "./routing.js";
+import type { RouteWeights, RoutingDecision, RoutingPreview } from "./routing.js";
 
 export type TaskStatus =
   | "queued"
@@ -367,6 +367,16 @@ export interface RecommendOptions {
    * (deadline > 24h out). Does not affect the chosen window.
    */
   model?: string;
+  /**
+   * Cross-provider routing candidates (ROADMAP item 1). With >= 2
+   * `"provider:model"` entries `recommend_window` returns a `routingPreview`
+   * — the scored candidate list + provisional pick at the previewed window's
+   * intensity (non-binding; the real decision is made at schedule time).
+   * Absent / single-entry ⇒ no preview.
+   */
+  candidates?: string[];
+  /** Optional routing weights; see {@link DeferOptions.routeWeights}. */
+  routeWeights?: Partial<RouteWeights>;
 }
 
 /**
@@ -414,4 +424,12 @@ export interface RecommendResult {
    * string discloses it in prose; this field exposes it structurally.
    */
   signalType?: GridSignalType;
+  /**
+   * Non-binding cross-provider routing preview (ROADMAP item 1). Present only
+   * when >= 2 `candidates` were supplied: the scored candidate list +
+   * provisional pick at THIS previewed window's intensity. The binding
+   * decision is made at schedule time and may differ if the forecast shifts.
+   * Absent when routing was not requested.
+   */
+  routingPreview?: RoutingPreview;
 }
