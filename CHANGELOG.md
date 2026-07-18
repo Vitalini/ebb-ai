@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Cross-provider LLM routing** (TS + PY, roadmap item 1). Opt-in and
+  honest: `schedule_task` / `recommend_window` gain optional
+  `candidates` (`"provider:model"` list — routing activates only with
+  ≥2; ebb never invents model equivalences) and `route_weights`
+  (default carbon 0.6 / cost 0.3 / latency 0.1). At the already-chosen
+  dispatch window each candidate is scored on carbon (SSOT per-model
+  energy × window intensity — hosted candidates share the documented
+  caller's-grid assumption; Ollama is genuinely local), cost (new SSOT
+  `data/prices.json`, dated + vendor-cited list prices; batch discount
+  applied when eligible; an unpriced model is rejected loudly, never
+  guessed) and a static latency class. The full scored list + weights
+  land in a signed `routing` receipt block (cross-language signature
+  vector added); dispatch falls back to the next-best candidate when an
+  adapter is unavailable (recorded as `routing_fallback`), and a failed
+  batch submit falls back to the same candidate's sync path first.
+  `recommend_window` and `dry_run` compute a genuine routing PREVIEW at
+  the previewed intensity (explicitly disclosed as non-binding) — no
+  accepted-but-inert parameters. Deterministic given a seeded rng; MCP
+  and OpenClaw render the routing block; CLI intentionally has no
+  schedule command, so no flag there.
+
 - **WattTime marginal-emissions feed** (TS + PY, roadmap item 2) — the
   5th real feed. Opt-in via `WATTTIME_USERNAME`/`WATTTIME_PASSWORD`;
   for the 6 covered US ISO zones a real marginal (co2_moer) *forecast*
