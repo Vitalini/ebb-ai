@@ -2,6 +2,8 @@
  * Public + internal types for @ebb-ai/core.
  */
 
+import type { RouteWeights, RoutingDecision } from "./routing.js";
+
 export type TaskStatus =
   | "queued"
   | "scheduled"
@@ -30,6 +32,20 @@ export interface DeferOptions {
   region?: string;
   /** Caller-supplied identifier for tracing. Must be a non-empty string and unique within the scheduler. */
   taskId?: string;
+  /**
+   * Cross-provider routing candidates (ROADMAP item 1): `"provider:model"`
+   * strings the caller explicitly allows. >= 2 activates routing (the
+   * scheduler scores them at the chosen window and dispatches the winner);
+   * absent or a single candidate leaves existing behavior unchanged. No
+   * silent model swaps — routing only ever picks from this list.
+   */
+  candidates?: string[];
+  /**
+   * Optional routing weights `{carbon, cost, latency}` (non-negative,
+   * normalized internally). Default `{carbon:0.6, cost:0.3, latency:0.1}`.
+   * Ignored unless `candidates` has >= 2 entries.
+   */
+  routeWeights?: Partial<RouteWeights>;
 }
 
 /**
@@ -163,6 +179,16 @@ export interface CarbonReceipt {
   /** ISO-8601 timestamp the signature was produced. Helps with replay
    *  defence when a receipt is re-presented out of context. */
   signedAt?: string;
+  /**
+   * Cross-provider routing provenance (ROADMAP item 1). Present only when
+   * the task was scheduled with >= 2 candidates. Records the normalized
+   * weights, the full scored candidate list, the chosen `provider:model`,
+   * an optional `fallbackFrom` when dispatch fell back off the first pick,
+   * and a one-line honest reasoning string. Inside the signed payload —
+   * a signed receipt attests exactly which candidates were compared and why
+   * the winner was picked. Omitted (undefined) when routing was not used.
+   */
+  routing?: RoutingDecision;
 }
 
 export interface TaskRecord<T = unknown> {
@@ -211,6 +237,14 @@ export interface TaskRecord<T = unknown> {
    * polls this batch until results arrive.
    */
   batchId?: string;
+  /**
+   * Cross-provider routing decision (ROADMAP item 1), computed and
+   * persisted at schedule time when the task was enqueued with >= 2
+   * candidates. Carries the scored candidate list, normalized weights and
+   * chosen `provider:model`; folded into the signed receipt at completion.
+   * Absent when routing was not used.
+   */
+  routingDecision?: RoutingDecision;
 }
 
 /**
@@ -255,6 +289,17 @@ export interface ProviderCallSpec {
    * original.
    */
   redactInReceipt?: string[];
+  /**
+   * Cross-provider routing candidates (ROADMAP item 1). When >= 2 entries
+   * are present the scheduler scores them at the chosen dispatch window and
+   * overwrites `provider`/`model` with the winner before persisting; the
+   * decision is recorded on the task's `routingDecision` and folded into the
+   * signed receipt. Absent / single-entry ⇒ the spec's own provider/model is
+   * used unchanged.
+   */
+  candidates?: string[];
+  /** Optional routing weights; see {@link DeferOptions.routeWeights}. */
+  routeWeights?: Partial<RouteWeights>;
 }
 
 /** Per-task outcome returned by `Scheduler.tick`. */

@@ -260,6 +260,15 @@ class CarbonReceipt:
     verify without out-of-band key distribution."""
     signed_at: str | None = None
     """ISO-8601 timestamp the signature was produced."""
+    routing: dict[str, Any] | None = None
+    """Cross-provider routing provenance (ROADMAP item 1). Present only
+    when the task was scheduled with >= 2 candidates. The camelCase wire
+    shape of :class:`ebb_ai.routing.RoutingDecision` (``weights``,
+    ``considered``, ``chosen``, optional ``fallbackFrom``, ``reasoning``).
+    Stored already-camelCased so the value is byte-identical to the TS
+    port under the shared canonical signing form. Inside the signed
+    payload — a signed receipt attests which candidates were compared and
+    why the winner was chosen. ``None`` when routing was not used."""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -306,6 +315,8 @@ class CarbonReceipt:
             d["signerPublicKey"] = self.signer_public_key
         if self.signed_at is not None:
             d["signedAt"] = self.signed_at
+        if self.routing is not None:
+            d["routing"] = self.routing
         return d
 
 
@@ -356,6 +367,16 @@ class TaskRecord:
     polls this batch until results arrive.
     """
 
+    routing_decision: dict[str, Any] | None = None
+    """Cross-provider routing decision (ROADMAP item 1), computed and
+    persisted at schedule time when the task was enqueued with >= 2
+    candidates. The camelCase wire shape of
+    :class:`ebb_ai.routing.RoutingDecision` — byte-identical to the TS
+    port's ``routing_decision`` column so a shared ledger round-trips.
+    Folded into the signed receipt at completion. ``None`` when routing
+    was not used.
+    """
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "task_id": self.task_id,
@@ -373,6 +394,7 @@ class TaskRecord:
             "estimated_carbon_g_co2": self.estimated_carbon_g_co2,
             "deadline": self.deadline,
             "batch_id": self.batch_id,
+            "routing_decision": self.routing_decision,
         }
 
 
@@ -418,6 +440,18 @@ class ProviderCallSpec:
     prompt — only the receipt's ``prompt`` field (and the terminal
     ``body_json`` ledger copy) is redacted.
     """
+    candidates: list[str] | None = None
+    """Cross-provider routing candidates (ROADMAP item 1): ``provider:model``
+    strings the caller explicitly allows. >= 2 activates routing (the
+    scheduler scores them at the chosen window and dispatches the winner);
+    absent / single-entry ⇒ this spec's own provider/model is used
+    unchanged. No silent model swaps — routing only ever picks from here.
+    """
+    route_weights: dict[str, float] | None = None
+    """Optional routing weights ``{carbon, cost, latency}`` (non-negative,
+    normalized internally). Default ``{carbon:0.6, cost:0.3, latency:0.1}``.
+    Only used when ``candidates`` has >= 2 entries.
+    """
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -445,6 +479,8 @@ class ProviderCallSpec:
             redact_in_receipt=data.get(
                 "redact_in_receipt", data.get("redactInReceipt")
             ),
+            candidates=data.get("candidates"),
+            route_weights=data.get("route_weights", data.get("routeWeights")),
         )
 
 

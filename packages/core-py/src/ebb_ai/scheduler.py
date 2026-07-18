@@ -53,6 +53,7 @@ from .errors import (
     TaskCancelledError,
 )
 from .grid import GridFeed, mock_grid_feed
+from .routing import candidate_id, parse_candidates, score_candidates
 from .sign import SigningKeyPair, load_or_create_signing_key, sign_receipt
 from .types import (
     CarbonReceipt,
@@ -542,7 +543,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     body_json         TEXT,
     estimated_carbon_g REAL,
     deadline          TEXT,
-    batch_id          TEXT
+    batch_id          TEXT,
+    routing_decision  TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_enqueued_at ON tasks(enqueued_at);
@@ -628,6 +630,27 @@ async def _ensure_batch_id_column(conn: aiosqlite.Connection) -> None:
         await conn.commit()
 
 
+async def _ensure_routing_decision_column(conn: aiosqlite.Connection) -> None:
+    """Idempotent migration: add ``routing_decision`` (ROADMAP item 1) to a
+    pre-routing ``tasks`` table.
+
+    Stores the scored cross-provider routing decision (camelCase JSON,
+    byte-identical to the TS port) persisted at schedule time and folded
+    into the receipt at completion. The column name matches the TS port's
+    SQLite schema exactly — the DB file is shared cross-language.
+    """
+    async with conn.execute("SELECT name FROM pragma_table_info('tasks')") as cur:
+        rows = await cur.fetchall()
+    names = {row[0] for row in rows}
+    if "routing_decision" not in names:
+        try:
+            await conn.execute("ALTER TABLE tasks ADD COLUMN routing_decision TEXT")
+        except aiosqlite.OperationalError as err:
+            if "duplicate column name" not in str(err).lower():
+                raise
+        await conn.commit()
+
+
 class _TaskStore:
     """Optional SQLite-backed durable queue.
 
@@ -678,6 +701,7 @@ class _TaskStore:
         await _ensure_estimated_carbon_column(conn)
         await _ensure_deadline_column(conn)
         await _ensure_batch_id_column(conn)
+        await _ensure_routing_decision_column(conn)
         self._conn = conn
         # The ledger stores prompts (redacted only at terminal
         # transitions) next to a 0600 signing key — keep the DB and its
@@ -713,8 +737,8 @@ class _TaskStore:
                     task_id, status, enqueued_at, scheduled_for, completed_at,
                     region, carbon_budget_g, result_json, error, receipt_json,
                     intensity_source, body_json, estimated_carbon_g, deadline,
-                    batch_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    batch_id, routing_decision
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(task_id) DO UPDATE SET
                     status            = excluded.status,
                     scheduled_for     = excluded.scheduled_for,
@@ -728,7 +752,8 @@ class _TaskStore:
                     body_json         = excluded.body_json,
                     estimated_carbon_g = excluded.estimated_carbon_g,
                     deadline          = excluded.deadline,
-                    batch_id          = excluded.batch_id
+                    batch_id          = excluded.batch_id,
+                    routing_decision  = excluded.routing_decision
                 """,
                 (
                     record.task_id,
@@ -746,6 +771,9 @@ class _TaskStore:
                     record.estimated_carbon_g_co2,
                     record.deadline,
                     record.batch_id,
+                    json.dumps(record.routing_decision)
+                    if record.routing_decision is not None
+                    else None,
                 ),
             )
             await conn.commit()
@@ -878,6 +906,7 @@ def _row_to_record(row: Any) -> TaskRecord:
             signature=data.get("signature"),
             signer_public_key=data.get("signer_public_key"),
             signed_at=data.get("signed_at"),
+            routing=data.get("routing"),
         )
     result = json.loads(row["result_json"]) if row["result_json"] else None
     # `body_json` is read defensively: SQLite columns added by a pre-v0.5
@@ -905,6 +934,13 @@ def _row_to_record(row: Any) -> TaskRecord:
         batch_id = row["batch_id"]
     except (IndexError, KeyError):
         batch_id = None
+    # `routing_decision` (ROADMAP item 1) is read defensively too — the
+    # column may be absent on a pre-routing DB row.
+    try:
+        routing_raw = row["routing_decision"]
+    except (IndexError, KeyError):
+        routing_raw = None
+    routing_decision = json.loads(routing_raw) if routing_raw else None
     return TaskRecord(
         task_id=row["task_id"],
         status=row["status"],
@@ -921,6 +957,7 @@ def _row_to_record(row: Any) -> TaskRecord:
         estimated_carbon_g_co2=estimated_carbon_g,
         deadline=deadline,
         batch_id=batch_id,
+        routing_decision=routing_decision,
     )
 
 
@@ -2234,7 +2271,9 @@ class Scheduler:
 
         # Parse spec.model out of the persisted body so the per-model
         # energy coefficients (v0.10) factor into both the budget filter
-        # and the estimated-carbon projection recorded on the task.
+        # and the estimated-carbon projection recorded on the task. The
+        # window is chosen ONCE below, BEFORE provider scoring; routing may
+        # overwrite the model afterward (ROADMAP item 1).
         spec_model = _spec_model_from_body(record.body_json)
 
         try:
@@ -2291,8 +2330,27 @@ class Scheduler:
                     await self._fail(task_id, CarbonBudgetExceededError(cheapest_g, budget_g))
                     return
             # No usable window — schedule for "now" so the next tick runs it.
+            # Route (if a candidate list was supplied) against the current-hour
+            # intensity (ROADMAP item 1).
             record.status = "scheduled"
             record.scheduled_for = _iso_utc(_now_utc())
+            now_intensity = (
+                forecast.entries[0].carbon_intensity_g_co2_per_kwh
+                if forecast.entries
+                else None
+            )
+            routed_model_now = (
+                self._apply_routing_if_needed(record, deadline, now_intensity)
+                if now_intensity is not None
+                else spec_model
+            )
+            if now_intensity is not None:
+                record.estimated_carbon_g_co2 = (
+                    _round_half_up(
+                        _intensity_to_grams(now_intensity, model=routed_model_now) * 10
+                    )
+                    / 10
+                )
             self._tasks[task_id] = record
             if self._store is not None and self._connected:
                 await self._store.upsert(record)
@@ -2308,10 +2366,17 @@ class Scheduler:
             if candidate_at is not None and candidate_at <= _now_utc()
             else candidate.datetime
         )
+        # Cross-provider routing (ROADMAP item 1): the window `candidate` was
+        # chosen ONCE above; now score the caller's candidates at that
+        # window's intensity, overwrite the spec's provider/model with the
+        # winner, and record the decision. No-op unless >= 2 candidates.
+        routed_model = self._apply_routing_if_needed(
+            record, deadline, candidate.carbon_intensity_g_co2_per_kwh
+        )
         record.estimated_carbon_g_co2 = (
             _round_half_up(
                 _intensity_to_grams(
-                    candidate.carbon_intensity_g_co2_per_kwh, model=spec_model
+                    candidate.carbon_intensity_g_co2_per_kwh, model=routed_model
                 )
                 * 10
             )
@@ -2320,6 +2385,60 @@ class Scheduler:
         self._tasks[task_id] = record
         if self._store is not None and self._connected:
             await self._store.upsert(record)
+
+    def _apply_routing_if_needed(
+        self,
+        record: TaskRecord,
+        deadline: datetime,
+        intensity_for_scoring: float,
+    ) -> str | None:
+        """Cross-provider routing (ROADMAP item 1). When the persisted body
+        carries >= 2 candidates, score them at ``intensity_for_scoring`` (the
+        already-chosen window's intensity), overwrite ``provider``/``model``
+        in ``body_json`` with the winner, and stash the full decision on
+        ``record.routing_decision`` (camelCase, byte-identical to the TS
+        port). Returns the model that should drive the estimated-carbon
+        figure (the routed winner, or the body's own model when routing did
+        not run). A missing price raises loudly (``MissingPriceError``) —
+        which fails the task at schedule time, by design.
+        """
+        if not record.body_json:
+            return _spec_model_from_body(record.body_json)
+        try:
+            body = json.loads(record.body_json)
+        except (TypeError, ValueError):
+            return _spec_model_from_body(record.body_json)
+        if not isinstance(body, dict):
+            return None
+        raw_candidates = body.get("candidates")
+        spec_model = body.get("model") if isinstance(body.get("model"), str) else None
+        if not isinstance(raw_candidates, list) or len(raw_candidates) < 2:
+            return spec_model
+        candidates = parse_candidates(raw_candidates)
+        now = _now_utc()
+        batch_eligible = (deadline - now) > timedelta(hours=24)
+        weights = body.get("route_weights", body.get("routeWeights"))
+        decision = score_candidates(
+            candidates,
+            intensity_for_scoring,
+            weights=weights,
+            batch_eligible=batch_eligible,
+            rng=self._rng,
+        )
+        chosen = next(
+            (
+                c
+                for c in decision.considered
+                if candidate_id(c.provider, c.model) == decision.chosen
+            ),
+            None,
+        )
+        if chosen is not None:
+            body["provider"] = chosen.provider
+            body["model"] = chosen.model
+            record.body_json = json.dumps(body)
+        record.routing_decision = decision.to_camel_dict()
+        return chosen.model if chosen is not None else spec_model
 
     async def _dispatch_provider_call(
         self,
@@ -2360,7 +2479,53 @@ class Scheduler:
             await self._fail(task_id, RuntimeError(msg))
             return TickResultEntry(task_id=task_id, status="failed", error=msg)
 
+        # Cross-provider routing fallback (ROADMAP item 1): when a routing
+        # decision is attached, dispatch the highest-scoring candidate whose
+        # adapter is actually configured AND ready. If the originally chosen
+        # candidate is unavailable, fall through to the next-best scored one
+        # and record the fallback on the receipt.
         adapter = adapters.get(spec.provider)
+        routing = record.routing_decision
+        if routing:
+            considered = routing.get("considered", [])
+            ordered = sorted(considered, key=lambda c: c["score"])
+
+            def _adapter_ready(provider: str) -> bool:
+                a = adapters.get(provider)
+                # Presence in the adapters dict IS the readiness signal in the
+                # Python port (adapters are constructed only when configured);
+                # honor an explicit ``ready`` attribute if a host sets one.
+                return a is not None and bool(getattr(a, "ready", True))
+
+            picked = next(
+                (c for c in ordered if _adapter_ready(c["provider"])),
+                None,
+            )
+            if picked is None:
+                ids = ", ".join(
+                    candidate_id(c["provider"], c["model"]) for c in considered
+                )
+                msg = (
+                    "tick: no configured/ready adapter for any routing candidate "
+                    f"({ids})"
+                )
+                await self._fail(task_id, RuntimeError(msg))
+                return TickResultEntry(task_id=task_id, status="failed", error=msg)
+            picked_id = candidate_id(picked["provider"], picked["model"])
+            if picked_id != routing.get("chosen"):
+                new_routing = dict(routing)
+                new_routing["fallbackFrom"] = routing.get("chosen")
+                new_routing["chosen"] = picked_id
+                new_routing["reasoning"] = (
+                    f"{routing.get('reasoning', '')} — dispatch fell back to "
+                    f"{picked_id} (originally {routing.get('chosen')} unavailable "
+                    "/ missing key)"
+                )
+                record.routing_decision = new_routing
+                spec.provider = picked["provider"]
+                spec.model = picked["model"]
+            adapter = adapters.get(picked["provider"])
+
         if adapter is None:
             msg = f"tick: no adapter configured for provider {spec.provider!r}"
             await self._fail(task_id, RuntimeError(msg))
@@ -2528,6 +2693,11 @@ class Scheduler:
                     signal_type=signal_type,
                     energy_source=resolve_model_energy(actual_model).coeffs.source,
                     energy_resolution=resolve_model_energy(actual_model).tier,
+                    # Cross-provider routing provenance (ROADMAP item 1): the
+                    # scored candidate list, weights, chosen id (+ any dispatch
+                    # fallbackFrom). Inside the signed payload; omitted when
+                    # routing was not used.
+                    routing=record.routing_decision,
                 )
             )
         except Exception as err:
@@ -2622,6 +2792,24 @@ class Scheduler:
             raise
         except Exception as err:
             msg = str(err)
+            # Cross-provider routing (ROADMAP item 1): a candidate chosen WITH
+            # a batch discount whose batch submission fails falls back to its
+            # OWN sync path first (the receipt then records the actual — sync —
+            # path), and only then, if the sync adapter is unavailable, to the
+            # next-best scored candidate (handled in _dispatch_provider_call).
+            # Non-routed batch tasks keep the historical behavior: fail, and
+            # let retry_task re-dispatch sync.
+            if record.routing_decision:
+                _log.warning(
+                    "[ebb-ai/scheduler] batch submit failed for %s (%s); falling "
+                    "back to the synchronous dispatch path for the routed candidate",
+                    task_id,
+                    msg,
+                )
+                record.status = "scheduled"
+                record.batch_id = None
+                record.error = None
+                return await self._dispatch_provider_call(record, adapters)
             record.status = "failed"
             record.completed_at = _iso_utc(_now_utc())
             record.error = msg
@@ -2827,6 +3015,11 @@ class Scheduler:
                     signal_type=signal_type,
                     energy_source=resolve_model_energy(actual_model).coeffs.source,
                     energy_resolution=resolve_model_energy(actual_model).tier,
+                    # Cross-provider routing provenance (ROADMAP item 1): the
+                    # scored candidate list, weights, chosen id (+ any dispatch
+                    # fallbackFrom). Inside the signed payload; omitted when
+                    # routing was not used.
+                    routing=record.routing_decision,
                 )
             )
         except Exception as err:
