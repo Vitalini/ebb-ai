@@ -514,6 +514,8 @@ export default defineToolPlugin({
           webhook_url?: string;
           file_path?: string;
           file_format?: string;
+          candidates?: string[];
+          route_weights?: { carbon?: number; cost?: number; latency?: number };
         },
         config: PluginConfig,
         context?: unknown,
@@ -547,7 +549,13 @@ export default defineToolPlugin({
         // runs regardless of `provider`, so no rejection is warranted there;
         // when unconfigured we WARN loudly instead of rejecting, because this
         // same call may have just captured the bridge (context-dependent).
-        if (dispatch === "api-key") {
+        // Cross-provider routing: >= 2 candidates means the winning provider is
+        // decided at the chosen window, and the dispatch-time fallback walks to
+        // the next-best candidate whose adapter is ready — so a missing key on
+        // the (fallback) primary provider is not a hard reject here.
+        const routingActive =
+          Array.isArray(params.candidates) && params.candidates.length >= 2;
+        if (dispatch === "api-key" && !routingActive) {
           const providers = availableProviders();
           if (!providers.has(provider)) {
             const keyName = PROVIDER_KEY_ENV[provider];
@@ -566,6 +574,8 @@ export default defineToolPlugin({
             provider,
             model,
             prompt: params.prompt,
+            candidates: params.candidates,
+            routeWeights: params.route_weights,
           },
           {
             deadline: new Date(params.deadline),
@@ -623,6 +633,16 @@ export default defineToolPlugin({
           persisted_to: dbPath,
           dispatch,
           delivery: deliverySet ?? null,
+          ...(task.routingDecision
+            ? {
+                routing: {
+                  chosen: task.routingDecision.chosen,
+                  weights: task.routingDecision.weights,
+                  considered: task.routingDecision.considered,
+                  reasoning: task.routingDecision.reasoning,
+                },
+              }
+            : {}),
           delivery_options: deliveryOptions
             .filter((o) => o.available)
             .map((o) => `${o.mode} — ${o.detail}`),

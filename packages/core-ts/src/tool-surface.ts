@@ -42,7 +42,7 @@ export type ToolHost = "mcp" | "openclaw";
 export const ALL_TOOL_HOSTS: readonly ToolHost[] = ["mcp", "openclaw"];
 
 /** The neutral kinds a parameter can take. */
-export type ToolParamKind = "string" | "number" | "boolean" | "enum" | "array";
+export type ToolParamKind = "string" | "number" | "boolean" | "enum" | "array" | "object";
 
 /**
  * One parameter of one tool, in a schema-library-neutral form. The `min` /
@@ -76,6 +76,11 @@ export interface ToolParam {
 
   // array facet (kind === "array")
   itemKind?: "string" | "enum";
+
+  // object facet (kind === "object"): the fixed sub-parameters. Each is a
+  // normal ToolParam (its own kind / facets / optionality). Renderers build a
+  // closed object schema from these.
+  properties?: readonly ToolParam[];
 }
 
 /** One tool: its wire name, canonical description, host applicability, and
@@ -127,6 +132,28 @@ const providerParam: ToolParam = {
   optional: true,
   description:
     "Which provider to dispatch this task through: 'anthropic', 'openai', 'gemini', or 'ollama' (local). Defaults to 'anthropic'. 'anthropic' and 'openai' can auto-route through a 50%-cheaper Batch API when the deadline allows; 'gemini' and 'ollama' always dispatch synchronously.",
+};
+
+const candidatesParam: ToolParam = {
+  name: "candidates",
+  kind: "array",
+  itemKind: "string",
+  optional: true,
+  description:
+    "Optional cross-provider routing candidates: 'provider:model' strings (e.g. ['anthropic:claude-haiku-4-5','gemini:gemini-2-0-flash','ollama:llama-3-1-8b']) the caller EXPLICITLY allows. With >= 2 entries the scheduler scores them at the chosen dispatch window on a weighted blend of carbon, cost and latency and dispatches the winner (recording the full scored list on the signed receipt). No silent model swaps — routing only ever picks from this list. Absent or a single entry leaves the provider/model behavior unchanged. Every candidate model must exist in the price table or the task is rejected loudly.",
+};
+
+const routeWeightsParam: ToolParam = {
+  name: "route_weights",
+  kind: "object",
+  optional: true,
+  description:
+    "Optional routing weights {carbon, cost, latency}, non-negative and normalized internally. Default {carbon:0.6, cost:0.3, latency:0.1}. Only used when 'candidates' has >= 2 entries.",
+  properties: [
+    { name: "carbon", kind: "number", min: 0, optional: true, description: "Weight on estimated grams CO2e at the chosen window (non-negative)." },
+    { name: "cost", kind: "number", min: 0, optional: true, description: "Weight on estimated USD list cost, batch discount applied when eligible (non-negative)." },
+    { name: "latency", kind: "number", min: 0, optional: true, description: "Weight on the static latency tier: local < hosted-sync < hosted-batch (non-negative)." },
+  ],
 };
 
 const modelParam = (opts: { hosts?: readonly ToolHost[]; description: string }): ToolParam => ({
@@ -233,6 +260,8 @@ export const TOOL_SURFACE: readonly CanonicalToolDef[] = [
         description:
           "Optional vendor model name (e.g. 'claude-sonnet-4-5'). Affects the reasoning string only.",
       }),
+      candidatesParam,
+      routeWeightsParam,
     ],
   },
   {
@@ -258,9 +287,11 @@ export const TOOL_SURFACE: readonly CanonicalToolDef[] = [
       carbonBudgetParam,
       modelParam({
         description:
-          "Model to dispatch with (e.g. 'claude-sonnet-4-6' for Anthropic, 'gpt-4o' for OpenAI). Defaults to the chosen provider's flagship model.",
+          "Model to dispatch with (e.g. 'claude-sonnet-4-6' for Anthropic, 'gpt-4o' for OpenAI). Defaults to the chosen provider's flagship model. When >= 2 'candidates' are supplied, routing may overwrite this with the winning candidate.",
       }),
       providerParam,
+      candidatesParam,
+      routeWeightsParam,
       // ── MCP-only parameters ──
       {
         name: "dry_run",
@@ -433,40 +464,49 @@ export function paramOptionalForHost(param: ToolParam, host: ToolHost): boolean 
  * (name, description, kind, requiredness, host scope, or a facet) changes
  * this output, so a snapshot diff surfaces the drift for review.
  */
+export interface NeutralParamSnapshot {
+  name: string;
+  kind: ToolParamKind;
+  required: boolean;
+  description: string;
+  format?: "date-time";
+  values?: readonly string[];
+  itemKind?: "string" | "enum";
+  integer?: boolean;
+  min?: number;
+  max?: number;
+  positive?: boolean;
+  minLength?: number;
+  /** Sub-parameters of an object-kind parameter (recursively snapshotted). */
+  properties?: NeutralParamSnapshot[];
+}
+
+function neutralParam(p: ToolParam, host: ToolHost): NeutralParamSnapshot {
+  return {
+    name: p.name,
+    kind: p.kind,
+    required: !paramOptionalForHost(p, host),
+    description: p.description,
+    ...(p.format ? { format: p.format } : {}),
+    ...(p.values ? { values: p.values } : {}),
+    ...(p.itemKind ? { itemKind: p.itemKind } : {}),
+    ...(p.integer ? { integer: p.integer } : {}),
+    ...(p.min !== undefined ? { min: p.min } : {}),
+    ...(p.max !== undefined ? { max: p.max } : {}),
+    ...(p.positive ? { positive: p.positive } : {}),
+    ...(p.minLength !== undefined ? { minLength: p.minLength } : {}),
+    ...(p.properties ? { properties: p.properties.map((sub) => neutralParam(sub, host)) } : {}),
+  };
+}
+
 export function neutralSurfaceForHost(host: ToolHost): Array<{
   name: string;
   description: string;
-  params: Array<{
-    name: string;
-    kind: ToolParamKind;
-    required: boolean;
-    description: string;
-    format?: "date-time";
-    values?: readonly string[];
-    itemKind?: "string" | "enum";
-    integer?: boolean;
-    min?: number;
-    max?: number;
-    positive?: boolean;
-    minLength?: number;
-  }>;
+  params: NeutralParamSnapshot[];
 }> {
   return toolsForHost(host).map((def) => ({
     name: def.name,
     description: def.description,
-    params: paramsForHost(def, host).map((p) => ({
-      name: p.name,
-      kind: p.kind,
-      required: !paramOptionalForHost(p, host),
-      description: p.description,
-      ...(p.format ? { format: p.format } : {}),
-      ...(p.values ? { values: p.values } : {}),
-      ...(p.itemKind ? { itemKind: p.itemKind } : {}),
-      ...(p.integer ? { integer: p.integer } : {}),
-      ...(p.min !== undefined ? { min: p.min } : {}),
-      ...(p.max !== undefined ? { max: p.max } : {}),
-      ...(p.positive ? { positive: p.positive } : {}),
-      ...(p.minLength !== undefined ? { minLength: p.minLength } : {}),
-    })),
+    params: paramsForHost(def, host).map((p) => neutralParam(p, host)),
   }));
 }
