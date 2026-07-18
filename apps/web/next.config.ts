@@ -24,12 +24,13 @@ const config: NextConfig = {
     ];
   },
 
-  // Baseline security headers for every response. CSP is intentionally
-  // omitted: a strict CSP for a Next/React app needs per-request nonces
-  // (script-src) and a wider style-src for hydration; tracked as a
-  // follow-up to avoid a half-broken policy. HSTS is already set by
-  // Vercel; we re-assert it here with `preload` so the file is the
-  // single source of truth.
+  // Baseline security headers for every response — including the static
+  // `public/` assets that middleware deliberately skips. The nonce-based
+  // Content-Security-Policy lives in `src/middleware.ts` instead: its
+  // `script-src` needs a fresh per-request nonce, which a static header
+  // block can't express. These two layers merge (different header keys),
+  // they don't clobber. HSTS is already set by Vercel; we re-assert it
+  // here with `preload` so the file is the single source of truth.
   async headers() {
     return [
       {
