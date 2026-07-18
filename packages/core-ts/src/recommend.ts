@@ -23,6 +23,7 @@
 
 import { gramsForIntensity } from "./energy.js";
 import { mockGridFeed } from "./grid.js";
+import { previewRouting } from "./routing.js";
 import {
   CarbonBudgetExceededError,
   InvalidDeadlineError,
@@ -90,6 +91,11 @@ export async function recommendWindow(
     throw new Error("recommendWindow: forecast returned no entries");
   }
 
+  // Deadline-based Batch API eligibility (24h SLA) — used both for the
+  // reasoning string and for the routing preview's batch-discount math, so
+  // the preview matches what the committing scheduler would compute.
+  const batchEligible = isBatchEligible(now, deadline);
+
   const budgetG = opts.carbonBudgetG;
   // Filter by deadline first (cheapest entry after the deadline is useless),
   // then by budget. Entries mark the *start* of an hour, so the entry
@@ -101,10 +107,11 @@ export async function recommendWindow(
   });
   if (inDeadline.length === 0) {
     // No entry between "now" and the deadline. The Scheduler dispatches
-    // immediately in this case; the recommender treats it as the same — fall
-    // back to entry[0] as the "best we can do".
+    // immediately in this case (routing against the current-hour intensity);
+    // the recommender mirrors that — fall back to entry[0] as the "best we
+    // can do".
     const head = entries[0]!;
-    return buildResultFromSingle(head, forecast, opts);
+    return buildResultFromSingle(head, forecast, opts, deps, batchEligible);
   }
 
   const survivors =
@@ -166,7 +173,16 @@ export async function recommendWindow(
     intensityToGrams(chosen.carbonIntensityGCo2PerKwh, opts.model),
   );
 
-  const batchEligible = isBatchEligible(now, deadline);
+  // Cross-provider routing preview (ROADMAP item 1): score the caller's
+  // candidates at the CHOSEN window's intensity — the same math the committing
+  // scheduler runs — and return it as a non-binding preview. No-op (undefined)
+  // unless >= 2 candidates were supplied, so the params are never inert.
+  const routingPreview = previewRouting(opts.candidates, {
+    intensityGCo2PerKwh: chosen.carbonIntensityGCo2PerKwh,
+    weights: opts.routeWeights,
+    batchEligible,
+    rng: deps.rng,
+  });
 
   const alternatives: RecommendAlternative[] = altEntries.map((e) => ({
     scheduledFor: e.datetime,
@@ -208,6 +224,7 @@ export async function recommendWindow(
         cleanBandSize: equallyClean.length,
       }),
     ),
+    ...(routingPreview ? { routingPreview } : {}),
   };
 }
 
@@ -218,8 +235,18 @@ function buildResultFromSingle(
   head: GridForecastEntry,
   forecast: GridForecast,
   opts: RecommendOptions,
+  deps: RecommendDependencies,
+  batchEligible: boolean,
 ): RecommendResult {
   const grams = roundTenth(intensityToGrams(head.carbonIntensityGCo2PerKwh, opts.model));
+  // Routing preview at the run-now intensity, with the deadline-based batch
+  // eligibility the committing scheduler's run-now fallback would use.
+  const routingPreview = previewRouting(opts.candidates, {
+    intensityGCo2PerKwh: head.carbonIntensityGCo2PerKwh,
+    weights: opts.routeWeights,
+    batchEligible,
+    rng: deps.rng,
+  });
   return {
     scheduledFor: head.datetime,
     intensityGCo2PerKwh: head.carbonIntensityGCo2PerKwh,
@@ -235,6 +262,7 @@ function buildResultFromSingle(
       forecast.signalType,
       `no in-deadline windows; best available is ${formatHour(head.datetime)} UTC`,
     ),
+    ...(routingPreview ? { routingPreview } : {}),
   };
 }
 

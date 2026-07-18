@@ -63,6 +63,14 @@ function buildTypeBoxField(param: ToolParam): TSchema {
       base = Type.Array(items, opts);
       break;
     }
+    case "object": {
+      const props: Record<string, TSchema> = {};
+      for (const sub of param.properties ?? []) {
+        props[sub.name] = buildTypeBoxField(sub);
+      }
+      base = Type.Object(props, opts);
+      break;
+    }
   }
   return paramOptionalForHost(param, HOST) ? Type.Optional(base) : base;
 }

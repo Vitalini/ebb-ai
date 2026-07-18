@@ -71,7 +71,8 @@ CREATE TABLE IF NOT EXISTS tasks (
   body_json         TEXT,
   estimated_carbon_g REAL,
   deadline          TEXT,
-  batch_id          TEXT
+  batch_id          TEXT,
+  routing_decision  TEXT
 );
 CREATE INDEX IF NOT EXISTS tasks_status_idx ON tasks(status);
 CREATE INDEX IF NOT EXISTS tasks_enqueued_idx ON tasks(enqueued_at);
@@ -112,6 +113,9 @@ function ensureColumns(db: SqliteDatabase): void {
   addColumn("estimated_carbon_g", "REAL");
   addColumn("deadline", "TEXT");
   addColumn("batch_id", "TEXT");
+  // routing_decision (ROADMAP item 1): the scored cross-provider routing
+  // decision, persisted at schedule time and folded into the receipt.
+  addColumn("routing_decision", "TEXT");
 }
 
 function safeStringify(value: unknown): string | null {
@@ -203,11 +207,11 @@ export class TaskStore {
       INSERT INTO tasks (
         task_id, status, enqueued_at, scheduled_for, completed_at,
         region, carbon_budget_g, result_json, error, receipt_json, intensity_source,
-        body_json, estimated_carbon_g, deadline, batch_id
+        body_json, estimated_carbon_g, deadline, batch_id, routing_decision
       ) VALUES (
         @task_id, @status, @enqueued_at, @scheduled_for, @completed_at,
         @region, @carbon_budget_g, @result_json, @error, @receipt_json, @intensity_source,
-        @body_json, @estimated_carbon_g, @deadline, @batch_id
+        @body_json, @estimated_carbon_g, @deadline, @batch_id, @routing_decision
       )
       ON CONFLICT(task_id) DO UPDATE SET
         status             = excluded.status,
@@ -222,7 +226,8 @@ export class TaskStore {
         body_json          = excluded.body_json,
         estimated_carbon_g = excluded.estimated_carbon_g,
         deadline           = excluded.deadline,
-        batch_id           = excluded.batch_id
+        batch_id           = excluded.batch_id,
+        routing_decision   = excluded.routing_decision
     `);
     stmt.run({
       task_id: record.taskId,
@@ -240,6 +245,7 @@ export class TaskStore {
       estimated_carbon_g: record.estimatedCarbonGCo2 ?? null,
       deadline: record.deadline ?? null,
       batch_id: record.batchId ?? null,
+      routing_decision: safeStringify(record.routingDecision),
     });
   }
 
@@ -329,6 +335,9 @@ function rowToRecord(row: Record<string, unknown>): TaskRecord<unknown> {
       (row.estimated_carbon_g as number | null) ?? undefined,
     deadline: (row.deadline as string | null) ?? undefined,
     batchId: (row.batch_id as string | null) ?? undefined,
+    routingDecision: safeParse(row.routing_decision as string | null) as
+      | TaskRecord["routingDecision"]
+      | undefined,
   };
 }
 

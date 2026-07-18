@@ -21,6 +21,14 @@ import { randomUUID } from "node:crypto";
 import { gramsForIntensity, resolveModelEnergy } from "./energy.js";
 import { mockGridFeed } from "./grid.js";
 import type { ProviderAdapter } from "./providers/base.js";
+import {
+  candidateId,
+  parseCandidates,
+  previewRouting,
+  scoreCandidates,
+  type RoutingDecision,
+  type RoutingPreview,
+} from "./routing.js";
 import { selectWindow } from "./select-window.js";
 import {
   loadOrCreateSigningKey,
@@ -780,6 +788,13 @@ export class Scheduler {
      * in-deadline window existed (the "run now" fallback below).
      */
     cleanBandSize?: number;
+    /**
+     * Non-binding cross-provider routing preview (ROADMAP item 1) — the
+     * scored candidate list + provisional pick this dry_run WOULD persist,
+     * scored at the previewed window's intensity. Present only when the spec
+     * carried >= 2 candidates. The binding pick is made at schedule time.
+     */
+    routingPreview?: RoutingPreview;
   }> {
     const deadline = normalizeDeadline(opts.deadline);
     const region = opts.region ?? this.defaultRegion;
@@ -822,6 +837,15 @@ export class Scheduler {
       if (!head) {
         throw new Error("previewProviderCall: forecast returned no entries");
       }
+      // Routing preview at the run-now intensity — same math the commit path's
+      // run-now fallback (`scheduleProviderCall`) uses. No-op unless >= 2
+      // candidates were supplied.
+      const routingPreviewNow = previewRouting(spec.candidates, {
+        intensityGCo2PerKwh: head.carbonIntensityGCo2PerKwh,
+        weights: spec.routeWeights,
+        batchEligible,
+        rng: this.rng,
+      });
       return {
         scheduledFor: new Date().toISOString(),
         estimatedCarbonGCo2:
@@ -830,8 +854,17 @@ export class Scheduler {
         band: head.band,
         batchEligible,
         region,
+        ...(routingPreviewNow ? { routingPreview: routingPreviewNow } : {}),
       };
     }
+    // Routing preview at the CHOSEN window's intensity — the block this
+    // dry_run would persist. No-op unless >= 2 candidates were supplied.
+    const routingPreview = previewRouting(spec.candidates, {
+      intensityGCo2PerKwh: candidate.carbonIntensityGCo2PerKwh,
+      weights: spec.routeWeights,
+      batchEligible,
+      rng: this.rng,
+    });
     return {
       // A candidate whose hour started in the past is the *current* hour —
       // the commit path dispatches now, so the preview says "now" too.
@@ -845,6 +878,7 @@ export class Scheduler {
       batchEligible,
       region,
       cleanBandSize: selection!.band.length,
+      ...(routingPreview ? { routingPreview } : {}),
     };
   }
 
@@ -1098,14 +1132,17 @@ export class Scheduler {
   private async scheduleProviderCall(taskId: string, deadline: Date): Promise<void> {
     const record = this.tasks.get(taskId);
     if (!record) return;
-    // Parse spec.model out of the persisted body so the per-model energy
-    // coefficients (v0.10) factor into both the budget filter and the
-    // estimated-carbon receipt.
+    // Parse the full spec out of the persisted body so the per-model energy
+    // coefficients (v0.10) factor into the budget filter + estimated-carbon
+    // receipt, and so cross-provider routing (ROADMAP item 1) can see the
+    // candidate list. `specModel` drives WINDOW selection (chosen once,
+    // before provider scoring); routing may overwrite the model afterward.
+    let spec: ProviderCallSpec | undefined;
     let specModel: string | undefined;
     if (record.bodyJson) {
       try {
-        const parsed = JSON.parse(record.bodyJson) as Partial<ProviderCallSpec>;
-        if (typeof parsed.model === "string") specModel = parsed.model;
+        spec = JSON.parse(record.bodyJson) as ProviderCallSpec;
+        if (typeof spec.model === "string") specModel = spec.model;
       } catch {
         // Corrupt body; downstream dispatch will fail it. Fall back to
         // the legacy flat estimate here.
@@ -1139,9 +1176,19 @@ export class Scheduler {
         }
       }
       // No usable window — schedule for `now` so the very next `tick` runs
-      // the task immediately rather than miss the deadline.
+      // the task immediately rather than miss the deadline. Route (if a
+      // candidate list was supplied) against the current-hour intensity.
+      const nowIntensity = forecast.entries[0]?.carbonIntensityGCo2PerKwh;
       record.status = "scheduled";
       record.scheduledFor = new Date().toISOString();
+      const routedModelNow =
+        nowIntensity !== undefined
+          ? this.applyRoutingIfNeeded(record, spec, nowIntensity)
+          : specModel;
+      if (nowIntensity !== undefined) {
+        record.estimatedCarbonGCo2 =
+          Math.round(intensityToGrams(nowIntensity, routedModelNow) * 10) / 10;
+      }
       this.store?.upsert(record);
       return;
     }
@@ -1152,9 +1199,57 @@ export class Scheduler {
       new Date(candidate.datetime).getTime() <= Date.now()
         ? new Date().toISOString()
         : candidate.datetime;
+    // Cross-provider routing (ROADMAP item 1): the window `candidate` was
+    // chosen ONCE above; now score the caller's candidates at that window's
+    // intensity, overwrite the spec's provider/model with the winner, and
+    // record the decision. No-op unless >= 2 candidates were supplied.
+    const routedModel = this.applyRoutingIfNeeded(
+      record,
+      spec,
+      candidate.carbonIntensityGCo2PerKwh,
+    );
     record.estimatedCarbonGCo2 =
-      Math.round(intensityToGrams(candidate.carbonIntensityGCo2PerKwh, specModel) * 10) / 10;
+      Math.round(intensityToGrams(candidate.carbonIntensityGCo2PerKwh, routedModel) * 10) / 10;
     this.store?.upsert(record);
+  }
+
+  /**
+   * Cross-provider routing (ROADMAP item 1). When the spec carries >= 2
+   * candidates, score them at `intensityForScoring` (the already-chosen
+   * window's intensity), overwrite `spec.provider`/`spec.model` with the
+   * winner, re-serialize `record.bodyJson`, and stash the full decision on
+   * `record.routingDecision`. Returns the model that should drive the
+   * estimated-carbon figure (the routed winner, or the spec's own model when
+   * routing did not run). A missing price throws loudly (MissingPriceError)
+   * — which fails the task at schedule time, by design.
+   */
+  private applyRoutingIfNeeded(
+    record: TaskRecord<unknown>,
+    spec: ProviderCallSpec | undefined,
+    intensityForScoring: number,
+  ): string | undefined {
+    if (!spec) return undefined;
+    const specs = spec.candidates;
+    if (!Array.isArray(specs) || specs.length < 2) return spec.model;
+    const candidates = parseCandidates(specs);
+    const batchEligible = record.deadline
+      ? new Date(record.deadline).getTime() - Date.now() > 24 * 60 * 60 * 1000
+      : false;
+    const decision = scoreCandidates({
+      candidates,
+      intensityGCo2PerKwh: intensityForScoring,
+      weights: spec.routeWeights,
+      batchEligible,
+      rng: this.rng,
+    });
+    const chosen = decision.considered.find((c) => candidateId(c) === decision.chosen);
+    if (chosen) {
+      spec.provider = chosen.provider;
+      spec.model = chosen.model;
+      record.bodyJson = JSON.stringify(spec);
+    }
+    record.routingDecision = decision;
+    return chosen?.model ?? spec.model;
   }
 
   private async dispatchProviderCall(
@@ -1174,7 +1269,39 @@ export class Scheduler {
       this.failTask(record.taskId, new Error(msg));
       return { taskId: record.taskId, status: "failed", error: msg };
     }
-    const adapter = adapters[spec.provider];
+    // Cross-provider routing fallback (ROADMAP item 1): when a routing
+    // decision is attached, dispatch the highest-scoring candidate whose
+    // adapter is actually configured AND ready (has a key). If the originally
+    // chosen candidate is unavailable, fall through to the next-best scored
+    // one and record the fallback on the receipt.
+    let adapter = adapters[spec.provider];
+    const routing = record.routingDecision;
+    if (routing) {
+      const ordered = [...routing.considered].sort((a, b) => a.score - b.score);
+      const picked = ordered.find((c) => {
+        const a = adapters[c.provider];
+        return a !== undefined && a.ready;
+      });
+      if (!picked) {
+        const msg =
+          `tick: no configured/ready adapter for any routing candidate ` +
+          `(${routing.considered.map((c) => candidateId(c)).join(", ")})`;
+        this.failTask(record.taskId, new Error(msg));
+        return { taskId: record.taskId, status: "failed", error: msg };
+      }
+      const pickedId = candidateId(picked);
+      if (pickedId !== routing.chosen) {
+        record.routingDecision = {
+          ...routing,
+          fallbackFrom: routing.chosen,
+          chosen: pickedId,
+          reasoning: `${routing.reasoning} — dispatch fell back to ${pickedId} (originally ${routing.chosen} unavailable / missing key)`,
+        };
+        spec.provider = picked.provider;
+        spec.model = picked.model;
+      }
+      adapter = adapters[picked.provider];
+    }
     if (!adapter) {
       const msg = `tick: no adapter configured for provider ${spec.provider}`;
       this.failTask(record.taskId, new Error(msg));
@@ -1312,6 +1439,10 @@ export class Scheduler {
         signalType,
         energySource: resolveModelEnergy(actualModel).coeffs.source,
         energyResolution: resolveModelEnergy(actualModel).tier,
+        // Cross-provider routing provenance (ROADMAP item 1): the scored
+        // candidate list, weights, chosen id (+ any dispatch fallbackFrom).
+        // Inside the signed payload; omitted when routing was not used.
+        routing: record.routingDecision,
       });
     } catch (err) {
       // eslint-disable-next-line no-console
@@ -1395,6 +1526,23 @@ export class Scheduler {
       return { taskId: record.taskId, status: "submitted" };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      // Cross-provider routing (ROADMAP item 1): a candidate chosen WITH a
+      // batch discount whose batch submission fails falls back to its OWN
+      // sync path first (the receipt then records the actual — sync — path),
+      // and only then, if the sync adapter is unavailable, to the next-best
+      // scored candidate (handled inside dispatchProviderCall). Non-routed
+      // batch tasks keep the historical behavior: fail, and let retryTask
+      // re-dispatch sync.
+      if (record.routingDecision) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[ebb-ai/scheduler] batch submit failed for ${record.taskId} (${msg}); falling back to the synchronous dispatch path for the routed candidate`,
+        );
+        record.status = "scheduled";
+        record.batchId = undefined;
+        record.error = undefined;
+        return this.dispatchProviderCall(record, adapters);
+      }
       record.status = "failed";
       record.completedAt = new Date().toISOString();
       record.error = msg;
@@ -1547,6 +1695,9 @@ export class Scheduler {
         signalType,
         energySource: resolveModelEnergy(actualModel).coeffs.source,
         energyResolution: resolveModelEnergy(actualModel).tier,
+        // Cross-provider routing provenance (ROADMAP item 1) — see the sync
+        // dispatch path. Present only when the task carried >= 2 candidates.
+        routing: record.routingDecision,
       });
     } catch (err) {
       // eslint-disable-next-line no-console

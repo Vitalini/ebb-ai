@@ -169,6 +169,14 @@ function buildZodField(param: ToolParam): z.ZodTypeAny {
           ? z.array(z.enum(param.values as [string, ...string[]]))
           : z.array(z.string());
       break;
+    case "object": {
+      const shape: z.ZodRawShape = {};
+      for (const sub of param.properties ?? []) {
+        shape[sub.name] = buildZodField(sub);
+      }
+      base = z.object(shape);
+      break;
+    }
   }
   base = base.describe(param.description);
   return paramOptionalForHost(param, "mcp") ? base.optional() : base;
@@ -371,6 +379,8 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
           region: string;
           carbon_budget_g?: number;
           model?: string;
+          candidates?: string[];
+          route_weights?: { carbon?: number; cost?: number; latency?: number };
         };
         try {
           const result = await recommendWindow(
@@ -379,6 +389,8 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
               region: parsed.region,
               carbonBudgetG: parsed.carbon_budget_g,
               model: parsed.model,
+              candidates: parsed.candidates,
+              routeWeights: parsed.route_weights,
             },
             { feed },
           );
@@ -410,6 +422,8 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
           provider?: "anthropic" | "openai" | "gemini" | "ollama";
           output_path?: string;
           redact_in_receipt?: string[];
+          candidates?: string[];
+          route_weights?: { carbon?: number; cost?: number; latency?: number };
         };
         try {
           // dry_run: return the planned dispatch without persisting.
@@ -423,6 +437,8 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
               prompt: parsed.prompt,
               outputPath: parsed.output_path,
               redactInReceipt: parsed.redact_in_receipt,
+              candidates: parsed.candidates,
+              routeWeights: parsed.route_weights,
             };
             const plan = await scheduler.previewProviderCall(spec, {
               deadline: parsed.deadline,
@@ -445,6 +461,9 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
                     `band: ${plan.band}\n` +
                     `estimated_carbon_g_co2: ${plan.estimatedCarbonGCo2}\n` +
                     `batch_eligible: ${plan.batchEligible}\n` +
+                    (plan.routingPreview
+                      ? `routing_preview: ${JSON.stringify(routingBlockPayload(plan.routingPreview))}\n`
+                      : "") +
                     formatGridSourceLine(gridSource),
                 },
               ],
@@ -462,6 +481,8 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
               prompt: parsed.prompt,
               outputPath: parsed.output_path,
               redactInReceipt: parsed.redact_in_receipt,
+              candidates: parsed.candidates,
+              routeWeights: parsed.route_weights,
             };
             const record = await scheduler.enqueueProviderCall(spec, {
               deadline: parsed.deadline,
@@ -483,6 +504,9 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
                     `scheduled_for: ${record.scheduledFor ?? "(immediate)"}\n` +
                     `deadline: ${parsed.deadline}\n` +
                     `estimated_carbon_g_co2: ${record.estimatedCarbonGCo2 ?? "(not scored)"}\n` +
+                    (record.routingDecision
+                      ? `routing: ${record.routingDecision.reasoning}\n`
+                      : "") +
                     `${formatGridSourceLine(gridSource)}\n` +
                     `persisted_to: ${persistedAt}\n` +
                     `\n` +
@@ -800,8 +824,40 @@ export function formatRecommendation(
       estimated_savings_vs_now_pct: a.estimatedSavingsVsNowPct,
     })),
     reasoning: r.reasoning,
+    // Non-binding cross-provider routing preview (ROADMAP item 1) — present
+    // only when >= 2 candidates were supplied. `preview: true` and the
+    // reasoning prefix disclose that the binding pick is decided at schedule
+    // time and may differ if the forecast shifts.
+    ...(r.routingPreview
+      ? { routing_preview: routingBlockPayload(r.routingPreview) }
+      : {}),
   };
   return JSON.stringify(payload, null, 2);
+}
+
+/**
+ * snake_case JSON rendering of a routing decision/preview for the MCP text
+ * payloads. Shared by recommend_window, schedule_task dry_run, and the
+ * committed schedule response so the block reads identically everywhere.
+ */
+export function routingBlockPayload(
+  routing: import("@ebb-ai/core").RoutingDecision & { preview?: true },
+): Record<string, unknown> {
+  return {
+    ...(routing.preview ? { preview: true } : {}),
+    chosen: routing.chosen,
+    ...(routing.fallbackFrom ? { fallback_from: routing.fallbackFrom } : {}),
+    weights: routing.weights,
+    considered: routing.considered.map((c) => ({
+      provider: c.provider,
+      model: c.model,
+      est_carbon_g: c.estCarbonG,
+      est_cost_usd: c.estCostUsd,
+      latency_class: c.latencyClass,
+      score: c.score,
+    })),
+    reasoning: routing.reasoning,
+  };
 }
 
 export function formatTask(task: TaskRecord<unknown> | undefined): string {
@@ -846,6 +902,27 @@ export function formatTask(task: TaskRecord<unknown> | undefined): string {
       lines.push(`  energy_resolution: ${task.receipt.energyResolution}`);
     if (task.receipt.durationMs)
       lines.push(`  duration_ms: ${task.receipt.durationMs}`);
+  }
+  // Cross-provider routing (ROADMAP item 1): show the scored candidate list
+  // and the chosen candidate. Prefer the signed receipt's copy (post-run);
+  // fall back to the schedule-time decision on the task row (pre-run).
+  const routing = task.receipt?.routing ?? task.routingDecision;
+  if (routing) {
+    lines.push("");
+    lines.push("Cross-provider routing:");
+    lines.push(`  chosen: ${routing.chosen}`);
+    if (routing.fallbackFrom)
+      lines.push(`  fallback_from: ${routing.fallbackFrom}`);
+    lines.push(
+      `  weights: carbon=${routing.weights.carbon} cost=${routing.weights.cost} latency=${routing.weights.latency}`,
+    );
+    lines.push("  considered:");
+    for (const c of routing.considered) {
+      lines.push(
+        `    ${c.provider}:${c.model} — score ${c.score}, carbon ${c.estCarbonG}g, cost $${c.estCostUsd}, latency ${c.latencyClass}`,
+      );
+    }
+    lines.push(`  reasoning: ${routing.reasoning}`);
   }
   if (task.result !== undefined) {
     lines.push("");

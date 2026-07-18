@@ -149,6 +149,60 @@
         "signerPublicKey": "7l7DiP7+qwhqOxgWmwA1mFQfQ/q+MQugu0rMPYuojgU=",
         "signedAt": "2026-07-01T07:00:01.000Z"
       }
+    },
+    {
+      "description": "v0.14+ routed receipt — cross-provider routing (ROADMAP item 1) block INSIDE the signed payload; the nested weights + scored-candidate list + chosen id + reasoning are all covered by the signature and canonicalize identically in both ports",
+      "legacyV011": false,
+      "privateKeyPem": "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIAAOh7m8nGkSotPu+auTLXSyG/C3XjJV251/026Vw9eM\n-----END PRIVATE KEY-----\n",
+      "receipt": {
+        "taskId": "vec-routed-v1",
+        "ranAt": "2026-07-02T09:00:00.000Z",
+        "region": "US-CAL-CISO",
+        "estimatedCarbonGCo2": 0.3,
+        "actualCarbonGCo2": 0.28,
+        "deltaPct": -6.7,
+        "provider": "ollama",
+        "model": "llama-3-1-8b",
+        "durationMs": 812,
+        "totalTokens": 1536,
+        "routing": {
+          "weights": { "carbon": 0.6, "cost": 0.3, "latency": 0.1 },
+          "considered": [
+            { "provider": "anthropic", "model": "claude-haiku-4-5", "estCarbonG": 0.414, "estCostUsd": 0.003, "latencyClass": 0.5, "score": 1 },
+            { "provider": "gemini", "model": "gemini-2-0-flash", "estCarbonG": 0.414, "estCostUsd": 0.00025, "latencyClass": 0.5, "score": 0.725 },
+            { "provider": "ollama", "model": "llama-3-1-8b", "estCarbonG": 0.276, "estCostUsd": 0, "latencyClass": 0, "score": 0 }
+          ],
+          "chosen": "ollama:llama-3-1-8b",
+          "reasoning": "routed to ollama:llama-3-1-8b (score .00 vs 1.00/.72): lowest carbon at window; no per-token cost (local); local (no network latency tier); runs locally on your own grid"
+        }
+      },
+      "signedAt": "2026-07-02T09:00:01.000Z",
+      "expectedCanonical": "{\"actualCarbonGCo2\":0.28,\"deltaPct\":-6.7,\"durationMs\":812,\"estimatedCarbonGCo2\":0.3,\"model\":\"llama-3-1-8b\",\"provider\":\"ollama\",\"ranAt\":\"2026-07-02T09:00:00.000Z\",\"region\":\"US-CAL-CISO\",\"routing\":{\"chosen\":\"ollama:llama-3-1-8b\",\"considered\":[{\"estCarbonG\":0.414,\"estCostUsd\":0.003,\"latencyClass\":0.5,\"model\":\"claude-haiku-4-5\",\"provider\":\"anthropic\",\"score\":1},{\"estCarbonG\":0.414,\"estCostUsd\":0.00025,\"latencyClass\":0.5,\"model\":\"gemini-2-0-flash\",\"provider\":\"gemini\",\"score\":0.725},{\"estCarbonG\":0.276,\"estCostUsd\":0,\"latencyClass\":0,\"model\":\"llama-3-1-8b\",\"provider\":\"ollama\",\"score\":0}],\"reasoning\":\"routed to ollama:llama-3-1-8b (score .00 vs 1.00/.72): lowest carbon at window; no per-token cost (local); local (no network latency tier); runs locally on your own grid\",\"weights\":{\"carbon\":0.6,\"cost\":0.3,\"latency\":0.1}},\"signedAt\":\"2026-07-02T09:00:01.000Z\",\"taskId\":\"vec-routed-v1\",\"totalTokens\":1536}",
+      "signedReceipt": {
+        "taskId": "vec-routed-v1",
+        "ranAt": "2026-07-02T09:00:00.000Z",
+        "region": "US-CAL-CISO",
+        "estimatedCarbonGCo2": 0.3,
+        "actualCarbonGCo2": 0.28,
+        "deltaPct": -6.7,
+        "provider": "ollama",
+        "model": "llama-3-1-8b",
+        "durationMs": 812,
+        "totalTokens": 1536,
+        "routing": {
+          "weights": { "carbon": 0.6, "cost": 0.3, "latency": 0.1 },
+          "considered": [
+            { "provider": "anthropic", "model": "claude-haiku-4-5", "estCarbonG": 0.414, "estCostUsd": 0.003, "latencyClass": 0.5, "score": 1 },
+            { "provider": "gemini", "model": "gemini-2-0-flash", "estCarbonG": 0.414, "estCostUsd": 0.00025, "latencyClass": 0.5, "score": 0.725 },
+            { "provider": "ollama", "model": "llama-3-1-8b", "estCarbonG": 0.276, "estCostUsd": 0, "latencyClass": 0, "score": 0 }
+          ],
+          "chosen": "ollama:llama-3-1-8b",
+          "reasoning": "routed to ollama:llama-3-1-8b (score .00 vs 1.00/.72): lowest carbon at window; no per-token cost (local); local (no network latency tier); runs locally on your own grid"
+        },
+        "signature": "rm0adTQOIwHTO1MP1TT4Em+Y2RxHyxfvt3nvAky8iz5+Aqbk28svzUUOLRdVA2t9NAaben9XFS9/E7ZV4DClDg==",
+        "signerPublicKey": "7l7DiP7+qwhqOxgWmwA1mFQfQ/q+MQugu0rMPYuojgU=",
+        "signedAt": "2026-07-02T09:00:01.000Z"
+      }
     }
   ]
 }

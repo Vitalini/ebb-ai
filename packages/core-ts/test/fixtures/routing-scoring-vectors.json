@@ -1,0 +1,76 @@
+{
+  "$comment": "Shared cross-language scoring-vector fixtures for cross-provider routing (ROADMAP item 1). Each case pins (candidates + window intensity + weights + batch eligibility) -> the full scored candidate list, the chosen provider:model, and the honest reasoning line. Both the TS suite (test/routing.test.ts) and the Python suite (tests/test_routing.py) load THIS file, run their own scoreCandidates / score_candidates with rng=()=>0 (deterministic), and assert byte-for-byte parity against expectedConsidered / expectedChosen / expectedReasoning. A drift in either port's scoring math, price table, or energy coefficients breaks both suites. Values were generated from the TS implementation against the committed SSOT tables.",
+  "cases": [
+    {
+      "name": "default-weights-3way",
+      "candidates": ["anthropic:claude-haiku-4-5", "gemini:gemini-2-0-flash", "ollama:llama-3-1-8b"],
+      "intensityGCo2PerKwh": 400,
+      "batchEligible": false,
+      "expectedWeights": { "carbon": 0.6, "cost": 0.3, "latency": 0.1 },
+      "expectedChosen": "ollama:llama-3-1-8b",
+      "expectedConsidered": [
+        { "provider": "anthropic", "model": "claude-haiku-4-5", "estCarbonG": 0.414, "estCostUsd": 0.003, "latencyClass": 0.5, "score": 1 },
+        { "provider": "gemini", "model": "gemini-2-0-flash", "estCarbonG": 0.414, "estCostUsd": 0.00025, "latencyClass": 0.5, "score": 0.725 },
+        { "provider": "ollama", "model": "llama-3-1-8b", "estCarbonG": 0.276, "estCostUsd": 0, "latencyClass": 0, "score": 0 }
+      ],
+      "expectedReasoning": "routed to ollama:llama-3-1-8b (score .00 vs 1.00/.72): lowest carbon at window; no per-token cost (local); local (no network latency tier); runs locally on your own grid"
+    },
+    {
+      "name": "cost-only-prefers-local",
+      "candidates": ["anthropic:claude-opus-4", "openai:gpt-4o", "ollama:llama-3-1-70b"],
+      "intensityGCo2PerKwh": 400,
+      "routeWeights": { "carbon": 0, "cost": 1, "latency": 0 },
+      "batchEligible": false,
+      "expectedWeights": { "carbon": 0, "cost": 1, "latency": 0 },
+      "expectedChosen": "ollama:llama-3-1-70b",
+      "expectedConsidered": [
+        { "provider": "anthropic", "model": "claude-opus-4", "estCarbonG": 4.14, "estCostUsd": 0.045, "latencyClass": 0.5, "score": 1 },
+        { "provider": "openai", "model": "gpt-4o", "estCarbonG": 2.76, "estCostUsd": 0.00625, "latencyClass": 0.5, "score": 0.138889 },
+        { "provider": "ollama", "model": "llama-3-1-70b", "estCarbonG": 1.38, "estCostUsd": 0, "latencyClass": 0, "score": 0 }
+      ],
+      "expectedReasoning": "routed to ollama:llama-3-1-70b (score .00 vs 1.00/.14): no per-token cost (local); runs locally on your own grid"
+    },
+    {
+      "name": "carbon-only-two-hosted",
+      "candidates": ["anthropic:claude-opus-4", "gemini:gemini-2-0-flash"],
+      "intensityGCo2PerKwh": 500,
+      "routeWeights": { "carbon": 1, "cost": 0, "latency": 0 },
+      "batchEligible": false,
+      "expectedWeights": { "carbon": 1, "cost": 0, "latency": 0 },
+      "expectedChosen": "gemini:gemini-2-0-flash",
+      "expectedConsidered": [
+        { "provider": "anthropic", "model": "claude-opus-4", "estCarbonG": 5.175, "estCostUsd": 0.045, "latencyClass": 0.5, "score": 1 },
+        { "provider": "gemini", "model": "gemini-2-0-flash", "estCarbonG": 0.5175, "estCostUsd": 0.00025, "latencyClass": 0.5, "score": 0 }
+      ],
+      "expectedReasoning": "routed to gemini:gemini-2-0-flash (score .00 vs 1.00): lowest carbon at window; hosted-grid assumption applies (all hosted candidates scored at the same caller's-grid intensity)"
+    },
+    {
+      "name": "batch-discount-changes-cost",
+      "candidates": ["anthropic:claude-sonnet-4", "openai:gpt-4o"],
+      "intensityGCo2PerKwh": 300,
+      "routeWeights": { "carbon": 0, "cost": 1, "latency": 0 },
+      "batchEligible": true,
+      "expectedWeights": { "carbon": 0, "cost": 1, "latency": 0 },
+      "expectedChosen": "openai:gpt-4o",
+      "expectedConsidered": [
+        { "provider": "anthropic", "model": "claude-sonnet-4", "estCarbonG": 1.035, "estCostUsd": 0.0045, "latencyClass": 1, "score": 1 },
+        { "provider": "openai", "model": "gpt-4o", "estCarbonG": 2.07, "estCostUsd": 0.003125, "latencyClass": 1, "score": 0 }
+      ],
+      "expectedReasoning": "routed to openai:gpt-4o (score .00 vs 1.00): lowest cost; hosted-grid assumption applies (all hosted candidates scored at the same caller's-grid intensity)"
+    },
+    {
+      "name": "latency-only-prefers-local",
+      "candidates": ["anthropic:claude-haiku-4-5", "ollama:mistral-7b"],
+      "intensityGCo2PerKwh": 350,
+      "routeWeights": { "carbon": 0, "cost": 0, "latency": 1 },
+      "batchEligible": false,
+      "expectedWeights": { "carbon": 0, "cost": 0, "latency": 1 },
+      "expectedChosen": "ollama:mistral-7b",
+      "expectedConsidered": [
+        { "provider": "anthropic", "model": "claude-haiku-4-5", "estCarbonG": 0.3622, "estCostUsd": 0.003, "latencyClass": 0.5, "score": 1 },
+        { "provider": "ollama", "model": "mistral-7b", "estCarbonG": 0.2415, "estCostUsd": 0, "latencyClass": 0, "score": 0 }
+      ],
+      "expectedReasoning": "routed to ollama:mistral-7b (score .00 vs 1.00): local (no network latency tier); runs locally on your own grid"
+    }
+  ]
+}

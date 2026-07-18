@@ -34,6 +34,7 @@ const readJson = (name) =>
 const energy = readJson("energy.json");
 const regions = readJson("regions.json");
 const bands = readJson("bands.json");
+const prices = readJson("prices.json");
 
 // ---- validation -----------------------------------------------------------
 const coeffIds = new Set(Object.keys(energy.coefficients));
@@ -41,6 +42,18 @@ for (const fam of energy.families) {
   if (!coeffIds.has(fam.representative)) {
     throw new Error(
       `family "${fam.id}" points at representative "${fam.representative}" which is not a coefficient key`,
+    );
+  }
+}
+// Routing scores carbon and cost off ONE model-id space. Every priced model
+// must have an energy coefficient so a routable candidate can be scored on
+// both dimensions; a price for an id the energy table never heard of is a
+// silent typo waiting to mis-score. (The reverse is fine: an energy-only id
+// simply isn't routable.)
+for (const id of Object.keys(prices.prices)) {
+  if (!coeffIds.has(id)) {
+    throw new Error(
+      `price entry "${id}" has no matching energy coefficient key — routing scores carbon+cost off one id space`,
     );
   }
 }
@@ -71,6 +84,17 @@ function tsFamily(f) {
   return `  { ${parts.join(", ")} },`;
 }
 
+function tsPrice(p) {
+  const parts = [
+    `inUsdPerMtok: ${num(p.inUsdPerMtok)}`,
+    `outUsdPerMtok: ${num(p.outUsdPerMtok)}`,
+  ];
+  if (p.batchDiscount !== undefined) parts.push(`batchDiscount: ${num(p.batchDiscount)}`);
+  parts.push(`asOf: ${JSON.stringify(p.asOf)}`);
+  parts.push(`source: ${JSON.stringify(p.source)}`);
+  return `{ ${parts.join(", ")} }`;
+}
+
 function tsRecord(obj, indent = "  ") {
   return Object.entries(obj)
     .map(([k, v]) => `${indent}${JSON.stringify(k)}: ${num(v)},`)
@@ -85,6 +109,9 @@ function renderTs() {
   const bandLines = bands.thresholds
     .map((t) => `  { maxExclusive: ${num(t.maxExclusive)}, band: ${JSON.stringify(t.band)} },`)
     .join("\n");
+  const priceLines = Object.entries(prices.prices)
+    .map(([id, p]) => `  ${JSON.stringify(id)}: ${tsPrice(p)},`)
+    .join("\n");
 
   return `/**
  * GENERATED — DO NOT EDIT.
@@ -94,6 +121,7 @@ function renderTs() {
  * on drift ('pnpm gen:data:check').
  */
 import type { ModelEnergyCoefficients, ModelFamily } from "../energy.js";
+import type { ModelPrice } from "../routing.js";
 import type { GridForecastEntry } from "../types.js";
 
 /** Industry-average Power Usage Effectiveness for hyperscaler data centres. */
@@ -153,6 +181,19 @@ ${bandLines}
 
 /** Band for values at or above every threshold. */
 export const DEFAULT_BAND: GridForecastEntry["band"] = ${JSON.stringify(bands.defaultBand)};
+
+/** Month the price table figures were read (see prices.json). */
+export const PRICES_AS_OF = ${JSON.stringify(prices.asOf)};
+
+/**
+ * Per-model public list prices (USD per million tokens), keyed by the same
+ * canonical lowercase ids as MODEL_ENERGY_COEFFICIENTS. Ollama-routable
+ * open-weight models are 0 (self-hosted). Used by cross-provider routing's
+ * cost dimension. LIST prices, not the caller's negotiated rate.
+ */
+export const MODEL_PRICES: Readonly<Record<string, ModelPrice>> = Object.freeze({
+${priceLines}
+});
 `;
 }
 
@@ -191,6 +232,17 @@ function pyFamily(f) {
   return `    {${parts.join(", ")}},`;
 }
 
+function pyPrice(p) {
+  const parts = [
+    `"in_usd_per_mtok": ${num(p.inUsdPerMtok)}`,
+    `"out_usd_per_mtok": ${num(p.outUsdPerMtok)}`,
+    `"batch_discount": ${p.batchDiscount === undefined ? "None" : num(p.batchDiscount)}`,
+    `"as_of": ${JSON.stringify(p.asOf)}`,
+    `"source": ${JSON.stringify(p.source)}`,
+  ];
+  return `{${parts.join(", ")}}`;
+}
+
 function pyDict(obj, indent = "    ") {
   return Object.entries(obj)
     .map(([k, v]) => `${indent}${JSON.stringify(k)}: ${num(v)},`)
@@ -207,6 +259,9 @@ function renderPy() {
     .join("\n");
   const bandLines = bands.thresholds
     .map((t) => `    (${num(t.maxExclusive)}, ${JSON.stringify(t.band)}),`)
+    .join("\n");
+  const priceLines = Object.entries(prices.prices)
+    .map(([id, p]) => `    ${JSON.stringify(id)}: ${pyPrice(p)},`)
     .join("\n");
 
   return `# GENERATED — DO NOT EDIT.
@@ -269,6 +324,16 @@ ${bandLines}
 
 #: Band for values at or above every threshold.
 DEFAULT_BAND: str = ${JSON.stringify(bands.defaultBand)}
+
+#: Month the price table figures were read (see prices.json).
+PRICES_AS_OF: str = ${JSON.stringify(prices.asOf)}
+
+#: Per-model public list prices (USD per million tokens), keyed by the same
+#: canonical lowercase ids as COEFFICIENTS. Ollama-routable open-weight models
+#: are 0 (self-hosted). Used by cross-provider routing's cost dimension.
+MODEL_PRICES: dict[str, dict[str, Any]] = {
+${priceLines}
+}
 `;
 }
 

@@ -6,6 +6,7 @@
  * on drift ('pnpm gen:data:check').
  */
 import type { ModelEnergyCoefficients, ModelFamily } from "../energy.js";
+import type { ModelPrice } from "../routing.js";
 import type { GridForecastEntry } from "../types.js";
 
 /** Industry-average Power Usage Effectiveness for hyperscaler data centres. */
@@ -186,3 +187,51 @@ export const BAND_THRESHOLDS: readonly {
 
 /** Band for values at or above every threshold. */
 export const DEFAULT_BAND: GridForecastEntry["band"] = "very_dirty";
+
+/** Month the price table figures were read (see prices.json). */
+export const PRICES_AS_OF = "2026-07";
+
+/**
+ * Per-model public list prices (USD per million tokens), keyed by the same
+ * canonical lowercase ids as MODEL_ENERGY_COEFFICIENTS. Ollama-routable
+ * open-weight models are 0 (self-hosted). Used by cross-provider routing's
+ * cost dimension. LIST prices, not the caller's negotiated rate.
+ */
+export const MODEL_PRICES: Readonly<Record<string, ModelPrice>> = Object.freeze({
+  "claude-opus-4": { inUsdPerMtok: 15, outUsdPerMtok: 75, batchDiscount: 0.5, asOf: "2026-07", source: "Anthropic pricing (anthropic.com/pricing)" },
+  "claude-opus-4-7": { inUsdPerMtok: 15, outUsdPerMtok: 75, batchDiscount: 0.5, asOf: "2026-07", source: "Anthropic pricing (anthropic.com/pricing)" },
+  "claude-opus-4-6": { inUsdPerMtok: 15, outUsdPerMtok: 75, batchDiscount: 0.5, asOf: "2026-07", source: "Anthropic pricing (anthropic.com/pricing)" },
+  "claude-opus-4-1": { inUsdPerMtok: 15, outUsdPerMtok: 75, batchDiscount: 0.5, asOf: "2026-07", source: "Anthropic pricing (anthropic.com/pricing)" },
+  "claude-opus-3-5": { inUsdPerMtok: 15, outUsdPerMtok: 75, batchDiscount: 0.5, asOf: "2026-07", source: "Anthropic pricing (anthropic.com/pricing)" },
+  "claude-opus-3": { inUsdPerMtok: 15, outUsdPerMtok: 75, batchDiscount: 0.5, asOf: "2026-07", source: "Anthropic pricing (anthropic.com/pricing)" },
+  "claude-sonnet-4": { inUsdPerMtok: 3, outUsdPerMtok: 15, batchDiscount: 0.5, asOf: "2026-07", source: "Anthropic pricing (anthropic.com/pricing)" },
+  "claude-sonnet-4-6": { inUsdPerMtok: 3, outUsdPerMtok: 15, batchDiscount: 0.5, asOf: "2026-07", source: "Anthropic pricing (anthropic.com/pricing)" },
+  "claude-sonnet-4-5": { inUsdPerMtok: 3, outUsdPerMtok: 15, batchDiscount: 0.5, asOf: "2026-07", source: "Anthropic pricing (anthropic.com/pricing)" },
+  "claude-sonnet-3-7": { inUsdPerMtok: 3, outUsdPerMtok: 15, batchDiscount: 0.5, asOf: "2026-07", source: "Anthropic pricing (anthropic.com/pricing)" },
+  "claude-sonnet-3-5": { inUsdPerMtok: 3, outUsdPerMtok: 15, batchDiscount: 0.5, asOf: "2026-07", source: "Anthropic pricing (anthropic.com/pricing)" },
+  "claude-sonnet-3": { inUsdPerMtok: 3, outUsdPerMtok: 15, batchDiscount: 0.5, asOf: "2026-07", source: "Anthropic pricing (anthropic.com/pricing)" },
+  "claude-haiku-4-5": { inUsdPerMtok: 1, outUsdPerMtok: 5, batchDiscount: 0.5, asOf: "2026-07", source: "Anthropic pricing (anthropic.com/pricing)" },
+  "claude-haiku-3-5": { inUsdPerMtok: 0.8, outUsdPerMtok: 4, batchDiscount: 0.5, asOf: "2026-07", source: "Anthropic pricing (anthropic.com/pricing)" },
+  "claude-haiku-3": { inUsdPerMtok: 0.25, outUsdPerMtok: 1.25, batchDiscount: 0.5, asOf: "2026-07", source: "Anthropic pricing (anthropic.com/pricing)" },
+  "gpt-4o": { inUsdPerMtok: 2.5, outUsdPerMtok: 10, batchDiscount: 0.5, asOf: "2026-07", source: "OpenAI API pricing (openai.com/api/pricing)" },
+  "gpt-4o-mini": { inUsdPerMtok: 0.15, outUsdPerMtok: 0.6, batchDiscount: 0.5, asOf: "2026-07", source: "OpenAI API pricing (openai.com/api/pricing)" },
+  "gpt-4-turbo": { inUsdPerMtok: 10, outUsdPerMtok: 30, batchDiscount: 0.5, asOf: "2026-07", source: "OpenAI API pricing (openai.com/api/pricing)" },
+  "gpt-4": { inUsdPerMtok: 30, outUsdPerMtok: 60, batchDiscount: 0.5, asOf: "2026-07", source: "OpenAI API pricing (openai.com/api/pricing)" },
+  "gpt-3-5-turbo": { inUsdPerMtok: 0.5, outUsdPerMtok: 1.5, batchDiscount: 0.5, asOf: "2026-07", source: "OpenAI API pricing (openai.com/api/pricing)" },
+  "o1": { inUsdPerMtok: 15, outUsdPerMtok: 60, batchDiscount: 0.5, asOf: "2026-07", source: "OpenAI API pricing (openai.com/api/pricing)" },
+  "o1-mini": { inUsdPerMtok: 1.1, outUsdPerMtok: 4.4, batchDiscount: 0.5, asOf: "2026-07", source: "OpenAI API pricing (openai.com/api/pricing)" },
+  "o3": { inUsdPerMtok: 2, outUsdPerMtok: 8, batchDiscount: 0.5, asOf: "2026-07", source: "OpenAI API pricing (openai.com/api/pricing)" },
+  "o3-mini": { inUsdPerMtok: 1.1, outUsdPerMtok: 4.4, batchDiscount: 0.5, asOf: "2026-07", source: "OpenAI API pricing (openai.com/api/pricing)" },
+  "gemini-1-5-pro": { inUsdPerMtok: 1.25, outUsdPerMtok: 5, asOf: "2026-07", source: "Google Gemini API pricing (ai.google.dev/pricing)" },
+  "gemini-1-5-flash": { inUsdPerMtok: 0.075, outUsdPerMtok: 0.3, asOf: "2026-07", source: "Google Gemini API pricing (ai.google.dev/pricing)" },
+  "gemini-2-0-flash": { inUsdPerMtok: 0.1, outUsdPerMtok: 0.4, asOf: "2026-07", source: "Google Gemini API pricing (ai.google.dev/pricing)" },
+  "gemini-2-0-pro": { inUsdPerMtok: 1.25, outUsdPerMtok: 5, asOf: "2026-07", source: "Google Gemini API pricing (ai.google.dev/pricing)" },
+  "llama-3-1-405b": { inUsdPerMtok: 0, outUsdPerMtok: 0, asOf: "2026-07", source: "Ollama local (self-hosted; no per-token vendor price)" },
+  "llama-3-1-70b": { inUsdPerMtok: 0, outUsdPerMtok: 0, asOf: "2026-07", source: "Ollama local (self-hosted; no per-token vendor price)" },
+  "llama-3-1-8b": { inUsdPerMtok: 0, outUsdPerMtok: 0, asOf: "2026-07", source: "Ollama local (self-hosted; no per-token vendor price)" },
+  "llama-3-70b": { inUsdPerMtok: 0, outUsdPerMtok: 0, asOf: "2026-07", source: "Ollama local (self-hosted; no per-token vendor price)" },
+  "llama-3-8b": { inUsdPerMtok: 0, outUsdPerMtok: 0, asOf: "2026-07", source: "Ollama local (self-hosted; no per-token vendor price)" },
+  "mistral-7b": { inUsdPerMtok: 0, outUsdPerMtok: 0, asOf: "2026-07", source: "Ollama local (self-hosted; no per-token vendor price)" },
+  "mixtral-8x7b": { inUsdPerMtok: 0, outUsdPerMtok: 0, asOf: "2026-07", source: "Ollama local (self-hosted; no per-token vendor price)" },
+  "mixtral-8x22b": { inUsdPerMtok: 0, outUsdPerMtok: 0, asOf: "2026-07", source: "Ollama local (self-hosted; no per-token vendor price)" },
+});
