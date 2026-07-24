@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+(Nothing pending — see version sections below.)
+
+## [0.14.0] — 2026-07-24
+
+**Theme:** "The router and the fifth feed." Cross-provider LLM routing
+with signed routing provenance, the WattTime marginal-emissions feed
+(5th real feed) plus Gemini/Ollama adapters and full Python feed parity,
+aggregate carbon-budget alerts, OS-notification and PDF delivery modes,
+and an enforced nonce-based CSP for ebb-ai.com.
+
+> **Operator note:** the OpenClaw plugin does not auto-update. Run
+> `openclaw plugins update @vitalini/ebb` to pull 0.14.0.
+
 ### Added
 
 - **PDF delivery format** (`file_format: "pdf"`, OpenClaw plugin, roadmap
@@ -1191,7 +1204,8 @@ their mind, and how to mitigate the operational failure modes
   Batches APIs. Direct Batch routing lands in v0.2.
 - Python port (`ebb-ai` PyPI) is a placeholder. v0.2.
 
-[Unreleased]: https://github.com/Vitalini/ebb-ai/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/Vitalini/ebb-ai/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/Vitalini/ebb-ai/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/Vitalini/ebb-ai/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/Vitalini/ebb-ai/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/Vitalini/ebb-ai/compare/v0.10.0...v0.11.0
