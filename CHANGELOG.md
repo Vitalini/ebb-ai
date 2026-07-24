@@ -23,6 +23,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `pdf` to the shared `reportFormats` tool-surface enum; the divergence-
   canary snapshot is updated deliberately.
 
+- **Nonce-based CSP for ebb-ai.com** (roadmap item 9). A Next.js
+  middleware issues a fresh per-request nonce and an ENFORCED
+  `Content-Security-Policy` — `script-src 'self' 'nonce-…'
+  'strict-dynamic'` with **no** `unsafe-inline` for scripts (styles keep
+  `unsafe-inline`: Next hydration / recharts / Tailwind inline styles,
+  documented). JSON-LD carries the nonce; baseline headers unchanged.
+  Cost accepted: six routes flip static→dynamic, upstream feed load
+  still capped by the 300 s fetch-layer cache.
 - **OS-notification delivery mode** (`deliver: ["os"]`, OpenClaw plugin,
   roadmap item 7). A native desktop notification on the gateway host when
   a deferred task completes. Dependency-free, per-platform spawn: macOS →
