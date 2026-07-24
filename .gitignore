@@ -58,3 +58,4 @@ development/
 
 # Vercel CLI link (local, per-machine)
 .vercel/
+packages/core-py/uv.lock
