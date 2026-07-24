@@ -1,4 +1,5 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { EventEmitter } from "node:events";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -17,9 +18,13 @@ import {
   setLlmBridgeForTest,
 } from "../src/dispatch.js";
 import {
+  __setPuppeteerImportForTest,
+  __setSpawnForTest,
   deliverResult,
   formatReport,
   getDeliveryConfig,
+  notificationContent,
+  osNotifyCommand,
   readDeliveryRecord,
   recordDeliveryOutcomes,
   scanDeliveryOptions,
@@ -842,6 +847,171 @@ describe("ebb OpenClaw plugin — result delivery", () => {
     } finally {
       delete process.env.EBB_DELIVERY_FILE;
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // ── OS-notification delivery (ROADMAP item 7) ──────────────────────────────
+
+  it("scanDeliveryOptions advertises the os mode", () => {
+    const opts = scanDeliveryOptions({});
+    const os = opts.find((o) => o.mode === "os");
+    expect(os).toBeDefined();
+    // On the CI/dev host (darwin/linux/win32) os is supported.
+    expect(typeof os?.available).toBe("boolean");
+  });
+
+  it("osNotifyCommand builds the correct binary + args per platform", () => {
+    const title = "ebb-ai — task t-1 complete";
+    const body = 'line "one"\n42 gCO2e';
+
+    const mac = osNotifyCommand("darwin", title, body)!;
+    expect(mac.cmd).toBe("osascript");
+    expect(mac.args[0]).toBe("-e");
+    // AppleScript: quotes in the payload are backslash-escaped, title embedded.
+    expect(mac.args[1]).toContain('with title "ebb-ai — task t-1 complete"');
+    expect(mac.args[1]).toContain('\\"one\\"');
+
+    const linux = osNotifyCommand("linux", title, body)!;
+    expect(linux.cmd).toBe("notify-send");
+    expect(linux.args).toEqual([title, body]);
+
+    const win = osNotifyCommand("win32", title, body)!;
+    expect(win.cmd).toBe("powershell");
+    expect(win.args).toContain("-Command");
+    expect(win.args[win.args.length - 1]).toContain("ToastNotification");
+
+    // Unsupported platform → null (caller records an honest failure).
+    expect(osNotifyCommand("aix" as NodeJS.Platform, title, body)).toBeNull();
+  });
+
+  it("notificationContent truncates, redacts secrets, and includes grams", () => {
+    const task = {
+      ...completedTask,
+      taskId: "t-notify",
+      result: { text: `secret sk-ant-${"a".repeat(30)} then ${"x".repeat(300)}` },
+    } as unknown as Parameters<typeof formatReport>[0];
+    const { title, body } = notificationContent(task);
+    expect(title).toContain("t-notify");
+    expect(body).not.toContain("sk-ant-");
+    expect(body).toContain("[REDACTED]");
+    expect(body).toContain("gCO2e");
+    // preview is truncated with an ellipsis
+    expect(body).toContain("…");
+  });
+
+  it("deliverResult os mode succeeds via a mocked spawn (exit 0)", async () => {
+    const calls: Array<{ cmd: string; args: string[] }> = [];
+    __setSpawnForTest(((cmd: string, args: string[]) => {
+      calls.push({ cmd, args });
+      const child = new EventEmitter();
+      queueMicrotask(() => child.emit("close", 0));
+      return child;
+    }) as never);
+    try {
+      const outcomes = await deliverResult(completedTask, { modes: ["os"] }, {});
+      expect(outcomes[0].mode).toBe("os");
+      expect(outcomes[0].ok).toBe(true);
+      expect(calls.length).toBe(1);
+    } finally {
+      __setSpawnForTest(undefined);
+    }
+  });
+
+  it("deliverResult os mode records an honest failure when the binary is missing", async () => {
+    __setSpawnForTest((() => {
+      const child = new EventEmitter();
+      queueMicrotask(() => {
+        const err = new Error("spawn notify-send ENOENT") as NodeJS.ErrnoException;
+        err.code = "ENOENT";
+        child.emit("error", err);
+      });
+      return child;
+    }) as never);
+    try {
+      const outcomes = await deliverResult(completedTask, { modes: ["os"] }, {});
+      expect(outcomes[0].mode).toBe("os");
+      expect(outcomes[0].ok).toBe(false);
+      expect(outcomes[0].detail).toMatch(/not found/);
+    } finally {
+      __setSpawnForTest(undefined);
+    }
+  });
+
+  // ── PDF delivery (ROADMAP item 8) ──────────────────────────────────────────
+
+  it("deliverResult pdf renders the HTML report via a stubbed puppeteer", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "ebb-pdf-"));
+    const filePath = join(dir, "report.pdf");
+    let setContentHtml: string | undefined;
+    const pdfCalls: Array<{ path?: string }> = [];
+    let closed = false;
+
+    __setPuppeteerImportForTest(async () => ({
+      // puppeteer's default export carries `launch`.
+      default: {
+        async launch() {
+          return {
+            async newPage() {
+              return {
+                async setContent(html: string) {
+                  setContentHtml = html;
+                },
+                async pdf(opts: { path: string }) {
+                  pdfCalls.push(opts);
+                  // Emulate puppeteer writing the file to `path`.
+                  writeFileSync(opts.path, "%PDF-1.4 stub");
+                },
+              };
+            },
+            async close() {
+              closed = true;
+            },
+          };
+        },
+      },
+    }));
+    try {
+      const outcomes = await deliverResult(
+        completedTask,
+        { modes: ["file"], filePath, format: "pdf" },
+        {},
+      );
+      expect(outcomes[0].mode).toBe("file");
+      expect(outcomes[0].ok).toBe(true);
+      expect(outcomes[0].detail).toContain(filePath);
+      // The HTML report template was fed to puppeteer, then rendered to PDF.
+      expect(setContentHtml).toContain("<html");
+      expect(setContentHtml).toContain("the deferred answer");
+      expect(pdfCalls[0]?.path).toBe(filePath);
+      expect(readFileSync(filePath, "utf8")).toContain("%PDF");
+      expect(closed).toBe(true);
+    } finally {
+      __setPuppeteerImportForTest(undefined);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("deliverResult pdf records an actionable failure when puppeteer is absent", async () => {
+    __setPuppeteerImportForTest(async () => {
+      const err = new Error(
+        "Cannot find package 'puppeteer'",
+      ) as NodeJS.ErrnoException;
+      err.code = "ERR_MODULE_NOT_FOUND";
+      throw err;
+    });
+    try {
+      const outcomes = await deliverResult(
+        completedTask,
+        { modes: ["file"], filePath: "/tmp/ebb-should-not-exist.pdf", format: "pdf" },
+        {},
+      );
+      expect(outcomes[0].mode).toBe("file");
+      expect(outcomes[0].ok).toBe(false);
+      expect(outcomes[0].detail).toMatch(/puppeteer/);
+      expect(outcomes[0].detail).toMatch(/npm install puppeteer/);
+      expect(outcomes[0].detail).toMatch(/kept in the queue/);
+    } finally {
+      __setPuppeteerImportForTest(undefined);
     }
   });
 });
