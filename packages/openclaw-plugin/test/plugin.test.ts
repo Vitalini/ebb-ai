@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -18,6 +18,7 @@ import {
   setLlmBridgeForTest,
 } from "../src/dispatch.js";
 import {
+  __setPuppeteerImportForTest,
   __setSpawnForTest,
   deliverResult,
   formatReport,
@@ -933,6 +934,84 @@ describe("ebb OpenClaw plugin — result delivery", () => {
       expect(outcomes[0].detail).toMatch(/not found/);
     } finally {
       __setSpawnForTest(undefined);
+    }
+  });
+
+  // ── PDF delivery (ROADMAP item 8) ──────────────────────────────────────────
+
+  it("deliverResult pdf renders the HTML report via a stubbed puppeteer", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "ebb-pdf-"));
+    const filePath = join(dir, "report.pdf");
+    let setContentHtml: string | undefined;
+    const pdfCalls: Array<{ path?: string }> = [];
+    let closed = false;
+
+    __setPuppeteerImportForTest(async () => ({
+      // puppeteer's default export carries `launch`.
+      default: {
+        async launch() {
+          return {
+            async newPage() {
+              return {
+                async setContent(html: string) {
+                  setContentHtml = html;
+                },
+                async pdf(opts: { path: string }) {
+                  pdfCalls.push(opts);
+                  // Emulate puppeteer writing the file to `path`.
+                  writeFileSync(opts.path, "%PDF-1.4 stub");
+                },
+              };
+            },
+            async close() {
+              closed = true;
+            },
+          };
+        },
+      },
+    }));
+    try {
+      const outcomes = await deliverResult(
+        completedTask,
+        { modes: ["file"], filePath, format: "pdf" },
+        {},
+      );
+      expect(outcomes[0].mode).toBe("file");
+      expect(outcomes[0].ok).toBe(true);
+      expect(outcomes[0].detail).toContain(filePath);
+      // The HTML report template was fed to puppeteer, then rendered to PDF.
+      expect(setContentHtml).toContain("<html");
+      expect(setContentHtml).toContain("the deferred answer");
+      expect(pdfCalls[0]?.path).toBe(filePath);
+      expect(readFileSync(filePath, "utf8")).toContain("%PDF");
+      expect(closed).toBe(true);
+    } finally {
+      __setPuppeteerImportForTest(undefined);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("deliverResult pdf records an actionable failure when puppeteer is absent", async () => {
+    __setPuppeteerImportForTest(async () => {
+      const err = new Error(
+        "Cannot find package 'puppeteer'",
+      ) as NodeJS.ErrnoException;
+      err.code = "ERR_MODULE_NOT_FOUND";
+      throw err;
+    });
+    try {
+      const outcomes = await deliverResult(
+        completedTask,
+        { modes: ["file"], filePath: "/tmp/ebb-should-not-exist.pdf", format: "pdf" },
+        {},
+      );
+      expect(outcomes[0].mode).toBe("file");
+      expect(outcomes[0].ok).toBe(false);
+      expect(outcomes[0].detail).toMatch(/puppeteer/);
+      expect(outcomes[0].detail).toMatch(/npm install puppeteer/);
+      expect(outcomes[0].detail).toMatch(/kept in the queue/);
+    } finally {
+      __setPuppeteerImportForTest(undefined);
     }
   });
 });

@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **PDF delivery format** (`file_format: "pdf"`, OpenClaw plugin, roadmap
+  item 8). The `file` delivery mode can now render the existing HTML report
+  template to a PDF at the same `file_path` semantics as the other formats,
+  via **puppeteer's** headless Chrome. puppeteer is an *optional*,
+  lazily-imported dependency — it is neither bundled nor a hard dependency
+  (esbuild marks it external, mirroring `better-sqlite3`); the import uses a
+  non-literal specifier so neither `tsc` nor esbuild pulls in Chrome. When a
+  `pdf` delivery runs on a gateway without puppeteer installed, the delivery
+  records a clear, actionable failure (`cd ~/.openclaw/extensions/ebb &&
+  npm install puppeteer`, then restart) through the existing outcome
+  machinery — it never throws, and the report stays in the queue. Added
+  `pdf` to the shared `reportFormats` tool-surface enum; the divergence-
+  canary snapshot is updated deliberately.
+
 - **OS-notification delivery mode** (`deliver: ["os"]`, OpenClaw plugin,
   roadmap item 7). A native desktop notification on the gateway host when
   a deferred task completes. Dependency-free, per-platform spawn: macOS →

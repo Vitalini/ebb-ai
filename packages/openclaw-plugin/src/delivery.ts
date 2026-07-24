@@ -14,7 +14,9 @@
  *   - os        → a native desktop notification on the gateway host
  *                 (dependency-free, per-platform spawn — roadmap item 7)
  *
- * The report renders as Markdown, HTML, plain text or JSON.
+ * The report renders as Markdown, HTML, plain text, JSON or PDF. PDF
+ * (roadmap item 8) renders the HTML report through an OPTIONAL puppeteer
+ * loaded lazily at delivery time — never a hard dependency.
  *
  * Delivery preferences + last-delivery outcomes are kept in a small
  * plugin-owned SQLite table keyed by task id — no core schema change.
@@ -35,7 +37,7 @@ export type DeliveryMode =
   | "file"
   | "queue"
   | "os";
-export type ReportFormat = "md" | "html" | "txt" | "json";
+export type ReportFormat = "md" | "html" | "txt" | "json" | "pdf";
 
 export type DeliveryConfig = {
   modes: DeliveryMode[];
@@ -56,7 +58,7 @@ export type DeliveryOption = {
   detail: string;
 };
 
-const ALL_FORMATS: ReportFormat[] = ["md", "html", "txt", "json"];
+const ALL_FORMATS: ReportFormat[] = ["md", "html", "txt", "json", "pdf"];
 
 // ── Integration scan ────────────────────────────────────────────────────────
 
@@ -113,7 +115,7 @@ export function scanDeliveryOptions(openclawConfig: unknown): DeliveryOption[] {
     {
       mode: "file",
       available: true,
-      detail: "write a report file (format: md, html, txt or json)",
+      detail: "write a report file (format: md, html, txt, json or pdf)",
     },
     {
       mode: "queue",
@@ -577,11 +579,113 @@ async function deliverWebhook(
   }
 }
 
+// ── PDF delivery (ROADMAP item 8) ────────────────────────────────────────────
+//
+// PDF renders the existing HTML report template through puppeteer's headless
+// Chrome. puppeteer is an OPTIONAL, lazily-imported dependency — it is neither
+// bundled nor a hard dependency (esbuild marks it external, mirroring the
+// better-sqlite3 treatment). The import is a non-literal specifier so `tsc`
+// never demands the types and esbuild never tries to bundle Chrome. If it is
+// absent on the gateway host the delivery records a clear, actionable failure
+// (surfaced via check_queue_status) and the report still stays in the queue —
+// it never throws into the scheduler.
+
+interface PuppeteerPage {
+  setContent(html: string, opts?: { waitUntil?: string }): Promise<void>;
+  pdf(opts: {
+    path: string;
+    format?: string;
+    printBackground?: boolean;
+  }): Promise<unknown>;
+}
+interface PuppeteerBrowser {
+  newPage(): Promise<PuppeteerPage>;
+  close(): Promise<void>;
+}
+interface PuppeteerModule {
+  launch(opts?: Record<string, unknown>): Promise<PuppeteerBrowser>;
+}
+type PuppeteerImport = { default?: PuppeteerModule } & Partial<PuppeteerModule>;
+type PuppeteerImporter = () => Promise<PuppeteerImport>;
+
+// A non-literal specifier: `tsc --noEmit` does not try to resolve puppeteer's
+// (absent) types, and esbuild leaves the dynamic import in place instead of
+// bundling headless Chrome.
+const PUPPETEER_MODULE = "puppeteer";
+const importPuppeteer: PuppeteerImporter = () =>
+  import(PUPPETEER_MODULE) as Promise<PuppeteerImport>;
+
+// Injectable so tests can stub both the success path (a fake puppeteer) and the
+// absent-module path without installing the real (heavy) dependency.
+let puppeteerImporter: PuppeteerImporter = importPuppeteer;
+
+/** Test hook: override (or reset) the puppeteer importer used by PDF delivery. */
+export function __setPuppeteerImportForTest(
+  fn: PuppeteerImporter | undefined,
+): void {
+  puppeteerImporter = fn ?? importPuppeteer;
+}
+
+/** Actionable install guidance — puppeteer resolves from the plugin's install
+ *  directory in the gateway, so that's where the operator must add it. */
+const PUPPETEER_INSTALL_HINT =
+  "pdf delivery needs the optional 'puppeteer' package, which is not installed. " +
+  "Install it where the gateway loaded the plugin, then restart the gateway: " +
+  "`cd ~/.openclaw/extensions/ebb && npm install puppeteer`. " +
+  "The report was kept in the queue.";
+
+function isModuleNotFound(err: unknown): boolean {
+  const code = (err as NodeJS.ErrnoException | undefined)?.code;
+  return code === "ERR_MODULE_NOT_FOUND" || code === "MODULE_NOT_FOUND";
+}
+
+async function deliverPdf(
+  task: CompletedTask,
+  path: string,
+): Promise<DeliveryOutcome> {
+  let mod: PuppeteerImport;
+  try {
+    mod = await puppeteerImporter();
+  } catch (err) {
+    return {
+      mode: "file",
+      ok: false,
+      detail: isModuleNotFound(err)
+        ? PUPPETEER_INSTALL_HINT
+        : `pdf delivery could not load puppeteer: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+    };
+  }
+  const puppeteer = mod.default ?? (mod as PuppeteerModule);
+  const html = formatReport(task, "html");
+  let browser: PuppeteerBrowser | undefined;
+  try {
+    await mkdir(dirname(path), { recursive: true });
+    browser = await puppeteer.launch();
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: "networkidle0" });
+    await page.pdf({ path, format: "A4", printBackground: true });
+    return { mode: "file", ok: true, detail: `wrote ${path} (pdf)` };
+  } catch (err) {
+    return {
+      mode: "file",
+      ok: false,
+      detail: `pdf render failed: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    };
+  } finally {
+    await browser?.close().catch(() => {});
+  }
+}
+
 async function deliverFile(
   task: CompletedTask,
   path: string,
   format: ReportFormat,
 ): Promise<DeliveryOutcome> {
+  if (format === "pdf") return deliverPdf(task, path);
   try {
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, formatReport(task, format));

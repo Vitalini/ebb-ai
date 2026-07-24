@@ -172,7 +172,7 @@ const taskIdRequired: ToolParam = {
 };
 
 const deliverModes = ["chat", "telegram", "webhook", "file", "queue", "os"] as const;
-const reportFormats = ["md", "html", "txt", "json"] as const;
+const reportFormats = ["md", "html", "txt", "json", "pdf"] as const;
 
 const deliverParam = (optional: boolean): ToolParam => ({
   name: "deliver",
@@ -207,7 +207,8 @@ const fileFormatParam: ToolParam = {
   values: reportFormats,
   optional: true,
   hosts: ["openclaw"],
-  description: "Report format for 'file' delivery. Default: md.",
+  description:
+    "Report format for 'file' delivery: md, html, txt, json, or pdf (pdf renders the HTML report via puppeteer if installed on the gateway). Default: md.",
 };
 
 // ── The canonical surface ───────────────────────────────────────────────────
@@ -400,7 +401,7 @@ export const TOOL_SURFACE: readonly CanonicalToolDef[] = [
     name: "set_delivery",
     hosts: ["openclaw"],
     description:
-      "Set or change how a scheduled task's result is delivered when it completes. Call this right after schedule_task, once you have ASKED the user how they want the result. The user may pick several modes. Modes: chat (their active OpenClaw chat), telegram, webhook (needs webhook_url), file (needs file_path; format md/html/txt/json), queue (no push — retrievable via check_queue_status), os (a native desktop notification on the gateway host). Default if the user is unsure: chat.",
+      "Set or change how a scheduled task's result is delivered when it completes. Call this right after schedule_task, once you have ASKED the user how they want the result. The user may pick several modes. Modes: chat (their active OpenClaw chat), telegram, webhook (needs webhook_url), file (needs file_path; format md/html/txt/json/pdf), queue (no push — retrievable via check_queue_status), os (a native desktop notification on the gateway host). Default if the user is unsure: chat.",
     params: [
       { ...taskIdRequired, description: "The id returned by schedule_task." },
       { ...deliverParam(false), description: "One or more delivery modes the user chose." },
