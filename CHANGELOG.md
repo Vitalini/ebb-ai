@@ -9,6 +9,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (Nothing pending — see version sections below.)
 
+## [0.15.1] — 2026-07-25
+
+**Theme:** "Clean supply chain, loud privacy boundary." Housekeeping
+driven by the ClawHub security review of 0.15.0 — no feature changes.
+
+> **Operator note:** run `openclaw plugins update @vitalini/ebb` to pull
+> 0.15.1.
+
+### Security
+
+- **Dependency hygiene, waves A–D.** `pnpm audit --prod` went **27
+  vulnerabilities (9 high) → 0**; the full audit went **39 → 1**
+  (dev-only). Highlights: `vitest` 2 → 4, clearing a *critical* advisory
+  (Vitest UI server arbitrary file read) and pulling `vite` 5 → 8;
+  `next` 15 → 16, clearing three high advisories (App-Router DoS, SSRF in
+  Server Actions, SSRF in rewrites); `sharp`, `postcss`, `hono`,
+  `form-data`, `fast-uri`, `js-yaml` to patched versions; `esbuild`
+  0.28.1. This clears ClawScan's `SC4` — the one finding in its review of
+  0.15.0 marked *unexpected*.
+  - The single remaining advisory is `brace-expansion@1.1.16`, reachable
+    only through ESLint's `minimatch@3.x`. It is dev-only, absent from
+    `--prod`, and unfixable from here: the patch exists only in 5.x, whose
+    changed export breaks `minimatch` 3. It needs ESLint to move off
+    `minimatch` 3.x.
+  - Next 16 renamed the middleware convention: `apps/web/src/middleware.ts`
+    → `proxy.ts` exporting `proxy`. The nonce-based CSP is byte-identical
+    and was re-verified live — fresh nonce per request, matching every
+    emitted `<script>` — as was the 300 s grid-feed cache.
+
+### Changed
+
+- **The delivery privacy boundary is now stated where it is acted on.**
+  ClawScan's `SQP-2`/`E1` observed that webhook and Telegram delivery move
+  full task content outside OpenClaw without the docs foregrounding it.
+  The `set_delivery` tool description (shared surface, so both the MCP
+  server and the OpenClaw plugin inherit it) now says plainly that `chat`
+  and `queue` keep the result inside OpenClaw while `webhook` POSTs the
+  full result to an unrestricted URL, `telegram` sends it to a third
+  party, and `file` writes it anywhere on the host — and instructs the
+  agent never to choose one of those three on the user's behalf. The
+  plugin README leads its delivery section with the same table. Parameter
+  names and shapes are unchanged; the divergence-canary snapshot was
+  updated deliberately.
+
 ## [0.15.0] — 2026-07-25
 
 **Theme:** "No ambient state." The library stops reading the environment;
@@ -1315,7 +1359,8 @@ their mind, and how to mitigate the operational failure modes
   Batches APIs. Direct Batch routing lands in v0.2.
 - Python port (`ebb-ai` PyPI) is a placeholder. v0.2.
 
-[Unreleased]: https://github.com/Vitalini/ebb-ai/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/Vitalini/ebb-ai/compare/v0.15.1...HEAD
+[0.15.1]: https://github.com/Vitalini/ebb-ai/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/Vitalini/ebb-ai/compare/v0.14.1...v0.15.0
 [0.14.1]: https://github.com/Vitalini/ebb-ai/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/Vitalini/ebb-ai/compare/v0.13.0...v0.14.0

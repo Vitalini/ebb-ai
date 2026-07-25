@@ -401,7 +401,7 @@ export const TOOL_SURFACE: readonly CanonicalToolDef[] = [
     name: "set_delivery",
     hosts: ["openclaw"],
     description:
-      "Set or change how a scheduled task's result is delivered when it completes. Call this right after schedule_task, once you have ASKED the user how they want the result. The user may pick several modes. Modes: chat (their active OpenClaw chat), telegram, webhook (needs webhook_url), file (needs file_path; format md/html/txt/json/pdf), queue (no push — retrievable via check_queue_status), os (a native desktop notification on the gateway host). Default if the user is unsure: chat.",
+      "Set or change how a scheduled task's result is delivered when it completes. Call this right after schedule_task, once you have ASKED the user how they want the result. The user may pick several modes. Modes: chat (their active OpenClaw chat), telegram, webhook (needs webhook_url), file (needs file_path; format md/html/txt/json/pdf), queue (no push — retrievable via check_queue_status), os (a native desktop notification on the gateway host). PRIVACY BOUNDARY — chat and queue keep the result inside OpenClaw; webhook POSTs the FULL result to whatever URL is supplied (ebb does not restrict or inspect that destination), telegram sends the FULL result to a third-party service, and file writes it to any path on the gateway host. Never pick one of those three on the user's behalf: confirm the destination with them first, and for sensitive tasks prefer chat or queue. Default if the user is unsure: chat.",
     params: [
       { ...taskIdRequired, description: "The id returned by schedule_task." },
       { ...deliverParam(false), description: "One or more delivery modes the user chose." },

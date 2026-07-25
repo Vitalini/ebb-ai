@@ -29,13 +29,34 @@ Tool names match the `@ebb-ai/mcp` MCP-server surface (no `ebb_` prefix).
 
 ## Result delivery
 
+> ### ⚠ Delivery can send task content outside OpenClaw
+>
+> Four of the six delivery modes move the **full text of your task's
+> result** past the boundary of your OpenClaw session. Know which you are
+> choosing:
+>
+> | Mode | Where the result goes |
+> |---|---|
+> | `chat` | stays in your OpenClaw chat — **no external transmission** |
+> | `queue` | stays in the local SQLite ledger — **no external transmission** |
+> | `os` | a desktop notification on the gateway host (a truncated preview) — local |
+> | `webhook` | **HTTP POST of the full result to whatever URL you supply** — ebb does not restrict, allowlist, or inspect that destination |
+> | `telegram` | **the full result to Telegram's servers**, via your configured OpenClaw Telegram target — a third party |
+> | `file` | written to **any path you supply** on the gateway host, readable by anything with filesystem access |
+>
+> The prompt you defer is also stored in the local ledger until the task
+> completes (then redacted), and the result is always kept in the queue
+> regardless of mode. **For sensitive work, use `chat` or `queue`**, and
+> treat a webhook URL, a Telegram target, and a file path as trust
+> decisions you are making about that data — verify each before use.
+
 When a deferred task completes, its result is delivered through the
 mode(s) chosen per task — `chat` (the active OpenClaw chat), `telegram`,
 `webhook` (POST to any URL), `file` (a report in md/html/txt/json/pdf),
 `queue` (no push), or `os` (a native desktop notification on the gateway
 host). The result is always kept in the queue too. Call `set_delivery`
 right after `schedule_task`, once you've asked the user how they want the
-result. Default: `chat`.
+result. Default: `chat` — the mode that keeps the result inside OpenClaw.
 
 The `os` mode is dependency-free — it spawns the platform's built-in
 notifier (`osascript` on macOS, `notify-send` on Linux, a PowerShell toast
