@@ -61,10 +61,18 @@ Full reference with args at https://www.ebb-ai.com/docs#commands.
 
 ## Optional API keys (live data; mock fallback otherwise)
 
-- `EBB_EIA_API_KEY` — U.S. ISOs via U.S. EIA, average emissions (free)
-- `WATTTIME_USERNAME` + `WATTTIME_PASSWORD` — U.S. ISOs via WattTime v3, marginal emissions (co2_moer); takes precedence over EIA where covered (free account)
-- `EBB_ENTSOE_SECURITY_TOKEN` — European zones via ENTSO-E (free)
-- `EBB_ELECTRICITY_MAPS_API_KEY` — universal fallback (free tier)
+These environment variables configure the `ebb` CLI and the `@ebb-ai/mcp`
+server. The `@vitalini/ebb` OpenClaw plugin reads no environment variables —
+it is configured through OpenClaw plugin config, under
+`plugins.entries.ebb.config`; the plugin-config field is listed after each
+variable. OpenClaw resolves the `"${ENV_VAR}"` shorthand in those fields, so
+exporting the variables still works — the gateway reads them, not the plugin.
+
+- `EBB_EIA_API_KEY` (plugin: `eiaApiKey`) — U.S. ISOs via U.S. EIA, average emissions (free)
+- `WATTTIME_USERNAME` + `WATTTIME_PASSWORD` (plugin: `wattTimeUsername` + `wattTimePassword`) — U.S. ISOs via WattTime v3, marginal emissions (co2_moer); takes precedence over EIA where covered (free account)
+- `EBB_ENTSOE_SECURITY_TOKEN` (plugin: `entsoeSecurityToken`) — European zones via ENTSO-E (free)
+- `EBB_ELECTRICITY_MAPS_API_KEY` (plugin: `electricityMapsApiKey`) — universal fallback (free tier)
+- `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY` / `GOOGLE_API_KEY` / `OLLAMA_HOST` (plugin: `anthropicApiKey` / `openaiApiKey` / `geminiApiKey` / `googleApiKey` / `ollamaHost`) — provider dispatch
 
 GB is always live via UK National Grid ESO (no key needed).
 

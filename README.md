@@ -320,7 +320,21 @@ GB, FR, DE), 72-hour forecast charts, best-window planner, queue viewer.
 
 **Grid data sources** (per zone, falls back to mock on failure):
 
-| Zone | Source | Auth | Notes |
+> **Where do the keys go?** The environment variables in the `Auth` column
+> configure the **hosts** — the `ebb` CLI, the `@ebb-ai/mcp` server, and this
+> dashboard. Each host reads them at its own entry point and injects them into
+> `@ebb-ai/core`, which is environment-pure and reads nothing ambient.
+> The **`@vitalini/ebb` OpenClaw plugin reads no environment variables at all**:
+> configure it under `plugins.entries.ebb.config` in your gateway config, using
+> `eiaApiKey`, `entsoeSecurityToken`, `electricityMapsApiKey`,
+> `wattTimeUsername` / `wattTimePassword` (plus `anthropicApiKey`,
+> `openaiApiKey`, `geminiApiKey` / `googleApiKey`, `ollamaHost`,
+> `ollamaModels`, `carbonBudgetG`, `carbonBudgetWindow`, `defaultRegion`,
+> `dbPath`). OpenClaw resolves the `"${ENV_VAR}"` shorthand in the credential
+> fields, so you can keep exporting the same variables and let the gateway read
+> them on the plugin's behalf.
+
+| Zone | Source | Auth (CLI / MCP / dashboard) | Notes |
 |---|---|---|---|
 | `GB` | [UK National Grid ESO Carbon Intensity API](https://carbonintensity.org.uk/) | None | Real 48h forecast, always on |
 | `US-CAL-CISO`, `US-TEX-ERCO`, `US-NE-ISNE`, `US-NY-NYIS`, `US-MIDA-PJM`, `US-MIDW-MISO` | [WattTime v3](https://watttime.org/) marginal (co2_moer) | Free account (`WATTTIME_USERNAME` + `WATTTIME_PASSWORD`) | **Marginal**-emissions FORECAST (lbs/MWh → gCO2/kWh). Takes precedence over EIA where covered; falls through to EIA on any error. Signal disclosed as `signalType: "marginal"` on forecasts/receipts |
