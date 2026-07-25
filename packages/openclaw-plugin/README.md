@@ -37,18 +37,20 @@ Tool names match the `@ebb-ai/mcp` MCP-server surface (no `ebb_` prefix).
 >
 > | Mode | Where the result goes |
 > |---|---|
-> | `chat` | stays in your OpenClaw chat — **no external transmission** |
-> | `queue` | stays in the local SQLite ledger — **no external transmission** |
-> | `os` | a desktop notification on the gateway host (a truncated preview) — local |
+> | `queue` | stays in the local SQLite ledger — **the only mode with no transmission at all** |
+> | `os` | a desktop notification on the gateway host (truncated preview) — local |
+> | `chat` | **your gateway's configured chat channel — which today is Telegram.** `chat` and `telegram` currently take the *same* Bot-API path, so "chat" is **not** an inside-OpenClaw-only mode on a Telegram-backed gateway |
+> | `telegram` | **the full result to Telegram's servers** — a third party |
 > | `webhook` | **HTTP POST of the full result to whatever URL you supply** — ebb does not restrict, allowlist, or inspect that destination |
-> | `telegram` | **the full result to Telegram's servers**, via your configured OpenClaw Telegram target — a third party |
 > | `file` | written to **any path you supply** on the gateway host, readable by anything with filesystem access |
 >
 > The prompt you defer is also stored in the local ledger until the task
 > completes (then redacted), and the result is always kept in the queue
-> regardless of mode. **For sensitive work, use `chat` or `queue`**, and
-> treat a webhook URL, a Telegram target, and a file path as trust
-> decisions you are making about that data — verify each before use.
+> regardless of mode. **For sensitive work use `queue`** and read the
+> result back with `check_queue_status` — it is the only mode that keeps
+> the content on your machine. Treat a webhook URL, a Telegram target and
+> a file path as trust decisions about that data, and verify each before
+> use.
 
 When a deferred task completes, its result is delivered through the
 mode(s) chosen per task — `chat` (the active OpenClaw chat), `telegram`,
@@ -56,7 +58,9 @@ mode(s) chosen per task — `chat` (the active OpenClaw chat), `telegram`,
 `queue` (no push), or `os` (a native desktop notification on the gateway
 host). The result is always kept in the queue too. Call `set_delivery`
 right after `schedule_task`, once you've asked the user how they want the
-result. Default: `chat` — the mode that keeps the result inside OpenClaw.
+result. Default: `chat` — the result comes back where the conversation is
+(on a Telegram-backed gateway, that means through Telegram; see the box
+above).
 
 The `os` mode is dependency-free — it spawns the platform's built-in
 notifier (`osascript` on macOS, `notify-send` on Linux, a PowerShell toast

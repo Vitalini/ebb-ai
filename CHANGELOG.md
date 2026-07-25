@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-(Nothing pending — see version sections below.)
+### Fixed
+
+- **Corrected an inaccurate privacy claim in 0.15.1's own documentation.**
+  0.15.1 stated that `chat` delivery "stays inside OpenClaw". That is
+  wrong on a Telegram-backed gateway: `chat` and `telegram` take the
+  *same* Telegram Bot-API path in `delivery.ts`, so on such a gateway a
+  "chat" result does leave for a third party. ClawHub's review caught the
+  contradiction (`E1`). The `set_delivery` tool description and the plugin
+  README now say so plainly, and both name **`queue`** — not `chat` — as
+  the only mode that transmits nothing. Documentation-only; delivery
+  behaviour is unchanged.
 
 ## [0.15.1] — 2026-07-25
 
