@@ -27,6 +27,7 @@ import {
   type Achievement,
   type CarbonBudgetStatus,
 } from "@ebb-ai/core";
+import { readEnvCredentials } from "../env.js";
 import { defaultDbPath } from "./tick.js";
 
 export interface StatsCommandOptions {
@@ -161,7 +162,13 @@ export async function runStats(opts: StatsCommandOptions = {}): Promise<StatsRes
     const bands = bandHistogram(completed);
     const badges = achievements(stats, perRegion);
     // Aggregate carbon-budget status (ROADMAP item 4): only when configured.
-    const budgetConfig = loadCarbonBudgetConfig({ path: opts.budgetConfig });
+    // Core is environment-pure, so the CLI (the host) reads the two
+    // EBB_CARBON_BUDGET_* variables and passes them in — same precedence as
+    // before: an exported variable beats the ~/.ebb-ai/config file.
+    const budgetConfig = loadCarbonBudgetConfig({
+      path: opts.budgetConfig,
+      env: readEnvCredentials().carbonBudget,
+    });
     let budget: CarbonBudgetStatus | undefined;
     if (budgetConfig) {
       const now = new Date();

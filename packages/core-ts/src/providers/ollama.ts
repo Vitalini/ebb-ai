@@ -42,9 +42,12 @@ type FetchLike = (
 
 export interface OllamaAdapterOptions {
   /**
-   * Base host URL. Defaults to `process.env.OLLAMA_HOST`, else
-   * `http://localhost:11434`. A bare `host:port` is accepted and prefixed
-   * with `http://`.
+   * Base host URL, supplied by the host application — this library never
+   * reads the environment. Defaults to `http://localhost:11434` when omitted.
+   * A bare `host:port` is accepted and prefixed with `http://`.
+   *
+   * The `ebb` CLI and `@ebb-ai/mcp` server read `OLLAMA_HOST` and pass it
+   * here; the OpenClaw plugin passes `ollamaHost` from plugin config.
    */
   host?: string;
   /** Inject a `fetch` implementation. Defaults to the global `fetch`. */
@@ -66,7 +69,7 @@ export class OllamaAdapter implements ProviderAdapter {
   private readonly fetchImpl: FetchLike | undefined;
 
   constructor(opts: OllamaAdapterOptions = {}) {
-    this.host = normalizeHost(opts.host ?? process.env.OLLAMA_HOST);
+    this.host = normalizeHost(opts.host);
     this.fetchImpl = opts.fetchImpl;
   }
 

@@ -232,9 +232,12 @@ function parseKeyValues(contents: string): Record<string, string> {
 }
 
 /**
- * The only two environment variables this module consults. Declared as a
- * closed shape rather than the whole environment: the loader must never hold
- * a reference to `process.env` as a whole (see `loadCarbonBudgetConfig`).
+ * The two environment-variable-shaped overrides this loader accepts. The
+ * names match the variables the `ebb` CLI and `@ebb-ai/mcp` server read, but
+ * THIS LIBRARY NEVER READS THE AMBIENT ENVIRONMENT — the host reads them and passes
+ * them in via `LoadCarbonBudgetOptions.env`. The OpenClaw plugin passes the
+ * same shape built from its plugin config (`carbonBudgetG` /
+ * `carbonBudgetWindow`).
  */
 export interface CarbonBudgetEnv {
   EBB_CARBON_BUDGET_G?: string;
@@ -244,36 +247,35 @@ export interface CarbonBudgetEnv {
 export interface LoadCarbonBudgetOptions {
   /** Override the config file path (tests). Defaults to `~/.ebb-ai/config`. */
   path?: string;
-  /** Override the two recognized variables (tests). Defaults to reading them
-   *  by name from `process.env`. */
+  /**
+   * Host-supplied overrides for the two recognized keys. Omitted / `{}` means
+   * "no overrides" — the `~/.ebb-ai/config` file alone decides.
+   */
   env?: CarbonBudgetEnv;
 }
 
 /**
  * Resolve the aggregate carbon budget from the `~/.ebb-ai/config` KEY=VALUE
- * file, with same-named environment variables taking precedence (exactly the
- * secrets-file precedence: an explicit env var always wins). Returns
+ * file, with host-supplied `opts.env` overrides taking precedence (exactly the
+ * secrets-file precedence: an explicit override always wins). Returns
  * `undefined` when no threshold is configured (feature off), or when the
  * values are malformed — a broken config never throws, it just disables the
  * feature.
  *
- * Recognized keys (file or env):
+ * Recognized keys (file or `opts.env`):
  *   - `EBB_CARBON_BUDGET_G`      — threshold in grams CO2e (required to enable)
  *   - `EBB_CARBON_BUDGET_WINDOW` — daily | weekly | monthly (default: daily)
+ *
+ * Reading the `~/.ebb-ai/config` FILE is deliberate and stays: that is
+ * filesystem I/O against a path this library owns. What is gone is any
+ * ambient-environment read — the CLI / MCP server read `EBB_CARBON_BUDGET_G` and
+ * `EBB_CARBON_BUDGET_WINDOW` at their own entry points and pass them in as
+ * `opts.env`; the OpenClaw plugin builds the same shape from plugin config.
  */
 export function loadCarbonBudgetConfig(
   opts: LoadCarbonBudgetOptions = {},
 ): CarbonBudgetConfig | undefined {
-  // Read the two budget variables BY NAME. Binding all of `process.env` to a
-  // local (the previous `opts.env ?? process.env`) put every secret the host
-  // happens to export into this scope, which is indistinguishable from
-  // credential harvesting to a static auditor — and needlessly so: the values
-  // read here are a gram threshold and a window name that never leave the
-  // process. Keep the reads narrow and literal.
-  const env: CarbonBudgetEnv = opts.env ?? {
-    EBB_CARBON_BUDGET_G: process.env.EBB_CARBON_BUDGET_G,
-    EBB_CARBON_BUDGET_WINDOW: process.env.EBB_CARBON_BUDGET_WINDOW,
-  };
+  const env: CarbonBudgetEnv = opts.env ?? {};
   const path = opts.path ?? carbonBudgetConfigPath();
   let fileValues: Record<string, string> = {};
   if (existsSync(path)) {

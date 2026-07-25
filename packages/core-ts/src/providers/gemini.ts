@@ -49,8 +49,10 @@ type FetchLike = (
 
 export interface GeminiAdapterOptions {
   /**
-   * API key. Defaults to `process.env.GEMINI_API_KEY`, then
-   * `process.env.GOOGLE_API_KEY`.
+   * API key. Supplied by the host — this library never reads the environment.
+   * The `ebb` CLI and `@ebb-ai/mcp` server read `GEMINI_API_KEY` (else
+   * `GOOGLE_API_KEY`) and pass the winner here; the OpenClaw plugin passes
+   * `geminiApiKey` (else `googleApiKey`) from plugin config.
    */
   apiKey?: string;
   /** Override the API base URL (defaults to the public endpoint). */
@@ -68,10 +70,7 @@ export class GeminiAdapter implements ProviderAdapter {
   private readonly fetchImpl: FetchLike | undefined;
 
   constructor(opts: GeminiAdapterOptions = {}) {
-    this.apiKey =
-      opts.apiKey ??
-      process.env.GEMINI_API_KEY ??
-      process.env.GOOGLE_API_KEY;
+    this.apiKey = opts.apiKey;
     this.baseUrl = (opts.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, "");
     this.fetchImpl = opts.fetchImpl;
   }
