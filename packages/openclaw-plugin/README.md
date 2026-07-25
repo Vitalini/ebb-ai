@@ -29,12 +29,52 @@ Tool names match the `@ebb-ai/mcp` MCP-server surface (no `ebb_` prefix).
 
 ## Result delivery
 
+> ### ⚠ Delivery can send task content outside OpenClaw
+>
+> Four of the six delivery modes move the **full text of your task's
+> result** past the boundary of your OpenClaw session. Know which you are
+> choosing:
+>
+> | Mode | Where the result goes |
+> |---|---|
+> | `chat` | stays in your OpenClaw chat — **no external transmission** |
+> | `queue` | stays in the local SQLite ledger — **no external transmission** |
+> | `os` | a desktop notification on the gateway host (a truncated preview) — local |
+> | `webhook` | **HTTP POST of the full result to whatever URL you supply** — ebb does not restrict, allowlist, or inspect that destination |
+> | `telegram` | **the full result to Telegram's servers**, via your configured OpenClaw Telegram target — a third party |
+> | `file` | written to **any path you supply** on the gateway host, readable by anything with filesystem access |
+>
+> The prompt you defer is also stored in the local ledger until the task
+> completes (then redacted), and the result is always kept in the queue
+> regardless of mode. **For sensitive work, use `chat` or `queue`**, and
+> treat a webhook URL, a Telegram target, and a file path as trust
+> decisions you are making about that data — verify each before use.
+
 When a deferred task completes, its result is delivered through the
 mode(s) chosen per task — `chat` (the active OpenClaw chat), `telegram`,
-`webhook` (POST to any URL), `file` (a report in md/html/txt/json), or
-`queue` (no push). The result is always kept in the queue too. Call
-`set_delivery` right after `schedule_task`, once you've asked the user how
-they want the result. Default: `chat`.
+`webhook` (POST to any URL), `file` (a report in md/html/txt/json/pdf),
+`queue` (no push), or `os` (a native desktop notification on the gateway
+host). The result is always kept in the queue too. Call `set_delivery`
+right after `schedule_task`, once you've asked the user how they want the
+result. Default: `chat` — the mode that keeps the result inside OpenClaw.
+
+The `os` mode is dependency-free — it spawns the platform's built-in
+notifier (`osascript` on macOS, `notify-send` on Linux, a PowerShell toast
+on Windows). Unsupported platform or a missing binary records an honest
+delivery failure (visible via `check_queue_status`) rather than throwing.
+
+The `pdf` file format renders the same HTML report through **puppeteer's**
+headless Chrome. puppeteer is an *optional* dependency — it is not bundled
+and not required to install the plugin. Add it only if you want PDF output,
+where the gateway loaded the plugin, then restart the gateway:
+
+```bash
+cd ~/.openclaw/extensions/ebb && npm install puppeteer
+```
+
+If puppeteer is absent when a `pdf` delivery runs, the delivery records a
+clear, actionable failure (surfaced via `check_queue_status`) with these
+exact install steps, and the report is still kept in the queue.
 
 ## Install
 
@@ -100,14 +140,65 @@ openclaw plugins install ./vitalini-ebb-<version>.tgz
 
 ## Configuration
 
-Optional config schema:
+**This plugin reads no environment variables.** Everything is configured
+through OpenClaw plugin config, under `plugins.entries.ebb.config` in your
+gateway config. (Environment variables still configure the `ebb` CLI and the
+`@ebb-ai/mcp` server — they are separate hosts and are unaffected.)
+
+Why: ClawHub's ClawScan raises `suspicious.env_credential_access` (severity:
+critical) on any ambient-environment read inside a bundle that also makes
+network calls, regardless of whether the value is a secret. So the reads are
+gone entirely, and `@ebb-ai/core` is environment-pure for the same reason.
 
 ```json
 {
-  "dbPath": "/home/you/.ebb-ai/queue.db",
-  "defaultRegion": "GB"
+  "plugins": {
+    "entries": {
+      "ebb": {
+        "enabled": true,
+        "config": {
+          "dbPath": "/home/you/.ebb-ai/queue.db",
+          "defaultRegion": "GB",
+          "eiaApiKey": "${EBB_EIA_API_KEY}",
+          "anthropicApiKey": "${ANTHROPIC_API_KEY}"
+        }
+      }
+    }
+  }
 }
 ```
+
+### Migrating from environment variables
+
+Every credential field is declared in the manifest's
+`configContracts.secretInputs`, so OpenClaw resolves the `"${ENV_VAR}"` /
+`"$ENV_VAR"` shorthand for it and hands the plugin the resolved value — the
+**gateway** performs the environment read, never this bundle. If you already
+export these variables, keep exporting them and reference them as shown above.
+`uiHints` marks the same fields sensitive, so the gateway UI masks them.
+
+| Was (environment variable) | Now (plugin config field) |
+|---|---|
+| `EBB_ELECTRICITY_MAPS_API_KEY` | `electricityMapsApiKey` |
+| `EBB_EIA_API_KEY` | `eiaApiKey` |
+| `EBB_ENTSOE_SECURITY_TOKEN` | `entsoeSecurityToken` |
+| `WATTTIME_USERNAME` | `wattTimeUsername` |
+| `WATTTIME_PASSWORD` | `wattTimePassword` |
+| `ANTHROPIC_API_KEY` | `anthropicApiKey` |
+| `OPENAI_API_KEY` | `openaiApiKey` |
+| `GEMINI_API_KEY` | `geminiApiKey` |
+| `GOOGLE_API_KEY` | `googleApiKey` |
+| `OLLAMA_HOST` | `ollamaHost` |
+| `OLLAMA_MODELS` | `ollamaModels` |
+| `EBB_CARBON_BUDGET_G` | `carbonBudgetG` (a number, not a string) |
+| `EBB_CARBON_BUDGET_WINDOW` | `carbonBudgetWindow` |
+| `EBB_DEFAULT_REGION` | `defaultRegion` |
+| `EBB_DELIVERY_FILE` | `deliveryStorePath` |
+| `EBB_DISABLE_STARTUP_DISPATCH=1` | `disableStartupDispatch: true` |
+
+Provider credentials are usually unnecessary: with the OpenClaw runtime LLM
+bridge captured (on the first tool call), deferred tasks dispatch through the
+gateway's own configured model with no API key at all.
 
 `dbPath` defaults to `~/.ebb-ai/queue.db` — the same path used by
 `@ebb-ai/mcp` (MCP server) and `@ebb-ai/cli` (CLI). All three share
@@ -124,8 +215,10 @@ Set `defaultRegion` explicitly for any other region (`US-TEX-ERCO`,
 `US-NE-ISNE`, …). Each tool call may also pass its own `region`, which
 overrides everything; `schedule_task` reports a `region_source`
 (`request` / `config` / `timezone` / `default`) so you can see which
-rule applied. Non-GB regions may need `EBB_*_API_KEY` env vars for live
-data, otherwise a deterministic mock is used.
+rule applied. Non-GB regions need the matching grid credential in plugin
+config (`eiaApiKey`, `entsoeSecurityToken`, `electricityMapsApiKey`,
+`wattTimeUsername` / `wattTimePassword`) for live data, otherwise a
+deterministic mock is used.
 
 ## When does the plugin auto-invoke?
 

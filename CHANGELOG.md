@@ -7,7 +7,209 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+(Nothing pending — see version sections below.)
+
+## [0.15.1] — 2026-07-25
+
+**Theme:** "Clean supply chain, loud privacy boundary." Housekeeping
+driven by the ClawHub security review of 0.15.0 — no feature changes.
+
+> **Operator note:** run `openclaw plugins update @vitalini/ebb` to pull
+> 0.15.1.
+
+### Security
+
+- **Dependency hygiene, waves A–D.** `pnpm audit --prod` went **27
+  vulnerabilities (9 high) → 0**; the full audit went **39 → 1**
+  (dev-only). Highlights: `vitest` 2 → 4, clearing a *critical* advisory
+  (Vitest UI server arbitrary file read) and pulling `vite` 5 → 8;
+  `next` 15 → 16, clearing three high advisories (App-Router DoS, SSRF in
+  Server Actions, SSRF in rewrites); `sharp`, `postcss`, `hono`,
+  `form-data`, `fast-uri`, `js-yaml` to patched versions; `esbuild`
+  0.28.1. This clears ClawScan's `SC4` — the one finding in its review of
+  0.15.0 marked *unexpected*.
+  - The single remaining advisory is `brace-expansion@1.1.16`, reachable
+    only through ESLint's `minimatch@3.x`. It is dev-only, absent from
+    `--prod`, and unfixable from here: the patch exists only in 5.x, whose
+    changed export breaks `minimatch` 3. It needs ESLint to move off
+    `minimatch` 3.x.
+  - Next 16 renamed the middleware convention: `apps/web/src/middleware.ts`
+    → `proxy.ts` exporting `proxy`. The nonce-based CSP is byte-identical
+    and was re-verified live — fresh nonce per request, matching every
+    emitted `<script>` — as was the 300 s grid-feed cache.
+
+### Changed
+
+- **The delivery privacy boundary is now stated where it is acted on.**
+  ClawScan's `SQP-2`/`E1` observed that webhook and Telegram delivery move
+  full task content outside OpenClaw without the docs foregrounding it.
+  The `set_delivery` tool description (shared surface, so both the MCP
+  server and the OpenClaw plugin inherit it) now says plainly that `chat`
+  and `queue` keep the result inside OpenClaw while `webhook` POSTs the
+  full result to an unrestricted URL, `telegram` sends it to a third
+  party, and `file` writes it anywhere on the host — and instructs the
+  agent never to choose one of those three on the user's behalf. The
+  plugin README leads its delivery section with the same table. Parameter
+  names and shapes are unchanged; the divergence-canary snapshot was
+  updated deliberately.
+
+## [0.15.0] — 2026-07-25
+
+**Theme:** "No ambient state." The library stops reading the environment;
+the hosts inject configuration.
+
+> **Operator note:** the OpenClaw plugin does not auto-update. Run
+> `openclaw plugins update @vitalini/ebb` to pull 0.15.0. **Plugin users:**
+> credentials move from environment variables to plugin config under
+> `plugins.entries.ebb.config`. Migration is lossless — every credential
+> field accepts OpenClaw's `${ENV_VAR}` shorthand, e.g.
+> `"anthropicApiKey": "${ANTHROPIC_API_KEY}"`, so the gateway reads the
+> variable you already export. The `ebb` CLI and `@ebb-ai/mcp` server are
+> unaffected: they still read the same environment variables directly.
+
+### Changed
+
+- **`@ebb-ai/core` is environment-pure — it reads no environment variables.**
+  0.14.1 narrowed the reads to named keys; that was not enough. ClawScan's
+  `suspicious.env_credential_access` rule fires on *any* ambient-environment
+  read inside a bundle that also makes network calls — the remaining finding
+  was `EBB_CARBON_BUDGET_G`, a non-secret numeric threshold. The only way to
+  clear it is to have zero such reads in the published bundle, so the reads are
+  gone rather than narrowed. Independently it is the right shape: a library
+  that reaches into ambient state is untestable and surprising to callers.
+
+  - `grid.ts`: `electricityMapsFeed` / `eiaFeed` / `entsoeFeed` / `wattTimeFeed`
+    take their credentials only as arguments. New `GridFeedCredentials` shape;
+    `buildDefaultGridFeed(credentials)` threads it to each leaf feed.
+    `buildDefaultGridFeed()` with no argument behaves exactly as before with no
+    variables exported: free UK feed for GB, deterministic mock elsewhere.
+  - `providers/{anthropic,openai,gemini,ollama}.ts`: `apiKey` / `host` come only
+    from the constructor. The `GEMINI_API_KEY`-then-`GOOGLE_API_KEY` precedence
+    moved to the hosts, unchanged.
+  - `budget.ts`: `loadCarbonBudgetConfig` still reads the `~/.ebb-ai/config`
+    FILE (filesystem I/O against a path the project owns, not ambient state)
+    but takes its overrides solely from `opts.env`.
+
+- **The OpenClaw plugin (`@vitalini/ebb`) reads no environment variables at
+  all.** Its bundle now contains **zero** environment accesses. Everything it
+  used to take from the environment is an OpenClaw plugin-config field under
+  `plugins.entries.ebb.config`, declared in `openclaw.plugin.json`'s
+  `configSchema` with a description naming the variable it replaces:
+  `electricityMapsApiKey`, `eiaApiKey`, `entsoeSecurityToken`,
+  `wattTimeUsername`, `wattTimePassword`, `anthropicApiKey`, `openaiApiKey`,
+  `geminiApiKey`, `googleApiKey`, `ollamaHost`, `ollamaModels`,
+  `carbonBudgetG`, `carbonBudgetWindow`, `deliveryStorePath`,
+  `disableStartupDispatch` (`defaultRegion` and `dbPath` already existed).
+
+  **Migration is lossless.** The nine credential fields are declared in the
+  manifest's `configContracts.secretInputs.paths`, which is what makes OpenClaw
+  resolve its `"${ENV_VAR}"` / `"$ENV_VAR"` SecretRef shorthand for them and
+  write the plaintext back into the config the plugin receives. Users who
+  already export `ANTHROPIC_API_KEY` keep exporting it and write
+  `"anthropicApiKey": "${ANTHROPIC_API_KEY}"` — the **gateway** performs the
+  environment read, never the plugin. `uiHints` marks the same fields sensitive
+  so the gateway UI masks them.
+
+- **No user-visible change for the `ebb` CLI or the `@ebb-ai/mcp` server.** They
+  are hosts: each reads the same variables it always did, at its own entry
+  point, through a small local `readEnvCredentials()` helper
+  (`packages/cli/src/env.ts`, `packages/mcp-server/src/env.ts`), and injects
+  them into core. The web dashboard does the same for the grid feeds.
+
+- **Python (`core-py`) is deliberately unchanged and stays environment-aware.**
+  It is never bundled into a third-party plugin — it is used directly as its own
+  host — so its `os.environ` fallbacks remain for ergonomics. The asymmetry is
+  documented in `packages/core-py/README.md` and in `core-ts/src/index.ts`.
+
+### Docs
+
+- Every environment-variable table now states that the variables configure the
+  **CLI and MCP server** (and the dashboard), and names the **plugin-config
+  field** that replaces each one for the OpenClaw plugin: root `README.md`,
+  `packages/cli/README.md`, `packages/mcp-server/README.md`,
+  `packages/core-py/README.md`, `packages/openclaw-plugin/README.md` (with a
+  full migration table), the web docs env table, `apps/web/.env.example`, and
+  `apps/web/public/llms.txt`.
+
+## [0.14.1] — 2026-07-25
+
+**Theme:** "Narrow reads." A security-hygiene patch: no feature changes,
+no wire changes.
+
+> **Operator note:** the OpenClaw plugin does not auto-update. Run
+> `openclaw plugins update @vitalini/ebb` to pull 0.14.1.
+
+### Changed
+
+- **Environment variables are read by name, never by binding all of
+  `process.env`.** ClawHub's ClawScan flagged the carbon-budget loader's
+  `opts.env ?? process.env` as `suspicious.env_credential_access`
+  (Critical) in 0.14.0. The finding was structurally fair even though the
+  values involved (a gram threshold and a window name) never leave the
+  process: holding the whole environment in a scope that also makes
+  network calls is indistinguishable, to a static auditor, from
+  credential harvesting. Fixed at the source rather than explained away —
+  `core-ts/budget.ts` and its `core-py/budget.py` mirror now read only
+  the two `EBB_CARBON_BUDGET_*` keys; the OpenClaw plugin's dispatch
+  layer declares a closed `ProviderEnv` shape populated by six named
+  reads (replacing five `= process.env` parameter defaults); the startup
+  bootstrap reads only `EBB_DISABLE_STARTUP_DISPATCH`. The published
+  bundle now contains zero whole-environment captures — every access is a
+  literal, individually justifiable variable.
+
+  What this deliberately does *not* change: ebb still reads the provider
+  and grid-feed credentials it is given (`ANTHROPIC_API_KEY`,
+  `EBB_ELECTRICITY_MAPS_API_KEY`, `WATTTIME_PASSWORD`, …) and sends each
+  to the API that issued it. That is the product's function, it is
+  documented on every surface, and it is disclosed to the scanner rather
+  than disguised.
+
+## [0.14.0] — 2026-07-24
+
+**Theme:** "The router and the fifth feed." Cross-provider LLM routing
+with signed routing provenance, the WattTime marginal-emissions feed
+(5th real feed) plus Gemini/Ollama adapters and full Python feed parity,
+aggregate carbon-budget alerts, OS-notification and PDF delivery modes,
+and an enforced nonce-based CSP for ebb-ai.com.
+
+> **Operator note:** the OpenClaw plugin does not auto-update. Run
+> `openclaw plugins update @vitalini/ebb` to pull 0.14.0.
+
 ### Added
+
+- **PDF delivery format** (`file_format: "pdf"`, OpenClaw plugin, roadmap
+  item 8). The `file` delivery mode can now render the existing HTML report
+  template to a PDF at the same `file_path` semantics as the other formats,
+  via **puppeteer's** headless Chrome. puppeteer is an *optional*,
+  lazily-imported dependency — it is neither bundled nor a hard dependency
+  (esbuild marks it external, mirroring `better-sqlite3`); the import uses a
+  non-literal specifier so neither `tsc` nor esbuild pulls in Chrome. When a
+  `pdf` delivery runs on a gateway without puppeteer installed, the delivery
+  records a clear, actionable failure (`cd ~/.openclaw/extensions/ebb &&
+  npm install puppeteer`, then restart) through the existing outcome
+  machinery — it never throws, and the report stays in the queue. Added
+  `pdf` to the shared `reportFormats` tool-surface enum; the divergence-
+  canary snapshot is updated deliberately.
+
+- **Nonce-based CSP for ebb-ai.com** (roadmap item 9). A Next.js
+  middleware issues a fresh per-request nonce and an ENFORCED
+  `Content-Security-Policy` — `script-src 'self' 'nonce-…'
+  'strict-dynamic'` with **no** `unsafe-inline` for scripts (styles keep
+  `unsafe-inline`: Next hydration / recharts / Tailwind inline styles,
+  documented). JSON-LD carries the nonce; baseline headers unchanged.
+  Cost accepted: six routes flip static→dynamic, upstream feed load
+  still capped by the 300 s fetch-layer cache.
+- **OS-notification delivery mode** (`deliver: ["os"]`, OpenClaw plugin,
+  roadmap item 7). A native desktop notification on the gateway host when
+  a deferred task completes. Dependency-free, per-platform spawn: macOS →
+  `osascript`, Linux → `notify-send`, Windows → a PowerShell toast. An
+  unsupported platform or a missing binary records an honest delivery
+  failure through the existing outcome machinery (surfaced via
+  `check_queue_status`) — it never throws into the scheduler. The
+  notification body carries the task id, a truncated result preview
+  (API-key/token-looking strings scrubbed), and a carbon-receipt grams
+  one-liner. Added to the shared `deliverModes` tool-surface enum; the
+  divergence-canary snapshot is updated deliberately.
 
 - **Carbon-budget alerts** (TS + PY, roadmap item 4). An *aggregate*
   carbon budget over the receipt ledger, distinct from the per-task
@@ -1157,7 +1359,11 @@ their mind, and how to mitigate the operational failure modes
   Batches APIs. Direct Batch routing lands in v0.2.
 - Python port (`ebb-ai` PyPI) is a placeholder. v0.2.
 
-[Unreleased]: https://github.com/Vitalini/ebb-ai/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/Vitalini/ebb-ai/compare/v0.15.1...HEAD
+[0.15.1]: https://github.com/Vitalini/ebb-ai/compare/v0.15.0...v0.15.1
+[0.15.0]: https://github.com/Vitalini/ebb-ai/compare/v0.14.1...v0.15.0
+[0.14.1]: https://github.com/Vitalini/ebb-ai/compare/v0.14.0...v0.14.1
+[0.14.0]: https://github.com/Vitalini/ebb-ai/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/Vitalini/ebb-ai/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/Vitalini/ebb-ai/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/Vitalini/ebb-ai/compare/v0.10.0...v0.11.0

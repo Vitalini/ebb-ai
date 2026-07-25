@@ -39,6 +39,18 @@ with a single wrapper executable.
 
 ## Secrets
 
+> **Scope:** the environment variables below configure **this CLI** (and the
+> `@ebb-ai/mcp` server, which reads the same set). The CLI reads them at its own
+> entry point and injects them into `@ebb-ai/core`, which is environment-pure.
+> The `@vitalini/ebb` **OpenClaw plugin reads no environment variables at all** —
+> configure it under `plugins.entries.ebb.config` in your gateway config
+> (`anthropicApiKey`, `openaiApiKey`, `geminiApiKey`/`googleApiKey`,
+> `ollamaHost`, `ollamaModels`, `eiaApiKey`, `electricityMapsApiKey`,
+> `entsoeSecurityToken`, `wattTimeUsername`/`wattTimePassword`, `carbonBudgetG`,
+> `carbonBudgetWindow`). OpenClaw resolves the `"${ENV_VAR}"` shorthand in those
+> fields, so you can keep exporting the same variables and let the gateway read
+> them on the plugin's behalf.
+
 Provider (and grid-feed) API keys live in `~/.config/ebb/env` — `KEY=VALUE`
 lines, created `0600` with a commented template on first `ebb install`. Both
 `ebb tick` (loads it at startup) and the systemd unit (`EnvironmentFile=`)

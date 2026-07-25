@@ -14,12 +14,169 @@
       },
       "defaultRegion": {
         "type": "string",
-        "description": "Default electricity-grid region when a tool call omits one. Examples: GB, US-CAL-CISO, US-TEX-ERCO, US-NE-ISNE, US-MIDA-PJM, FR, DE. When unset, ebb-ai guesses from the host machine's timezone (London→GB, Paris→FR, Berlin→DE, US Pacific→US-CAL-CISO, US Eastern→US-MIDA-PJM) and otherwise falls back to GB. Set this explicitly for precise control."
+        "description": "Default electricity-grid region when a tool call omits one. Examples: GB, US-CAL-CISO, US-TEX-ERCO, US-NE-ISNE, US-MIDA-PJM, FR, DE. When unset, ebb-ai guesses from the host machine's timezone (London→GB, Paris→FR, Berlin→DE, US Pacific→US-CAL-CISO, US Eastern→US-MIDA-PJM) and otherwise falls back to GB. Set this explicitly for precise control. (Replaces the EBB_DEFAULT_REGION environment variable, which still configures the ebb CLI and @ebb-ai/mcp server.)"
+      },
+      "electricityMapsApiKey": {
+        "type": "string",
+        "description": "Electricity Maps free-tier API key, used for every grid zone without a more specific feed. Replaces the EBB_ELECTRICITY_MAPS_API_KEY environment variable — the plugin reads no environment variables. Accepts the ${EBB_ELECTRICITY_MAPS_API_KEY} secret shorthand. Unset ⇒ those zones fall back to synthetic (mock) grid data."
+      },
+      "eiaApiKey": {
+        "type": "string",
+        "description": "US EIA v2 Open Data API key, used for the major US ISO/RTO zones. Replaces the EBB_EIA_API_KEY environment variable. Accepts the ${EBB_EIA_API_KEY} secret shorthand. Unset ⇒ US zones fall back to synthetic (mock) grid data."
+      },
+      "entsoeSecurityToken": {
+        "type": "string",
+        "description": "ENTSO-E Transparency Platform security token, used for the EU bidding zones (FR, DE, ES, IT, NL). Replaces the EBB_ENTSOE_SECURITY_TOKEN environment variable. Accepts the ${EBB_ENTSOE_SECURITY_TOKEN} secret shorthand. Unset ⇒ EU zones fall back to synthetic (mock) grid data."
+      },
+      "wattTimeUsername": {
+        "type": "string",
+        "description": "WattTime account username. With wattTimePassword, enables WattTime marginal (MOER) forecasts for the US ISO/RTO zones, taking precedence over the EIA feed. Replaces the WATTTIME_USERNAME environment variable. Accepts the ${WATTTIME_USERNAME} secret shorthand."
+      },
+      "wattTimePassword": {
+        "type": "string",
+        "description": "WattTime account password. Required together with wattTimeUsername. Replaces the WATTTIME_PASSWORD environment variable. Accepts the ${WATTTIME_PASSWORD} secret shorthand."
+      },
+      "anthropicApiKey": {
+        "type": "string",
+        "description": "Anthropic API key for dispatching scheduled tasks directly. Replaces the ANTHROPIC_API_KEY environment variable. Accepts the ${ANTHROPIC_API_KEY} secret shorthand. Usually unnecessary: when a tool call has captured the OpenClaw runtime LLM bridge, tasks dispatch through the gateway's own model with no key at all."
+      },
+      "openaiApiKey": {
+        "type": "string",
+        "description": "OpenAI API key for dispatching scheduled tasks directly. Replaces the OPENAI_API_KEY environment variable. Accepts the ${OPENAI_API_KEY} secret shorthand. Usually unnecessary — see anthropicApiKey."
+      },
+      "geminiApiKey": {
+        "type": "string",
+        "description": "Google Gemini API key. Gemini is not a gateway-bridge provider, so this (or googleApiKey) is the only way to dispatch gemini-* tasks. Replaces the GEMINI_API_KEY environment variable. Accepts the ${GEMINI_API_KEY} secret shorthand."
+      },
+      "googleApiKey": {
+        "type": "string",
+        "description": "Fallback Google API key, used for Gemini when geminiApiKey is unset. Replaces the GOOGLE_API_KEY environment variable. Accepts the ${GOOGLE_API_KEY} secret shorthand."
+      },
+      "ollamaHost": {
+        "type": "string",
+        "description": "Base URL of a local Ollama server, e.g. http://localhost:11434. Setting it is the explicit opt-in that registers the (keyless) Ollama adapter. Replaces the OLLAMA_HOST environment variable."
+      },
+      "ollamaModels": {
+        "type": "string",
+        "description": "Comma-separated Ollama model ids (e.g. \"llama3.1,mistral\") that should infer to the ollama provider when a task names them without an explicit provider. Replaces the OLLAMA_MODELS environment variable."
+      },
+      "carbonBudgetG": {
+        "type": "number",
+        "description": "Aggregate carbon budget in grams CO2e. Crossing it fires a one-shot alert through the configured delivery channel. Replaces the EBB_CARBON_BUDGET_G environment variable. Takes precedence over the same key in the ~/.ebb-ai/config file, which is still read.",
+        "exclusiveMinimum": 0
+      },
+      "carbonBudgetWindow": {
+        "anyOf": [
+          {
+            "type": "string",
+            "const": "daily"
+          },
+          {
+            "type": "string",
+            "const": "weekly"
+          },
+          {
+            "type": "string",
+            "const": "monthly"
+          }
+        ],
+        "description": "Rolling window the carbon budget is scoped to. Defaults to daily. Replaces the EBB_CARBON_BUDGET_WINDOW environment variable."
+      },
+      "deliveryStorePath": {
+        "type": "string",
+        "description": "Override the SQLite file holding per-task delivery preferences and outcomes. Defaults to ~/.ebb-ai/delivery.db. Replaces the EBB_DELIVERY_FILE environment variable."
+      },
+      "disableStartupDispatch": {
+        "type": "boolean",
+        "description": "Disable the background dispatch loop that drains due tasks every 60s. Replaces EBB_DISABLE_STARTUP_DISPATCH=1. Only for embedding contexts that drive dispatch by hand — with this on, scheduled tasks never run until a tool call triggers them."
       }
     },
     "additionalProperties": false
   },
-  "version": "0.13.0",
+  "uiHints": {
+    "dbPath": {
+      "advanced": true
+    },
+    "electricityMapsApiKey": {
+      "sensitive": true
+    },
+    "eiaApiKey": {
+      "sensitive": true
+    },
+    "entsoeSecurityToken": {
+      "sensitive": true
+    },
+    "wattTimeUsername": {
+      "sensitive": true
+    },
+    "wattTimePassword": {
+      "sensitive": true
+    },
+    "anthropicApiKey": {
+      "sensitive": true
+    },
+    "openaiApiKey": {
+      "sensitive": true
+    },
+    "geminiApiKey": {
+      "sensitive": true
+    },
+    "googleApiKey": {
+      "sensitive": true
+    },
+    "ollamaModels": {
+      "advanced": true
+    },
+    "deliveryStorePath": {
+      "advanced": true
+    },
+    "disableStartupDispatch": {
+      "advanced": true
+    }
+  },
+  "configContracts": {
+    "secretInputs": {
+      "paths": [
+        {
+          "path": "electricityMapsApiKey",
+          "expected": "string"
+        },
+        {
+          "path": "eiaApiKey",
+          "expected": "string"
+        },
+        {
+          "path": "entsoeSecurityToken",
+          "expected": "string"
+        },
+        {
+          "path": "wattTimeUsername",
+          "expected": "string"
+        },
+        {
+          "path": "wattTimePassword",
+          "expected": "string"
+        },
+        {
+          "path": "anthropicApiKey",
+          "expected": "string"
+        },
+        {
+          "path": "openaiApiKey",
+          "expected": "string"
+        },
+        {
+          "path": "geminiApiKey",
+          "expected": "string"
+        },
+        {
+          "path": "googleApiKey",
+          "expected": "string"
+        }
+      ]
+    }
+  },
+  "version": "0.15.1",
   "contracts": {
     "tools": [
       "schedule_task",

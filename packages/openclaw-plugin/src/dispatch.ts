@@ -9,12 +9,16 @@
  *     from a tool-call context. It runs the prompt through the gateway's
  *     own configured model + credentials, so NO separate API key is
  *     needed. This is the preferred path inside an OpenClaw gateway.
- *  2. Direct HTTP adapters built from `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`.
- *     A fallback for environments where the runtime bridge is unavailable
- *     (e.g. the standalone CLI, or a gateway that denies plugin LLM use).
+ *  2. Direct HTTP adapters built from the `anthropicApiKey` / `openaiApiKey`
+ *     (and `geminiApiKey` / `ollamaHost`) PLUGIN CONFIG fields. A fallback
+ *     for environments where the runtime bridge is unavailable (e.g. a
+ *     gateway that denies plugin LLM use).
  *
  * A task whose provider has no adapter is failed by `Scheduler.tick` with
  * a clear error instead of being left stuck in `scheduled`.
+ *
+ * This module reads NO environment variables — see `config.ts` for why and
+ * for the env-var → config-field migration table.
  */
 
 import {
@@ -24,6 +28,8 @@ import {
   type DispatchResult,
   type ProviderAdapter,
 } from "@ebb-ai/core";
+
+import type { PluginConfig } from "./config.js";
 
 /**
  * The dispatcher only runs prompts synchronously, so an adapter needs
@@ -280,13 +286,19 @@ function openaiAdapter(apiKey: string): DispatchAdapter {
 }
 
 /**
- * Build the dispatch adapters for the current environment. Prefers the
- * OpenClaw runtime bridge (no API key needed); otherwise builds direct
- * HTTP adapters from whatever provider keys are set.
+ * Build the dispatch adapters from PLUGIN CONFIG. Prefers the OpenClaw
+ * runtime bridge (no API key needed); otherwise builds direct HTTP adapters
+ * from whatever provider credentials the gateway config supplies.
+ *
+ * Nothing in this file reads the ambient environment. The provider keys used
+ * to come from `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY` /
+ * `GOOGLE_API_KEY` / `OLLAMA_HOST` / `OLLAMA_MODELS`; they now come from the
+ * identically-purposed `anthropicApiKey` / `openaiApiKey` / `geminiApiKey` /
+ * `googleApiKey` / `ollamaHost` / `ollamaModels` config fields, which accept
+ * OpenClaw's `${ENV_VAR}` secret shorthand so the gateway can still source
+ * them from the environment on the plugin's behalf. See `config.ts`.
  */
-export function buildAdapters(
-  env: Record<string, string | undefined> = process.env,
-): DispatchAdapters {
+export function buildAdapters(config: PluginConfig = {}): DispatchAdapters {
   const adapters: DispatchAdapters = {};
   if (bridgeComplete) {
     // The bridge routes through the gateway's own model — register it for
@@ -296,33 +308,33 @@ export function buildAdapters(
     adapters.anthropic = bridgeAdapter("anthropic");
     adapters.openai = bridgeAdapter("openai");
   } else {
-    const anthropicKey = env.ANTHROPIC_API_KEY?.trim();
+    const anthropicKey = config.anthropicApiKey?.trim();
     if (anthropicKey) adapters.anthropic = anthropicAdapter(anthropicKey);
-    const openaiKey = env.OPENAI_API_KEY?.trim();
+    const openaiKey = config.openaiApiKey?.trim();
     if (openaiKey) adapters.openai = openaiAdapter(openaiKey);
   }
   // Gemini and Ollama are distinct providers the gateway bridge cannot
   // represent, so build direct adapters whenever they are configured —
-  // regardless of the bridge. Gemini reads GEMINI_API_KEY (else GOOGLE_API_KEY);
-  // Ollama is local + keyless, gated on an explicit OLLAMA_HOST opt-in.
-  const geminiKey = env.GEMINI_API_KEY?.trim() || env.GOOGLE_API_KEY?.trim();
+  // regardless of the bridge. Gemini uses geminiApiKey (else googleApiKey);
+  // Ollama is local + keyless, gated on an explicit ollamaHost opt-in.
+  const geminiKey = config.geminiApiKey?.trim() || config.googleApiKey?.trim();
   if (geminiKey) adapters.gemini = new GeminiAdapter({ apiKey: geminiKey });
-  const ollamaHost = env.OLLAMA_HOST?.trim();
+  const ollamaHost = config.ollamaHost?.trim();
   if (ollamaHost) adapters.ollama = new OllamaAdapter({ host: ollamaHost });
   return adapters;
 }
 
 /** Summarise how scheduled tasks will be dispatched right now. */
 export function dispatchCapability(
-  env: Record<string, string | undefined> = process.env,
+  config: PluginConfig = {},
 ): DispatchCapability {
   if (bridgeComplete) return "openclaw-runtime";
   if (
-    env.ANTHROPIC_API_KEY?.trim() ||
-    env.OPENAI_API_KEY?.trim() ||
-    env.GEMINI_API_KEY?.trim() ||
-    env.GOOGLE_API_KEY?.trim() ||
-    env.OLLAMA_HOST?.trim()
+    config.anthropicApiKey?.trim() ||
+    config.openaiApiKey?.trim() ||
+    config.geminiApiKey?.trim() ||
+    config.googleApiKey?.trim() ||
+    config.ollamaHost?.trim()
   ) {
     return "api-key";
   }
@@ -332,16 +344,15 @@ export function dispatchCapability(
 export type Provider = "anthropic" | "openai" | "gemini" | "ollama";
 
 /**
- * Parse the configured Ollama model allow-list from `OLLAMA_MODELS`
- * (comma-separated model ids). A model in this list infers to the `ollama`
- * provider. Empty / unset → no models map to Ollama by inference (an explicit
+ * Parse the configured Ollama model allow-list from the `ollamaModels` config
+ * field (comma-separated model ids; formerly the `OLLAMA_MODELS` environment
+ * variable). A model in this list infers to the `ollama` provider. Empty /
+ * unset → no models map to Ollama by inference (an explicit
  * `provider: "ollama"` still works).
  */
-function ollamaModelSet(
-  env: Record<string, string | undefined> = process.env,
-): ReadonlySet<string> {
+function ollamaModelSet(config: PluginConfig = {}): ReadonlySet<string> {
   return new Set(
-    (env.OLLAMA_MODELS ?? "")
+    (config.ollamaModels ?? "")
       .split(",")
       .map((s) => s.trim().toLowerCase())
       .filter((s) => s.length > 0),
@@ -352,7 +363,7 @@ function ollamaModelSet(
  * Infer the provider from a model identifier:
  *   - `gpt-*` / `o<digit>*` (o1, o3-mini, …) → openai
  *   - `gemini-*` → gemini
- *   - a model listed in `OLLAMA_MODELS` → ollama
+ *   - a model listed in `ollamaModels` → ollama
  *   - `claude-*` → anthropic
  * Anything unrecognised defaults to `anthropic` (the historical default and
  * the safest fallback for a gateway that has an Anthropic key). Case- and
@@ -360,34 +371,34 @@ function ollamaModelSet(
  */
 export function inferProvider(
   model: string | undefined,
-  env: Record<string, string | undefined> = process.env,
+  config: PluginConfig = {},
 ): Provider {
   const m = (model ?? "").trim().toLowerCase();
   if (m.startsWith("gpt-") || m.startsWith("gpt") || /^o\d/.test(m)) return "openai";
   if (m.startsWith("gemini")) return "gemini";
-  if (m.length > 0 && ollamaModelSet(env).has(m)) return "ollama";
+  if (m.length > 0 && ollamaModelSet(config).has(m)) return "ollama";
   if (m.startsWith("claude")) return "anthropic";
   return "anthropic";
 }
 
 /**
- * Which providers can actually be dispatched in the current environment.
+ * Which providers can actually be dispatched with the current configuration.
  * With the runtime bridge captured, both hosted providers are dispatchable
  * (the bridge routes through the gateway's own model). Gemini / Ollama are
  * dispatchable whenever their own configuration is present, bridge or not.
  */
 export function availableProviders(
-  env: Record<string, string | undefined> = process.env,
+  config: PluginConfig = {},
 ): Set<Provider> {
   const set = new Set<Provider>();
   if (bridgeComplete) {
     set.add("anthropic");
     set.add("openai");
   } else {
-    if (env.ANTHROPIC_API_KEY?.trim()) set.add("anthropic");
-    if (env.OPENAI_API_KEY?.trim()) set.add("openai");
+    if (config.anthropicApiKey?.trim()) set.add("anthropic");
+    if (config.openaiApiKey?.trim()) set.add("openai");
   }
-  if (env.GEMINI_API_KEY?.trim() || env.GOOGLE_API_KEY?.trim()) set.add("gemini");
-  if (env.OLLAMA_HOST?.trim()) set.add("ollama");
+  if (config.geminiApiKey?.trim() || config.googleApiKey?.trim()) set.add("gemini");
+  if (config.ollamaHost?.trim()) set.add("ollama");
   return set;
 }

@@ -1,6 +1,6 @@
 {
   "name": "@ebb-ai/mcp",
-  "version": "0.13.0",
+  "version": "0.15.1",
   "description": "Model Context Protocol server for ebb-ai \u2014 carbon-aware scheduling tools for any MCP-compatible agent.",
   "license": "Apache-2.0",
   "author": "Vitalii Borovyk",
@@ -30,8 +30,8 @@
   },
   "devDependencies": {
     "typescript": "^5.6.3",
-    "vitest": "^2.1.5",
-    "tsx": "^4.22.3",
+    "vitest": "^4.1.10",
+    "tsx": "^4.23.1",
     "@types/node": "^22.10.0"
   },
   "repository": {

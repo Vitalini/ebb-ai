@@ -343,6 +343,24 @@ result = verify_receipt(signed)
             these in your MCP host&apos;s env block to unlock live data for more
             regions.
           </p>
+          <p className="text-sm text-fg-muted">
+            These environment variables configure the{" "}
+            <strong className="font-semibold text-fg">ebb CLI</strong> and the{" "}
+            <strong className="font-semibold text-fg">@ebb-ai/mcp server</strong>.
+            The <strong className="font-semibold text-fg">OpenClaw plugin</strong>{" "}
+            reads no environment variables at all — configure it through plugin
+            config instead, under{" "}
+            <code className="font-mono text-[13px]">
+              plugins.entries.ebb.config
+            </code>{" "}
+            in your gateway config. Each field below lists the plugin-config key
+            that replaces it, and OpenClaw resolves{" "}
+            <code className="font-mono text-[13px]">
+              &quot;${"{"}ENV_VAR{"}"}&quot;
+            </code>{" "}
+            in those fields, so you can keep exporting the same variables and let
+            the gateway read them.
+          </p>
         </header>
         <ul className="divide-y divide-rule overflow-hidden rounded-md border border-rule bg-bg-card text-sm">
           {ENVS.map((e) => (
@@ -351,6 +369,10 @@ result = verify_receipt(signed)
                 {e.name}
               </code>
               <p className="mt-1 text-fg-muted">{e.desc}</p>
+              <p className="mt-1 text-[13px] text-fg-muted">
+                OpenClaw plugin config:{" "}
+                <code className="font-mono text-[12px] text-fg">{e.plugin}</code>
+              </p>
             </li>
           ))}
         </ul>
@@ -497,33 +519,47 @@ const TOOLS: Tool[] = [
   },
 ];
 
-const ENVS: Array<{ name: string; desc: string }> = [
+/**
+ * Environment variables are HOST-level configuration: they configure the `ebb`
+ * CLI and the `@ebb-ai/mcp` server. The OpenClaw plugin reads no environment
+ * variables — `plugin` names the plugin-config field that replaces each one
+ * (set under `plugins.entries.ebb.config`; OpenClaw resolves `"${ENV_VAR}"`
+ * there, so the gateway can still source the value from the environment).
+ */
+const ENVS: Array<{ name: string; desc: string; plugin: string }> = [
   {
     name: "EBB_EIA_API_KEY",
+    plugin: "eiaApiKey",
     desc: "U.S. Energy Information Administration. Unlocks live AVERAGE-emissions data for the six US ISOs (CISO, ERCO, ISNE, MIDA-PJM, NY-NYIS, MIDW-MISO). Free at eia.gov/opendata/register.php.",
   },
   {
     name: "WATTTIME_USERNAME · WATTTIME_PASSWORD",
+    plugin: "wattTimeUsername · wattTimePassword",
     desc: "WattTime v3 account. Unlocks live MARGINAL-emissions (co2_moer) forecasts for the US ISOs — the honest signal for time-shifting. Takes precedence over EIA where covered and falls through to EIA on any error; the marginal signal is disclosed as signalType:\"marginal\" on forecasts and receipts. Free account at watttime.org.",
   },
   {
     name: "EBB_ENTSOE_SECURITY_TOKEN",
+    plugin: "entsoeSecurityToken",
     desc: "ENTSO-E Transparency Platform. Unlocks live data for European zones (FR, DE, ES, IT, NL). Free at transparency.entsoe.eu.",
   },
   {
     name: "EBB_ELECTRICITY_MAPS_API_KEY",
+    plugin: "electricityMapsApiKey",
     desc: "Electricity Maps free tier (100 req/day). Universal fallback for any other zone. Free at electricitymaps.com/free-tier-api.",
   },
   {
     name: "ANTHROPIC_API_KEY · OPENAI_API_KEY",
+    plugin: "anthropicApiKey · openaiApiKey",
     desc: "Required only if you want ebb-ai to actually dispatch provider calls (vs. just queueing them). Either is enough. anthropic and openai can auto-route through a 50%-cheaper Batch API when the deadline allows.",
   },
   {
     name: "GEMINI_API_KEY · GOOGLE_API_KEY",
+    plugin: "geminiApiKey · googleApiKey",
     desc: "Dispatch through Google Gemini (generativelanguage.googleapis.com). GEMINI_API_KEY is preferred; GOOGLE_API_KEY is the fallback. Sync-only (no Batch API).",
   },
   {
     name: "OLLAMA_HOST · OLLAMA_MODELS",
+    plugin: "ollamaHost · ollamaModels",
     desc: "Dispatch through a local Ollama server (default http://localhost:11434). Keyless — setting OLLAMA_HOST opts the ollama provider in. OLLAMA_MODELS (comma-separated) lets schedule_task infer the ollama provider from a bare model name. Sync-only.",
   },
 ];

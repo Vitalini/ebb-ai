@@ -19,7 +19,13 @@ import type {
 } from "./base.js";
 
 export interface OpenAIAdapterOptions {
+  /**
+   * API key. Supplied by the host — this library never reads the environment.
+   * The `ebb` CLI and `@ebb-ai/mcp` server read `OPENAI_API_KEY` and pass it
+   * here; the OpenClaw plugin passes `openaiApiKey` from plugin config.
+   */
   apiKey?: string;
+  /** Inject an already-constructed SDK client (tests, client reuse). */
   client?: unknown;
 }
 
@@ -78,7 +84,7 @@ export class OpenAIAdapter implements ProviderAdapter {
   private client: OpenAIClient | undefined;
 
   constructor(opts: OpenAIAdapterOptions = {}) {
-    this.apiKey = opts.apiKey ?? process.env.OPENAI_API_KEY;
+    this.apiKey = opts.apiKey;
     if (opts.client) {
       this.client = opts.client as OpenAIClient;
     }

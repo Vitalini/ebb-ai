@@ -11,22 +11,33 @@
  *   - webhook   → HTTP POST of the result to any URL
  *   - file      → write a rendered report to disk
  *   - queue     → no push; retrieve via check_queue_status (always on)
+ *   - os        → a native desktop notification on the gateway host
+ *                 (dependency-free, per-platform spawn — roadmap item 7)
  *
- * The report renders as Markdown, HTML, plain text or JSON.
+ * The report renders as Markdown, HTML, plain text, JSON or PDF. PDF
+ * (roadmap item 8) renders the HTML report through an OPTIONAL puppeteer
+ * loaded lazily at delivery time — never a hard dependency.
  *
  * Delivery preferences + last-delivery outcomes are kept in a small
  * plugin-owned SQLite table keyed by task id — no core schema change.
  */
 
+import { spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { homedir } from "node:os";
+import { homedir, platform as osPlatform } from "node:os";
 import { dirname, join } from "node:path";
 
 import type { CarbonAlert, CarbonReceipt, TaskRecord } from "@ebb-ai/core";
 
-export type DeliveryMode = "chat" | "telegram" | "webhook" | "file" | "queue";
-export type ReportFormat = "md" | "html" | "txt" | "json";
+export type DeliveryMode =
+  | "chat"
+  | "telegram"
+  | "webhook"
+  | "file"
+  | "queue"
+  | "os";
+export type ReportFormat = "md" | "html" | "txt" | "json" | "pdf";
 
 export type DeliveryConfig = {
   modes: DeliveryMode[];
@@ -47,7 +58,7 @@ export type DeliveryOption = {
   detail: string;
 };
 
-const ALL_FORMATS: ReportFormat[] = ["md", "html", "txt", "json"];
+const ALL_FORMATS: ReportFormat[] = ["md", "html", "txt", "json", "pdf"];
 
 // ── Integration scan ────────────────────────────────────────────────────────
 
@@ -104,12 +115,19 @@ export function scanDeliveryOptions(openclawConfig: unknown): DeliveryOption[] {
     {
       mode: "file",
       available: true,
-      detail: "write a report file (format: md, html, txt or json)",
+      detail: "write a report file (format: md, html, txt, json or pdf)",
     },
     {
       mode: "queue",
       available: true,
       detail: "keep in the queue, retrieve with check_queue_status (always on)",
+    },
+    {
+      mode: "os",
+      available: osNotifySupported(),
+      detail: osNotifySupported()
+        ? "native desktop notification on the gateway host"
+        : `native desktop notifications unsupported on ${osPlatform()}`,
     },
   ];
 }
@@ -141,11 +159,25 @@ function loadSqlite(): SqliteCtor {
     .DatabaseSync;
 }
 
+/**
+ * Where the delivery-preference store lives. Set from the plugin's
+ * `deliveryStorePath` config field (which replaces the old
+ * `EBB_DELIVERY_FILE` environment variable — this bundle reads no
+ * environment variables at all). `undefined` ⇒ the default path.
+ */
+let configuredStorePath: string | undefined;
+
+/**
+ * Point the delivery store at an explicit path. Called from the plugin entry
+ * whenever a resolved `PluginConfig` becomes available, and by tests.
+ * Passing `undefined` restores the default.
+ */
+export function setDeliveryStorePath(path: string | undefined): void {
+  configuredStorePath = path?.trim() || undefined;
+}
+
 function storePath(): string {
-  return (
-    process.env.EBB_DELIVERY_FILE?.trim() ||
-    join(homedir(), ".ebb-ai", "delivery.db")
-  );
+  return configuredStorePath ?? join(homedir(), ".ebb-ai", "delivery.db");
 }
 
 let cachedStore: { path: string; db: SqliteDb } | undefined;
@@ -358,6 +390,177 @@ export type DeliveryOutcome = {
   detail: string;
 };
 
+// ── OS-notification delivery (ROADMAP item 7) ────────────────────────────────
+//
+// A native desktop notification on the gateway host when a deferred task
+// completes. Dependency-free: each platform is driven through a binary that
+// already ships with the OS — no npm packages. An unsupported platform or a
+// missing binary records an honest failure outcome; it never throws into the
+// scheduler.
+
+/** Platforms for which we know how to raise a native notification. */
+function osNotifySupported(platform: NodeJS.Platform = osPlatform()): boolean {
+  return platform === "darwin" || platform === "linux" || platform === "win32";
+}
+
+// Injectable spawn so tests can assert the exact binary + args and simulate a
+// missing binary without touching the real OS. Defaults to node's spawn.
+type SpawnFn = typeof spawn;
+let spawnImpl: SpawnFn = spawn;
+/** Test hook: override the spawn used by OS-notification delivery. */
+export function __setSpawnForTest(fn: SpawnFn | undefined): void {
+  spawnImpl = fn ?? spawn;
+}
+
+/** Lightweight secret scrub for the notification body — the native surface is
+ *  outside the queue, so strip API-key / token-looking strings defensively
+ *  (mirrors core's receipt redaction set). */
+const NOTIFY_REDACTIONS: ReadonlyArray<RegExp> = [
+  /sk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}/g, // Anthropic / OpenAI keys
+  /\bBearer\s+[A-Za-z0-9_.-]{20,}/gi, // OAuth bearer tokens
+  /\bAKIA[0-9A-Z]{16}\b/g, // AWS access key id
+  /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36}\b/g, // GitHub tokens
+  /\bAIza[0-9A-Za-z_-]{35}\b/g, // Google API key
+  /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/g, // Slack tokens
+];
+
+function redactForNotification(text: string): string {
+  let out = text;
+  for (const re of NOTIFY_REDACTIONS) out = out.replace(re, "[REDACTED]");
+  return out;
+}
+
+/** A short grams-only carbon line for the notification body. */
+function carbonGrams(task: CompletedTask): string {
+  const rc = task.receipt;
+  if (rc && typeof rc.actualCarbonGCo2 === "number") {
+    return `${rc.actualCarbonGCo2} gCO2e`;
+  }
+  if (rc && typeof rc.estimatedCarbonGCo2 === "number") {
+    return `~${rc.estimatedCarbonGCo2} gCO2e`;
+  }
+  return "carbon n/a";
+}
+
+/** Notification title + body: task id, a short redacted result preview, and
+ *  a carbon receipt one-liner (grams). No secrets in the body. */
+export function notificationContent(task: CompletedTask): {
+  title: string;
+  body: string;
+} {
+  const preview = redactForNotification(resultText(task))
+    .replace(/\s+/g, " ")
+    .trim();
+  const short = preview.length > 140 ? `${preview.slice(0, 140)}…` : preview;
+  return {
+    title: `ebb-ai — task ${task.taskId} complete`,
+    body: `${short}\n${carbonGrams(task)}`,
+  };
+}
+
+/** Escape a string for embedding inside an AppleScript double-quoted literal. */
+function escapeAppleScript(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+/**
+ * Build the per-platform notification command (binary + argv). Pure and
+ * side-effect-free so tests can assert it directly; returns null for a
+ * platform we do not support.
+ */
+export function osNotifyCommand(
+  platform: NodeJS.Platform,
+  title: string,
+  body: string,
+): { cmd: string; args: string[] } | null {
+  if (platform === "darwin") {
+    const script = `display notification "${escapeAppleScript(
+      body,
+    )}" with title "${escapeAppleScript(title)}"`;
+    return { cmd: "osascript", args: ["-e", script] };
+  }
+  if (platform === "linux") {
+    return { cmd: "notify-send", args: [title, body] };
+  }
+  if (platform === "win32") {
+    const esc = (s: string) => s.replace(/'/g, "''");
+    const script = [
+      "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType=WindowsRuntime] | Out-Null;",
+      "$t = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02);",
+      `$texts = $t.GetElementsByTagName('text'); $texts.Item(0).AppendChild($t.CreateTextNode('${esc(
+        title,
+      )}')) | Out-Null; $texts.Item(1).AppendChild($t.CreateTextNode('${esc(
+        body,
+      )}')) | Out-Null;`,
+      "$toast = [Windows.UI.Notifications.ToastNotification]::new($t);",
+      "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('ebb-ai').Show($toast);",
+    ].join(" ");
+    return {
+      cmd: "powershell",
+      args: ["-NoProfile", "-NonInteractive", "-Command", script],
+    };
+  }
+  return null;
+}
+
+/** Run a spawned command, resolving to a delivery-style outcome. Never throws;
+ *  a missing binary (ENOENT) or a non-zero exit becomes an honest failure. */
+function runNotifyCommand(
+  cmd: string,
+  args: string[],
+): Promise<{ ok: boolean; detail: string }> {
+  return new Promise((resolve) => {
+    let child: ReturnType<SpawnFn>;
+    try {
+      child = spawnImpl(cmd, args, { stdio: "ignore" });
+    } catch (err) {
+      resolve({
+        ok: false,
+        detail: err instanceof Error ? err.message : String(err),
+      });
+      return;
+    }
+    let settled = false;
+    const done = (r: { ok: boolean; detail: string }) => {
+      if (!settled) {
+        settled = true;
+        resolve(r);
+      }
+    };
+    child.on("error", (err: NodeJS.ErrnoException) => {
+      done({
+        ok: false,
+        detail:
+          err.code === "ENOENT"
+            ? `${cmd} not found on the gateway host`
+            : err.message,
+      });
+    });
+    child.on("close", (code: number | null) => {
+      done(
+        code === 0 || code === null
+          ? { ok: true, detail: `notified via ${cmd}` }
+          : { ok: false, detail: `${cmd} exited ${code}` },
+      );
+    });
+  });
+}
+
+async function deliverOs(task: CompletedTask): Promise<DeliveryOutcome> {
+  const platform = osPlatform();
+  const { title, body } = notificationContent(task);
+  const command = osNotifyCommand(platform, title, body);
+  if (!command) {
+    return {
+      mode: "os",
+      ok: false,
+      detail: `os notifications unsupported on ${platform}`,
+    };
+  }
+  const res = await runNotifyCommand(command.cmd, command.args);
+  return { mode: "os", ok: res.ok, detail: res.detail };
+}
+
 async function deliverWebhook(
   task: CompletedTask,
   url: string,
@@ -390,11 +593,113 @@ async function deliverWebhook(
   }
 }
 
+// ── PDF delivery (ROADMAP item 8) ────────────────────────────────────────────
+//
+// PDF renders the existing HTML report template through puppeteer's headless
+// Chrome. puppeteer is an OPTIONAL, lazily-imported dependency — it is neither
+// bundled nor a hard dependency (esbuild marks it external, mirroring the
+// better-sqlite3 treatment). The import is a non-literal specifier so `tsc`
+// never demands the types and esbuild never tries to bundle Chrome. If it is
+// absent on the gateway host the delivery records a clear, actionable failure
+// (surfaced via check_queue_status) and the report still stays in the queue —
+// it never throws into the scheduler.
+
+interface PuppeteerPage {
+  setContent(html: string, opts?: { waitUntil?: string }): Promise<void>;
+  pdf(opts: {
+    path: string;
+    format?: string;
+    printBackground?: boolean;
+  }): Promise<unknown>;
+}
+interface PuppeteerBrowser {
+  newPage(): Promise<PuppeteerPage>;
+  close(): Promise<void>;
+}
+interface PuppeteerModule {
+  launch(opts?: Record<string, unknown>): Promise<PuppeteerBrowser>;
+}
+type PuppeteerImport = { default?: PuppeteerModule } & Partial<PuppeteerModule>;
+type PuppeteerImporter = () => Promise<PuppeteerImport>;
+
+// A non-literal specifier: `tsc --noEmit` does not try to resolve puppeteer's
+// (absent) types, and esbuild leaves the dynamic import in place instead of
+// bundling headless Chrome.
+const PUPPETEER_MODULE = "puppeteer";
+const importPuppeteer: PuppeteerImporter = () =>
+  import(PUPPETEER_MODULE) as Promise<PuppeteerImport>;
+
+// Injectable so tests can stub both the success path (a fake puppeteer) and the
+// absent-module path without installing the real (heavy) dependency.
+let puppeteerImporter: PuppeteerImporter = importPuppeteer;
+
+/** Test hook: override (or reset) the puppeteer importer used by PDF delivery. */
+export function __setPuppeteerImportForTest(
+  fn: PuppeteerImporter | undefined,
+): void {
+  puppeteerImporter = fn ?? importPuppeteer;
+}
+
+/** Actionable install guidance — puppeteer resolves from the plugin's install
+ *  directory in the gateway, so that's where the operator must add it. */
+const PUPPETEER_INSTALL_HINT =
+  "pdf delivery needs the optional 'puppeteer' package, which is not installed. " +
+  "Install it where the gateway loaded the plugin, then restart the gateway: " +
+  "`cd ~/.openclaw/extensions/ebb && npm install puppeteer`. " +
+  "The report was kept in the queue.";
+
+function isModuleNotFound(err: unknown): boolean {
+  const code = (err as NodeJS.ErrnoException | undefined)?.code;
+  return code === "ERR_MODULE_NOT_FOUND" || code === "MODULE_NOT_FOUND";
+}
+
+async function deliverPdf(
+  task: CompletedTask,
+  path: string,
+): Promise<DeliveryOutcome> {
+  let mod: PuppeteerImport;
+  try {
+    mod = await puppeteerImporter();
+  } catch (err) {
+    return {
+      mode: "file",
+      ok: false,
+      detail: isModuleNotFound(err)
+        ? PUPPETEER_INSTALL_HINT
+        : `pdf delivery could not load puppeteer: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+    };
+  }
+  const puppeteer = mod.default ?? (mod as PuppeteerModule);
+  const html = formatReport(task, "html");
+  let browser: PuppeteerBrowser | undefined;
+  try {
+    await mkdir(dirname(path), { recursive: true });
+    browser = await puppeteer.launch();
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: "networkidle0" });
+    await page.pdf({ path, format: "A4", printBackground: true });
+    return { mode: "file", ok: true, detail: `wrote ${path} (pdf)` };
+  } catch (err) {
+    return {
+      mode: "file",
+      ok: false,
+      detail: `pdf render failed: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    };
+  } finally {
+    await browser?.close().catch(() => {});
+  }
+}
+
 async function deliverFile(
   task: CompletedTask,
   path: string,
   format: ReportFormat,
 ): Promise<DeliveryOutcome> {
+  if (format === "pdf") return deliverPdf(task, path);
   try {
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, formatReport(task, format));
@@ -475,6 +780,10 @@ export async function deliverResult(
           ? await deliverFile(task, config.filePath, config.format ?? "md")
           : { mode, ok: false, detail: "no file_path" },
       );
+      continue;
+    }
+    if (mode === "os") {
+      outcomes.push(await deliverOs(task));
       continue;
     }
     if (mode === "chat" || mode === "telegram") {

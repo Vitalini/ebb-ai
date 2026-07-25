@@ -19,7 +19,12 @@ import type {
 } from "./base.js";
 
 export interface AnthropicAdapterOptions {
-  /** API key. Defaults to process.env.ANTHROPIC_API_KEY. */
+  /**
+   * API key. Supplied by the host — this library never reads the environment.
+   * The `ebb` CLI and `@ebb-ai/mcp` server read `ANTHROPIC_API_KEY` and pass
+   * it here; the OpenClaw plugin passes `anthropicApiKey` from plugin config.
+   * Without a key (and without `client`), `ready` is false.
+   */
   apiKey?: string;
   /**
    * Inject an already-constructed SDK client. Useful for tests and for
@@ -45,7 +50,7 @@ export class AnthropicAdapter implements ProviderAdapter {
   private client: AnthropicMessagesClient | undefined;
 
   constructor(opts: AnthropicAdapterOptions = {}) {
-    this.apiKey = opts.apiKey ?? process.env.ANTHROPIC_API_KEY;
+    this.apiKey = opts.apiKey;
     if (opts.client) {
       this.client = opts.client as AnthropicMessagesClient;
     }

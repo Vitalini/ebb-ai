@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Nav } from "@/components/nav";
 import "./globals.css";
 
@@ -86,7 +87,7 @@ const jsonLd = {
       operatingSystem: "macOS, Linux, Windows",
       offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
       license: "https://opensource.org/licenses/Apache-2.0",
-      softwareVersion: "0.13.0",
+      softwareVersion: "0.15.1",
       author: {
         "@type": "Person",
         name: "Vitalii Borovyk",
@@ -109,16 +110,21 @@ const jsonLd = {
   ],
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // The proxy-generated per-request nonce. The JSON-LD tag must carry it,
+  // otherwise 'strict-dynamic' blocks this inline script. Reading `headers()`
+  // is also what opts pages into dynamic rendering (see proxy.ts).
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html lang="en">
       <head>
         <script
           type="application/ld+json"
+          nonce={nonce}
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       </head>
@@ -140,7 +146,7 @@ export default function RootLayout({
               (mock fallback when no key is configured)
             </p>
             <p className="font-mono text-fg-dim">
-              v0.13.0 · operator preview · UTC-aligned
+              v0.15.1 · operator preview · UTC-aligned
             </p>
           </div>
         </footer>

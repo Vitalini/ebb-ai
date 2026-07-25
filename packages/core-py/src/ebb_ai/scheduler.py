@@ -1697,7 +1697,7 @@ class Scheduler:
             alerted = await self._store.has_budget_alert(
                 budget.window_kind, usage.window_start, budget.threshold_g
             )
-        except Exception:  # noqa: BLE001 — best-effort probe
+        except Exception:
             alerted = False
         pct = (
             round((usage.used_g / budget.threshold_g) * 100)
@@ -1733,7 +1733,7 @@ class Scheduler:
         now = _now_utc()
         try:
             rows = await self._store.list_by_status("completed")
-        except Exception:  # noqa: BLE001 — a store read failure disables the check
+        except Exception:
             return
         usage = carbon_budget_usage(rows, budget.window_kind, now)
         if usage.used_g < budget.threshold_g:
@@ -1773,7 +1773,7 @@ class Scheduler:
                 crossing_id,
                 _iso_utc(now),
             )
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             _log.warning(
                 "[ebb-ai/scheduler] failed to record carbon-budget alert "
                 "marker: %s",
@@ -1795,7 +1795,7 @@ class Scheduler:
                 res = hook(alert)
                 if asyncio.iscoroutine(res):
                     await res
-        except Exception as err:  # noqa: BLE001 — a throwing hook must not break dispatch
+        except Exception as err:
             _log.warning(
                 "[ebb-ai/scheduler] on_carbon_alert hook raised (%s); ignoring",
                 err,

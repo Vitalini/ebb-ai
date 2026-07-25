@@ -39,6 +39,28 @@ Modern AI agents call LLM APIs synchronously by default. Three costs follow:
 
 ---
 
+## Environment variables
+
+The Python package reads provider credentials from the environment
+(`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, …) as a convenience — you are the host
+here: you import `ebb_ai` directly into your own script, notebook or service.
+
+> **Deliberate asymmetry with the TypeScript packages.** `@ebb-ai/core` (the TS
+> mirror of this library) is *environment-pure*: it reads no environment
+> variables and takes every credential as an explicit argument, because it gets
+> bundled into the `@vitalini/ebb` OpenClaw plugin, and ClawHub's ClawScan flags
+> any ambient-environment read in a bundle that also makes network calls. This
+> Python package is never bundled into a third-party plugin, so the ergonomic
+> fallbacks stay. Passing credentials explicitly (`AnthropicAdapter(api_key=…)`)
+> works here too and is preferred in library code.
+>
+> Environment variables configure the **`ebb` CLI** and the **`@ebb-ai/mcp`
+> server**; the **OpenClaw plugin** is configured through OpenClaw plugin config
+> (`plugins.entries.ebb.config`), where each field names the variable it
+> replaced.
+
+---
+
 ## Install
 
 ```bash

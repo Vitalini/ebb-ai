@@ -464,7 +464,7 @@ exports[`tool surface — divergence canary > per-host neutral schema snapshot (
           "required": false,
         },
         {
-          "description": "How to deliver the result when the task completes — one or more of: chat (the user's active OpenClaw chat), telegram, webhook, file, queue. Default: chat.",
+          "description": "How to deliver the result when the task completes — one or more of: chat (the user's active OpenClaw chat), telegram, webhook, file, queue, os (a native desktop notification on the gateway host). Default: chat.",
           "itemKind": "enum",
           "kind": "array",
           "name": "deliver",
@@ -475,6 +475,7 @@ exports[`tool surface — divergence canary > per-host neutral schema snapshot (
             "webhook",
             "file",
             "queue",
+            "os",
           ],
         },
         {
@@ -490,7 +491,7 @@ exports[`tool surface — divergence canary > per-host neutral schema snapshot (
           "required": false,
         },
         {
-          "description": "Report format for 'file' delivery. Default: md.",
+          "description": "Report format for 'file' delivery: md, html, txt, json, or pdf (pdf renders the HTML report via puppeteer if installed on the gateway). Default: md.",
           "kind": "enum",
           "name": "file_format",
           "required": false,
@@ -499,6 +500,7 @@ exports[`tool surface — divergence canary > per-host neutral schema snapshot (
             "html",
             "txt",
             "json",
+            "pdf",
           ],
         },
       ],
@@ -591,7 +593,7 @@ exports[`tool surface — divergence canary > per-host neutral schema snapshot (
       ],
     },
     {
-      "description": "Set or change how a scheduled task's result is delivered when it completes. Call this right after schedule_task, once you have ASKED the user how they want the result. The user may pick several modes. Modes: chat (their active OpenClaw chat), telegram, webhook (needs webhook_url), file (needs file_path; format md/html/txt/json), queue (no push — retrievable via check_queue_status). Default if the user is unsure: chat.",
+      "description": "Set or change how a scheduled task's result is delivered when it completes. Call this right after schedule_task, once you have ASKED the user how they want the result. The user may pick several modes. Modes: chat (their active OpenClaw chat), telegram, webhook (needs webhook_url), file (needs file_path; format md/html/txt/json/pdf), queue (no push — retrievable via check_queue_status), os (a native desktop notification on the gateway host). PRIVACY BOUNDARY — chat and queue keep the result inside OpenClaw; webhook POSTs the FULL result to whatever URL is supplied (ebb does not restrict or inspect that destination), telegram sends the FULL result to a third-party service, and file writes it to any path on the gateway host. Never pick one of those three on the user's behalf: confirm the destination with them first, and for sensitive tasks prefer chat or queue. Default if the user is unsure: chat.",
       "name": "set_delivery",
       "params": [
         {
@@ -613,6 +615,7 @@ exports[`tool surface — divergence canary > per-host neutral schema snapshot (
             "webhook",
             "file",
             "queue",
+            "os",
           ],
         },
         {
@@ -628,7 +631,7 @@ exports[`tool surface — divergence canary > per-host neutral schema snapshot (
           "required": false,
         },
         {
-          "description": "Report format for 'file' delivery. Default: md.",
+          "description": "Report format for 'file' delivery: md, html, txt, json, or pdf (pdf renders the HTML report via puppeteer if installed on the gateway). Default: md.",
           "kind": "enum",
           "name": "file_format",
           "required": false,
@@ -637,6 +640,7 @@ exports[`tool surface — divergence canary > per-host neutral schema snapshot (
             "html",
             "txt",
             "json",
+            "pdf",
           ],
         },
       ],

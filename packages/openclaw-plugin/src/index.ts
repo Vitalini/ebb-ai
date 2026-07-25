@@ -12,8 +12,22 @@
  * Scheduled provider-call tasks are executed in-process: a background loop
  * runs `Scheduler.tick`, dispatching due tasks through OpenClaw's own model
  * runtime (`api.runtime.llm.complete`, captured from a tool-call context) —
- * no separate API key required — or through `ANTHROPIC_API_KEY` /
- * `OPENAI_API_KEY` as a fallback.
+ * no separate API key required — or through the `anthropicApiKey` /
+ * `openaiApiKey` plugin-config fields as a fallback.
+ *
+ * ── CONFIGURATION: PLUGIN CONFIG ONLY, NO ENVIRONMENT VARIABLES ────────────
+ * This bundle reads ZERO environment variables. Everything — grid-feed
+ * credentials, provider credentials, the carbon-budget threshold, the
+ * delivery-store path, the startup opt-out — comes from OpenClaw plugin
+ * config (`plugins.entries.ebb.config`), declared in `./config.ts` and
+ * mirrored into `openclaw.plugin.json`. `@ebb-ai/core` is environment-pure for
+ * the same reason. Each config field's description names the environment
+ * variable it replaces, and the credential fields accept OpenClaw's
+ * `${ENV_VAR}` secret shorthand, so a user who exports the old variables can
+ * keep doing so — the GATEWAY reads them, not this plugin.
+ *
+ * (The `ebb` CLI and the `@ebb-ai/mcp` server are separate hosts and still
+ * read those environment variables directly; their behaviour is unchanged.)
  *
  * Startup / restart behaviour (important — read before relying on the
  * "background loop"): the loop is started at module load (see
@@ -26,7 +40,8 @@
  *     from a tool-call `context`, never present at boot; and
  *   - the gateway chat/config (`api.config`) used for chat/telegram delivery.
  * So at boot the dispatcher can dispatch via a direct API key
- * (ANTHROPIC_API_KEY / OPENAI_API_KEY) if one is set, but tasks whose only
+ * (`anthropicApiKey` / `openaiApiKey`, recovered from the captured gateway
+ * config once available), but tasks whose only
  * viable path is the runtime bridge are SKIPPED (left `scheduled`, logged
  * once per provider) until the first tool call captures the bridge — see
  * `runDispatchTick`. This is honest about the limitation rather than failing
@@ -90,6 +105,15 @@ import {
 } from "./dispatch.js";
 
 import {
+  carbonBudgetOverrides,
+  gridCredentials,
+  mergeConfig,
+  pluginConfigFromGatewayConfig,
+  pluginConfigSchema,
+  type PluginConfig,
+} from "./config.js";
+
+import {
   deliverCarbonAlert,
   deliverResult,
   formatCarbonAlertMessage,
@@ -98,6 +122,7 @@ import {
   recordDeliveryOutcomes,
   scanDeliveryOptions,
   setDeliveryConfig,
+  setDeliveryStorePath,
   telegramTarget,
   validateDeliveryConfig,
   type DeliveryConfig,
@@ -109,18 +134,14 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { mkdirSync } from "node:fs";
 
-type PluginConfig = {
-  dbPath?: string;
-  defaultRegion?: string;
-};
-
 // Loud SYNTHETIC-data disclosure, mirroring the @ebb-ai/mcp server so the two
 // surfaces read identically. "mock" grid source ⇒ the carbon numbers are
 // illustrative, not measured.
 const SYNTHETIC_GRID_WARNING =
   "⚠ SYNTHETIC (mock) grid data — no live grid feed was available for this region, " +
   "so the carbon numbers above are illustrative, not measured. " +
-  "Set EBB_ELECTRICITY_MAPS_API_KEY (or another supported feed key) for real intensity.";
+  "Set the plugin's electricityMapsApiKey (or another supported feed credential) " +
+  "in the gateway config for real intensity.";
 
 /**
  * The model a task carries when the caller does not pass one, per provider.
@@ -139,15 +160,20 @@ const DEFAULT_MODEL_BY_PROVIDER: Record<
   ollama: "llama3.1",
 };
 
-/** The env var that configures each provider's direct-dispatch route. */
-const PROVIDER_KEY_ENV: Record<
+/**
+ * The plugin-config field that configures each provider's direct-dispatch
+ * route. (These replaced the ANTHROPIC_API_KEY / OPENAI_API_KEY /
+ * GEMINI_API_KEY / OLLAMA_HOST environment variables — the plugin reads no
+ * environment variables.)
+ */
+const PROVIDER_CONFIG_FIELD: Record<
   "anthropic" | "openai" | "gemini" | "ollama",
   string
 > = {
-  anthropic: "ANTHROPIC_API_KEY",
-  openai: "OPENAI_API_KEY",
-  gemini: "GEMINI_API_KEY",
-  ollama: "OLLAMA_HOST",
+  anthropic: "anthropicApiKey",
+  openai: "openaiApiKey",
+  gemini: "geminiApiKey",
+  ollama: "ollamaHost",
 };
 
 /**
@@ -189,14 +215,76 @@ type ToolDefinition = {
 };
 type ToolFactory = (def: ToolDefinition) => unknown;
 
+/**
+ * Wrap the SDK's tool factory so every `execute` receives the RESOLVED plugin
+ * config instead of the raw one.
+ *
+ * One seam for all ten tools: the raw `config` OpenClaw passes is merged over
+ * this plugin's block in the captured gateway config, and the delivery-store
+ * path is published to the delivery module. Doing it here means no tool body
+ * has to remember to resolve config — and, critically, no tool body has any
+ * reason to reach for the ambient environment.
+ */
+function withEffectiveConfig(
+  rawTool: ToolFactory,
+  build: (tool: ToolFactory) => unknown[],
+): unknown[] {
+  const wrapped: ToolFactory = (def) =>
+    rawTool({
+      ...def,
+      execute: (params: never, config: PluginConfig, context?: unknown) =>
+        def.execute(params, effectiveConfig(config), context),
+    });
+  return build(wrapped);
+}
+
+// ── Effective plugin config ─────────────────────────────────────────────────
+// OpenClaw hands each tool its own config as the second argument of `execute`.
+// The background dispatcher and the startup bootstrap have no such argument,
+// so they fall back to this plugin's block inside the captured gateway config
+// (`api.config` → `plugins.entries.ebb.config`) once a tool call has captured
+// it. The explicit argument always wins.
+//
+// This is the plugin's ONLY configuration source. Nothing here reads the
+// ambient environment — see `config.ts` for the env-var → config-field map.
+
+function effectiveConfig(config: PluginConfig = {}): PluginConfig {
+  const merged = mergeConfig(
+    pluginConfigFromGatewayConfig(getCapturedOpenClawConfig()),
+    config,
+  );
+  // The delivery store is reached from module-level helpers with no config
+  // parameter, so publish the resolved path to it here.
+  setDeliveryStorePath(merged.deliveryStorePath);
+  return merged;
+}
+
 // ── Grid feed (no SQLite) ───────────────────────────────────────────────────
 // The grid feed has no database dependency, so `recommend_window` and
 // `get_grid_forecast` keep working even when the SQLite queue cannot open.
-let cachedGridFeed: ReturnType<typeof buildDefaultGridFeed> | undefined;
+//
+// Cached per credential set: the feed is a pure function of the five grid
+// credentials, and re-deriving it on a config change is what makes a newly
+// configured API key take effect without a gateway restart.
+let cachedGridFeed:
+  | { key: string; feed: ReturnType<typeof buildDefaultGridFeed> }
+  | undefined;
 
-function getGridFeed(): ReturnType<typeof buildDefaultGridFeed> {
-  cachedGridFeed ??= buildDefaultGridFeed();
-  return cachedGridFeed;
+function getGridFeed(
+  config: PluginConfig = {},
+): ReturnType<typeof buildDefaultGridFeed> {
+  const credentials = gridCredentials(config);
+  const key = JSON.stringify([
+    credentials.electricityMapsApiKey ?? "",
+    credentials.eiaApiKey ?? "",
+    credentials.entsoeSecurityToken ?? "",
+    credentials.wattTimeUsername ?? "",
+    credentials.wattTimePassword ?? "",
+  ]);
+  if (cachedGridFeed?.key !== key) {
+    cachedGridFeed = { key, feed: buildDefaultGridFeed(credentials) };
+  }
+  return cachedGridFeed.feed;
 }
 
 // ── Queue runtime (SQLite-backed) ───────────────────────────────────────────
@@ -243,13 +331,18 @@ function getQueueRuntime(config: PluginConfig): QueueRuntime {
     );
   }
 
-  // Aggregate carbon-budget alerts (ROADMAP item 4): read the local budget
-  // config (env wins over ~/.ebb-ai/config). When set, a crossing inside
-  // Scheduler.tick routes through the SAME delivery machinery — chat by
-  // default via the captured gateway config — and is logged to the gateway.
-  const carbonBudget = loadCarbonBudgetConfig();
+  // Aggregate carbon-budget alerts (ROADMAP item 4): the ~/.ebb-ai/config
+  // FILE is still read by core, with the plugin's carbonBudgetG /
+  // carbonBudgetWindow config fields taking precedence (they replaced the
+  // EBB_CARBON_BUDGET_G / EBB_CARBON_BUDGET_WINDOW environment variables).
+  // When set, a crossing inside Scheduler.tick routes through the SAME
+  // delivery machinery — chat by default via the captured gateway config —
+  // and is logged to the gateway.
+  const carbonBudget = loadCarbonBudgetConfig({
+    env: carbonBudgetOverrides(config),
+  });
   const scheduler = new Scheduler({
-    feed: getGridFeed(),
+    feed: getGridFeed(config),
     store,
     defaultRegion: resolveRegion(undefined, config.defaultRegion).region,
     eager: false,
@@ -312,8 +405,11 @@ export async function runDispatchTick(
   config: PluginConfig,
   adaptersOverride?: DispatchAdapters,
 ): Promise<TickResult> {
-  const { scheduler, store } = getQueueRuntime(config);
-  const adapters = adaptersOverride ?? buildAdapters();
+  // The background sweep has no tool-call config of its own, so fold in the
+  // plugin block from the captured gateway config when one is available.
+  const cfg = effectiveConfig(config);
+  const { scheduler, store } = getQueueRuntime(cfg);
+  const adapters = adaptersOverride ?? buildAdapters(cfg);
   const covered = new Set<string>(
     Object.entries(adapters)
       .filter(([, a]) => a !== undefined)
@@ -333,11 +429,12 @@ export async function runDispatchTick(
       loggedSkippedProviders.add(provider);
       // eslint-disable-next-line no-console
       const keyHint =
-        PROVIDER_KEY_ENV[provider as keyof typeof PROVIDER_KEY_ENV] ??
+        PROVIDER_CONFIG_FIELD[provider as keyof typeof PROVIDER_CONFIG_FIELD] ??
         "its provider credential";
       console.warn(
         `[ebb-ai] dispatcher: no adapter for provider "${provider}" yet ` +
-          `(runtime bridge is captured on the first tool call; ${keyHint} is not set). ` +
+          `(runtime bridge is captured on the first tool call; plugin config ` +
+          `"${keyHint}" is not set). ` +
           `Leaving those tasks scheduled; they dispatch once an adapter is available.`,
       );
     }
@@ -447,9 +544,32 @@ async function onCarbonAlert(alert: CarbonAlert): Promise<void> {
   }
 }
 
+// Timer handles, kept so `disableStartupDispatch: true` arriving later (via
+// plugin config on the first tool call) can actually stop the loop.
+let dispatchFirstSweepTimer: ReturnType<typeof setTimeout> | undefined;
+let dispatchIntervalTimer: ReturnType<typeof setInterval> | undefined;
+
+/** Stop the background dispatch loop, if running. Idempotent. */
+function stopDispatcher(): void {
+  if (dispatchFirstSweepTimer) clearTimeout(dispatchFirstSweepTimer);
+  if (dispatchIntervalTimer) clearInterval(dispatchIntervalTimer);
+  dispatchFirstSweepTimer = undefined;
+  dispatchIntervalTimer = undefined;
+  dispatcherStarted = false;
+}
+
 /** Start the background dispatch loop — once per process. */
 function ensureDispatcher(config: PluginConfig): void {
   activeDispatchConfig = config;
+  // `disableStartupDispatch` (formerly EBB_DISABLE_STARTUP_DISPATCH=1) is a
+  // plugin-config field, and plugin config only reaches this module once a
+  // tool call supplies it — after the module-load bootstrap may already have
+  // started the loop. So honour it here by STOPPING an already-running loop,
+  // not just by declining to start one.
+  if (config.disableStartupDispatch === true) {
+    stopDispatcher();
+    return;
+  }
   if (dispatcherStarted) return;
   dispatcherStarted = true;
   const sweep = (): void => {
@@ -459,8 +579,10 @@ function ensureDispatcher(config: PluginConfig): void {
     void runDispatchTick(activeDispatchConfig).catch(() => {});
   };
   // First sweep shortly after start — catches already-overdue tasks.
-  setTimeout(sweep, 4000).unref?.();
-  setInterval(sweep, DISPATCH_INTERVAL_MS).unref?.();
+  dispatchFirstSweepTimer = setTimeout(sweep, 4000);
+  dispatchFirstSweepTimer.unref?.();
+  dispatchIntervalTimer = setInterval(sweep, DISPATCH_INTERVAL_MS);
+  dispatchIntervalTimer.unref?.();
 }
 
 // ── Startup bootstrap ────────────────────────────────────────────────────────
@@ -477,18 +599,26 @@ function ensureDispatcher(config: PluginConfig): void {
 //      (tests, `--version`, inspect), while a long-lived gateway keeps
 //      draining every DISPATCH_INTERVAL_MS.
 // `ensureDispatcher` is idempotent, so the later first-tool-call path is a
-// no-op once this has fired. `EBB_DISABLE_STARTUP_DISPATCH=1` opts out (tests
-// / embedding contexts that drive `runDispatchTick` by hand).
+// no-op once this has fired.
+//
+// OPT-OUT: `disableStartupDispatch: true` in plugin config (which replaced
+// `EBB_DISABLE_STARTUP_DISPATCH=1`) suppresses this — but note the ordering
+// limitation it inherits from the SDK: at module load NO config exists yet, so
+// the flag can only be honoured (a) when a caller passes it here directly —
+// how the test suite and embedders drive it — or (b) on the first tool call,
+// where `ensureDispatcher` STOPS the loop this bootstrap started. It cannot
+// prevent the single deferred queue-open below. That is a deliberate trade:
+// the alternative was reading the ambient environment, which is exactly what
+// this plugin no longer does.
 let startupBootstrapped = false;
-export function bootstrapDispatcherOnStartup(
-  config: PluginConfig = {},
-  env: Record<string, string | undefined> = process.env,
-): void {
+export function bootstrapDispatcherOnStartup(config: PluginConfig = {}): void {
   if (startupBootstrapped) return;
   startupBootstrapped = true;
-  if (env.EBB_DISABLE_STARTUP_DISPATCH === "1") return;
+  if (config.disableStartupDispatch === true) return;
   // Defer the queue open + dispatcher start off the import path.
   setTimeout(() => {
+    // Re-check at fire time: a caller may have opted out in the meantime.
+    if (startupDispatchSuppressed) return;
     try {
       // getQueueRuntime() calls ensureDispatcher() internally.
       getQueueRuntime(config);
@@ -497,6 +627,21 @@ export function bootstrapDispatcherOnStartup(
       // opens (with a clear error) on the first tool call instead.
     }
   }, 1000).unref?.();
+}
+
+/**
+ * Suppress the module-load startup dispatcher from OUTSIDE the plugin entry.
+ *
+ * `defineToolPlugin` has no init hook, so `bootstrapDispatcherOnStartup()` runs
+ * at import — before any caller can pass `disableStartupDispatch`. This seam
+ * lets an embedder (and the test suite, via `vitest` `setupFiles`) opt out
+ * between the import and the deferred queue-open 1s later. It replaces the
+ * `EBB_DISABLE_STARTUP_DISPATCH=1` environment variable for that purpose;
+ * inside a gateway, prefer the `disableStartupDispatch` plugin-config field.
+ */
+let startupDispatchSuppressed = false;
+export function suppressStartupDispatch(suppressed = true): void {
+  startupDispatchSuppressed = suppressed;
 }
 
 // Kick the dispatcher at module load — the manifest's activation.onStartup
@@ -509,24 +654,11 @@ export default defineToolPlugin({
   name: "ebb-ai — carbon-aware deferral",
   description:
     'Auto-defer "do it later" tasks to the cleanest electricity-grid hour inside the deadline.',
-  configSchema: Type.Object(
-    {
-      dbPath: Type.Optional(
-        Type.String({
-          description:
-            "Override the SQLite queue path. Defaults to ~/.ebb-ai/queue.db (shared with the @ebb-ai/mcp server and @ebb-ai/cli).",
-        }),
-      ),
-      defaultRegion: Type.Optional(
-        Type.String({
-          description:
-            "Default electricity-grid region when a tool call omits one. Examples: GB, US-CAL-CISO, US-TEX-ERCO, US-NE-ISNE, US-MIDA-PJM, FR, DE. When unset, ebb-ai guesses from the host machine's timezone (London→GB, Paris→FR, Berlin→DE, US Pacific→US-CAL-CISO, US Eastern→US-MIDA-PJM) and otherwise falls back to GB. Set this explicitly for precise control.",
-        }),
-      ),
-    },
-    { additionalProperties: false },
-  ),
-  tools: (tool: ToolFactory) => [
+  // Every setting lives in ./config.ts, which is also the source of truth for
+  // openclaw.plugin.json's configSchema. The plugin reads no environment
+  // variables; each field's description names the variable it replaced.
+  configSchema: pluginConfigSchema,
+  tools: (rawTool: ToolFactory) => withEffectiveConfig(rawTool, (tool) => [
     // ── schedule_task ─────────────────────────────────────────────────────
     tool({
       name: "schedule_task",
@@ -559,7 +691,7 @@ export default defineToolPlugin({
         // Provider: explicit param wins; else infer from the model prefix
         // (gpt-*/o<n>* → openai, gemini-* → gemini, an OLLAMA_MODELS-listed id
         // → ollama, claude-* → anthropic; default anthropic).
-        const provider = params.provider ?? inferProvider(explicitModel);
+        const provider = params.provider ?? inferProvider(explicitModel, config);
         const providerInferred = params.provider === undefined;
         // A concrete model is stored for the direct-API-key path and for the
         // audit record; the OpenClaw runtime bridge ignores it and uses the
@@ -569,7 +701,7 @@ export default defineToolPlugin({
 
         // How this task will execute when due: "openclaw-runtime" (gateway
         // model, no key), "api-key", or "unconfigured".
-        const dispatch = dispatchCapability();
+        const dispatch = dispatchCapability(config);
 
         // Key validation on the API-key dispatch path: if the ONLY route is a
         // direct API key and the chosen provider has none, the task would
@@ -587,14 +719,15 @@ export default defineToolPlugin({
         const routingActive =
           Array.isArray(params.candidates) && params.candidates.length >= 2;
         if (dispatch === "api-key" && !routingActive) {
-          const providers = availableProviders();
+          const providers = availableProviders(config);
           if (!providers.has(provider)) {
-            const keyName = PROVIDER_KEY_ENV[provider];
+            const keyName = PROVIDER_CONFIG_FIELD[provider];
             throw new Error(
               `schedule_task rejected: this task would dispatch via provider "${provider}" ` +
                 `(${providerInferred ? `inferred from model "${model}"` : "explicitly requested"}), ` +
-                `but ${keyName} is not set on the gateway. Set ${keyName} and retry, or choose a ` +
-                `provider whose key is configured (${[...providers].join(", ") || "none"}).`,
+                `but the ebb plugin's "${keyName}" config field is not set on the gateway. ` +
+                `Set it in plugins.entries.ebb.config and retry, or choose a ` +
+                `provider whose credential is configured (${[...providers].join(", ") || "none"}).`,
             );
           }
         }
@@ -637,7 +770,7 @@ export default defineToolPlugin({
         // Grid-source disclosure: the scheduler scores against the grid feed,
         // which falls back to a deterministic SYNTHETIC curve when no live
         // feed key is set. Surface that honestly on the schedule response.
-        const gridSource = task.receipt?.gridSource ?? getGridFeed().source;
+        const gridSource = task.receipt?.gridSource ?? getGridFeed(config).source;
         const synthetic = gridSource === "mock";
 
         // Warn (do not reject) when nothing can dispatch yet: the bridge may
@@ -724,7 +857,7 @@ export default defineToolPlugin({
             candidates: params.candidates,
             routeWeights: params.route_weights,
           },
-          { feed: getGridFeed() },
+          { feed: getGridFeed(config) },
         );
       },
     }),
@@ -817,7 +950,7 @@ export default defineToolPlugin({
       ) {
         captureOpenClawRuntime(context);
         const { region } = resolveRegion(params.region, config.defaultRegion);
-        const forecast = await getGridFeed().fetchForecast(
+        const forecast = await getGridFeed(config).fetchForecast(
           region,
           params.hours ?? 24,
         );
@@ -936,7 +1069,7 @@ export default defineToolPlugin({
         try {
           entry = await scheduler.expediteTask(
             params.task_id,
-            buildAdapters() as TickAdapters,
+            buildAdapters(config) as TickAdapters,
           );
         } catch (err) {
           // Surface the scheduler's own rejection message verbatim (e.g. a
@@ -985,7 +1118,7 @@ export default defineToolPlugin({
         try {
           entry = await scheduler.retryTask(
             params.task_id,
-            buildAdapters() as TickAdapters,
+            buildAdapters(config) as TickAdapters,
           );
         } catch (err) {
           // Surface the scheduler's own rejection message verbatim (e.g. a
@@ -1015,5 +1148,5 @@ export default defineToolPlugin({
         };
       },
     }),
-  ],
+  ]),
 });
