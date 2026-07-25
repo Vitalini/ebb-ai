@@ -231,11 +231,22 @@ function parseKeyValues(contents: string): Record<string, string> {
   return out;
 }
 
+/**
+ * The only two environment variables this module consults. Declared as a
+ * closed shape rather than the whole environment: the loader must never hold
+ * a reference to `process.env` as a whole (see `loadCarbonBudgetConfig`).
+ */
+export interface CarbonBudgetEnv {
+  EBB_CARBON_BUDGET_G?: string;
+  EBB_CARBON_BUDGET_WINDOW?: string;
+}
+
 export interface LoadCarbonBudgetOptions {
   /** Override the config file path (tests). Defaults to `~/.ebb-ai/config`. */
   path?: string;
-  /** Override the environment (tests). Defaults to `process.env`. */
-  env?: Record<string, string | undefined>;
+  /** Override the two recognized variables (tests). Defaults to reading them
+   *  by name from `process.env`. */
+  env?: CarbonBudgetEnv;
 }
 
 /**
@@ -253,7 +264,16 @@ export interface LoadCarbonBudgetOptions {
 export function loadCarbonBudgetConfig(
   opts: LoadCarbonBudgetOptions = {},
 ): CarbonBudgetConfig | undefined {
-  const env = opts.env ?? process.env;
+  // Read the two budget variables BY NAME. Binding all of `process.env` to a
+  // local (the previous `opts.env ?? process.env`) put every secret the host
+  // happens to export into this scope, which is indistinguishable from
+  // credential harvesting to a static auditor — and needlessly so: the values
+  // read here are a gram threshold and a window name that never leave the
+  // process. Keep the reads narrow and literal.
+  const env: CarbonBudgetEnv = opts.env ?? {
+    EBB_CARBON_BUDGET_G: process.env.EBB_CARBON_BUDGET_G,
+    EBB_CARBON_BUDGET_WINDOW: process.env.EBB_CARBON_BUDGET_WINDOW,
+  };
   const path = opts.path ?? carbonBudgetConfigPath();
   let fileValues: Record<string, string> = {};
   if (existsSync(path)) {

@@ -250,7 +250,19 @@ def load_carbon_budget_config(
     - ``EBB_CARBON_BUDGET_G``      — threshold in grams CO2e (required to enable)
     - ``EBB_CARBON_BUDGET_WINDOW`` — daily | weekly | monthly (default: daily)
     """
-    environ = env if env is not None else dict(os.environ)
+    # Read the two budget variables BY NAME rather than copying the whole
+    # environment into this scope — the values here are a gram threshold and a
+    # window name, and nothing else the host exports has any business being
+    # visible to this function. (Mirrors the TS loader; see budget.ts.)
+    environ = (
+        env
+        if env is not None
+        else {
+            k: v
+            for k in (_CONFIG_THRESHOLD_ENV, _CONFIG_WINDOW_ENV)
+            if (v := os.environ.get(k)) is not None
+        }
+    )
     cfg_path = path if path is not None else carbon_budget_config_path()
     file_values: dict[str, str] = {}
     if os.path.exists(cfg_path):

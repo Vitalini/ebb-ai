@@ -280,12 +280,45 @@ function openaiAdapter(apiKey: string): DispatchAdapter {
 }
 
 /**
+ * The complete set of environment variables the dispatch layer consults —
+ * the provider credentials it forwards to that provider's own API, plus the
+ * Ollama host/model configuration.
+ *
+ * Declared as a closed shape, and populated by `providerEnv()` with six
+ * literal reads, so that nothing here ever holds a reference to the whole
+ * `process.env`. Binding the entire environment (the previous
+ * `= process.env` defaults) pulled every unrelated secret the host exports
+ * into scope alongside code that makes network calls — an auditor cannot
+ * tell that apart from credential harvesting, and it was never needed.
+ */
+export interface ProviderEnv {
+  ANTHROPIC_API_KEY?: string;
+  OPENAI_API_KEY?: string;
+  GEMINI_API_KEY?: string;
+  GOOGLE_API_KEY?: string;
+  OLLAMA_HOST?: string;
+  OLLAMA_MODELS?: string;
+}
+
+/** Snapshot exactly the six recognized variables, by name. */
+function providerEnv(): ProviderEnv {
+  return {
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+    GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
+    OLLAMA_HOST: process.env.OLLAMA_HOST,
+    OLLAMA_MODELS: process.env.OLLAMA_MODELS,
+  };
+}
+
+/**
  * Build the dispatch adapters for the current environment. Prefers the
  * OpenClaw runtime bridge (no API key needed); otherwise builds direct
  * HTTP adapters from whatever provider keys are set.
  */
 export function buildAdapters(
-  env: Record<string, string | undefined> = process.env,
+  env: ProviderEnv = providerEnv(),
 ): DispatchAdapters {
   const adapters: DispatchAdapters = {};
   if (bridgeComplete) {
@@ -314,7 +347,7 @@ export function buildAdapters(
 
 /** Summarise how scheduled tasks will be dispatched right now. */
 export function dispatchCapability(
-  env: Record<string, string | undefined> = process.env,
+  env: ProviderEnv = providerEnv(),
 ): DispatchCapability {
   if (bridgeComplete) return "openclaw-runtime";
   if (
@@ -338,7 +371,7 @@ export type Provider = "anthropic" | "openai" | "gemini" | "ollama";
  * `provider: "ollama"` still works).
  */
 function ollamaModelSet(
-  env: Record<string, string | undefined> = process.env,
+  env: ProviderEnv = providerEnv(),
 ): ReadonlySet<string> {
   return new Set(
     (env.OLLAMA_MODELS ?? "")
@@ -360,7 +393,7 @@ function ollamaModelSet(
  */
 export function inferProvider(
   model: string | undefined,
-  env: Record<string, string | undefined> = process.env,
+  env: ProviderEnv = providerEnv(),
 ): Provider {
   const m = (model ?? "").trim().toLowerCase();
   if (m.startsWith("gpt-") || m.startsWith("gpt") || /^o\d/.test(m)) return "openai";
@@ -377,7 +410,7 @@ export function inferProvider(
  * dispatchable whenever their own configuration is present, bridge or not.
  */
 export function availableProviders(
-  env: Record<string, string | undefined> = process.env,
+  env: ProviderEnv = providerEnv(),
 ): Set<Provider> {
   const set = new Set<Provider>();
   if (bridgeComplete) {

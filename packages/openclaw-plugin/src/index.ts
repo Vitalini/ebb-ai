@@ -482,7 +482,11 @@ function ensureDispatcher(config: PluginConfig): void {
 let startupBootstrapped = false;
 export function bootstrapDispatcherOnStartup(
   config: PluginConfig = {},
-  env: Record<string, string | undefined> = process.env,
+  // Only the opt-out flag is consulted — read by name, never by binding the
+  // whole `process.env` into this scope.
+  env: { EBB_DISABLE_STARTUP_DISPATCH?: string } = {
+    EBB_DISABLE_STARTUP_DISPATCH: process.env.EBB_DISABLE_STARTUP_DISPATCH,
+  },
 ): void {
   if (startupBootstrapped) return;
   startupBootstrapped = true;
