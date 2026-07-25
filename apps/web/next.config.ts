@@ -25,8 +25,8 @@ const config: NextConfig = {
   },
 
   // Baseline security headers for every response — including the static
-  // `public/` assets that middleware deliberately skips. The nonce-based
-  // Content-Security-Policy lives in `src/middleware.ts` instead: its
+  // `public/` assets that the proxy deliberately skips. The nonce-based
+  // Content-Security-Policy lives in `src/proxy.ts` instead: its
   // `script-src` needs a fresh per-request nonce, which a static header
   // block can't express. These two layers merge (different header keys),
   // they don't clobber. HSTS is already set by Vercel; we re-assert it

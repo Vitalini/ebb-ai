@@ -115,9 +115,9 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // The middleware-generated per-request nonce. The JSON-LD tag must carry it,
+  // The proxy-generated per-request nonce. The JSON-LD tag must carry it,
   // otherwise 'strict-dynamic' blocks this inline script. Reading `headers()`
-  // is also what opts pages into dynamic rendering (see middleware.ts).
+  // is also what opts pages into dynamic rendering (see proxy.ts).
   const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html lang="en">

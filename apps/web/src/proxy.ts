@@ -3,10 +3,18 @@ import { NextRequest, NextResponse } from "next/server";
 /**
  * Per-request nonce-based Content-Security-Policy.
  *
+ * Next.js 16 renamed the `middleware` file convention to `proxy` (and the named
+ * export `middleware` to `proxy`). This file used to be `src/middleware.ts`; the
+ * logic is byte-for-byte the same. One runtime consequence: `proxy` always runs
+ * on the `nodejs` runtime and that is not configurable, whereas `middleware` ran
+ * on `edge`. Nothing here needs edge — `crypto.randomUUID()` and `Buffer` are
+ * both Node built-ins — and the nonce hand-off below is a request-header
+ * contract that is runtime-independent.
+ *
  * Roadmap item 9. The baseline security headers (HSTS, X-Frame-Options,
  * X-Content-Type-Options, Referrer-Policy, Permissions-Policy) stay in
  * `next.config.ts` where they apply to *every* response including the static
- * `public/` assets; this middleware adds the one header those can't express: a
+ * `public/` assets; this proxy adds the one header those can't express: a
  * strict CSP whose `script-src` is pinned to a fresh per-request nonce.
  *
  * How Next.js consumes the nonce: we set the CSP on the *request* headers before
@@ -28,7 +36,7 @@ import { NextRequest, NextResponse } from "next/server";
  * CSP nonces don't cover style attributes, so `'unsafe-inline'` for *styles only*
  * is the documented, accepted compromise. It does not weaken script-src.
  */
-export function middleware(request: NextRequest): NextResponse {
+export function proxy(request: NextRequest): NextResponse {
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
 
   // `'unsafe-eval'` is needed only by the dev-mode React Refresh runtime; the
