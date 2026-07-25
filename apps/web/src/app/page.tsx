@@ -68,7 +68,7 @@ function Hero() {
     <section className="space-y-5 pt-2">
       <div className="inline-flex items-center gap-2 rounded-md border border-accent/40 bg-accent/5 px-3 py-1 font-mono text-xs uppercase tracking-wider text-accent">
         <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-        v0.14.1 · operator preview
+        v0.15.0 · operator preview
       </div>
       <h1 className="text-balance text-3xl font-extrabold leading-[1.1] tracking-tight text-fg sm:text-4xl">
         Defer AI work to <span className="text-accent">balance the grid</span> — cheaper, faster, lower-carbon.

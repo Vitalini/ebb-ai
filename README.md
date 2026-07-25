@@ -72,7 +72,7 @@ Windsurf, OpenClaw, OpenAI Codex CLI, Pi). The agent asks
 `recommend_window`, sees the plan, then commits via `schedule_task`
 — or doesn't.
 
-> **Status:** v0.14.1 · 2026-07-25 · `@ebb-ai/{core,mcp,cli}` published
+> **Status:** v0.15.0 · 2026-07-25 · `@ebb-ai/{core,mcp,cli}` published
 > to npm under the `@ebb-ai` org; `ebb-ai` on PyPI; `@vitalini/ebb`
 > OpenClaw plugin shares the queue. **One-command Claude Code plugin**
 > via `/plugin marketplace add Vitalini/ebb-ai && /plugin install ebb-ai`.

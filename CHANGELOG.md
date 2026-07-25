@@ -7,8 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+(Nothing pending — see version sections below.)
+
+## [0.15.0] — 2026-07-25
+
 **Theme:** "No ambient state." The library stops reading the environment;
 the hosts inject configuration.
+
+> **Operator note:** the OpenClaw plugin does not auto-update. Run
+> `openclaw plugins update @vitalini/ebb` to pull 0.15.0. **Plugin users:**
+> credentials move from environment variables to plugin config under
+> `plugins.entries.ebb.config`. Migration is lossless — every credential
+> field accepts OpenClaw's `${ENV_VAR}` shorthand, e.g.
+> `"anthropicApiKey": "${ANTHROPIC_API_KEY}"`, so the gateway reads the
+> variable you already export. The `ebb` CLI and `@ebb-ai/mcp` server are
+> unaffected: they still read the same environment variables directly.
 
 ### Changed
 
@@ -1302,7 +1315,8 @@ their mind, and how to mitigate the operational failure modes
   Batches APIs. Direct Batch routing lands in v0.2.
 - Python port (`ebb-ai` PyPI) is a placeholder. v0.2.
 
-[Unreleased]: https://github.com/Vitalini/ebb-ai/compare/v0.14.1...HEAD
+[Unreleased]: https://github.com/Vitalini/ebb-ai/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/Vitalini/ebb-ai/compare/v0.14.1...v0.15.0
 [0.14.1]: https://github.com/Vitalini/ebb-ai/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/Vitalini/ebb-ai/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/Vitalini/ebb-ai/compare/v0.12.0...v0.13.0
