@@ -15,6 +15,28 @@
  *
  * Still out of scope (tracked in ROADMAP.md):
  *   - Cross-provider routing.
+ *
+ * ── ENVIRONMENT PURITY ──────────────────────────────────────────────────────
+ * This library reads NO environment variables. Every credential, host URL and
+ * threshold is an explicit argument; the HOST application decides where its
+ * configuration comes from and injects it:
+ *
+ *   - `ebb` CLI and `@ebb-ai/mcp` server → read the documented env vars
+ *     (ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY / GOOGLE_API_KEY,
+ *     OLLAMA_HOST, EBB_EIA_API_KEY, EBB_ELECTRICITY_MAPS_API_KEY,
+ *     EBB_ENTSOE_SECURITY_TOKEN, WATTTIME_USERNAME / WATTTIME_PASSWORD,
+ *     EBB_CARBON_BUDGET_*) at their own entry points.
+ *   - the OpenClaw plugin (`@vitalini/ebb`) → reads its OpenClaw plugin
+ *     config and reads no environment variables at all, so the published
+ *     bundle contains zero ambient-environment accesses.
+ *
+ * The `~/.ebb-ai/config` FILE is still read by `loadCarbonBudgetConfig` —
+ * that is filesystem I/O against a path this project owns, not ambient state.
+ *
+ * NOTE — deliberate TS/Python asymmetry: the Python mirror (`ebb_ai`, in
+ * packages/core-py) is NOT environment-pure. It is used directly as its own
+ * host (scripts, notebooks) rather than being bundled into a third-party
+ * plugin, so its `os.environ` fallbacks stay for ergonomics.
  */
 
 export {
@@ -88,6 +110,7 @@ export {
 export type {
   CarbonAlert,
   CarbonBudgetConfig,
+  CarbonBudgetEnv,
   CarbonBudgetStatus,
   CarbonBudgetUsage,
   CarbonBudgetWindowKind,
@@ -103,6 +126,7 @@ export {
   multiSourceGridFeed,
   buildDefaultGridFeed,
 } from "./grid.js";
+export type { GridFeedCredentials } from "./grid.js";
 export type {
   DeferOptions,
   GridForecast,

@@ -83,17 +83,28 @@ Add to `~/.openclaw/mcp.json`:
 
 ## Environment variables
 
-| Var | Purpose |
-|---|---|
-| `EBB_ELECTRICITY_MAPS_API_KEY` | API key from [electricitymaps.com](https://www.electricitymaps.com/free-tier-api). Universal fallback. If unset (and no zone-specific feed is configured), the server falls back to deterministic mock data so you can still run the whole stack locally. |
-| `EBB_EIA_API_KEY` | Free [US EIA](https://www.eia.gov/opendata/) key. Enables average-emissions intensity for the US ISO zones (CAISO / ERCOT / ISO-NE / NYISO / PJM / MISO). |
-| `EBB_ENTSOE_SECURITY_TOKEN` | Free [ENTSO-E](https://transparency.entsoe.eu/) token. Enables EU zone intensity (FR / DE / ES / IT / NL). |
-| `WATTTIME_USERNAME` + `WATTTIME_PASSWORD` | Free [WattTime v3](https://watttime.org/) account. Enables **marginal**-emissions (co2_moer) forecasts for the US ISO zones — takes precedence over EIA where covered, falls through to EIA on any error. The marginal signal is disclosed as `signalType: "marginal"` on forecasts and receipts. |
-| `EBB_DEFAULT_REGION` | Electricity Maps zone code, default `US-CAL-CISO`. |
-| `ANTHROPIC_API_KEY` | Enables the `anthropic` provider (batch-capable). |
-| `OPENAI_API_KEY` | Enables the `openai` provider (batch-capable). |
-| `GEMINI_API_KEY` / `GOOGLE_API_KEY` | Enables the `gemini` provider (Generative Language API, sync-only). `GEMINI_API_KEY` is preferred; `GOOGLE_API_KEY` is the fallback. |
-| `OLLAMA_HOST` | Enables the local `ollama` provider (sync-only). Default `http://localhost:11434`; keyless — set this var to opt the provider in. |
+These variables configure **this MCP server** (and the `ebb` CLI, which reads
+the same set). They are read at the server's own entry point and injected into
+`@ebb-ai/core`, which is environment-pure and reads nothing ambient itself.
+
+> **OpenClaw plugin users:** the `@vitalini/ebb` OpenClaw plugin reads **no**
+> environment variables. Configure it through plugin config instead, under
+> `plugins.entries.ebb.config` in your gateway config — the "Plugin config"
+> column below names the field that replaces each variable. OpenClaw resolves
+> the `"${ENV_VAR}"` shorthand in those fields, so you can keep exporting the
+> same variables and let the gateway read them on the plugin's behalf.
+
+| Var | Plugin config | Purpose |
+|---|---|---|
+| `EBB_ELECTRICITY_MAPS_API_KEY` | `electricityMapsApiKey` | API key from [electricitymaps.com](https://www.electricitymaps.com/free-tier-api). Universal fallback. If unset (and no zone-specific feed is configured), the server falls back to deterministic mock data so you can still run the whole stack locally. |
+| `EBB_EIA_API_KEY` | `eiaApiKey` | Free [US EIA](https://www.eia.gov/opendata/) key. Enables average-emissions intensity for the US ISO zones (CAISO / ERCOT / ISO-NE / NYISO / PJM / MISO). |
+| `EBB_ENTSOE_SECURITY_TOKEN` | `entsoeSecurityToken` | Free [ENTSO-E](https://transparency.entsoe.eu/) token. Enables EU zone intensity (FR / DE / ES / IT / NL). |
+| `WATTTIME_USERNAME` + `WATTTIME_PASSWORD` | `wattTimeUsername` + `wattTimePassword` | Free [WattTime v3](https://watttime.org/) account. Enables **marginal**-emissions (co2_moer) forecasts for the US ISO zones — takes precedence over EIA where covered, falls through to EIA on any error. The marginal signal is disclosed as `signalType: "marginal"` on forecasts and receipts. |
+| `EBB_DEFAULT_REGION` | `defaultRegion` | Electricity Maps zone code, default `US-CAL-CISO`. |
+| `ANTHROPIC_API_KEY` | `anthropicApiKey` | Enables the `anthropic` provider (batch-capable). |
+| `OPENAI_API_KEY` | `openaiApiKey` | Enables the `openai` provider (batch-capable). |
+| `GEMINI_API_KEY` / `GOOGLE_API_KEY` | `geminiApiKey` / `googleApiKey` | Enables the `gemini` provider (Generative Language API, sync-only). `GEMINI_API_KEY` is preferred; `GOOGLE_API_KEY` is the fallback. |
+| `OLLAMA_HOST` | `ollamaHost` | Enables the local `ollama` provider (sync-only). Default `http://localhost:11434`; keyless — set this var to opt the provider in. |
 
 ## v0.1 limitations
 

@@ -38,11 +38,17 @@ describe("GeminiAdapter", () => {
     expect(new GeminiAdapter({ apiKey: "k" }).ready).toBe(true);
   });
 
-  it("reads GEMINI_API_KEY, then falls back to GOOGLE_API_KEY", () => {
+  // Environment purity: the adapter takes its key as an argument and NEVER
+  // reads the ambient environment. Resolving GEMINI_API_KEY before
+  // GOOGLE_API_KEY is now the HOST's job (packages/cli/src/env.ts,
+  // packages/mcp-server/src/env.ts); the OpenClaw plugin injects plugin-config
+  // values instead, which is what keeps its bundle free of environment reads.
+  it("ignores GEMINI_API_KEY / GOOGLE_API_KEY in the environment", () => {
     process.env.GOOGLE_API_KEY = "goog";
-    expect(new GeminiAdapter().ready).toBe(true);
     process.env.GEMINI_API_KEY = "gem";
-    expect(new GeminiAdapter().ready).toBe(true);
+    expect(new GeminiAdapter().ready).toBe(false);
+    // Only an injected key makes it ready.
+    expect(new GeminiAdapter({ apiKey: "injected" }).ready).toBe(true);
   });
 
   it("has no batch surface (sync-only adapter)", () => {

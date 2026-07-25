@@ -57,6 +57,8 @@ import {
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 
+import { readEnvCredentials, type ProviderCredentials } from "./env.js";
+
 /** The grid-feed interface is not re-exported by @ebb-ai/core's index;
  *  derive it structurally from the factory we already import. */
 type GridFeed = ReturnType<typeof buildDefaultGridFeed>;
@@ -111,18 +113,34 @@ export function resolveStartupDb(explicit = process.env.EBB_DB_PATH): {
   }
 }
 
-function buildAdapters(): TickAdapters {
+/**
+ * Build the dispatch adapters from host-supplied credentials.
+ *
+ * `@ebb-ai/core` no longer reads the environment, so the MCP server (the host)
+ * reads it once via `readEnvCredentials()` and injects the values here. The
+ * registration rules are unchanged: an adapter appears exactly when its
+ * credential is present, Gemini prefers GEMINI_API_KEY over GOOGLE_API_KEY,
+ * and Ollama is an explicit OLLAMA_HOST opt-in.
+ */
+export function buildAdapters(
+  creds: ProviderCredentials = readEnvCredentials(),
+): TickAdapters {
   const out: TickAdapters = {};
-  if (process.env.ANTHROPIC_API_KEY) out.anthropic = new AnthropicAdapter();
-  if (process.env.OPENAI_API_KEY) out.openai = new OpenAIAdapter();
-  // Gemini reads GEMINI_API_KEY, falling back to GOOGLE_API_KEY.
-  if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) {
-    out.gemini = new GeminiAdapter();
+  if (creds.anthropicApiKey) {
+    out.anthropic = new AnthropicAdapter({ apiKey: creds.anthropicApiKey });
+  }
+  if (creds.openaiApiKey) {
+    out.openai = new OpenAIAdapter({ apiKey: creds.openaiApiKey });
+  }
+  // Gemini reads GEMINI_API_KEY, falling back to GOOGLE_API_KEY (resolved in
+  // readEnvCredentials, so `geminiApiKey` here is already the winner).
+  if (creds.geminiApiKey) {
+    out.gemini = new GeminiAdapter({ apiKey: creds.geminiApiKey });
   }
   // Ollama is local + keyless: register it only when OLLAMA_HOST is set, an
   // explicit opt-in that a local server is being run. (The adapter still
   // defaults to http://localhost:11434 when constructed.)
-  if (process.env.OLLAMA_HOST) out.ollama = new OllamaAdapter();
+  if (creds.ollamaHost) out.ollama = new OllamaAdapter({ host: creds.ollamaHost });
   return out;
 }
 
@@ -327,7 +345,10 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
   defaultRegion: string;
   defaultModel: string;
 } {
-  const feed = deps.feed ?? buildDefaultGridFeed();
+  // The MCP server is the HOST: it reads its environment here, once, and
+  // injects the values into the environment-pure core library.
+  const env = readEnvCredentials();
+  const feed = deps.feed ?? buildDefaultGridFeed(env.grid);
   // When EBB_DEFAULT_REGION is unset, guess the region from the host
   // timezone (shared with the CLI and the OpenClaw plugin) instead of
   // hard-coding one — falls back to GB.
@@ -342,7 +363,7 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
   // tick, so no onCarbonAlert hook is wired here — alerts fire from the
   // tickers (ebb tick / the OpenClaw plugin). Display-only.
   const carbonBudget: CarbonBudgetConfig | undefined =
-    deps.carbonBudget ?? loadCarbonBudgetConfig();
+    deps.carbonBudget ?? loadCarbonBudgetConfig({ env: env.carbonBudget });
   const scheduler =
     deps.scheduler ??
     new Scheduler({

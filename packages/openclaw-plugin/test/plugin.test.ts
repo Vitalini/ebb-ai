@@ -29,6 +29,7 @@ import {
   recordDeliveryOutcomes,
   scanDeliveryOptions,
   setDeliveryConfig,
+  setDeliveryStorePath,
   validateDeliveryConfig,
 } from "../src/delivery.js";
 import type { StubResolvedTool } from "./stub-tool-plugin.js";
@@ -370,28 +371,28 @@ describe("ebb OpenClaw plugin — tool execution", () => {
 describe("ebb OpenClaw plugin — dispatch adapters", () => {
   beforeEach(() => setLlmBridgeForTest(undefined));
 
-  it("buildAdapters is empty when no provider keys are set", () => {
+  it("buildAdapters is empty when no provider credentials are configured", () => {
     expect(buildAdapters({})).toEqual({});
   });
 
-  it("buildAdapters exposes an adapter per configured API key", () => {
+  it("buildAdapters exposes an adapter per configured plugin-config credential", () => {
     const adapters = buildAdapters({
-      ANTHROPIC_API_KEY: "sk-ant-test",
-      OPENAI_API_KEY: "sk-openai-test",
+      anthropicApiKey: "sk-ant-test",
+      openaiApiKey: "sk-openai-test",
     });
     expect(adapters.anthropic?.provider).toBe("anthropic");
     expect(adapters.openai?.provider).toBe("openai");
     expect(typeof adapters.anthropic?.dispatch).toBe("function");
   });
 
-  it("builds a Gemini adapter from GEMINI_API_KEY, else GOOGLE_API_KEY", () => {
-    expect(buildAdapters({ GEMINI_API_KEY: "g" }).gemini?.provider).toBe("gemini");
-    expect(buildAdapters({ GOOGLE_API_KEY: "g" }).gemini?.provider).toBe("gemini");
+  it("builds a Gemini adapter from geminiApiKey, else googleApiKey", () => {
+    expect(buildAdapters({ geminiApiKey: "g" }).gemini?.provider).toBe("gemini");
+    expect(buildAdapters({ googleApiKey: "g" }).gemini?.provider).toBe("gemini");
     expect(buildAdapters({}).gemini).toBeUndefined();
   });
 
-  it("builds an Ollama adapter only when OLLAMA_HOST is set", () => {
-    expect(buildAdapters({ OLLAMA_HOST: "http://localhost:11434" }).ollama?.provider).toBe(
+  it("builds an Ollama adapter only when ollamaHost is set", () => {
+    expect(buildAdapters({ ollamaHost: "http://localhost:11434" }).ollama?.provider).toBe(
       "ollama",
     );
     expect(buildAdapters({}).ollama).toBeUndefined();
@@ -401,8 +402,8 @@ describe("ebb OpenClaw plugin — dispatch adapters", () => {
     setLlmBridgeForTest(async () => ({ text: "" }));
     try {
       const adapters = buildAdapters({
-        GEMINI_API_KEY: "g",
-        OLLAMA_HOST: "http://localhost:11434",
+        geminiApiKey: "g",
+        ollamaHost: "http://localhost:11434",
       });
       // Bridge covers the two hosted providers…
       expect(adapters.anthropic?.provider).toBe("anthropic");
@@ -413,6 +414,44 @@ describe("ebb OpenClaw plugin — dispatch adapters", () => {
     } finally {
       setLlmBridgeForTest(undefined);
     }
+  });
+});
+
+describe("ebb OpenClaw plugin — grid feed is built from plugin config", () => {
+  it("get_grid_forecast uses the eiaApiKey from plugin config, never the environment", async () => {
+    // EBB_EIA_API_KEY is exported but must be ignored; the eiaApiKey config
+    // field is what reaches the EIA endpoint.
+    const savedEnv = process.env.EBB_EIA_API_KEY;
+    process.env.EBB_EIA_API_KEY = "leaked-env-key";
+    const realFetch = globalThis.fetch;
+    const urls: string[] = [];
+    globalThis.fetch = (async (url: string) => {
+      urls.push(String(url));
+      throw new Error("blocked in test");
+    }) as unknown as typeof fetch;
+    try {
+      const res = (await tool("get_grid_forecast").execute(
+        { region: "US-CAL-CISO", hours: 3 },
+        { eiaApiKey: "cfg-eia-key" },
+      )) as { source: string };
+      // The feed degrades to mock because the request was blocked — the point
+      // is WHICH credential it tried to use.
+      expect(res.source).toBe("mock");
+      expect(urls.some((u) => u.includes("cfg-eia-key"))).toBe(true);
+      expect(urls.some((u) => u.includes("leaked-env-key"))).toBe(false);
+    } finally {
+      globalThis.fetch = realFetch;
+      if (savedEnv === undefined) delete process.env.EBB_EIA_API_KEY;
+      else process.env.EBB_EIA_API_KEY = savedEnv;
+    }
+  });
+
+  it("with no grid credentials configured, US zones fall back to the mock feed", async () => {
+    const res = (await tool("get_grid_forecast").execute(
+      { region: "US-CAL-CISO", hours: 3 },
+      {},
+    )) as { source: string; forecast: unknown[] };
+    expect(res.source).toBe("mock");
   });
 });
 
@@ -434,12 +473,12 @@ describe("ebb OpenClaw plugin — provider inference", () => {
     expect(inferProvider("  GEMINI-2.0-FLASH  ")).toBe("gemini"); // trim + case
   });
 
-  it("infers ollama only for models in the OLLAMA_MODELS allow-list", () => {
-    const env = { OLLAMA_MODELS: "llama3.1, mistral , qwen2.5" };
-    expect(inferProvider("llama3.1", env)).toBe("ollama");
-    expect(inferProvider("MISTRAL", env)).toBe("ollama"); // case-insensitive
+  it("infers ollama only for models in the ollamaModels allow-list", () => {
+    const cfg = { ollamaModels: "llama3.1, mistral , qwen2.5" };
+    expect(inferProvider("llama3.1", cfg)).toBe("ollama");
+    expect(inferProvider("MISTRAL", cfg)).toBe("ollama"); // case-insensitive
     // Not listed → falls through to the anthropic default (not ollama).
-    expect(inferProvider("phi3", env)).toBe("anthropic");
+    expect(inferProvider("phi3", cfg)).toBe("anthropic");
     // No allow-list → an ollama model is NOT inferred (explicit provider only).
     expect(inferProvider("llama3.1", {})).toBe("anthropic");
   });
@@ -451,16 +490,16 @@ describe("ebb OpenClaw plugin — provider inference", () => {
     expect(inferProvider("  GPT-4O  ")).toBe("openai"); // trim + case-insensitive
   });
 
-  it("availableProviders reflects API keys, and both hosted providers under the bridge", () => {
+  it("availableProviders reflects plugin config, and both hosted providers under the bridge", () => {
     expect([...availableProviders({})]).toEqual([]);
-    expect([...availableProviders({ ANTHROPIC_API_KEY: "k" })]).toEqual(["anthropic"]);
+    expect([...availableProviders({ anthropicApiKey: "k" })]).toEqual(["anthropic"]);
     expect(
-      [...availableProviders({ OPENAI_API_KEY: "k" })].sort(),
+      [...availableProviders({ openaiApiKey: "k" })].sort(),
     ).toEqual(["openai"]);
     // Gemini / Ollama are available from their own config, bridge or not.
-    expect([...availableProviders({ GEMINI_API_KEY: "k" })]).toEqual(["gemini"]);
-    expect([...availableProviders({ GOOGLE_API_KEY: "k" })]).toEqual(["gemini"]);
-    expect([...availableProviders({ OLLAMA_HOST: "http://localhost:11434" })]).toEqual([
+    expect([...availableProviders({ geminiApiKey: "k" })]).toEqual(["gemini"]);
+    expect([...availableProviders({ googleApiKey: "k" })]).toEqual(["gemini"]);
+    expect([...availableProviders({ ollamaHost: "http://localhost:11434" })]).toEqual([
       "ollama",
     ]);
     setLlmBridgeForTest(async () => ({ text: "" }));
@@ -469,7 +508,7 @@ describe("ebb OpenClaw plugin — provider inference", () => {
       // Gemini / Ollama still require their own config.
       expect([...availableProviders({})].sort()).toEqual(["anthropic", "openai"]);
       expect(
-        [...availableProviders({ OLLAMA_HOST: "http://localhost:11434" })].sort(),
+        [...availableProviders({ ollamaHost: "http://localhost:11434" })].sort(),
       ).toEqual(["anthropic", "ollama", "openai"]);
     } finally {
       setLlmBridgeForTest(undefined);
@@ -562,33 +601,47 @@ describe("ebb OpenClaw plugin — schedule_task provider param", () => {
     }
   });
 
-  it("rejects at schedule time when the api-key path lacks the chosen provider's key", async () => {
-    // No bridge, only an ANTHROPIC key → an openai (gpt) task must be rejected
-    // rather than queued to fail (or POSTed to the wrong provider) at dispatch.
+  it("rejects at schedule time when the api-key path lacks the chosen provider's credential", async () => {
+    // No bridge, only an anthropicApiKey in PLUGIN CONFIG → an openai (gpt)
+    // task must be rejected rather than queued to fail (or POSTed to the wrong
+    // provider) at dispatch. Credentials come from plugin config, never the
+    // environment.
     setLlmBridgeForTest(undefined);
-    const prev = { a: process.env.ANTHROPIC_API_KEY, o: process.env.OPENAI_API_KEY };
-    process.env.ANTHROPIC_API_KEY = "sk-ant-test";
-    delete process.env.OPENAI_API_KEY;
+    const config = { dbPath, anthropicApiKey: "sk-ant-test" };
+    await expect(
+      tool("schedule_task").execute(
+        { prompt: "p", deadline: deadlineISO(), region: "GB", model: "gpt-4o" },
+        config,
+      ),
+    ).rejects.toThrow(/openaiApiKey/);
+
+    // An anthropic task with the anthropic credential set is accepted.
+    const ok = (await tool("schedule_task").execute(
+      { prompt: "p", deadline: deadlineISO(), region: "GB", model: "claude-sonnet-4-6" },
+      config,
+    )) as { provider: string; dispatch: string };
+    expect(ok.provider).toBe("anthropic");
+    expect(ok.dispatch).toBe("api-key");
+  });
+
+  it("ignores provider credentials present in the ambient environment", async () => {
+    // The whole point of the 0.14.2 refactor: an ANTHROPIC_API_KEY exported by
+    // the gateway process must have NO effect on the plugin, because the
+    // plugin never reads the environment. With no plugin config, dispatch is
+    // "unconfigured" and a gpt task is still rejected.
+    setLlmBridgeForTest(undefined);
+    const prev = process.env.ANTHROPIC_API_KEY;
+    process.env.ANTHROPIC_API_KEY = "sk-ant-from-env";
     try {
       await expect(
         tool("schedule_task").execute(
           { prompt: "p", deadline: deadlineISO(), region: "GB", model: "gpt-4o" },
           { dbPath },
         ),
-      ).rejects.toThrow(/OPENAI_API_KEY/);
-
-      // An anthropic task with the anthropic key set is accepted.
-      const ok = (await tool("schedule_task").execute(
-        { prompt: "p", deadline: deadlineISO(), region: "GB", model: "claude-sonnet-4-6" },
-        { dbPath },
-      )) as { provider: string; dispatch: string };
-      expect(ok.provider).toBe("anthropic");
-      expect(ok.dispatch).toBe("api-key");
+      ).resolves.toMatchObject({ dispatch: "unconfigured" });
     } finally {
-      if (prev.a === undefined) delete process.env.ANTHROPIC_API_KEY;
-      else process.env.ANTHROPIC_API_KEY = prev.a;
-      if (prev.o === undefined) delete process.env.OPENAI_API_KEY;
-      else process.env.OPENAI_API_KEY = prev.o;
+      if (prev === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = prev;
     }
   });
 
@@ -733,12 +786,15 @@ describe("ebb OpenClaw plugin — runDispatchTick skips provider-less tasks", ()
 
 describe("ebb OpenClaw plugin — startup dispatcher bootstrap", () => {
   it("bootstrapDispatcherOnStartup is exported and idempotent, and honours the disable flag", () => {
-    // The suite runs with EBB_DISABLE_STARTUP_DISPATCH=1, so the module-load
-    // call was a no-op. Calling it directly must not throw and must be
-    // idempotent (guarded so a second call is a no-op).
+    // The suite's setup file calls suppressStartupDispatch(), so the
+    // module-load call's deferred queue-open is a no-op. Calling it directly
+    // must not throw and must be idempotent (guarded so a second call is a
+    // no-op). The opt-out is now the `disableStartupDispatch` PLUGIN CONFIG
+    // field — the old EBB_DISABLE_STARTUP_DISPATCH environment variable is
+    // gone, because the bundle reads no environment variables at all.
     expect(typeof bootstrapDispatcherOnStartup).toBe("function");
-    expect(() => bootstrapDispatcherOnStartup({}, { EBB_DISABLE_STARTUP_DISPATCH: "1" })).not.toThrow();
-    expect(() => bootstrapDispatcherOnStartup({}, {})).not.toThrow();
+    expect(() => bootstrapDispatcherOnStartup({ disableStartupDispatch: true })).not.toThrow();
+    expect(() => bootstrapDispatcherOnStartup({})).not.toThrow();
   });
 });
 
@@ -819,21 +875,21 @@ describe("ebb OpenClaw plugin — result delivery", () => {
 
   it("setDeliveryConfig / getDeliveryConfig round-trip via the sidecar", async () => {
     const dir = mkdtempSync(join(tmpdir(), "ebb-sidecar-"));
-    process.env.EBB_DELIVERY_FILE = join(dir, "delivery.json");
+    setDeliveryStorePath(join(dir, "delivery.db"));
     try {
       await setDeliveryConfig("t-z", { modes: ["chat", "file"], filePath: "/tmp/r.md" });
       expect((await getDeliveryConfig("t-z", true)).modes).toEqual(["chat", "file"]);
       // an unknown task falls back to the chat default
       expect((await getDeliveryConfig("t-unknown", true)).modes).toEqual(["chat"]);
     } finally {
-      delete process.env.EBB_DELIVERY_FILE;
+      setDeliveryStorePath(undefined);
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
   it("recordDeliveryOutcomes persists per-mode outcomes for later audit", async () => {
     const dir = mkdtempSync(join(tmpdir(), "ebb-outcomes-"));
-    process.env.EBB_DELIVERY_FILE = join(dir, "delivery.json");
+    setDeliveryStorePath(join(dir, "delivery.db"));
     try {
       await recordDeliveryOutcomes("t-o", { modes: ["chat", "webhook"] }, [
         { mode: "chat", ok: true, detail: "Telegram DM → 1" },
@@ -845,7 +901,7 @@ describe("ebb OpenClaw plugin — result delivery", () => {
       expect(rec?.outcomes?.find((o) => o.mode === "webhook")?.ok).toBe(false);
       expect(await readDeliveryRecord("t-none")).toBeUndefined();
     } finally {
-      delete process.env.EBB_DELIVERY_FILE;
+      setDeliveryStorePath(undefined);
       rmSync(dir, { recursive: true, force: true });
     }
   });

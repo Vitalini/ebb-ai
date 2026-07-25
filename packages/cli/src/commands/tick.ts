@@ -22,6 +22,7 @@ import {
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { readEnvCredentials, type ProviderCredentials } from "../env.js";
 import { loadEnvFileIntoProcess } from "./env-file.js";
 
 export interface TickCommandOptions {
@@ -62,22 +63,34 @@ export function defaultDbPath(): string {
   return newPath;
 }
 
-function buildAdapters(): TickAdapters {
+/**
+ * Build the tick adapters from host-supplied credentials.
+ *
+ * `@ebb-ai/core` no longer reads the environment, so the CLI (the host)
+ * reads it once via `readEnvCredentials()` and injects the values here. The
+ * registration rules are unchanged: an adapter appears exactly when its
+ * credential is present, Gemini prefers GEMINI_API_KEY over GOOGLE_API_KEY,
+ * and Ollama is an explicit OLLAMA_HOST opt-in.
+ */
+export function buildAdapters(
+  creds: ProviderCredentials = readEnvCredentials(),
+): TickAdapters {
   const out: TickAdapters = {};
-  if (process.env.ANTHROPIC_API_KEY) {
-    out.anthropic = new AnthropicAdapter();
+  if (creds.anthropicApiKey) {
+    out.anthropic = new AnthropicAdapter({ apiKey: creds.anthropicApiKey });
   }
-  if (process.env.OPENAI_API_KEY) {
-    out.openai = new OpenAIAdapter();
+  if (creds.openaiApiKey) {
+    out.openai = new OpenAIAdapter({ apiKey: creds.openaiApiKey });
   }
-  // Gemini reads GEMINI_API_KEY, falling back to GOOGLE_API_KEY.
-  if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) {
-    out.gemini = new GeminiAdapter();
+  // Gemini reads GEMINI_API_KEY, falling back to GOOGLE_API_KEY (resolved in
+  // readEnvCredentials, so `geminiApiKey` here is already the winner).
+  if (creds.geminiApiKey) {
+    out.gemini = new GeminiAdapter({ apiKey: creds.geminiApiKey });
   }
   // Ollama is local + keyless: register it only when OLLAMA_HOST is set
   // (explicit opt-in). The adapter defaults to http://localhost:11434.
-  if (process.env.OLLAMA_HOST) {
-    out.ollama = new OllamaAdapter();
+  if (creds.ollamaHost) {
+    out.ollama = new OllamaAdapter({ host: creds.ollamaHost });
   }
   return out;
 }
@@ -136,8 +149,12 @@ export async function runTickOnce(
   // cron uniformly. Explicit env always wins.
   loadEnvFileIntoProcess(opts.envFile);
 
+  // The CLI is the HOST: it reads its environment here, once (after the
+  // secrets file has been folded in), and injects the values into the
+  // environment-pure core library.
+  const env = readEnvCredentials();
   const dbPath = opts.db ?? defaultDbPath();
-  const adapters = buildAdapters();
+  const adapters = buildAdapters(env);
   if (Object.keys(adapters).length === 0) {
     // Loud warning when pending provider tasks exist but no adapter is
     // configured (no ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY /
@@ -158,7 +175,12 @@ export async function runTickOnce(
   const missingForPending = missingProviderKeysForPending(dbPath);
   // Aggregate carbon-budget alerts (ROADMAP item 4): read the local budget
   // config (env wins over ~/.ebb-ai/config) and log any crossing prominently.
-  const carbonBudget = loadCarbonBudgetConfig({ path: opts.budgetConfig });
+  // Core no longer reads the environment, so the two EBB_CARBON_BUDGET_*
+  // variables are read here and passed in — same precedence as before.
+  const carbonBudget = loadCarbonBudgetConfig({
+    path: opts.budgetConfig,
+    env: env.carbonBudget,
+  });
   const firedAlerts: CarbonAlert[] = [];
   const scheduler = new Scheduler({
     dbPath,

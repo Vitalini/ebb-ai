@@ -15,6 +15,13 @@
  *     MARGINAL forecast, disclosed via signalType:"marginal").
  *   - multiSourceGridFeed: routes per zone across the feeds above.
  *   - buildDefaultGridFeed: best free feed per zone, mock fallback.
+ *
+ * ENVIRONMENT PURITY: nothing in this module reads the ambient environment. Every
+ * credential arrives as an explicit argument — the HOST (the `ebb` CLI, the
+ * `@ebb-ai/mcp` server, the web dashboard, the OpenClaw plugin) decides where
+ * its configuration comes from and injects it. A library that reaches into the
+ * ambient environment is both untestable and indistinguishable, to a static
+ * auditor, from credential harvesting.
  */
 
 import {
@@ -110,9 +117,13 @@ export function mockGridFeed(clock?: () => Date): GridFeed {
  * missing, the request fails, or the response shape is unexpected. The
  * fallback is deliberate so a developer can still run the whole stack
  * end-to-end without signing up.
+ *
+ * The key is always passed in by the host (CLI/MCP read
+ * `EBB_ELECTRICITY_MAPS_API_KEY`; the OpenClaw plugin reads
+ * `electricityMapsApiKey` from plugin config). This function never reads env.
  */
 export function electricityMapsFeed(apiKey?: string): GridFeed {
-  const key = apiKey ?? process.env.EBB_ELECTRICITY_MAPS_API_KEY;
+  const key = apiKey;
   const mock = mockGridFeed();
 
   if (!key) {
@@ -121,7 +132,7 @@ export function electricityMapsFeed(apiKey?: string): GridFeed {
       async fetchForecast(region, hours) {
         // eslint-disable-next-line no-console
         console.warn(
-          "[ebb-ai/grid] no EBB_ELECTRICITY_MAPS_API_KEY set — using mock data",
+          "[ebb-ai/grid] no Electricity Maps API key configured — using mock data",
         );
         return mock.fetchForecast(region, hours);
       },
@@ -417,9 +428,12 @@ interface EiaFuelRow {
  * Carbon-intensity feed backed by the US Energy Information Administration's
  * v2 Open Data API. Returns a synthesized hourly forecast from the last
  * 24 hours of realized fuel mix.
+ *
+ * The key is always passed in by the host (CLI/MCP read `EBB_EIA_API_KEY`;
+ * the OpenClaw plugin reads `eiaApiKey` from plugin config).
  */
 export function eiaFeed(apiKey?: string): GridFeed {
-  const key = apiKey ?? process.env.EBB_EIA_API_KEY;
+  const key = apiKey;
   const mock = mockGridFeed();
   if (!key) {
     return {
@@ -427,7 +441,7 @@ export function eiaFeed(apiKey?: string): GridFeed {
       async fetchForecast(region, hours) {
         // eslint-disable-next-line no-console
         console.warn(
-          "[ebb-ai/grid] no EBB_EIA_API_KEY set — using mock data for EIA-eligible zones",
+          "[ebb-ai/grid] no EIA API key configured — using mock data for EIA-eligible zones",
         );
         return mock.fetchForecast(region, hours);
       },
@@ -700,9 +714,13 @@ export function parseEntsoeXml(xml: string): EntsoeTimeSeries[] {
  * Note: ENTSO-E's real day-ahead forecast (documentType A71, processType
  * A01) lacks the per-fuel generation mix we need to compute carbon
  * intensity, which is why realised A75 data + persistence is used instead.
+ *
+ * The token is always passed in by the host (CLI/MCP read
+ * `EBB_ENTSOE_SECURITY_TOKEN`; the OpenClaw plugin reads
+ * `entsoeSecurityToken` from plugin config).
  */
 export function entsoeFeed(securityToken?: string): GridFeed {
-  const token = securityToken ?? process.env.EBB_ENTSOE_SECURITY_TOKEN;
+  const token = securityToken;
   const mock = mockGridFeed();
   if (!token) {
     return {
@@ -710,7 +728,7 @@ export function entsoeFeed(securityToken?: string): GridFeed {
       async fetchForecast(region, hours) {
         // eslint-disable-next-line no-console
         console.warn(
-          "[ebb-ai/grid] no EBB_ENTSOE_SECURITY_TOKEN set — using mock data for EU zones",
+          "[ebb-ai/grid] no ENTSO-E security token configured — using mock data for EU zones",
         );
         return mock.fetchForecast(region, hours);
       },
@@ -907,7 +925,10 @@ interface WattTimeForecastPoint {
 
 /**
  * Carbon-intensity feed backed by WattTime v3 marginal (co2_moer)
- * forecasts. Opt-in via WATTTIME_USERNAME / WATTTIME_PASSWORD.
+ * forecasts. Opt-in by supplying a username + password — the host reads them
+ * from wherever it keeps configuration (CLI/MCP: `WATTTIME_USERNAME` /
+ * `WATTTIME_PASSWORD`; OpenClaw plugin: `wattTimeUsername` /
+ * `wattTimePassword` in plugin config). This function never reads env.
  *
  * With no credentials the returned feed *is* `fallback` (transparent
  * pass-through), so wiring `wattTimeFeed({ fallback: eiaFeed() })` into
@@ -924,8 +945,8 @@ export function wattTimeFeed(options?: {
    */
   fallback?: GridFeed;
 }): GridFeed {
-  const username = options?.username ?? process.env.WATTTIME_USERNAME;
-  const password = options?.password ?? process.env.WATTTIME_PASSWORD;
+  const username = options?.username;
+  const password = options?.password;
   const fallback = options?.fallback ?? mockGridFeed();
 
   // Opt-in by credentials, same pattern as EIA/ENTSO-E. Without both, the
@@ -1078,16 +1099,39 @@ export function multiSourceGridFeed(options: {
 }
 
 /**
+ * Credentials for the optional (non-free) grid feeds, supplied by the host.
+ *
+ * A closed shape rather than a `Record<string,string>` so a host can never
+ * accidentally hand the whole environment to the library. Each field names the
+ * environment variable the CLI / MCP server reads for it; the OpenClaw plugin
+ * supplies the same values from its plugin config (`electricityMapsApiKey`,
+ * `eiaApiKey`, `entsoeSecurityToken`, `wattTimeUsername`, `wattTimePassword`).
+ */
+export interface GridFeedCredentials {
+  /** Electricity Maps free-tier key. CLI/MCP env: `EBB_ELECTRICITY_MAPS_API_KEY`. */
+  electricityMapsApiKey?: string;
+  /** US EIA v2 Open Data key. CLI/MCP env: `EBB_EIA_API_KEY`. */
+  eiaApiKey?: string;
+  /** ENTSO-E Transparency Platform token. CLI/MCP env: `EBB_ENTSOE_SECURITY_TOKEN`. */
+  entsoeSecurityToken?: string;
+  /** WattTime account username. CLI/MCP env: `WATTTIME_USERNAME`. */
+  wattTimeUsername?: string;
+  /** WattTime account password. CLI/MCP env: `WATTTIME_PASSWORD`. */
+  wattTimePassword?: string;
+}
+
+/**
  * Auto-build the best free grid feed for every supported zone.
  *
  * Selection logic (per zone):
  *   - "GB"                              → UK Carbon Intensity (free, no key)
  *   - "US-CAL-CISO" / ERCO / ISNE /
  *     MIDA-PJM / NY-NYIS / MIDW-MISO    → WattTime marginal FORECAST when
- *                                         WATTTIME_USERNAME/PASSWORD are set,
- *                                         else EIA when EBB_EIA_API_KEY is set
- *   - "FR" / "DE" / "ES" / "IT" / "NL"  → ENTSO-E when EBB_ENTSOE_SECURITY_TOKEN is set
- *   - everything else                   → Electricity Maps when EBB_ELECTRICITY_MAPS_API_KEY is set
+ *                                         wattTimeUsername/wattTimePassword
+ *                                         are supplied, else EIA when
+ *                                         eiaApiKey is supplied
+ *   - "FR" / "DE" / "ES" / "IT" / "NL"  → ENTSO-E when entsoeSecurityToken is supplied
+ *   - everything else                   → Electricity Maps when electricityMapsApiKey is supplied
  *   - any zone without a configured key → deterministic mock curve
  *
  * Each leaf feed already falls back to the mock on its own when its key
@@ -1096,10 +1140,15 @@ export function multiSourceGridFeed(options: {
  * data without inspecting URLs.
  *
  * Use this in production entry points (MCP server, CLI tick daemon, web
- * APIs) so the user gets real numbers wherever a free source exists — even
- * if they've configured zero API keys, GB still resolves to live data.
+ * APIs, the OpenClaw plugin) so the user gets real numbers wherever a free
+ * source exists — even with zero credentials, GB still resolves to live data.
+ *
+ * `buildDefaultGridFeed()` with no argument is exactly the "no keys
+ * configured" case: free UK feed for GB, deterministic mock everywhere else.
  */
-export function buildDefaultGridFeed(): GridFeed {
+export function buildDefaultGridFeed(
+  credentials: GridFeedCredentials = {},
+): GridFeed {
   const feeds: Record<string, GridFeed> = {
     GB: ukCarbonIntensityFeed(),
   };
@@ -1110,13 +1159,17 @@ export function buildDefaultGridFeed(): GridFeed {
   // zone is uncovered, or the request errors. With no WattTime creds the
   // wrapper collapses to eiaFeed(), so behaviour is byte-identical to before.
   for (const zone of Object.keys(EIA_RESPONDENT_BY_ZONE)) {
-    feeds[zone] = wattTimeFeed({ fallback: eiaFeed() });
+    feeds[zone] = wattTimeFeed({
+      username: credentials.wattTimeUsername,
+      password: credentials.wattTimePassword,
+      fallback: eiaFeed(credentials.eiaApiKey),
+    });
   }
   for (const zone of Object.keys(ENTSOE_BIDDING_ZONE_BY_REGION)) {
-    feeds[zone] = entsoeFeed();
+    feeds[zone] = entsoeFeed(credentials.entsoeSecurityToken);
   }
   return multiSourceGridFeed({
     feeds,
-    fallback: electricityMapsFeed(),
+    fallback: electricityMapsFeed(credentials.electricityMapsApiKey),
   });
 }

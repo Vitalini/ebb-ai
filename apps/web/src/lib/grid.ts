@@ -16,10 +16,15 @@
  *     also reports the chosen entry's offset for chart highlighting.
  *   - `intensityToGrams`: a rounded single-number projection for the UI.
  *
- * `buildDefaultGridFeed` reads the feed env vars (EBB_EIA_API_KEY,
- * EBB_ENTSOE_SECURITY_TOKEN, EBB_ELECTRICITY_MAPS_API_KEY, and
- * WATTTIME_USERNAME/WATTTIME_PASSWORD for the US ISOs' marginal feed) and
- * falls back to the deterministic mock so the dashboard never goes dark.
+ * `@ebb-ai/core` is environment-pure — it reads no environment variables and
+ * takes credentials as arguments. The dashboard is a HOST, so it reads the
+ * feed env vars here (EBB_EIA_API_KEY, EBB_ENTSOE_SECURITY_TOKEN,
+ * EBB_ELECTRICITY_MAPS_API_KEY, and WATTTIME_USERNAME/WATTTIME_PASSWORD for
+ * the US ISOs' marginal feed) and injects them into `buildDefaultGridFeed`,
+ * which falls back to the deterministic mock so the dashboard never goes dark.
+ *
+ * This module is server-only (the env reads run in the Next.js server
+ * runtime); no credential ever reaches the browser bundle.
  */
 
 import { unstable_cache } from "next/cache";
@@ -36,7 +41,13 @@ import type { GridForecast, GridForecastEntry } from "./types";
  * key or failure → deterministic mock. Each leaf reports its own `source`,
  * so the UI can still distinguish "live" from "mock".
  */
-const feed = buildDefaultGridFeed();
+const feed = buildDefaultGridFeed({
+  electricityMapsApiKey: process.env.EBB_ELECTRICITY_MAPS_API_KEY,
+  eiaApiKey: process.env.EBB_EIA_API_KEY,
+  entsoeSecurityToken: process.env.EBB_ENTSOE_SECURITY_TOKEN,
+  wattTimeUsername: process.env.WATTTIME_USERNAME,
+  wattTimePassword: process.env.WATTTIME_PASSWORD,
+});
 
 /**
  * Fetch a forecast for `region` over `hours`, routed across the configured

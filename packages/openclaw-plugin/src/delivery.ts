@@ -159,11 +159,25 @@ function loadSqlite(): SqliteCtor {
     .DatabaseSync;
 }
 
+/**
+ * Where the delivery-preference store lives. Set from the plugin's
+ * `deliveryStorePath` config field (which replaces the old
+ * `EBB_DELIVERY_FILE` environment variable — this bundle reads no
+ * environment variables at all). `undefined` ⇒ the default path.
+ */
+let configuredStorePath: string | undefined;
+
+/**
+ * Point the delivery store at an explicit path. Called from the plugin entry
+ * whenever a resolved `PluginConfig` becomes available, and by tests.
+ * Passing `undefined` restores the default.
+ */
+export function setDeliveryStorePath(path: string | undefined): void {
+  configuredStorePath = path?.trim() || undefined;
+}
+
 function storePath(): string {
-  return (
-    process.env.EBB_DELIVERY_FILE?.trim() ||
-    join(homedir(), ".ebb-ai", "delivery.db")
-  );
+  return configuredStorePath ?? join(homedir(), ".ebb-ai", "delivery.db");
 }
 
 let cachedStore: { path: string; db: SqliteDb } | undefined;

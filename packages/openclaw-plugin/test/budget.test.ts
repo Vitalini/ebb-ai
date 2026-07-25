@@ -77,30 +77,27 @@ describe("carbon-alert delivery helpers", () => {
 describe("runDispatchTick fires a carbon-budget alert on crossing", () => {
   let tmp: string;
   let dbPath: string;
-  const savedG = process.env.EBB_CARBON_BUDGET_G;
-  const savedW = process.env.EBB_CARBON_BUDGET_WINDOW;
+  // Tiny threshold so a single dispatched task crosses it. The threshold now
+  // comes from PLUGIN CONFIG (the EBB_CARBON_BUDGET_* environment variables
+  // configure the CLI and MCP server, not the plugin), and plugin config
+  // overrides the ~/.ebb-ai/config file — so the test never touches the real
+  // config and never touches the environment.
+  let config: { dbPath: string; carbonBudgetG: number; carbonBudgetWindow: "daily" };
 
   beforeEach(() => {
     tmp = mkdtempSync(join(tmpdir(), "ebb-plugin-budget-"));
     dbPath = join(tmp, "queue.db");
-    // Tiny threshold so a single dispatched task crosses it. Env overrides
-    // the ~/.ebb-ai/config file, so the test never touches the real config.
-    process.env.EBB_CARBON_BUDGET_G = "0.0001";
-    process.env.EBB_CARBON_BUDGET_WINDOW = "daily";
+    config = { dbPath, carbonBudgetG: 0.0001, carbonBudgetWindow: "daily" };
   });
 
   afterEach(() => {
-    if (savedG !== undefined) process.env.EBB_CARBON_BUDGET_G = savedG;
-    else delete process.env.EBB_CARBON_BUDGET_G;
-    if (savedW !== undefined) process.env.EBB_CARBON_BUDGET_WINDOW = savedW;
-    else delete process.env.EBB_CARBON_BUDGET_WINDOW;
     rmSync(tmp, { recursive: true, force: true });
   });
 
   it("records the alert marker after a crossing dispatch", async () => {
     const sched = (await tool("schedule_task").execute(
       { prompt: "budget cross", deadline: deadlineISO(), region: "GB" },
-      { dbPath },
+      config,
     )) as { task_id: string };
 
     // Force the task overdue.
@@ -119,7 +116,7 @@ describe("runDispatchTick fires a carbon-budget alert on crossing", () => {
         return { text: `stub:${prompt}`, model, provider: "anthropic", raw: {} };
       },
     };
-    const result = await runDispatchTick({ dbPath }, { anthropic: stub });
+    const result = await runDispatchTick(config, { anthropic: stub });
     expect(result.dispatched).toBeGreaterThanOrEqual(1);
 
     // The alert marker for the current daily window must now exist.

@@ -7,7 +7,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-(Nothing pending — see version sections below.)
+**Theme:** "No ambient state." The library stops reading the environment;
+the hosts inject configuration.
+
+### Changed
+
+- **`@ebb-ai/core` is environment-pure — it reads no environment variables.**
+  0.14.1 narrowed the reads to named keys; that was not enough. ClawScan's
+  `suspicious.env_credential_access` rule fires on *any* ambient-environment
+  read inside a bundle that also makes network calls — the remaining finding
+  was `EBB_CARBON_BUDGET_G`, a non-secret numeric threshold. The only way to
+  clear it is to have zero such reads in the published bundle, so the reads are
+  gone rather than narrowed. Independently it is the right shape: a library
+  that reaches into ambient state is untestable and surprising to callers.
+
+  - `grid.ts`: `electricityMapsFeed` / `eiaFeed` / `entsoeFeed` / `wattTimeFeed`
+    take their credentials only as arguments. New `GridFeedCredentials` shape;
+    `buildDefaultGridFeed(credentials)` threads it to each leaf feed.
+    `buildDefaultGridFeed()` with no argument behaves exactly as before with no
+    variables exported: free UK feed for GB, deterministic mock elsewhere.
+  - `providers/{anthropic,openai,gemini,ollama}.ts`: `apiKey` / `host` come only
+    from the constructor. The `GEMINI_API_KEY`-then-`GOOGLE_API_KEY` precedence
+    moved to the hosts, unchanged.
+  - `budget.ts`: `loadCarbonBudgetConfig` still reads the `~/.ebb-ai/config`
+    FILE (filesystem I/O against a path the project owns, not ambient state)
+    but takes its overrides solely from `opts.env`.
+
+- **The OpenClaw plugin (`@vitalini/ebb`) reads no environment variables at
+  all.** Its bundle now contains **zero** environment accesses. Everything it
+  used to take from the environment is an OpenClaw plugin-config field under
+  `plugins.entries.ebb.config`, declared in `openclaw.plugin.json`'s
+  `configSchema` with a description naming the variable it replaces:
+  `electricityMapsApiKey`, `eiaApiKey`, `entsoeSecurityToken`,
+  `wattTimeUsername`, `wattTimePassword`, `anthropicApiKey`, `openaiApiKey`,
+  `geminiApiKey`, `googleApiKey`, `ollamaHost`, `ollamaModels`,
+  `carbonBudgetG`, `carbonBudgetWindow`, `deliveryStorePath`,
+  `disableStartupDispatch` (`defaultRegion` and `dbPath` already existed).
+
+  **Migration is lossless.** The nine credential fields are declared in the
+  manifest's `configContracts.secretInputs.paths`, which is what makes OpenClaw
+  resolve its `"${ENV_VAR}"` / `"$ENV_VAR"` SecretRef shorthand for them and
+  write the plaintext back into the config the plugin receives. Users who
+  already export `ANTHROPIC_API_KEY` keep exporting it and write
+  `"anthropicApiKey": "${ANTHROPIC_API_KEY}"` — the **gateway** performs the
+  environment read, never the plugin. `uiHints` marks the same fields sensitive
+  so the gateway UI masks them.
+
+- **No user-visible change for the `ebb` CLI or the `@ebb-ai/mcp` server.** They
+  are hosts: each reads the same variables it always did, at its own entry
+  point, through a small local `readEnvCredentials()` helper
+  (`packages/cli/src/env.ts`, `packages/mcp-server/src/env.ts`), and injects
+  them into core. The web dashboard does the same for the grid feeds.
+
+- **Python (`core-py`) is deliberately unchanged and stays environment-aware.**
+  It is never bundled into a third-party plugin — it is used directly as its own
+  host — so its `os.environ` fallbacks remain for ergonomics. The asymmetry is
+  documented in `packages/core-py/README.md` and in `core-ts/src/index.ts`.
+
+### Docs
+
+- Every environment-variable table now states that the variables configure the
+  **CLI and MCP server** (and the dashboard), and names the **plugin-config
+  field** that replaces each one for the OpenClaw plugin: root `README.md`,
+  `packages/cli/README.md`, `packages/mcp-server/README.md`,
+  `packages/core-py/README.md`, `packages/openclaw-plugin/README.md` (with a
+  full migration table), the web docs env table, `apps/web/.env.example`, and
+  `apps/web/public/llms.txt`.
 
 ## [0.14.1] — 2026-07-25
 
