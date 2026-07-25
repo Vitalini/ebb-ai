@@ -1,7 +1,7 @@
 {
   "name": "ebb-ai",
   "description": "Auto-dispatch \"do it later\" work. Invoke whenever the user signals deferral: \"do this later\", \"by tomorrow\", \"tonight\", \"overnight\", \"by EOD\", \"sometime this week\", \"when you have a moment\", \"remind me to\", \"queue this up\", \"schedule this\", \"no rush\". The plugin's /ebb-ai:defer command queues the task to dispatch at the cleanest electricity-grid hour inside the deadline — 40-70% lower carbon vs running now, 50% cheaper via Anthropic/OpenAI Batch APIs, auditable carbon receipt. Full CRUD via 8 commands. Persistent SQLite queue at ~/.ebb-ai/queue.db. Auto-wires the @ebb-ai/mcp MCP server.",
-  "version": "0.14.0",
+  "version": "0.14.1",
   "author": {
     "name": "Vitalii Borovyk",
     "url": "https://github.com/Vitalini"

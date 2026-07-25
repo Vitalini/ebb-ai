@@ -9,6 +9,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (Nothing pending — see version sections below.)
 
+## [0.14.1] — 2026-07-25
+
+**Theme:** "Narrow reads." A security-hygiene patch: no feature changes,
+no wire changes.
+
+> **Operator note:** the OpenClaw plugin does not auto-update. Run
+> `openclaw plugins update @vitalini/ebb` to pull 0.14.1.
+
+### Changed
+
+- **Environment variables are read by name, never by binding all of
+  `process.env`.** ClawHub's ClawScan flagged the carbon-budget loader's
+  `opts.env ?? process.env` as `suspicious.env_credential_access`
+  (Critical) in 0.14.0. The finding was structurally fair even though the
+  values involved (a gram threshold and a window name) never leave the
+  process: holding the whole environment in a scope that also makes
+  network calls is indistinguishable, to a static auditor, from
+  credential harvesting. Fixed at the source rather than explained away —
+  `core-ts/budget.ts` and its `core-py/budget.py` mirror now read only
+  the two `EBB_CARBON_BUDGET_*` keys; the OpenClaw plugin's dispatch
+  layer declares a closed `ProviderEnv` shape populated by six named
+  reads (replacing five `= process.env` parameter defaults); the startup
+  bootstrap reads only `EBB_DISABLE_STARTUP_DISPATCH`. The published
+  bundle now contains zero whole-environment captures — every access is a
+  literal, individually justifiable variable.
+
+  What this deliberately does *not* change: ebb still reads the provider
+  and grid-feed credentials it is given (`ANTHROPIC_API_KEY`,
+  `EBB_ELECTRICITY_MAPS_API_KEY`, `WATTTIME_PASSWORD`, …) and sends each
+  to the API that issued it. That is the product's function, it is
+  documented on every surface, and it is disclosed to the scanner rather
+  than disguised.
+
 ## [0.14.0] — 2026-07-24
 
 **Theme:** "The router and the fifth feed." Cross-provider LLM routing
@@ -1204,7 +1237,8 @@ their mind, and how to mitigate the operational failure modes
   Batches APIs. Direct Batch routing lands in v0.2.
 - Python port (`ebb-ai` PyPI) is a placeholder. v0.2.
 
-[Unreleased]: https://github.com/Vitalini/ebb-ai/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/Vitalini/ebb-ai/compare/v0.14.1...HEAD
+[0.14.1]: https://github.com/Vitalini/ebb-ai/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/Vitalini/ebb-ai/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/Vitalini/ebb-ai/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/Vitalini/ebb-ai/compare/v0.11.0...v0.12.0
