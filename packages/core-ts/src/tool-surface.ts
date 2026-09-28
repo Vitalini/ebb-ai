@@ -140,7 +140,7 @@ const candidatesParam: ToolParam = {
   itemKind: "string",
   optional: true,
   description:
-    "Optional cross-provider routing candidates: 'provider:model' strings (e.g. ['anthropic:claude-haiku-4-5','gemini:gemini-2-0-flash','ollama:llama-3-1-8b']) the caller EXPLICITLY allows. With >= 2 entries the scheduler scores them at the chosen dispatch window on a weighted blend of carbon, cost and latency and dispatches the winner (recording the full scored list on the signed receipt). No silent model swaps — routing only ever picks from this list. Absent or a single entry leaves the provider/model behavior unchanged. Every candidate model must exist in the price table or the task is rejected loudly.",
+    "Optional cross-provider routing candidates: 'provider:model' strings (e.g. ['anthropic:claude-haiku-4-5','openai:gpt-6-luna','ollama:llama-3-1-8b']) the caller EXPLICITLY allows. With >= 2 entries the scheduler scores them at the chosen dispatch window on a weighted blend of carbon, cost and latency and dispatches the winner (recording the full scored list on the signed receipt). No silent model swaps — routing only ever picks from this list. Absent or a single entry leaves the provider/model behavior unchanged. Every candidate model must exist in the price table or the task is rejected loudly.",
 };
 
 const routeWeightsParam: ToolParam = {
@@ -259,7 +259,7 @@ export const TOOL_SURFACE: readonly CanonicalToolDef[] = [
         // never exposed a model parameter.
         hosts: ["mcp"],
         description:
-          "Optional vendor model name (e.g. 'claude-sonnet-4-5'). Affects the reasoning string only.",
+          "Optional vendor model name (e.g. 'claude-sonnet-5'). Affects the reasoning string only.",
       }),
       candidatesParam,
       routeWeightsParam,
@@ -288,7 +288,7 @@ export const TOOL_SURFACE: readonly CanonicalToolDef[] = [
       carbonBudgetParam,
       modelParam({
         description:
-          "Model to dispatch with (e.g. 'claude-sonnet-4-6' for Anthropic, 'gpt-4o' for OpenAI). Defaults to the chosen provider's flagship model. When >= 2 'candidates' are supplied, routing may overwrite this with the winning candidate.",
+          "Model to dispatch with (e.g. 'claude-sonnet-5' for Anthropic, 'gpt-6-sol' for OpenAI). Defaults to the chosen provider's flagship model. When >= 2 'candidates' are supplied, routing may overwrite this with the winning candidate.",
       }),
       providerParam,
       candidatesParam,

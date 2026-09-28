@@ -362,7 +362,7 @@ export interface RecommendOptions {
    */
   carbonBudgetG?: number;
   /**
-   * Optional vendor model name (e.g. "claude-sonnet-4-5", "gpt-4.1-mini"). Used
+   * Optional vendor model name (e.g. "claude-sonnet-5", "gpt-6-sol"). Used
    * purely for shaping the `reasoning` string when Batch API is applicable
    * (deadline > 24h out). Does not affect the chosen window.
    */

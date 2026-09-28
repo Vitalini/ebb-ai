@@ -220,7 +220,7 @@ export function lookupModelEnergy(model?: string): ModelEnergyCoefficients {
 }
 
 export interface EstimateEnergyOpts {
-  /** Provider model identifier; e.g. "claude-sonnet-4-5", "gpt-4o". */
+  /** Provider model identifier; e.g. "claude-sonnet-5", "gpt-6-sol". */
   model?: string;
   /** Prompt tokens. If omitted with a known model, `TYPICAL_INPUT_TOKENS` is used. */
   inputTokens?: number;
