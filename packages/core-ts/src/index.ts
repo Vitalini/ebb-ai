@@ -148,6 +148,7 @@ export {
   OpenAIAdapter,
   GeminiAdapter,
   OllamaAdapter,
+  DEFAULT_MODEL_BY_PROVIDER,
 } from "./providers/index.js";
 export type {
   BatchHandle,

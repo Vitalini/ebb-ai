@@ -10,6 +10,7 @@ import {
   normalizeModelName,
   resolveModelEnergy,
 } from "../src/energy.js";
+import { DEFAULT_MODEL_BY_PROVIDER } from "../src/index.js";
 
 describe("normalizeModelName", () => {
   it("lowercases and strips dated suffixes", () => {
@@ -231,5 +232,20 @@ describe("ENERGY_SOURCES citations", () => {
     expect(ENERGY_SOURCES.patterson2021.arxiv).toBe("2104.10350");
     expect(ENERGY_SOURCES.luccioni2024.arxiv).toBe("2311.16863");
     expect(ENERGY_SOURCES.huggingface.url).toContain("huggingface.co/AIEnergyScore");
+  });
+});
+
+describe("DEFAULT_MODEL_BY_PROVIDER", () => {
+  it("names one current model per provider, each resolvable by the energy table", () => {
+    expect(DEFAULT_MODEL_BY_PROVIDER).toEqual({
+      anthropic: "claude-sonnet-5",
+      openai: "gpt-6-sol",
+      gemini: "gemini-3.8-flash",
+      ollama: "llama3.1",
+    });
+    for (const model of Object.values(DEFAULT_MODEL_BY_PROVIDER)) {
+      expect(resolveModelEnergy(model).coeffs.status, model).toBeUndefined();
+    }
+    expect(resolveModelEnergy(DEFAULT_MODEL_BY_PROVIDER.gemini).tier).toBe("normalized");
   });
 });

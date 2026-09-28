@@ -10,3 +10,4 @@ export { GeminiAdapter } from "./gemini.js";
 export type { GeminiAdapterOptions } from "./gemini.js";
 export { OllamaAdapter } from "./ollama.js";
 export type { OllamaAdapterOptions } from "./ollama.js";
+export { DEFAULT_MODEL_BY_PROVIDER } from "./defaults.js";
