@@ -42,7 +42,7 @@ try {
     {
       type: "provider_call",
       provider: "anthropic",
-      model: "claude-sonnet-4-6",
+      model: "claude-sonnet-5",
       prompt: "smoke-test prompt",
     },
     { deadline: new Date(Date.now() + 6 * 3600_000), region: "GB" },
