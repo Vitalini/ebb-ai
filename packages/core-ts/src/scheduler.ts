@@ -1810,6 +1810,7 @@ export class Scheduler {
       usage: first.usage,
       model: first.model ?? spec.model,
       provider: spec.provider,
+      stopReason: first.stopReason,
       raw: poll,
     };
 

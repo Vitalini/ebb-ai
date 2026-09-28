@@ -45,6 +45,7 @@ class BatchAdapter(ProviderAdapter):
         self.retrieve_sequence: list[str] = ["completed"]
         self.retrieve_usage = (10, 5)
         self.completed_text = "batch-result"
+        self.completed_stop_reason: str | None = None
 
     async def dispatch(
         self,
@@ -96,6 +97,7 @@ class BatchAdapter(ProviderAdapter):
                     input_tokens=inp,
                     output_tokens=out,
                     total_tokens=inp + out,
+                    stop_reason=self.completed_stop_reason,
                 )
             ],
         )
@@ -171,6 +173,23 @@ async def test_batch_submit_poll_complete_lifecycle() -> None:
         assert rec.receipt.energy_source is not None
         assert rec.result is not None
         assert rec.result.get("text") == "batch-result"
+
+
+async def test_batch_result_cut_off_by_max_tokens_keeps_stop_reason() -> None:
+    """R10: a truncated batch answer is stored with its stop_reason."""
+    async with Scheduler(feed=mock_grid_feed()) as s:
+        spec = ProviderCallSpec(provider="anthropic", model="m", prompt="long")
+        await s.enqueue_provider_call(
+            spec, DeferOptions(deadline=_deadline(60), task_id="bt:maxtok")
+        )
+        adapter = BatchAdapter()
+        adapter.completed_stop_reason = "max_tokens"
+        await s.tick({"anthropic": adapter})  # submit
+        await s.tick({"anthropic": adapter})  # retrieve → completed
+        rec = s.get_task("bt:maxtok")
+        assert rec.status == "completed"
+        assert rec.result is not None
+        assert rec.result.get("stop_reason") == "max_tokens"
 
 
 async def test_short_deadline_uses_sync_path() -> None:

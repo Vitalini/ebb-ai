@@ -3163,6 +3163,7 @@ class Scheduler:
             raw=None,
             input_tokens=first.input_tokens,
             output_tokens=first.output_tokens,
+            stop_reason=first.stop_reason,
         )
 
         intensity_g: float | None = None
@@ -3311,6 +3312,7 @@ def _result_to_serializable(value: Any) -> Any:
         "provider",
         "input_tokens",
         "output_tokens",
+        "stop_reason",
         "batch_id",
         "prompt_count",
     )
