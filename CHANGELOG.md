@@ -67,6 +67,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `pnpm.overrides` for the patched `fast-uri`, `hono`, `qs`, `sharp` and
   `nanoid` ranges, closing the advisories reachable from the monorepo
   other than `next` (tracked separately).
+- **`next` 16.2.11 → 16.3.6 in `apps/web`, closing two critical
+  unauthenticated-RCE advisories:** `GHSA-p293-qw3h-jr36` and
+  `GHSA-2xp9-vwfh-vxw4` (the second via the Image Optimization API when
+  AVIF files are used), both fixed upstream in `next@16.3.3`.
+  `eslint-config-next` bumped to match. `pnpm audit --prod` no longer
+  reports either advisory.
 
 ## [0.15.1] — 2026-07-25
 
