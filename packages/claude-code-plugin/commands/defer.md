@@ -50,10 +50,11 @@ Parse `$ARGUMENTS` into:
   guess from the host machine's timezone, falling back to `GB`). The
   `region` line in the tool response tells you what it picked; relay that
   to the user.
-- **`--model <name>`** — optional vendor model hint (e.g.
-  `claude-sonnet-4-6`). **Required when the deferred task should
-  actually dispatch via `ebb tick`** — without a model the server falls
-  back to its default (`EBB_DEFAULT_MODEL`, else `claude-sonnet-4-6`).
+- **`--model <name>`** — optional vendor model id (e.g.
+  `claude-sonnet-5`). Without it the server uses the chosen provider's
+  default: `claude-sonnet-5` for `anthropic` (overridable with
+  `EBB_DEFAULT_MODEL`), `gpt-6-sol` for `openai`. The `model` line in the
+  tool response shows what it picked.
 - **`--output <abs-path>`** — optional absolute file path. When the
   task completes, ebb-ai writes `{ taskId, result, receipt }` as JSON
   to this path. Useful if the user wants the result to land in an
