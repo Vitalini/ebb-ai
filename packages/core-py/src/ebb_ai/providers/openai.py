@@ -25,6 +25,7 @@ import re
 from typing import Any
 
 from .base import (
+    DEFAULT_MAX_TOKENS,
     BatchHandle,
     BatchResultItem,
     BatchRetrieveResult,
@@ -32,9 +33,6 @@ from .base import (
     DispatchResult,
     ProviderAdapter,
 )
-
-#: Output ceiling when ``DispatchOptions.max_tokens`` is ``None``.
-DEFAULT_MAX_TOKENS = 1024
 
 
 def _load_sdk() -> Any:

@@ -23,6 +23,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
+#: Output ceiling an adapter applies when ``DispatchOptions.max_tokens`` is
+#: ``None``. The Anthropic adapter overrides it with its own, larger default.
+DEFAULT_MAX_TOKENS = 1024
+
 
 @dataclass(slots=True)
 class DispatchOptions:
@@ -194,6 +198,7 @@ class ProviderAdapter(ABC):
 
 
 __all__ = [
+    "DEFAULT_MAX_TOKENS",
     "BatchHandle",
     "BatchResultItem",
     "BatchRetrieveResult",

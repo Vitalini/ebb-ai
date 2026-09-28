@@ -34,10 +34,12 @@ from typing import Any
 
 import httpx
 
-from .base import DispatchOptions, DispatchResult, ProviderAdapter
-
-#: Output ceiling when ``DispatchOptions.max_tokens`` is ``None``.
-DEFAULT_MAX_TOKENS = 1024
+from .base import (
+    DEFAULT_MAX_TOKENS,
+    DispatchOptions,
+    DispatchResult,
+    ProviderAdapter,
+)
 
 _DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 

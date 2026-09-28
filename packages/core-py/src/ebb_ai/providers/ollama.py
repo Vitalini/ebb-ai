@@ -27,10 +27,12 @@ from typing import Any
 
 import httpx
 
-from .base import DispatchOptions, DispatchResult, ProviderAdapter
-
-#: Output ceiling when ``DispatchOptions.max_tokens`` is ``None``.
-DEFAULT_MAX_TOKENS = 1024
+from .base import (
+    DEFAULT_MAX_TOKENS,
+    DispatchOptions,
+    DispatchResult,
+    ProviderAdapter,
+)
 
 _DEFAULT_HOST = "http://localhost:11434"
 

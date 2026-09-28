@@ -512,8 +512,6 @@ async def test_provider_call_max_tokens_reaches_anthropic_batch(
 
 @pytest.mark.asyncio
 async def test_provider_call_refusal_fails_the_task() -> None:
-
-
     client = _recording_anthropic_client()
     client.messages.create = AsyncMock(
         return_value=SimpleNamespace(
