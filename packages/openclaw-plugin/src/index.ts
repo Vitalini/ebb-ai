@@ -74,6 +74,7 @@ import { defineToolPlugin } from "openclaw/plugin-sdk/tool-plugin";
 
 import {
   buildDefaultGridFeed,
+  DEFAULT_MODEL_BY_PROVIDER,
   getToolDefOrThrow,
   loadCarbonBudgetConfig,
   recommendWindow,
@@ -142,23 +143,6 @@ const SYNTHETIC_GRID_WARNING =
   "so the carbon numbers above are illustrative, not measured. " +
   "Set the plugin's electricityMapsApiKey (or another supported feed credential) " +
   "in the gateway config for real intensity.";
-
-/**
- * The model a task carries when the caller does not pass one, per provider.
- * Stored for the direct-API-key path + audit record; the OpenClaw runtime
- * bridge ignores it and runs the gateway agent's own model. Keeping these
- * per-provider means a task never carries a foreign model id (e.g. an openai
- * task with a claude default).
- */
-const DEFAULT_MODEL_BY_PROVIDER: Record<
-  "anthropic" | "openai" | "gemini" | "ollama",
-  string
-> = {
-  anthropic: "claude-sonnet-4-6",
-  openai: "gpt-4o",
-  gemini: "gemini-2.0-flash",
-  ollama: "llama3.1",
-};
 
 /**
  * The plugin-config field that configures each provider's direct-dispatch
