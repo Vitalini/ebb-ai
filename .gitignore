@@ -59,3 +59,8 @@ development/
 # Vercel CLI link (local, per-machine)
 .vercel/
 packages/core-py/uv.lock
+
+# Local agent/tool artifacts
+.worktrees/
+.playwright-mcp/
+packages/openclaw-plugin/reports/
