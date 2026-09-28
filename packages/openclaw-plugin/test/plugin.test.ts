@@ -551,7 +551,7 @@ describe("ebb OpenClaw plugin — schedule_task provider param", () => {
         { dbPath },
       )) as { provider: string; model: string };
       expect(dflt.provider).toBe("anthropic");
-      expect(dflt.model).toBe("claude-sonnet-4-6");
+      expect(dflt.model).toBe("claude-sonnet-5");
     } finally {
       setLlmBridgeForTest(undefined);
     }
@@ -576,6 +576,25 @@ describe("ebb OpenClaw plugin — schedule_task provider param", () => {
       expect(oll.provider).toBe("ollama");
       expect(oll.provider_source).toBe("request");
       expect(oll.model).toBe("llama3.1");
+    } finally {
+      setLlmBridgeForTest(undefined);
+    }
+  });
+
+  it.each([
+    ["anthropic", "claude-sonnet-5"],
+    ["openai", "gpt-6-sol"],
+    ["gemini", "gemini-3.8-flash"],
+    ["ollama", "llama3.1"],
+  ] as const)("an explicit %s provider with no model defaults to %s", async (provider, expected) => {
+    setLlmBridgeForTest(async () => ({ text: "" }));
+    try {
+      const rec = (await tool("schedule_task").execute(
+        { prompt: "p", deadline: deadlineISO(), region: "GB", provider },
+        { dbPath },
+      )) as { provider: string; model: string };
+      expect(rec.provider).toBe(provider);
+      expect(rec.model).toBe(expected);
     } finally {
       setLlmBridgeForTest(undefined);
     }
