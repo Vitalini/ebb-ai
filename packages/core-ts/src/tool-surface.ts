@@ -166,6 +166,9 @@ const modelParam = (opts: { hosts?: readonly ToolHost[]; description: string }):
   description: opts.description,
 });
 
+const scheduleModelDescription = (anthropicOverride: string): string =>
+  `Model to dispatch with (e.g. 'claude-sonnet-5' for Anthropic, 'gpt-6-sol' for OpenAI). Defaults per provider: anthropic '${DEFAULT_MODEL_BY_PROVIDER.anthropic}'${anthropicOverride}, openai '${DEFAULT_MODEL_BY_PROVIDER.openai}', gemini '${DEFAULT_MODEL_BY_PROVIDER.gemini}', ollama '${DEFAULT_MODEL_BY_PROVIDER.ollama}'. When >= 2 'candidates' are supplied, routing may overwrite this with the winning candidate.`;
+
 const taskIdRequired: ToolParam = {
   name: "task_id",
   kind: "string",
@@ -288,9 +291,15 @@ export const TOOL_SURFACE: readonly CanonicalToolDef[] = [
           "Grid-region override (Electricity Maps zone code such as 'US-CAL-CISO'). Defaults to the host's configured region, else a host-timezone guess, else GB.",
       }),
       carbonBudgetParam,
+      // The EBB_DEFAULT_MODEL override is read only by the MCP server, so the
+      // sentence naming it is MCP-only; OpenClaw gets the plain defaults.
       modelParam({
-        description:
-          `Model to dispatch with (e.g. 'claude-sonnet-5' for Anthropic, 'gpt-6-sol' for OpenAI). Defaults per provider: anthropic '${DEFAULT_MODEL_BY_PROVIDER.anthropic}' (a host may override it with EBB_DEFAULT_MODEL), openai '${DEFAULT_MODEL_BY_PROVIDER.openai}', gemini '${DEFAULT_MODEL_BY_PROVIDER.gemini}', ollama '${DEFAULT_MODEL_BY_PROVIDER.ollama}'. When >= 2 'candidates' are supplied, routing may overwrite this with the winning candidate.`,
+        hosts: ["mcp"],
+        description: scheduleModelDescription(" (EBB_DEFAULT_MODEL overrides it)"),
+      }),
+      modelParam({
+        hosts: ["openclaw"],
+        description: scheduleModelDescription(""),
       }),
       providerParam,
       candidatesParam,
