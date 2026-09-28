@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **`next` 16.2.11 → 16.3.6 in `apps/web`, closing two critical
+  unauthenticated-RCE advisories:** `GHSA-p293-qw3h-jr36` and
+  `GHSA-2xp9-vwfh-vxw4` (the second via the Image Optimization API when
+  AVIF files are used), both fixed upstream in `next@16.3.3`.
+  `eslint-config-next` bumped to match. `pnpm audit --prod` no longer
+  reports either advisory.
+
 ### Fixed
 
 - **Corrected an inaccurate privacy claim in 0.15.1's own documentation.**
