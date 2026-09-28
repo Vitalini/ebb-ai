@@ -10,6 +10,7 @@ import {
   normalizeModelName,
   resolveModelEnergy,
 } from "../src/energy.js";
+import { DEFAULT_MODEL_BY_PROVIDER } from "../src/index.js";
 
 describe("normalizeModelName", () => {
   it("lowercases and strips dated suffixes", () => {
@@ -39,13 +40,49 @@ describe("normalizeModelName", () => {
     expect(normalizeModelName("us.anthropic.claude-opus-4-1-v1:0")).toBe("claude-opus-4-1");
   });
 
+  it("strips Bedrock global and bare vendor prefixes", () => {
+    expect(normalizeModelName("global.anthropic.claude-sonnet-5")).toBe("claude-sonnet-5");
+    expect(normalizeModelName("anthropic.claude-opus-5")).toBe("claude-opus-5");
+    expect(normalizeModelName("meta.llama-4-scout")).toBe("llama-4-scout");
+  });
+
   it("canonicalizes claude word order", () => {
     expect(normalizeModelName("claude-3-5-sonnet")).toBe("claude-sonnet-3-5");
     expect(normalizeModelName("claude-3-5-sonnet-20241022")).toBe("claude-sonnet-3-5");
+    expect(normalizeModelName("claude-5-1-fable")).toBe("claude-fable-5-1");
+    expect(normalizeModelName("claude-5-1-mythos")).toBe("claude-mythos-5-1");
+  });
+
+  it("maps the dotted Gemini / GPT vendor ids to the canonical keys", () => {
+    expect(normalizeModelName("gemini-3.8-flash")).toBe("gemini-3-8-flash");
+    expect(normalizeModelName("gpt-4.1-mini")).toBe("gpt-4-1-mini");
   });
 });
 
 describe("resolveModelEnergy", () => {
+  it("keeps retired rows resolvable and flags them", () => {
+    const r = resolveModelEnergy("claude-sonnet-3-5");
+    expect(r.tier).toBe("exact");
+    expect(r.coeffs.status).toBe("retired");
+    expect(resolveModelEnergy("claude-3-5-sonnet-20241022").tier).toBe("normalized");
+    expect(resolveModelEnergy("gpt-4").coeffs.status).toBe("deprecated");
+    expect(resolveModelEnergy("claude-sonnet-5").coeffs.status).toBeUndefined();
+  });
+
+  it("routes new families to current representatives", () => {
+    const opus5 = MODEL_ENERGY_COEFFICIENTS["claude-opus-5"]!;
+    const fable = MODEL_ENERGY_COEFFICIENTS["claude-fable-5-1"]!;
+    const gpt41 = MODEL_ENERGY_COEFFICIENTS["gpt-4-1"]!;
+    expect(resolveModelEnergy("claude-opus-6")).toEqual({ coeffs: opus5, tier: "family-fallback" });
+    expect(resolveModelEnergy("claude-mythos-5-1")).toEqual({ coeffs: fable, tier: "family-fallback" });
+    expect(resolveModelEnergy("gemini-4-flash").coeffs).toBe(MODEL_ENERGY_COEFFICIENTS["gemini-3-8-flash"]);
+    // gpt-4-1 is ordered before gpt-4, so a 4.1 variant never lands on gpt-4.
+    expect(resolveModelEnergy("gpt-4-1-ultra").coeffs).toBe(gpt41);
+    expect(resolveModelEnergy("gpt-4-1-ultra").coeffs).not.toBe(MODEL_ENERGY_COEFFICIENTS["gpt-4"]);
+    // The removed never-real row still resolves, through its family.
+    expect(resolveModelEnergy("claude-opus-3-5")).toEqual({ coeffs: opus5, tier: "family-fallback" });
+  });
+
   it("reports the resolution tier", () => {
     expect(resolveModelEnergy("claude-opus-4-7").tier).toBe("exact");
     expect(resolveModelEnergy("claude-sonnet-4-5-20251022").tier).toBe("normalized");
@@ -55,7 +92,7 @@ describe("resolveModelEnergy", () => {
   });
 
   it("family fallback uses the representative's coefficients", () => {
-    const rep = MODEL_ENERGY_COEFFICIENTS["claude-sonnet-4"]!;
+    const rep = MODEL_ENERGY_COEFFICIENTS["claude-sonnet-5"]!;
     const got = resolveModelEnergy("claude-sonnet-9").coeffs;
     expect(got.whPerInputToken).toBe(rep.whPerInputToken);
     expect(got.whPerOutputToken).toBe(rep.whPerOutputToken);
@@ -195,5 +232,20 @@ describe("ENERGY_SOURCES citations", () => {
     expect(ENERGY_SOURCES.patterson2021.arxiv).toBe("2104.10350");
     expect(ENERGY_SOURCES.luccioni2024.arxiv).toBe("2311.16863");
     expect(ENERGY_SOURCES.huggingface.url).toContain("huggingface.co/AIEnergyScore");
+  });
+});
+
+describe("DEFAULT_MODEL_BY_PROVIDER", () => {
+  it("names one current model per provider, each resolvable by the energy table", () => {
+    expect(DEFAULT_MODEL_BY_PROVIDER).toEqual({
+      anthropic: "claude-sonnet-5",
+      openai: "gpt-6-sol",
+      gemini: "gemini-3.8-flash",
+      ollama: "llama3.1",
+    });
+    for (const model of Object.values(DEFAULT_MODEL_BY_PROVIDER)) {
+      expect(resolveModelEnergy(model).coeffs.status, model).toBeUndefined();
+    }
+    expect(resolveModelEnergy(DEFAULT_MODEL_BY_PROVIDER.gemini).tier).toBe("normalized");
   });
 });

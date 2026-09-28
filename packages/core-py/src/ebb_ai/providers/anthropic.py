@@ -15,8 +15,10 @@ Batches API), which is a flat 50% discount with a 24-hour SLA.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
+from ..energy import normalize_model_name
 from .base import (
     BatchHandle,
     BatchResultItem,
@@ -24,7 +26,72 @@ from .base import (
     DispatchOptions,
     DispatchResult,
     ProviderAdapter,
+    ProviderRefusalError,
 )
+
+#: Output ceiling when ``DispatchOptions.max_tokens`` is ``None``. The
+#: ``claude-api`` skill's non-streaming default: large enough not to
+#: truncate normal answers, small enough to stay under the SDK's HTTP
+#: timeout.
+DEFAULT_MAX_TOKENS = 16000
+
+_SAMPLING_PARAMS = ("temperature", "top_p", "top_k")
+_SAMPLING_MODEL_RE = re.compile(r"^claude-(opus|sonnet|haiku)-(\d+)(?:-(\d{1,2}))?(?!\d)")
+
+
+def _supports_sampling_params(model: str) -> bool:
+    """Allow-list: does this Claude model accept sampling parameters?
+
+    Opus 4.7 and later, Sonnet 5, Fable and Mythos reject ``temperature``
+    / ``top_p`` / ``top_k`` with a 400. True only for every Haiku id and
+    for Opus / Sonnet 4.6 or lower; every other id, including models
+    released after this list was written, gets False. Omitting a sampling
+    parameter never breaks a request; sending it to a model that rejects
+    it always does. Mirrors the TS adapter's ``supportsSamplingParams``.
+    """
+    m = _SAMPLING_MODEL_RE.match(normalize_model_name(model))
+    if m is None:
+        return False
+    if m.group(1) == "haiku":
+        return True
+    major = int(m.group(2))
+    minor = int(m.group(3) or 0)
+    return major < 4 or (major == 4 and minor <= 6)
+
+
+def _request_params(model: str, prompt: str, opts: DispatchOptions) -> dict[str, Any]:
+    """The request fields shared by ``messages.create`` and each Message
+    Batches entry. Sampling parameters in ``opts.extra`` are dropped for
+    models that reject them."""
+    params: dict[str, Any] = {
+        "model": model,
+        "max_tokens": opts.max_tokens
+        if opts.max_tokens is not None
+        else DEFAULT_MAX_TOKENS,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    if opts.system is not None:
+        params["system"] = opts.system
+    if opts.metadata:
+        params["metadata"] = opts.metadata
+    params.update(opts.extra)
+    if not _supports_sampling_params(model):
+        for key in _SAMPLING_PARAMS:
+            params.pop(key, None)
+    return params
+
+
+def _refusal(message: Any, model: str) -> ProviderRefusalError | None:
+    """A :class:`ProviderRefusalError` when ``message`` is a refusal (HTTP
+    200, but no answer), else ``None``."""
+    if getattr(message, "stop_reason", None) != "refusal":
+        return None
+    details = getattr(message, "stop_details", None)
+    return ProviderRefusalError(
+        "anthropic",
+        getattr(message, "model", None) or model,
+        getattr(details, "category", None),
+    )
 
 
 def _load_sdk() -> Any:
@@ -87,18 +154,12 @@ class AnthropicAdapter(ProviderAdapter):
         ``raw`` for advanced consumers (citations, tool calls, etc.).
         """
         opts = options or DispatchOptions()
-        kwargs: dict[str, Any] = {
-            "model": model,
-            "max_tokens": opts.max_tokens,
-            "messages": [{"role": "user", "content": prompt}],
-        }
-        if opts.system is not None:
-            kwargs["system"] = opts.system
-        if opts.metadata:
-            kwargs["metadata"] = opts.metadata
-        kwargs.update(opts.extra)
-
-        response = await self._client.messages.create(**kwargs)
+        response = await self._client.messages.create(
+            **_request_params(model, prompt, opts)
+        )
+        refusal = _refusal(response, model)
+        if refusal is not None:
+            raise refusal
         text = _extract_text(response)
         usage = getattr(response, "usage", None)
         return DispatchResult(
@@ -108,6 +169,7 @@ class AnthropicAdapter(ProviderAdapter):
             raw=response,
             input_tokens=getattr(usage, "input_tokens", None) if usage else None,
             output_tokens=getattr(usage, "output_tokens", None) if usage else None,
+            stop_reason=getattr(response, "stop_reason", None),
         )
 
     async def dispatch_batch(
@@ -122,19 +184,10 @@ class AnthropicAdapter(ProviderAdapter):
         ``custom_id``. We auto-assign ``custom_id = f"req-{i}"``.
         """
         opts = options or DispatchOptions()
-        requests = []
-        for i, prompt in enumerate(prompts):
-            params: dict[str, Any] = {
-                "model": model,
-                "max_tokens": opts.max_tokens,
-                "messages": [{"role": "user", "content": prompt}],
-            }
-            if opts.system is not None:
-                params["system"] = opts.system
-            if opts.metadata:
-                params["metadata"] = opts.metadata
-            params.update(opts.extra)
-            requests.append({"custom_id": f"req-{i}", "params": params})
+        requests = [
+            {"custom_id": f"req-{i}", "params": _request_params(model, prompt, opts)}
+            for i, prompt in enumerate(prompts)
+        ]
 
         batch = await self._client.messages.batches.create(requests=requests)
         return BatchHandle(
@@ -168,8 +221,18 @@ class AnthropicAdapter(ProviderAdapter):
         async for entry in stream:
             result = getattr(entry, "result", None)
             result_type = getattr(result, "type", None)
-            if result_type == "succeeded":
-                message = getattr(result, "message", None)
+            message = getattr(result, "message", None)
+            refusal = (
+                _refusal(message, "unknown model")
+                if result_type == "succeeded"
+                else None
+            )
+            if refusal is not None:
+                # A refused request succeeded at the HTTP level but has no answer.
+                saw_error = True
+                if first_error is None:
+                    first_error = str(refusal)
+            elif result_type == "succeeded":
                 text = _extract_text(message) if message is not None else ""
                 usage = getattr(message, "usage", None)
                 input_tokens = getattr(usage, "input_tokens", None) if usage else None
@@ -188,6 +251,7 @@ class AnthropicAdapter(ProviderAdapter):
                         input_tokens=input_tokens,
                         output_tokens=output_tokens,
                         total_tokens=total,
+                        stop_reason=getattr(message, "stop_reason", None),
                     )
                 )
             elif result_type == "expired":

@@ -71,6 +71,9 @@ export type EnergyResolutionTier =
   | "family-fallback"
   | "default";
 
+/** Lifecycle flag on a coefficient row (absent = current). */
+export type ModelLifecycleStatus = "retired" | "deprecated";
+
 /** Per-model inference energy coefficients (chip-level Wh, no PUE applied). */
 export interface ModelEnergyCoefficients {
   /** Wh consumed per input (prompt) token. */
@@ -81,6 +84,12 @@ export interface ModelEnergyCoefficients {
   paramsB?: number;
   /** Provenance of the numbers. */
   source: EnergySourceTier;
+  /**
+   * Vendor lifecycle stage, when not current. `retired`: shut down, kept so
+   * past receipts still resolve, never priced. `deprecated`: shutdown
+   * announced, still callable and priced.
+   */
+  status?: ModelLifecycleStatus;
 }
 
 /**
@@ -141,9 +150,11 @@ export function normalizeModelName(model: string): string {
   let name = model.trim().toLowerCase();
   // Strip a path-style provider prefix ("anthropic/…", "meta-llama/…").
   if (name.includes("/")) name = name.slice(name.lastIndexOf("/") + 1);
-  // Strip a Bedrock region.vendor. prefix ("us.anthropic.…").
+  // Strip a Bedrock vendor prefix, with or without a region / global
+  // inference-profile scope ("us.anthropic.…", "global.anthropic.…",
+  // "anthropic.…").
   name = name.replace(
-    /^(?:us|eu|apac)\.(?:anthropic|meta|amazon|cohere|mistral|ai21|stability)\./,
+    /^(?:(?:us|eu|apac|global)\.)?(?:anthropic|meta|amazon|cohere|mistral|ai21|stability)\./,
     "",
   );
   // Strip a Bedrock trailing version tag (":0", ":1").
@@ -158,7 +169,7 @@ export function normalizeModelName(model: string): string {
   name = name.replace(/-\d{3,4}$/, "");
   // Canonicalize Claude word order: "claude-3-5-sonnet" → "claude-sonnet-3-5".
   const reordered = name.match(
-    /^claude-(\d+(?:-\d+)*)-(opus|sonnet|haiku)(-.*)?$/,
+    /^claude-(\d+(?:-\d+)*)-(opus|sonnet|haiku|fable|mythos)(-.*)?$/,
   );
   if (reordered) {
     name = `claude-${reordered[2]}-${reordered[1]}${reordered[3] ?? ""}`;
@@ -209,7 +220,7 @@ export function lookupModelEnergy(model?: string): ModelEnergyCoefficients {
 }
 
 export interface EstimateEnergyOpts {
-  /** Provider model identifier; e.g. "claude-sonnet-4-5", "gpt-4o". */
+  /** Provider model identifier; e.g. "claude-sonnet-5", "gpt-6-sol". */
   model?: string;
   /** Prompt tokens. If omitted with a known model, `TYPICAL_INPUT_TOKENS` is used. */
   inputTokens?: number;

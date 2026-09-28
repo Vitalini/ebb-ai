@@ -278,7 +278,7 @@ async def recommend_window(
         Optional grams CO2e cap. Forecast entries above the budget are dropped
         before the cheapest window is selected.
     model:
-        Optional vendor model name (e.g. ``"claude-sonnet-4-5"``). Selects
+        Optional vendor model name (e.g. ``"claude-sonnet-5"``). Selects
         the per-model energy coefficients (v0.10) used for the reported
         grams and the carbon-budget filter, matching the TS port. With no
         model the legacy flat estimate is used. It does not, on its own,

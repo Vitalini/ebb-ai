@@ -1,11 +1,23 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { estimateEnergyKwh } from "@ebb-ai/core/energy";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { RegionCard, RegionCardSkeleton } from "@/components/region-card";
 import { getGridForecast } from "@/lib/grid";
 import { REGIONS, type Region } from "@/lib/regions";
 import type { GridForecast } from "@/lib/types";
+
+/**
+ * Format a model's typical-call energy (500 in + 500 out tokens, PUE 1.15,
+ * per `estimateEnergyKwh` in `@ebb-ai/core/energy`) as "~N Wh". Mirrors the
+ * docs page's convention so both pages agree on every Wh-per-call figure.
+ */
+function formatWh(model: string): string {
+  const wh = estimateEnergyKwh({ model }) * 1000;
+  const rounded = Math.round(wh * 10) / 10;
+  return `~${rounded.toFixed(1)} Wh`;
+}
 
 export const metadata: Metadata = {
   title: "Live carbon map",
@@ -220,9 +232,10 @@ function Methodology() {
             PUE 1.15). Actual ebb-ai dispatches (v0.10+) use{" "}
             <strong className="text-fg">per-model coefficients</strong>
             {" "}from Patterson 2021, Luccioni 2024, and the Hugging Face AI
-            Energy Score — e.g. claude-sonnet-4 ≈ 3 Wh/call (500 in + 500
-            out), claude-opus ≈ 9 Wh, claude-haiku ≈ 0.9 Wh, llama-3.1-8b
-            ≈ 0.6 Wh. The cleanest hour inside the deadline still wins;
+            Energy Score — e.g. claude-sonnet-5 {formatWh("claude-sonnet-5")}/call
+            (500 in + 500 out, PUE 1.15), claude-opus-5 {formatWh("claude-opus-5")},
+            claude-haiku-4-5 {formatWh("claude-haiku-4-5")}, llama-3.1-8b{" "}
+            {formatWh("llama-3-1-8b")}. The cleanest hour inside the deadline still wins;
             now grams scale with which model the agent actually runs.
             See <Link href="/docs#energy" className="text-accent hover:underline">/docs &rarr; energy</Link>.
           </p>

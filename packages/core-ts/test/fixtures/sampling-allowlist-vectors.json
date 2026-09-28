@@ -1,0 +1,169 @@
+{
+  "_comment": "Cross-language parity for the Anthropic sampling allow-list (supportsSamplingParams / _supports_sampling_params): true = the model receives temperature/top_p/top_k. Consumed by packages/core-ts/test/sampling-parity.test.ts and packages/core-py/tests/test_sampling_parity.py.",
+  "vectors": [
+    {
+      "id": "claude-haiku-4-5",
+      "sampling": true
+    },
+    {
+      "id": "claude-haiku-4-5-20251001",
+      "sampling": true
+    },
+    {
+      "id": "claude-3-5-haiku-20241022",
+      "sampling": true
+    },
+    {
+      "id": "claude-3-haiku-20240307",
+      "sampling": true
+    },
+    {
+      "id": "claude-opus-4-6",
+      "sampling": true
+    },
+    {
+      "id": "claude-sonnet-4-6",
+      "sampling": true
+    },
+    {
+      "id": "claude-opus-4-5",
+      "sampling": true
+    },
+    {
+      "id": "claude-opus-4-5-20251101",
+      "sampling": true
+    },
+    {
+      "id": "claude-sonnet-4-5",
+      "sampling": true
+    },
+    {
+      "id": "claude-sonnet-4-5-20250929",
+      "sampling": true
+    },
+    {
+      "id": "claude-opus-4-1",
+      "sampling": true
+    },
+    {
+      "id": "claude-opus-4-1-20250805",
+      "sampling": true
+    },
+    {
+      "id": "claude-opus-4",
+      "sampling": true
+    },
+    {
+      "id": "claude-opus-4-0",
+      "sampling": true
+    },
+    {
+      "id": "claude-sonnet-4",
+      "sampling": true
+    },
+    {
+      "id": "claude-sonnet-4-20250514",
+      "sampling": true
+    },
+    {
+      "id": "claude-3-7-sonnet-20250219",
+      "sampling": true
+    },
+    {
+      "id": "claude-3-5-sonnet-20241022",
+      "sampling": true
+    },
+    {
+      "id": "claude-3-opus-20240229",
+      "sampling": true
+    },
+    {
+      "id": "claude-opus-4-7",
+      "sampling": false
+    },
+    {
+      "id": "claude-opus-4-8",
+      "sampling": false
+    },
+    {
+      "id": "claude-opus-5",
+      "sampling": false
+    },
+    {
+      "id": "claude-opus-5-5",
+      "sampling": false
+    },
+    {
+      "id": "claude-sonnet-5",
+      "sampling": false
+    },
+    {
+      "id": "claude-fable-5",
+      "sampling": false
+    },
+    {
+      "id": "claude-fable-5-1",
+      "sampling": false
+    },
+    {
+      "id": "claude-mythos-5",
+      "sampling": false
+    },
+    {
+      "id": "claude-mythos-5-1",
+      "sampling": false
+    },
+    {
+      "id": "claude-opus-6",
+      "sampling": false
+    },
+    {
+      "id": "claude-sonnet-6",
+      "sampling": false
+    },
+    {
+      "id": "claude-opus-4-10",
+      "sampling": false
+    },
+    {
+      "id": "CLAUDE-SONNET-4-6",
+      "sampling": true
+    },
+    {
+      "id": "claude-sonnet-4-6:0",
+      "sampling": true
+    },
+    {
+      "id": "us.anthropic.claude-sonnet-4-6",
+      "sampling": true
+    },
+    {
+      "id": "global.anthropic.claude-opus-4-5",
+      "sampling": true
+    },
+    {
+      "id": "anthropic.claude-haiku-4-5",
+      "sampling": true
+    },
+    {
+      "id": "anthropic.claude-opus-5",
+      "sampling": false
+    },
+    {
+      "id": "claude-opus-4.6",
+      "sampling": true
+    },
+    {
+      "id": "claude-sonnet-4.5",
+      "sampling": true
+    },
+    {
+      "id": "gpt-6-sol",
+      "sampling": false
+    },
+    {
+      "id": "",
+      "sampling": false
+    }
+  ]
+}

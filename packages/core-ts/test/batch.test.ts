@@ -41,6 +41,7 @@ interface BatchAdapter extends ProviderAdapter {
   retrieveCalls: string[];
   retrieveSequence: BatchRetrieveResult["status"][];
   retrieveUsage: { inputTokens: number; outputTokens: number };
+  retrieveStopReason?: string;
 }
 
 function makeBatchAdapter(
@@ -82,6 +83,7 @@ function makeBatchAdapter(
           {
             text: "batch-result",
             model: "m",
+            stopReason: adapter.retrieveStopReason,
             usage: {
               inputTokens,
               outputTokens,
@@ -160,6 +162,22 @@ describe("Batch API routing (§0.1)", () => {
     expect(done?.receipt?.gridSource).toBeDefined();
     expect(done?.receipt?.energySource).toBeDefined();
     expect((done?.result as { text?: string })?.text).toBe("batch-result");
+    s.shutdown();
+  });
+
+  it("a batch result cut off by max_tokens keeps its stopReason (R10)", async () => {
+    const s = new Scheduler({ feed: mockGridFeed() });
+    const adapter = makeBatchAdapter();
+    adapter.retrieveStopReason = "max_tokens";
+    const rec = await s.enqueueProviderCall(
+      { type: "provider_call", provider: "anthropic", model: "m", prompt: "long" },
+      { deadline: deadline(60), region: "US-CAL-CISO", taskId: "bt-maxtok" },
+    );
+    await s.tick({ anthropic: adapter }); // submit
+    await s.tick({ anthropic: adapter }); // retrieve → completed
+    const done = s.getTask(rec.taskId);
+    expect(done?.status).toBe("completed");
+    expect((done?.result as { stopReason?: string })?.stopReason).toBe("max_tokens");
     s.shutdown();
   });
 

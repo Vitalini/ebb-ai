@@ -41,12 +41,42 @@ export interface DispatchResult {
     outputTokens?: number;
     totalTokens?: number;
   };
-  /** Vendor identifier we used (e.g. "claude-sonnet-4-5", "gpt-4.1-mini"). */
+  /** Vendor identifier we used (e.g. "claude-sonnet-5", "gpt-6-sol"). */
   model: string;
   /** Vendor name: "anthropic" | "openai" | "..." */
   provider: string;
   /** Raw vendor response object. Inspect at your own risk. */
   raw: unknown;
+  /**
+   * Why the model stopped, as the provider reported it (Anthropic
+   * `stop_reason`: "end_turn", "max_tokens", ...). A "max_tokens" value
+   * means `text` is truncated. Absent when the provider does not report one.
+   */
+  stopReason?: string;
+}
+
+/**
+ * Thrown when the provider declined the request (Anthropic
+ * `stop_reason: "refusal"`). The call returned HTTP 200, but its content
+ * is not an answer, so it must not be recorded as a completed task.
+ * Carries no HTTP status, so the scheduler does not retry it.
+ */
+export class ProviderRefusalError extends Error {
+  readonly provider: string;
+  readonly model: string;
+  /** Refusal category from `stop_details.category` ("cyber", "bio", ...), or null. */
+  readonly category: string | null;
+
+  constructor(provider: string, model: string, category: string | null) {
+    super(
+      `${provider} refused the request for ${model}` +
+        (category ? ` (category: ${category})` : ""),
+    );
+    this.name = "ProviderRefusalError";
+    this.provider = provider;
+    this.model = model;
+    this.category = category;
+  }
 }
 
 export interface BatchHandle {
@@ -77,6 +107,8 @@ export interface BatchRetrieveResult {
   results?: Array<{
     text: string;
     model?: string;
+    /** Provider stop reason for this request; "max_tokens" means truncated. */
+    stopReason?: string;
     usage?: {
       inputTokens?: number;
       outputTokens?: number;

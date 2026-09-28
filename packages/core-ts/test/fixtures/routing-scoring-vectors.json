@@ -3,17 +3,17 @@
   "cases": [
     {
       "name": "default-weights-3way",
-      "candidates": ["anthropic:claude-haiku-4-5", "gemini:gemini-2-0-flash", "ollama:llama-3-1-8b"],
+      "candidates": ["anthropic:claude-haiku-4-5", "openai:gpt-6-luna", "ollama:llama-3-1-8b"],
       "intensityGCo2PerKwh": 400,
       "batchEligible": false,
       "expectedWeights": { "carbon": 0.6, "cost": 0.3, "latency": 0.1 },
       "expectedChosen": "ollama:llama-3-1-8b",
       "expectedConsidered": [
         { "provider": "anthropic", "model": "claude-haiku-4-5", "estCarbonG": 0.414, "estCostUsd": 0.003, "latencyClass": 0.5, "score": 1 },
-        { "provider": "gemini", "model": "gemini-2-0-flash", "estCarbonG": 0.414, "estCostUsd": 0.00025, "latencyClass": 0.5, "score": 0.725 },
+        { "provider": "openai", "model": "gpt-6-luna", "estCarbonG": 0.414, "estCostUsd": 0.0003, "latencyClass": 0.5, "score": 0.73 },
         { "provider": "ollama", "model": "llama-3-1-8b", "estCarbonG": 0.276, "estCostUsd": 0, "latencyClass": 0, "score": 0 }
       ],
-      "expectedReasoning": "routed to ollama:llama-3-1-8b (score .00 vs 1.00/.72): lowest carbon at window; no per-token cost (local); local (no network latency tier); runs locally on your own grid"
+      "expectedReasoning": "routed to ollama:llama-3-1-8b (score .00 vs 1.00/.73): lowest carbon at window; no per-token cost (local); local (no network latency tier); runs locally on your own grid"
     },
     {
       "name": "cost-only-prefers-local",
@@ -32,17 +32,17 @@
     },
     {
       "name": "carbon-only-two-hosted",
-      "candidates": ["anthropic:claude-opus-4", "gemini:gemini-2-0-flash"],
+      "candidates": ["anthropic:claude-opus-4", "openai:gpt-6-luna"],
       "intensityGCo2PerKwh": 500,
       "routeWeights": { "carbon": 1, "cost": 0, "latency": 0 },
       "batchEligible": false,
       "expectedWeights": { "carbon": 1, "cost": 0, "latency": 0 },
-      "expectedChosen": "gemini:gemini-2-0-flash",
+      "expectedChosen": "openai:gpt-6-luna",
       "expectedConsidered": [
         { "provider": "anthropic", "model": "claude-opus-4", "estCarbonG": 5.175, "estCostUsd": 0.045, "latencyClass": 0.5, "score": 1 },
-        { "provider": "gemini", "model": "gemini-2-0-flash", "estCarbonG": 0.5175, "estCostUsd": 0.00025, "latencyClass": 0.5, "score": 0 }
+        { "provider": "openai", "model": "gpt-6-luna", "estCarbonG": 0.5175, "estCostUsd": 0.0003, "latencyClass": 0.5, "score": 0 }
       ],
-      "expectedReasoning": "routed to gemini:gemini-2-0-flash (score .00 vs 1.00): lowest carbon at window; hosted-grid assumption applies (all hosted candidates scored at the same caller's-grid intensity)"
+      "expectedReasoning": "routed to openai:gpt-6-luna (score .00 vs 1.00): lowest carbon at window; hosted-grid assumption applies (all hosted candidates scored at the same caller's-grid intensity)"
     },
     {
       "name": "batch-discount-changes-cost",

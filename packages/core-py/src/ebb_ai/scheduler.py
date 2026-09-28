@@ -2762,7 +2762,7 @@ class Scheduler:
         from .providers.base import DispatchOptions  # local import to avoid cycle
 
         opts = DispatchOptions(
-            max_tokens=spec.max_tokens if spec.max_tokens is not None else 1024,
+            max_tokens=spec.max_tokens,
             system=spec.system_prompt,
             extra={"temperature": spec.temperature}
             if spec.temperature is not None
@@ -2998,7 +2998,7 @@ class Scheduler:
         from .providers.base import DispatchOptions  # local import to avoid cycle
 
         opts = DispatchOptions(
-            max_tokens=spec.max_tokens if spec.max_tokens is not None else 1024,
+            max_tokens=spec.max_tokens,
             system=spec.system_prompt,
             extra={"temperature": spec.temperature}
             if spec.temperature is not None
@@ -3163,6 +3163,7 @@ class Scheduler:
             raw=None,
             input_tokens=first.input_tokens,
             output_tokens=first.output_tokens,
+            stop_reason=first.stop_reason,
         )
 
         intensity_g: float | None = None
@@ -3311,6 +3312,7 @@ def _result_to_serializable(value: Any) -> Any:
         "provider",
         "input_tokens",
         "output_tokens",
+        "stop_reason",
         "batch_id",
         "prompt_count",
     )

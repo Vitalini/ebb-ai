@@ -20,6 +20,7 @@ interface Vector {
   whPerOutputToken: number;
   source: "measured" | "estimated" | "fallback";
   resolution: "exact" | "normalized" | "family-fallback" | "default";
+  status?: "retired" | "deprecated";
 }
 
 const fixture = JSON.parse(
@@ -44,6 +45,7 @@ describe("cross-language model-energy vectors", () => {
       expect(coeffs.source).toBe(v.source);
       expect(coeffs.whPerInputToken).toBeCloseTo(v.whPerInputToken, 9);
       expect(coeffs.whPerOutputToken).toBeCloseTo(v.whPerOutputToken, 9);
+      expect(coeffs.status).toBe(v.status);
     });
   }
 });
