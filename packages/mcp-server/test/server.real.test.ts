@@ -221,6 +221,65 @@ describe("schedule_task response enrichment (§1.11)", () => {
     await close();
   });
 
+  describe("per-provider default model (R12)", () => {
+    const saved = process.env.EBB_DEFAULT_MODEL;
+    afterEach(() => {
+      if (saved === undefined) delete process.env.EBB_DEFAULT_MODEL;
+      else process.env.EBB_DEFAULT_MODEL = saved;
+    });
+
+    async function previewModel(provider?: string): Promise<string> {
+      const { client, close } = await connect();
+      const deadline = new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString();
+      const result = await client.callTool({
+        name: "schedule_task",
+        arguments: {
+          prompt: "preview me",
+          deadline,
+          dry_run: true,
+          ...(provider ? { provider } : {}),
+        },
+      });
+      await close();
+      expect((result as TextResult).isError).toBeFalsy();
+      const line = textOf(result).split("\n").find((l) => l.startsWith("model: "));
+      return line!.slice("model: ".length);
+    }
+
+    it.each([
+      [undefined, "claude-sonnet-5"],
+      ["anthropic", "claude-sonnet-5"],
+      ["openai", "gpt-6-sol"],
+      ["gemini", "gemini-3.8-flash"],
+      ["ollama", "llama3.1"],
+    ])("dry_run with provider %s and no model previews %s", async (provider, model) => {
+      delete process.env.EBB_DEFAULT_MODEL;
+      expect(await previewModel(provider)).toBe(model);
+    });
+
+    it("EBB_DEFAULT_MODEL overrides the Anthropic default only", async () => {
+      process.env.EBB_DEFAULT_MODEL = "claude-opus-5";
+      expect(await previewModel()).toBe("claude-opus-5");
+      expect(await previewModel("openai")).toBe("gpt-6-sol");
+      expect(await previewModel("gemini")).toBe("gemini-3.8-flash");
+    });
+
+    it("the persisted task carries the same per-provider default as the preview", async () => {
+      delete process.env.EBB_DEFAULT_MODEL;
+      const { client, scheduler, close } = await connect({ dbPath: ":memory:" });
+      const deadline = new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString();
+      const result = await client.callTool({
+        name: "schedule_task",
+        arguments: { prompt: "persist me", deadline, provider: "openai" },
+      });
+      expect((result as TextResult).isError).toBeFalsy();
+      expect(textOf(result)).toContain("model: gpt-6-sol");
+      const [task] = scheduler.listPersistedTasks();
+      expect(JSON.parse(task.bodyJson!).model).toBe("gpt-6-sol");
+      await close();
+    });
+  });
+
   it("recommend_window payload includes grid_source", async () => {
     const { client, close } = await connect();
     const deadline = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString();

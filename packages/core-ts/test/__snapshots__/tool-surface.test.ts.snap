@@ -125,7 +125,7 @@ exports[`tool surface — divergence canary > per-host neutral schema snapshot (
           "required": false,
         },
         {
-          "description": "Model to dispatch with (e.g. 'claude-sonnet-5' for Anthropic, 'gpt-6-sol' for OpenAI). Defaults to the chosen provider's flagship model. When >= 2 'candidates' are supplied, routing may overwrite this with the winning candidate.",
+          "description": "Model to dispatch with (e.g. 'claude-sonnet-5' for Anthropic, 'gpt-6-sol' for OpenAI). Defaults per provider: anthropic 'claude-sonnet-5' (a host may override it with EBB_DEFAULT_MODEL), openai 'gpt-6-sol', gemini 'gemini-3.8-flash', ollama 'llama3.1'. When >= 2 'candidates' are supplied, routing may overwrite this with the winning candidate.",
           "kind": "string",
           "name": "model",
           "required": false,
@@ -410,7 +410,7 @@ exports[`tool surface — divergence canary > per-host neutral schema snapshot (
           "required": false,
         },
         {
-          "description": "Model to dispatch with (e.g. 'claude-sonnet-5' for Anthropic, 'gpt-6-sol' for OpenAI). Defaults to the chosen provider's flagship model. When >= 2 'candidates' are supplied, routing may overwrite this with the winning candidate.",
+          "description": "Model to dispatch with (e.g. 'claude-sonnet-5' for Anthropic, 'gpt-6-sol' for OpenAI). Defaults per provider: anthropic 'claude-sonnet-5' (a host may override it with EBB_DEFAULT_MODEL), openai 'gpt-6-sol', gemini 'gemini-3.8-flash', ollama 'llama3.1'. When >= 2 'candidates' are supplied, routing may overwrite this with the winning candidate.",
           "kind": "string",
           "name": "model",
           "required": false,
