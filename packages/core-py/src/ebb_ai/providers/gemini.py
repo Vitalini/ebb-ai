@@ -34,7 +34,12 @@ from typing import Any
 
 import httpx
 
-from .base import DispatchOptions, DispatchResult, ProviderAdapter
+from .base import (
+    DEFAULT_MAX_TOKENS,
+    DispatchOptions,
+    DispatchResult,
+    ProviderAdapter,
+)
 
 _DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
@@ -95,9 +100,11 @@ class GeminiAdapter(ProviderAdapter):
             )
         opts = options or DispatchOptions()
 
-        generation_config: dict[str, Any] = {}
-        if opts.max_tokens is not None:
-            generation_config["maxOutputTokens"] = opts.max_tokens
+        generation_config: dict[str, Any] = {
+            "maxOutputTokens": opts.max_tokens
+            if opts.max_tokens is not None
+            else DEFAULT_MAX_TOKENS
+        }
         temperature = opts.extra.get("temperature")
         if temperature is not None:
             generation_config["temperature"] = temperature

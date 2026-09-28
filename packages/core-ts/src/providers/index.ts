@@ -4,6 +4,7 @@ export type {
   DispatchResult,
   ProviderAdapter,
 } from "./base.js";
+export { ProviderRefusalError } from "./base.js";
 export { AnthropicAdapter } from "./anthropic.js";
 export { OpenAIAdapter } from "./openai.js";
 export { GeminiAdapter } from "./gemini.js";

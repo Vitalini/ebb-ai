@@ -10,6 +10,8 @@
  *   - messages.batches.create — Batch API (50% off, 24h SLA)
  */
 
+import { normalizeModelName } from "../energy.js";
+import { ProviderRefusalError } from "./base.js";
 import type {
   BatchHandle,
   BatchRetrieveResult,
@@ -17,6 +19,58 @@ import type {
   DispatchResult,
   ProviderAdapter,
 } from "./base.js";
+
+/**
+ * Output ceiling when the caller sets none. The `claude-api` skill's
+ * non-streaming default: large enough not to truncate normal answers,
+ * small enough to stay under the SDK's HTTP timeout.
+ */
+const DEFAULT_MAX_TOKENS = 16000;
+
+/**
+ * Allow-list: does this Claude model accept sampling parameters
+ * (`temperature`)? Opus 4.7 and later, Sonnet 5, Fable and Mythos reject
+ * them with a 400. True only for every Haiku id and for Opus / Sonnet 4.6
+ * or lower; every other id, including models released after this list
+ * was written, gets false. Omitting `temperature` never breaks a request;
+ * sending it to a model that rejects it always does.
+ */
+function supportsSamplingParams(model: string): boolean {
+  const m = normalizeModelName(model).match(
+    /^claude-(opus|sonnet|haiku)-(\d+)(?:-(\d{1,2}))?(?!\d)/,
+  );
+  if (!m) return false;
+  if (m[1] === "haiku") return true;
+  const major = Number(m[2]);
+  const minor = Number(m[3] ?? 0);
+  return major < 4 || (major === 4 && minor <= 6);
+}
+
+interface AnthropicMessage {
+  content?: Array<{ type: string; text?: string }>;
+  usage?: { input_tokens?: number; output_tokens?: number };
+  model?: string;
+  stop_reason?: string | null;
+  stop_details?: { category?: string | null } | null;
+}
+
+function messageText(message: AnthropicMessage | undefined): string {
+  return (message?.content ?? [])
+    .filter((b) => b.type === "text" && typeof b.text === "string")
+    .map((b) => b.text as string)
+    .join("");
+}
+
+/** Throw on a refusal: the response is HTTP 200 but carries no answer. */
+function assertNotRefused(message: AnthropicMessage | undefined, model: string): void {
+  if (message?.stop_reason === "refusal") {
+    throw new ProviderRefusalError(
+      "anthropic",
+      message.model ?? model,
+      message.stop_details?.category ?? null,
+    );
+  }
+}
 
 export interface AnthropicAdapterOptions {
   /**
@@ -67,23 +121,12 @@ export class AnthropicAdapter implements ProviderAdapter {
   ): Promise<DispatchResult> {
     const client = await this.getClient();
     const res = (await client.messages.create({
-      model,
-      max_tokens: options.maxTokens ?? 1024,
-      temperature: options.temperature,
-      system: options.system,
-      messages: [{ role: "user", content: prompt }],
+      ...requestParams(model, prompt, options),
       metadata: options.metadata ? { user_id: undefined, ...options.metadata } : undefined,
-    })) as {
-      content?: Array<{ type: string; text?: string }>;
-      usage?: { input_tokens?: number; output_tokens?: number };
-      model?: string;
-    };
-    const text = (res.content ?? [])
-      .filter((b) => b.type === "text" && typeof b.text === "string")
-      .map((b) => b.text as string)
-      .join("");
+    })) as AnthropicMessage;
+    assertNotRefused(res, model);
     return {
-      text,
+      text: messageText(res),
       usage: {
         inputTokens: res.usage?.input_tokens,
         outputTokens: res.usage?.output_tokens,
@@ -95,6 +138,7 @@ export class AnthropicAdapter implements ProviderAdapter {
       model: res.model ?? model,
       provider: this.provider,
       raw: res,
+      stopReason: res.stop_reason ?? undefined,
     };
   }
 
@@ -109,13 +153,7 @@ export class AnthropicAdapter implements ProviderAdapter {
     const client = await this.getClient();
     const requests = prompts.map((prompt, i) => ({
       custom_id: `ebb-${i}`,
-      params: {
-        model,
-        max_tokens: options.maxTokens ?? 1024,
-        temperature: options.temperature,
-        system: options.system,
-        messages: [{ role: "user", content: prompt }],
-      },
+      params: requestParams(model, prompt, options),
     }));
     const res = (await client.messages.batches.create({ requests })) as {
       id?: string;
@@ -152,26 +190,28 @@ export class AnthropicAdapter implements ProviderAdapter {
       const e = entry as {
         result?: {
           type?: string;
-          message?: {
-            content?: Array<{ type: string; text?: string }>;
-            usage?: { input_tokens?: number; output_tokens?: number };
-            model?: string;
-          };
+          message?: AnthropicMessage;
           error?: { message?: string; type?: string };
         };
       };
       const type = e.result?.type;
-      if (type === "succeeded") {
-        const message = e.result?.message;
-        const text = (message?.content ?? [])
-          .filter((b) => b.type === "text" && typeof b.text === "string")
-          .map((b) => b.text as string)
-          .join("");
+      const message = e.result?.message;
+      if (type === "succeeded" && message?.stop_reason === "refusal") {
+        // A refused request succeeded at the HTTP level but has no answer.
+        sawError = true;
+        firstError ??= new ProviderRefusalError(
+          this.provider,
+          message.model ?? "unknown model",
+          message.stop_details?.category ?? null,
+        ).message;
+      } else if (type === "succeeded") {
+        const text = messageText(message);
         const inputTokens = message?.usage?.input_tokens;
         const outputTokens = message?.usage?.output_tokens;
         results.push({
           text,
           model: message?.model,
+          stopReason: message?.stop_reason ?? undefined,
           usage: {
             inputTokens,
             outputTokens,
@@ -232,4 +272,25 @@ export class AnthropicAdapter implements ProviderAdapter {
     this.client = new Anthropic({ apiKey: this.apiKey, maxRetries: 0 });
     return this.client;
   }
+}
+
+/**
+ * The request fields shared by `messages.create` and each Message Batches
+ * entry. `temperature` is left out entirely for models that reject it.
+ */
+function requestParams(
+  model: string,
+  prompt: string,
+  options: DispatchOptions,
+): Record<string, unknown> {
+  const params: Record<string, unknown> = {
+    model,
+    max_tokens: options.maxTokens ?? DEFAULT_MAX_TOKENS,
+    system: options.system,
+    messages: [{ role: "user", content: prompt }],
+  };
+  if (options.temperature !== undefined && supportsSamplingParams(model)) {
+    params.temperature = options.temperature;
+  }
+  return params;
 }

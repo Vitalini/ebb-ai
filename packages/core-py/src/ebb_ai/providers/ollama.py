@@ -27,7 +27,12 @@ from typing import Any
 
 import httpx
 
-from .base import DispatchOptions, DispatchResult, ProviderAdapter
+from .base import (
+    DEFAULT_MAX_TOKENS,
+    DispatchOptions,
+    DispatchResult,
+    ProviderAdapter,
+)
 
 _DEFAULT_HOST = "http://localhost:11434"
 
@@ -91,8 +96,9 @@ class OllamaAdapter(ProviderAdapter):
         temperature = opts.extra.get("temperature")
         if temperature is not None:
             ollama_options["temperature"] = temperature
-        if opts.max_tokens is not None:
-            ollama_options["num_predict"] = opts.max_tokens
+        ollama_options["num_predict"] = (
+            opts.max_tokens if opts.max_tokens is not None else DEFAULT_MAX_TOKENS
+        )
 
         messages: list[dict[str, str]] = []
         if opts.system is not None:

@@ -18,6 +18,7 @@ from .base import (
     DispatchOptions,
     DispatchResult,
     ProviderAdapter,
+    ProviderRefusalError,
 )
 from .gemini import GeminiAdapter
 from .ollama import OllamaAdapter
@@ -32,4 +33,5 @@ __all__ = [
     "OllamaAdapter",
     "OpenAIAdapter",
     "ProviderAdapter",
+    "ProviderRefusalError",
 ]
