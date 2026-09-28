@@ -35,6 +35,7 @@ import {
 import {
   AnthropicAdapter,
   buildDefaultGridFeed,
+  DEFAULT_MODEL_BY_PROVIDER,
   GeminiAdapter,
   OllamaAdapter,
   OpenAIAdapter,
@@ -50,6 +51,7 @@ import {
   type CarbonBudgetStatus,
   type GridForecast,
   type ProviderCallSpec,
+  type ProviderName,
   type TaskRecord,
   type TickAdapters,
   type ToolParam,
@@ -327,6 +329,7 @@ export interface EbbServerDeps {
    *  ":memory:" → ephemeral SQLite store. */
   dbPath?: string;
   defaultRegion?: string;
+  /** Anthropic default model; other providers use DEFAULT_MODEL_BY_PROVIDER. */
   defaultModel?: string;
   /** Aggregate carbon-budget config (tests). Defaults to `loadCarbonBudgetConfig()`. */
   carbonBudget?: CarbonBudgetConfig;
@@ -355,8 +358,15 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
   const defaultRegion =
     deps.defaultRegion ??
     resolveRegion(undefined, process.env.EBB_DEFAULT_REGION).region;
+  // Anthropic default: injected > EBB_DEFAULT_MODEL > the shared map. Other
+  // providers always take their own entry, so a task never carries another
+  // vendor's model id (EBB_DEFAULT_MODEL is an Anthropic override only).
   const defaultModel =
-    deps.defaultModel ?? process.env.EBB_DEFAULT_MODEL ?? "claude-sonnet-4-6";
+    deps.defaultModel ??
+    process.env.EBB_DEFAULT_MODEL ??
+    DEFAULT_MODEL_BY_PROVIDER.anthropic;
+  const defaultModelFor = (provider: ProviderName): string =>
+    provider === "anthropic" ? defaultModel : DEFAULT_MODEL_BY_PROVIDER[provider];
   const dbPath = deps.dbPath;
   // Aggregate carbon-budget config (ROADMAP item 4): loaded so
   // check_queue_status can render a budget block. The MCP server does not
@@ -461,12 +471,13 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
         try {
           // dry_run: return the planned dispatch without persisting.
           if (parsed.dry_run) {
+            const provider = parsed.provider ?? "anthropic";
             const spec: ProviderCallSpec = {
               type: "provider_call",
-              provider: parsed.provider ?? "anthropic",
+              provider,
               // Same default as the real enqueue below — dry_run must
               // preview exactly what commit would do.
-              model: parsed.model ?? defaultModel,
+              model: parsed.model ?? defaultModelFor(provider),
               prompt: parsed.prompt,
               outputPath: parsed.output_path,
               redactInReceipt: parsed.redact_in_receipt,
@@ -507,10 +518,11 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
           // mode (mostly useful for testing or no-dispatch placeholders).
           const shouldDispatch = parsed.dispatch ?? true;
           if (shouldDispatch) {
+            const provider = parsed.provider ?? "anthropic";
             const spec: ProviderCallSpec = {
               type: "provider_call",
-              provider: parsed.provider ?? "anthropic",
-              model: parsed.model ?? defaultModel,
+              provider,
+              model: parsed.model ?? defaultModelFor(provider),
               prompt: parsed.prompt,
               outputPath: parsed.output_path,
               redactInReceipt: parsed.redact_in_receipt,

@@ -35,6 +35,8 @@
  * modelled with `optionalPerHost` rather than dropped.
  */
 
+import { DEFAULT_MODEL_BY_PROVIDER } from "./providers/defaults.js";
+
 /** The two hosts that register these tools. */
 export type ToolHost = "mcp" | "openclaw";
 
@@ -288,7 +290,7 @@ export const TOOL_SURFACE: readonly CanonicalToolDef[] = [
       carbonBudgetParam,
       modelParam({
         description:
-          "Model to dispatch with (e.g. 'claude-sonnet-5' for Anthropic, 'gpt-6-sol' for OpenAI). Defaults to the chosen provider's flagship model. When >= 2 'candidates' are supplied, routing may overwrite this with the winning candidate.",
+          `Model to dispatch with (e.g. 'claude-sonnet-5' for Anthropic, 'gpt-6-sol' for OpenAI). Defaults per provider: anthropic '${DEFAULT_MODEL_BY_PROVIDER.anthropic}' (a host may override it with EBB_DEFAULT_MODEL), openai '${DEFAULT_MODEL_BY_PROVIDER.openai}', gemini '${DEFAULT_MODEL_BY_PROVIDER.gemini}', ollama '${DEFAULT_MODEL_BY_PROVIDER.ollama}'. When >= 2 'candidates' are supplied, routing may overwrite this with the winning candidate.`,
       }),
       providerParam,
       candidatesParam,

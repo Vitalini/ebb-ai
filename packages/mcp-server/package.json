@@ -19,6 +19,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "start": "node dist/server.js",
+    "smoke": "node scripts/smoke-stdio.mjs",
     "dev": "node --loader tsx src/server.ts",
     "clean": "rm -rf dist"
   },
