@@ -149,6 +149,7 @@ export {
   GeminiAdapter,
   OllamaAdapter,
   DEFAULT_MODEL_BY_PROVIDER,
+  ProviderRefusalError,
 } from "./providers/index.js";
 export type {
   BatchHandle,

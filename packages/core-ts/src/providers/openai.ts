@@ -50,14 +50,14 @@ function isOSeriesModel(model: string): boolean {
   return /^o\d/.test(model.trim().toLowerCase());
 }
 
-/** gpt-5 family (gpt-5, gpt-5-mini, gpt-5.1, …). */
-function isGpt5FamilyModel(model: string): boolean {
-  return /^gpt-5/.test(model.trim().toLowerCase());
+/** gpt-5 and gpt-6 families (gpt-5, gpt-5-mini, gpt-5.1, gpt-6-sol, …). */
+function isGpt5Or6FamilyModel(model: string): boolean {
+  return /^gpt-[56]/.test(model.trim().toLowerCase());
 }
 
 /**
  * Build the token/temperature portion of a chat.completions payload.
- * o-series and gpt-5-family models reject the legacy `max_tokens`
+ * o-series, gpt-5 and gpt-6 family models reject the legacy `max_tokens`
  * parameter (400 "Unsupported parameter") and require
  * `max_completion_tokens`; o-series additionally rejects `temperature`.
  * Everything else keeps the classic parameters.
@@ -67,7 +67,7 @@ function completionParams(
   options: DispatchOptions,
 ): Record<string, unknown> {
   const params: Record<string, unknown> = {};
-  if (isOSeriesModel(model) || isGpt5FamilyModel(model)) {
+  if (isOSeriesModel(model) || isGpt5Or6FamilyModel(model)) {
     params.max_completion_tokens = options.maxTokens;
   } else {
     params.max_tokens = options.maxTokens;

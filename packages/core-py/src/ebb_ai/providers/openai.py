@@ -10,7 +10,7 @@ JSONL "input file" — we build the file in memory and upload it via
 ``files.create(purpose="batch")``. This is the same flow the official
 OpenAI batch cookbook recommends.
 
-o-series reasoning models and the gpt-5 family reject the legacy
+o-series reasoning models and the gpt-5 and gpt-6 families reject the legacy
 ``max_tokens`` parameter (400 "Unsupported parameter") and require
 ``max_completion_tokens``; o-series additionally rejects
 ``temperature``. :func:`_completion_params` maps the request
@@ -33,6 +33,9 @@ from .base import (
     ProviderAdapter,
 )
 
+#: Output ceiling when ``DispatchOptions.max_tokens`` is ``None``.
+DEFAULT_MAX_TOKENS = 1024
+
 
 def _load_sdk() -> Any:
     try:
@@ -51,24 +54,25 @@ def _is_o_series_model(model: str) -> bool:
     return re.match(r"^o\d", model.strip().lower()) is not None
 
 
-def _is_gpt5_family_model(model: str) -> bool:
-    """gpt-5 family (gpt-5, gpt-5-mini, gpt-5.1, …)."""
-    return model.strip().lower().startswith("gpt-5")
+def _is_gpt5_or_6_family_model(model: str) -> bool:
+    """gpt-5 and gpt-6 families (gpt-5, gpt-5-mini, gpt-5.1, gpt-6-sol, …)."""
+    return re.match(r"^gpt-[56]", model.strip().lower()) is not None
 
 
 def _completion_params(model: str, opts: DispatchOptions) -> dict[str, Any]:
     """Build the token/temperature portion of a chat.completions payload.
 
-    o-series and gpt-5-family models reject the legacy ``max_tokens``
+    o-series, gpt-5 and gpt-6 family models reject the legacy ``max_tokens``
     parameter and require ``max_completion_tokens``; o-series
     additionally rejects ``temperature`` (which arrives via
     ``opts.extra``). Everything else keeps the classic parameters.
     """
+    max_tokens = opts.max_tokens if opts.max_tokens is not None else DEFAULT_MAX_TOKENS
     params: dict[str, Any] = {}
-    if _is_o_series_model(model) or _is_gpt5_family_model(model):
-        params["max_completion_tokens"] = opts.max_tokens
+    if _is_o_series_model(model) or _is_gpt5_or_6_family_model(model):
+        params["max_completion_tokens"] = max_tokens
     else:
-        params["max_tokens"] = opts.max_tokens
+        params["max_tokens"] = max_tokens
     params.update(opts.extra)
     if _is_o_series_model(model):
         params.pop("temperature", None)

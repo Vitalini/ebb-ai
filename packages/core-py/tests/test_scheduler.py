@@ -11,6 +11,9 @@ import re
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -18,10 +21,12 @@ from ebb_ai import (
     CarbonBudgetExceededError,
     DeferOptions,
     InvalidDeadlineError,
+    ProviderCallSpec,
     Scheduler,
     mock_grid_feed,
     pick_best_window,
 )
+from ebb_ai.providers import AnthropicAdapter
 from ebb_ai.types import GridForecastEntry
 
 
@@ -430,3 +435,107 @@ async def test_horizon_capped_at_72_hours() -> None:
         assert requested[0] <= 72
     finally:
         await s.shutdown()
+
+
+# --------------------------------------------------------------------- #
+# Provider-call max_tokens reaches the adapter unchanged (the Anthropic
+# adapter applies its own 16000 default; the scheduler must not substitute
+# 1024 first).
+
+
+def _recording_anthropic_client() -> Any:
+    message = SimpleNamespace(
+        model="claude-sonnet-5",
+        content=[SimpleNamespace(type="text", text="ok")],
+        usage=SimpleNamespace(input_tokens=1, output_tokens=1),
+        stop_reason="end_turn",
+        stop_details=None,
+    )
+    client = SimpleNamespace()
+    client.messages = SimpleNamespace(
+        create=AsyncMock(return_value=message),
+        batches=SimpleNamespace(
+            create=AsyncMock(return_value=SimpleNamespace(id="msgbatch_1")),
+            retrieve=AsyncMock(
+                return_value=SimpleNamespace(processing_status="in_progress")
+            ),
+        ),
+    )
+    return client
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("max_tokens", "expected"), [(None, 16000), (512, 512)])
+async def test_provider_call_max_tokens_reaches_anthropic_sync(
+    max_tokens: int | None, expected: int
+) -> None:
+    client = _recording_anthropic_client()
+    async with Scheduler(feed=mock_grid_feed()) as s:
+        rec = await s.enqueue_provider_call(
+            ProviderCallSpec(
+                provider="anthropic",
+                model="claude-sonnet-5",
+                prompt="hi",
+                max_tokens=max_tokens,
+            ),
+            DeferOptions(deadline=_in_hours(0.001).isoformat()),
+        )
+        rec.scheduled_for = (datetime.now(UTC) - timedelta(seconds=1)).isoformat()
+        s._tasks[rec.task_id] = rec  # type: ignore[index]
+        result = await s.tick({"anthropic": AnthropicAdapter(client=client)})
+        assert result.dispatched == 1
+    assert client.messages.create.await_args.kwargs["max_tokens"] == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("max_tokens", "expected"), [(None, 16000), (512, 512)])
+async def test_provider_call_max_tokens_reaches_anthropic_batch(
+    max_tokens: int | None, expected: int
+) -> None:
+    client = _recording_anthropic_client()
+    async with Scheduler(feed=mock_grid_feed()) as s:
+        await s.enqueue_provider_call(
+            ProviderCallSpec(
+                provider="anthropic",
+                model="claude-sonnet-5",
+                prompt="hi",
+                max_tokens=max_tokens,
+                prefer_batch=True,
+            ),
+            DeferOptions(deadline=_in_hours(72).isoformat()),
+        )
+        result = await s.tick({"anthropic": AnthropicAdapter(client=client)})
+        assert result.batch_submitted == 1
+    requests = client.messages.batches.create.await_args.kwargs["requests"]
+    assert requests[0]["params"]["max_tokens"] == expected
+
+
+@pytest.mark.asyncio
+async def test_provider_call_refusal_fails_the_task() -> None:
+
+
+    client = _recording_anthropic_client()
+    client.messages.create = AsyncMock(
+        return_value=SimpleNamespace(
+            model="claude-opus-5",
+            content=[],
+            usage=SimpleNamespace(input_tokens=1, output_tokens=0),
+            stop_reason="refusal",
+            stop_details=SimpleNamespace(type="refusal", category="cyber"),
+        )
+    )
+    async with Scheduler(feed=mock_grid_feed()) as s:
+        rec = await s.enqueue_provider_call(
+            ProviderCallSpec(provider="anthropic", model="claude-opus-5", prompt="hi"),
+            DeferOptions(deadline=_in_hours(0.001).isoformat()),
+        )
+        rec.scheduled_for = (datetime.now(UTC) - timedelta(seconds=1)).isoformat()
+        s._tasks[rec.task_id] = rec  # type: ignore[index]
+        result = await s.tick({"anthropic": AnthropicAdapter(client=client)})
+        assert result.failed == 1
+        assert result.dispatched == 0
+        task = s.get_task(rec.task_id)
+        assert task.status == "failed"
+        assert "cyber" in (task.error or "")
+    # A refusal is not transient: exactly one provider call, no retry.
+    assert client.messages.create.await_count == 1
