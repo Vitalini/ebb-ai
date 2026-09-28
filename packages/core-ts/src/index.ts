@@ -180,6 +180,7 @@ export {
 export type {
   EnergySourceTier,
   EnergyResolutionTier,
+  ModelLifecycleStatus,
   ModelEnergyCoefficients,
   ModelFamily,
   ResolvedModelEnergy,

@@ -39,6 +39,11 @@ EnergySourceTier = Literal["measured", "estimated", "fallback"]
 #: unrecognized, flat legacy constant.
 EnergyResolutionTier = Literal["exact", "normalized", "family-fallback", "default"]
 
+#: Lifecycle flag on a coefficient row (``None`` = current). ``retired`` —
+#: shut down, kept so past receipts still resolve, never priced;
+#: ``deprecated`` — shutdown announced, still callable and priced.
+ModelLifecycleStatus = Literal["retired", "deprecated"]
+
 
 @dataclass(frozen=True, slots=True)
 class ModelEnergyCoefficients:
@@ -48,6 +53,7 @@ class ModelEnergyCoefficients:
     wh_per_output_token: float
     source: EnergySourceTier
     params_b: float | None = None
+    status: ModelLifecycleStatus | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +93,7 @@ MODEL_ENERGY_COEFFICIENTS: dict[str, ModelEnergyCoefficients] = {
         wh_per_output_token=c["wh_per_output_token"],
         source=c["source"],
         params_b=c["params_b"],
+        status=c["status"],
     )
     for name, c in _data.COEFFICIENTS.items()
 }
@@ -103,10 +110,10 @@ _LATEST_PREVIEW = re.compile(r"-(latest|preview)$")
 _VERSION_SUFFIX = re.compile(r"-v\d+$")
 _NUMERIC_SUFFIX = re.compile(r"-\d{3,4}$")
 _PROVIDER_DOTTED = re.compile(
-    r"^(?:us|eu|apac)\.(?:anthropic|meta|amazon|cohere|mistral|ai21|stability)\."
+    r"^(?:(?:us|eu|apac|global)\.)?(?:anthropic|meta|amazon|cohere|mistral|ai21|stability)\."
 )
 _BEDROCK_TAG = re.compile(r":\d+$")
-_CLAUDE_REORDER = re.compile(r"^claude-(\d+(?:-\d+)*)-(opus|sonnet|haiku)(-.*)?$")
+_CLAUDE_REORDER = re.compile(r"^claude-(\d+(?:-\d+)*)-(opus|sonnet|haiku|fable|mythos)(-.*)?$")
 
 
 def normalize_model_name(model: str) -> str:

@@ -45,6 +45,14 @@ for (const fam of energy.families) {
     );
   }
 }
+// A lifecycle flag is optional; when present it must be a known value so a
+// typo cannot silently mark a live model as retired (or vice versa).
+const STATUSES = new Set(["retired", "deprecated"]);
+for (const [id, c] of Object.entries(energy.coefficients)) {
+  if (c.status !== undefined && !STATUSES.has(c.status)) {
+    throw new Error(`coefficient "${id}" has unknown status "${c.status}" (expected retired | deprecated)`);
+  }
+}
 // Routing scores carbon and cost off ONE model-id space. Every priced model
 // must have an energy coefficient so a routable candidate can be scored on
 // both dimensions; a price for an id the energy table never heard of is a
@@ -55,6 +63,12 @@ for (const id of Object.keys(prices.prices)) {
     throw new Error(
       `price entry "${id}" has no matching energy coefficient key — routing scores carbon+cost off one id space`,
     );
+  }
+  // A retired model cannot be called, so a price for it is not a routing
+  // input: retired rows keep their energy coefficient (old receipts still
+  // resolve) but must not be priced.
+  if (energy.coefficients[id].status === "retired") {
+    throw new Error(`price entry "${id}" belongs to a retired model — remove the price row`);
   }
 }
 
@@ -73,6 +87,7 @@ function tsCoefficient(c) {
   ];
   if (c.paramsB !== undefined) parts.push(`paramsB: ${num(c.paramsB)}`);
   parts.push(`source: ${JSON.stringify(c.source)}`);
+  if (c.status !== undefined) parts.push(`status: ${JSON.stringify(c.status)}`);
   return `{ ${parts.join(", ")} }`;
 }
 
@@ -220,6 +235,7 @@ function pyCoefficient(c) {
     `"wh_per_output_token": ${num(c.whPerOutputToken)}`,
     `"params_b": ${c.paramsB === undefined ? "None" : num(c.paramsB)}`,
     `"source": ${JSON.stringify(c.source)}`,
+    `"status": ${c.status === undefined ? "None" : JSON.stringify(c.status)}`,
   ];
   return `{${parts.join(", ")}}`;
 }
