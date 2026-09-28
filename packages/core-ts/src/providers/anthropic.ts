@@ -35,7 +35,7 @@ const DEFAULT_MAX_TOKENS = 16000;
  * was written, gets false. Omitting `temperature` never breaks a request;
  * sending it to a model that rejects it always does.
  */
-function supportsSamplingParams(model: string): boolean {
+export function supportsSamplingParams(model: string): boolean {
   const m = normalizeModelName(model).match(
     /^claude-(opus|sonnet|haiku)-(\d+)(?:-(\d{1,2}))?(?!\d)/,
   );
