@@ -1,5 +1,16 @@
 import type { Metadata } from "next";
+import { estimateEnergyKwh } from "@ebb-ai/core/energy";
 import { InstallPicker } from "@/components/install-picker";
+
+/**
+ * Format a model's typical-call energy (500 in + 500 out tokens, PUE 1.15,
+ * per `estimateEnergyKwh` in `@ebb-ai/core/energy`) as "~N Wh".
+ */
+function formatWh(model: string): string {
+  const wh = estimateEnergyKwh({ model }) * 1000;
+  const rounded = Math.round(wh * 10) / 10;
+  return `~${rounded.toFixed(1)} Wh`;
+}
 
 export const metadata: Metadata = {
   title: "Docs · install, commands, MCP tools",
@@ -123,38 +134,45 @@ export default function DocsPage() {
             </thead>
             <tbody className="divide-y divide-rule font-mono text-xs text-fg-muted">
               <tr>
-                <td className="px-4 py-2 text-fg">claude-opus-4 · gpt-4-turbo · o1 · gemini-1.5-pro</td>
+                <td className="px-4 py-2 text-fg">claude-opus-5 · claude-fable-5-1 · gpt-6-astra · o3</td>
                 <td className="px-4 py-2">0.003</td>
                 <td className="px-4 py-2">0.015</td>
-                <td className="px-4 py-2">~10.4 Wh</td>
+                <td className="px-4 py-2">{formatWh("claude-opus-5")}</td>
                 <td className="px-4 py-2">estimated</td>
               </tr>
               <tr>
-                <td className="px-4 py-2 text-fg">claude-sonnet-4 · llama-3.1-70b</td>
+                <td className="px-4 py-2 text-fg">gpt-4o · gemini-3.1-pro</td>
+                <td className="px-4 py-2">0.002</td>
+                <td className="px-4 py-2">0.01</td>
+                <td className="px-4 py-2">{formatWh("gpt-4o")}</td>
+                <td className="px-4 py-2">estimated</td>
+              </tr>
+              <tr>
+                <td className="px-4 py-2 text-fg">claude-sonnet-5 · gpt-6-sol · llama-3.1-70b</td>
                 <td className="px-4 py-2">0.001</td>
                 <td className="px-4 py-2">0.005</td>
-                <td className="px-4 py-2">~3.5 Wh</td>
+                <td className="px-4 py-2">{formatWh("claude-sonnet-5")}</td>
                 <td className="px-4 py-2">estimated / measured</td>
               </tr>
               <tr>
-                <td className="px-4 py-2 text-fg">claude-haiku · gpt-4o-mini · gemini-flash · o1-mini</td>
+                <td className="px-4 py-2 text-fg">claude-haiku-4-5 · gpt-6-luna · gemini-3.8-flash · gpt-4o-mini</td>
                 <td className="px-4 py-2">0.0003 – 0.0006</td>
                 <td className="px-4 py-2">0.0015 – 0.003</td>
-                <td className="px-4 py-2">~1.0 – 2.1 Wh</td>
+                <td className="px-4 py-2">{formatWh("claude-haiku-4-5")}</td>
                 <td className="px-4 py-2">estimated</td>
               </tr>
               <tr>
                 <td className="px-4 py-2 text-fg">llama-3.1-8b · mistral-7b</td>
                 <td className="px-4 py-2">0.0002</td>
                 <td className="px-4 py-2">0.001</td>
-                <td className="px-4 py-2">~0.7 Wh</td>
+                <td className="px-4 py-2">{formatWh("llama-3-1-8b")}</td>
                 <td className="px-4 py-2">measured</td>
               </tr>
               <tr>
                 <td className="px-4 py-2 text-fg">llama-3.1-405b · gpt-4</td>
                 <td className="px-4 py-2">0.005</td>
                 <td className="px-4 py-2">0.025</td>
-                <td className="px-4 py-2">~17 Wh</td>
+                <td className="px-4 py-2">{formatWh("llama-3-1-405b")}</td>
                 <td className="px-4 py-2">measured / estimated</td>
               </tr>
             </tbody>
@@ -184,7 +202,7 @@ export default function DocsPage() {
 } from "@ebb-ai/core";
 
 estimateEnergyKwh({
-  model: "claude-sonnet-4",
+  model: "claude-sonnet-5",
   inputTokens: 1000,
   outputTokens: 2000,
 });
@@ -246,7 +264,7 @@ ran_at            2026-06-01T13:00:00.000Z
 actual_g_co2      2.4
 estimated_g_co2   2.6
 delta_pct         -7.7
-model             claude-sonnet-4-5
+model             claude-sonnet-5
 provider          anthropic
 
 signer_public_key OnTm5l9VbQHFv9wD...
