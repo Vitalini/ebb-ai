@@ -30,6 +30,13 @@ pnpm test     # 18/18 should pass
 
 Requirements: Node 20+, pnpm 9+.
 
+`pnpm preflight` (see step 4 below) also runs `ruff check` and `pytest`
+against `packages/core-py`, which needs its own virtualenv — pnpm does
+not create one for you. From `packages/core-py`, run
+`python3.11 -m venv .venv && .venv/bin/pip install -e '.[dev]'` once;
+the `dev` extra pulls in `ruff`, `pytest`, `pytest-asyncio`, and the
+`anthropic`/`openai` SDKs the adapter tests mock against.
+
 ## Workflow
 
 1. Fork the repository.

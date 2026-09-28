@@ -141,7 +141,7 @@ async def main():
 
     async def work():
         result = await adapter.dispatch(
-            "claude-sonnet-4-5",
+            "claude-sonnet-5",
             "Summarize today's git commits.",
         )
         return result.text
@@ -164,7 +164,7 @@ directly:
 
 ```python
 handle = await adapter.dispatch_batch(
-    "claude-sonnet-4-5",
+    "claude-sonnet-5",
     ["prompt 1", "prompt 2", "prompt 3"],
 )
 print(handle.batch_id)  # poll via the Anthropic SDK
@@ -179,7 +179,7 @@ from ebb_ai.providers import OpenAIAdapter
 async def main():
     adapter = OpenAIAdapter()  # reads OPENAI_API_KEY
     handle = await adapter.dispatch_batch(
-        "gpt-4.1-mini",
+        "gpt-6-sol",
         ["prompt 1", "prompt 2"],
     )
     print(handle.batch_id)

@@ -44,7 +44,7 @@ ebb schedule \
   --region US-CAL-CISO \
   --carbon-budget-g 5 \
   --provider anthropic \
-  --model claude-sonnet-4-5 \
+  --model claude-sonnet-5 \
   --prompt "Summarize the last 50 PRs in this repo."
 ```
 

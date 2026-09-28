@@ -276,12 +276,12 @@ const scheduler = new Scheduler({ dbPath: "/var/lib/ebb/queue.sqlite" });
 const adapter = new AnthropicAdapter();
 
 await scheduler.defer(
-  () => adapter.dispatch("claude-sonnet-4-5", "Summarize today's git commits."),
+  () => adapter.dispatch("claude-sonnet-5", "Summarize today's git commits."),
   { deadline: "2026-05-13T08:00:00-04:00", region: "US-CAL-CISO" },
 );
 
 // or — submit 100 prompts via Anthropic Message Batches for a 50% discount:
-const handle = await adapter.dispatchBatch("claude-sonnet-4-5", prompts);
+const handle = await adapter.dispatchBatch("claude-sonnet-5", prompts);
 console.log(handle.batchId);
 ```
 
