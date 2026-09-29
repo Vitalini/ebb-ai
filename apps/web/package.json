@@ -14,17 +14,17 @@
   },
   "dependencies": {
     "@ebb-ai/core": "workspace:*",
-    "lucide-react": "^1.26.0",
+    "lucide-react": "^1.48.0",
     "next": "^16.3.6",
-    "react": "^19.2.6",
-    "react-dom": "^19.2.6",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
     "recharts": "^2.15.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
-    "@types/node": "^22.10.0",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
+    "@types/node": "^22.20.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "eslint": "^9.15.0",
     "eslint-config-next": "^16.3.6",
     "tailwindcss": "^4.3.3",
