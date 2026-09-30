@@ -44,29 +44,41 @@ default. `ebb-ai` makes the choice automatic. Four parallel wins:
 now deferred to the cleanest, cheapest, fastest hour inside the
 deadline. Apache-2.0.
 
-```typescript
-import { recommendWindow } from "@ebb-ai/core";
+A real run, excerpted (GB, 2026-09-30T21:03:30Z, live National Grid ESO
+feed, local Ollama `llama3.2:1b`; raw output and reproducer in
+[`docs/examples/2026-09-30-GB-tick/`](docs/examples/2026-09-30-GB-tick/)):
 
-const plan = await recommendWindow({
-  deadline: "2026-05-14T08:00:00-04:00",
-  region: "US-CAL-CISO",
-});
+```console
+$ bash docs/examples/2026-09-30-GB-tick/command.sh
+forecast source: ukCarbonIntensity (forecast)
+forecast now:  2026-09-30T21:00:00.000Z  158 gCO2/kWh
+forecast peak: 2026-10-01T17:00:00.000Z  183 gCO2/kWh
 
-// {
-//   scheduledFor:                "2026-05-14T05:00:00.000Z",
-//   intensityGCo2PerKwh:         60,
-//   band:                        "very_clean",
-//   estimatedCarbonGCo2:         0.1,
-//   estimatedSavingsVsNowPct:    73,
-//   batchEligible:               true,
-//   reasoning:
-//     "cleanest in-deadline window is 05:00 UTC (very clean mix); " +
-//     "~73% cleaner than dispatching now; Batch API saves an " +
-//     "additional 50% on cost (24h SLA)"
-// }
+recommendWindow({ region: "GB", model: "llama3.2:1b", ... }):
+  "scheduledFor": "2026-10-02T09:00:00.000Z",
+  "intensityGCo2PerKwh": 88,
+  "band": "very_clean",
+
+$ ebb tick --db <temp> --region GB
+tick: 1 inspected, 1 dispatched, 0 failed
+
+$ ebb verify t-ef2354ee-eff0-431c-b11e-6edfcb8299b0 --db <temp>
+✓ VALID
+intensity_g_kwh   158
+grid_source       ukCarbonIntensity
+signer_public_key tTpsWuAS52easY0sgqz5E42aen7tdE5otdfLN6F+kxg=
 ```
 
-Same call surfaces as an **MCP tool** to any compatible agent host
+| | UTC hour | Carbon intensity |
+|---|---|---|
+| Forecast peak | 2026-10-01T17:00 | 183 gCO2/kWh |
+| Recommended window (72h deadline) | 2026-10-02T09:00 | 88 gCO2/kWh |
+
+Price: not available for this run. ebb has no electricity-price feed, and
+its sync vs Batch list-price comparison needs at least two candidate models;
+this run used one unpriced local Ollama model.
+
+`recommendWindow()` surfaces as an **MCP tool** to any compatible agent host
 (Claude Desktop, Claude Code, Cursor, Cline, Continue, Zed,
 Windsurf, OpenClaw, OpenAI Codex CLI, Pi). The agent asks
 `recommend_window`, sees the plan, then commits via `schedule_task`

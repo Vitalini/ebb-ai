@@ -250,34 +250,66 @@ estimateEnergyKwh();
           </p>
         </div>
 
+        <div className="space-y-3">
+          <p className="text-sm text-fg-muted">
+            A real run on GB, 2026-09-30T21:03:30Z, with the live
+            National Grid ESO feed (<code className="font-mono text-xs">ukCarbonIntensity</code>)
+            and a local Ollama <code className="font-mono text-xs">llama3.2:1b</code>.
+            Forecast (projected), one GB run, 2026-09-30: peak 183
+            gCO2/kWh at 2026-10-01T17:00 UTC; recommended window for a
+            72h deadline 88 gCO2/kWh at 2026-10-02T09:00 UTC. Measured at
+            dispatch, from the live feed and recorded in the receipt: 158
+            gCO2/kWh. Price: not available for this run; ebb
+            has no electricity-price feed, and its sync vs Batch
+            list-price comparison needs at least two candidate models.
+            Raw output and the reproducer are in{" "}
+            <a
+              className="text-accent hover:underline"
+              href="https://github.com/Vitalini/ebb-ai/tree/main/docs/examples/2026-09-30-GB-tick"
+              target="_blank"
+              rel="noreferrer"
+            >
+              docs/examples/2026-09-30-GB-tick
+            </a>
+            .
+          </p>
+        </div>
+
         <div className="rounded-md border border-rule bg-bg-card p-4 font-mono text-xs leading-relaxed text-fg-muted">
           <p className="mb-2 text-fg">CLI</p>
           <pre className="overflow-x-auto whitespace-pre text-fg">
-{`# Verify the receipt for a completed task in the local ledger
-$ ebb verify 1c5b...e0
+{`# Drain due tasks; the receipt uses the region's live grid feed
+$ ebb tick --db <temp> --region GB
+tick: 1 inspected, 1 dispatched, 0 failed
 
+# Verify the receipt for a completed task in the local ledger
+$ ebb verify t-ef2354ee-eff0-431c-b11e-6edfcb8299b0 --db <temp>
 ✓ VALID
 
-task_id           1c5b...e0
-region            US-CAL-CISO
-ran_at            2026-06-01T13:00:00.000Z
-actual_g_co2      2.4
-estimated_g_co2   2.6
-delta_pct         -7.7
-model             claude-sonnet-5
-provider          anthropic
+task_id           t-ef2354ee-eff0-431c-b11e-6edfcb8299b0
+region            GB
+ran_at            2026-09-30T21:03:33.059Z
+actual_g_co2      0
+estimated_g_co2   0.5
+delta_pct         -100
+intensity_g_kwh   158
+grid_source       ukCarbonIntensity
+energy_source     measured
+energy_resolution family-fallback
+model             llama3.2:1b
+provider          ollama
 
-signer_public_key OnTm5l9VbQHFv9wD...
-signed_at         2026-06-01T13:00:00.184Z
+signer_public_key tTpsWuAS52easY0sgqz5E42aen7tdE5otdfLN6F+kxg=
+signed_at         2026-09-30T21:03:34.050Z
 
-Ed25519 signature verified against canonical payload (412 bytes)
+Ed25519 signature verified against canonical payload (512 bytes)
 
 # Verify a receipt JSON file (e.g. as shipped to outputPath)
-$ ebb verify --file ./out/task-1c5b.json --json
-{ "outcome": "valid", "signerPublicKey": "OnTm5l9VbQHFv9wD...", ... }
+$ ebb verify --file ./receipt.json --json
+{ "outcome": "valid", "signerPublicKey": "tTpsWuAS52easY0sgqz5E42aen7tdE5otdfLN6F+kxg=", ... }
 
 # Pin the expected signer for B2B/ESG pipelines
-$ ebb verify --file ./inbox/receipt.json --trusted-public-key OnTm5l9V...
+$ ebb verify --file ./inbox/receipt.json --trusted-public-key tTpsWuAS...
 # exit 0 on match; exit 3 on key-mismatch`}
           </pre>
         </div>

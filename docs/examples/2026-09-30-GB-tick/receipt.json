@@ -1,0 +1,20 @@
+{
+  "taskId": "t-ef2354ee-eff0-431c-b11e-6edfcb8299b0",
+  "ranAt": "2026-09-30T21:03:33.059Z",
+  "region": "GB",
+  "estimatedCarbonGCo2": 0.5,
+  "actualCarbonGCo2": 0,
+  "deltaPct": -100,
+  "provider": "ollama",
+  "model": "llama3.2:1b",
+  "durationMs": 360,
+  "prompt": "In one sentence, explain why running AI inference when the grid is cleanest reduces carbon emissions.",
+  "totalTokens": 81,
+  "intensityGCo2PerKwh": 158,
+  "gridSource": "ukCarbonIntensity",
+  "energySource": "measured",
+  "energyResolution": "family-fallback",
+  "signature": "fBI2Geqqno2fRViKSkdwIkxXiEnQ7ZHlQhn2zn+8EmzlGaDbuATQInZQoXOVdGwTPmpGDafEgjzCH4oEgQMVAQ==",
+  "signerPublicKey": "tTpsWuAS52easY0sgqz5E42aen7tdE5otdfLN6F+kxg=",
+  "signedAt": "2026-09-30T21:03:34.050Z"
+}

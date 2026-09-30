@@ -219,14 +219,14 @@ Maximum concurrency is two (chain plus E).
 | Example provenance | U2 number-vs-raw-output check | after U2 |
 | Claims | U3 per-claim grep | after U3 |
 | Citations | U6 citation check | after U6 |
-| Commit shape | `git log --oneline main..HEAD` shows exactly six commits in brief order | before push |
+| Commit shape | `git log --oneline main..HEAD` shows exactly eight commits: the plan commit, then the six brief-item commits in brief order with `fix(cli): tick uses the region's grid feed for receipts` directly before item 2. The fix was added because `ebb tick` signed receipts from the mock curve, which blocked a real U2 run. | before push |
 | No release side effects | `git tag --points-at HEAD` empty; `npm view @ebb-ai/core version` still 0.13.0 | before push |
 
 The full gate at the end runs as a Haiku job with nothing else running; real failures go back to the owning stream's model.
 
 ## Definition of Done
 
-- Six commits on `chore/infoq-article-prep` in brief order, each passing its unit verification.
+- Six brief-item commits plus the `fix(cli)` commit on `chore/infoq-article-prep` in brief order (see Commit shape), each passing its unit verification.
 - `pnpm preflight` and `pnpm --filter ./apps/web build` green on the branch head; CI green on the PR.
 - PR open against `main` with: the 0.16.0 release diff called out for Vitalii, the list of dropped claims with original text and location, the example's provenance label, and the "Needs Vitalii" list.
 - `ce-code-review` run once on the PR; blockers fixed via fixup commits autosquashed into their owning commit.

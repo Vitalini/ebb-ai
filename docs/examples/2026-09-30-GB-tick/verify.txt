@@ -1,0 +1,29 @@
+$ node packages/cli/dist/index.js verify t-ef2354ee-eff0-431c-b11e-6edfcb8299b0 --db <tmp>/queue.db
+✓ VALID
+
+task_id           t-ef2354ee-eff0-431c-b11e-6edfcb8299b0
+region            GB
+ran_at            2026-09-30T21:03:33.059Z
+actual_g_co2      0
+estimated_g_co2   0.5
+delta_pct         -100
+intensity_g_kwh   158
+grid_source       ukCarbonIntensity
+energy_source     measured
+energy_resolution family-fallback
+model             llama3.2:1b
+provider          ollama
+
+signer_public_key tTpsWuAS52easY0sgqz5E42aen7tdE5otdfLN6F+kxg=
+signed_at         2026-09-30T21:03:34.050Z
+
+Ed25519 signature verified against canonical payload (512 bytes)
+
+$ node packages/cli/dist/index.js verify --file docs/examples/2026-09-30-GB-tick/receipt.json --json
+{
+  "taskId": "t-ef2354ee-eff0-431c-b11e-6edfcb8299b0",
+  "outcome": "valid",
+  "signerPublicKey": "tTpsWuAS52easY0sgqz5E42aen7tdE5otdfLN6F+kxg=",
+  "reason": "Ed25519 signature verified against canonical payload (512 bytes)"
+}
+
