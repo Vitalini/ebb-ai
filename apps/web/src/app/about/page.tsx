@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { VERSION } from "@/lib/version";
 
 export const metadata: Metadata = {
   title: "About",
@@ -262,7 +263,7 @@ export default function AboutPage() {
       <section className="space-y-3">
         <h2 className="text-2xl font-bold tracking-tight">Status</h2>
         <p className="leading-relaxed text-fg-muted">
-          v0.12.x (operator preview). The scheduler is production-grade — the
+          v{VERSION} (operator preview). The scheduler is production-grade — the
           even-distribution simulation routes 10 000 synthetic tasks across 31
           regions with under 11 % max-bucket concentration, the SQLite ledger
           survives process restart, and per-region routing is auto-wired. Live

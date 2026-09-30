@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { Nav } from "@/components/nav";
+import { VERSION } from "@/lib/version";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -87,7 +88,7 @@ const jsonLd = {
       operatingSystem: "macOS, Linux, Windows",
       offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
       license: "https://opensource.org/licenses/Apache-2.0",
-      softwareVersion: "0.15.1",
+      softwareVersion: VERSION,
       author: {
         "@type": "Person",
         name: "Vitalii Borovyk",
@@ -146,7 +147,7 @@ export default async function RootLayout({
               (mock fallback when no key is configured)
             </p>
             <p className="font-mono text-fg-dim">
-              v0.15.1 · operator preview · UTC-aligned
+              v{VERSION} · operator preview · UTC-aligned
             </p>
           </div>
         </footer>

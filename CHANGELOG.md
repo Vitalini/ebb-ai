@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] — 2026-09-30
+
+### Release
+
+- **npm goes from 0.13.0 straight to 0.16.0.** 0.14.0, 0.14.1, 0.15.0 and
+  0.15.1 shipped to PyPI and as git tags only, never to npm; npm users
+  upgrading from 0.13.0 get every change in
+  [0.14.0](#0140--2026-07-24), [0.14.1](#0141--2026-07-25),
+  [0.15.0](#0150--2026-07-25) and [0.15.1](#0151--2026-07-25) as well as
+  this section.
+
 ### Changed
 
 - **Model catalogue refreshed for September 2026.** Added the current
@@ -60,6 +71,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A `stop_reason: "refusal"` response now raises `ProviderRefusalError`**
   with the `stop_details.category`, instead of being returned as if it
   were a normal (empty or partial) answer.
+- **Batch results keep `stop_reason`.** A Batch API answer cut off by
+  `max_tokens` was stored without its `stop_reason`, so the truncation was
+  invisible in the result. The TS and Python schedulers now carry
+  `stop_reason` through to the stored batch result (aad933f).
 
 ### Security
 
@@ -1424,7 +1439,8 @@ their mind, and how to mitigate the operational failure modes
   Batches APIs. Direct Batch routing lands in v0.2.
 - Python port (`ebb-ai` PyPI) is a placeholder. v0.2.
 
-[Unreleased]: https://github.com/Vitalini/ebb-ai/compare/v0.15.1...HEAD
+[Unreleased]: https://github.com/Vitalini/ebb-ai/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/Vitalini/ebb-ai/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/Vitalini/ebb-ai/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/Vitalini/ebb-ai/compare/v0.14.1...v0.15.0
 [0.14.1]: https://github.com/Vitalini/ebb-ai/compare/v0.14.0...v0.14.1
