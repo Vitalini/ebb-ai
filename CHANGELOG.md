@@ -47,6 +47,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`ebb tick` receipts now use the region's grid feed.** The CLI built its
+  `Scheduler` without a feed, so every receipt's dispatch-time intensity
+  came from the synthetic mock curve (`grid_source=mock`) even for GB,
+  which has a live keyless feed. It now uses `buildDefaultGridFeed()`,
+  like the MCP server; the mock remains the fallback when a feed fails.
 - **Corrected an inaccurate privacy claim in 0.15.1's own documentation.**
   0.15.1 stated that `chat` delivery "stays inside OpenClaw". That is
   wrong on a Telegram-backed gateway: `chat` and `telegram` take the

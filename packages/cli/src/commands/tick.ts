@@ -9,6 +9,7 @@
 
 import {
   AnthropicAdapter,
+  buildDefaultGridFeed,
   GeminiAdapter,
   loadCarbonBudgetConfig,
   OllamaAdapter,
@@ -185,6 +186,9 @@ export async function runTickOnce(
   const scheduler = new Scheduler({
     dbPath,
     defaultRegion: resolveRegion(undefined, opts.region).region,
+    // Same feed the MCP server uses, so the receipt's dispatch-time
+    // intensity comes from the region's live feed (mock only as fallback).
+    feed: buildDefaultGridFeed(env.grid),
     ...(carbonBudget
       ? {
           carbonBudget,
