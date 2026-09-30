@@ -6,8 +6,8 @@
 
 ebb-ai is a carbon-aware scheduler for agentic AI workflows. Hand it any
 deferrable LLM call with a deadline; it routes the dispatch to the hour
-with the lowest grid carbon-intensity inside the window (typically 40-70 %
-cleaner than running immediately), writes a per-task carbon receipt, and
+with the lowest grid carbon-intensity inside the window (the saving
+depends on region and day), writes a per-task carbon receipt, and
 uses the provider's Batch API (Anthropic / OpenAI) when the deadline
 allows (50 % cost discount, same result).
 

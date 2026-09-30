@@ -123,7 +123,7 @@ git clone https://github.com/Vitalini/ebb-ai
 cd ebb-ai
 pnpm install
 pnpm -r build       # build every package in the workspace
-pnpm -r test        # 204 tests across TS + Python
+pnpm -r test        # full TS + Python suite (current count: README.md badge)
 ```
 
 Requirements: **Node 20+**, **pnpm 9+**, **Python 3.11+** for the

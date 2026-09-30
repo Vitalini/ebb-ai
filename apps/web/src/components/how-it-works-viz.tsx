@@ -40,10 +40,10 @@ const WINS: Array<{
   Icon: LucideIcon;
   hue: Hue;
 }> = [
-  { idx: 0, label: "Carbon", value: "−80%", caption: "vs dispatching at peak", Icon: Leaf, hue: "emerald" },
-  { idx: 1, label: "Cost", value: "−50%", caption: "Batch-API window", Icon: Coins, hue: "amber" },
+  { idx: 0, label: "Carbon", value: "Lower", caption: "vs dispatching at peak", Icon: Leaf, hue: "emerald" },
+  { idx: 1, label: "Cost", value: "−50%", caption: "Batch window (projected)", Icon: Coins, hue: "amber" },
   { idx: 2, label: "Latency", value: "Faster", caption: "off-peak capacity", Icon: Zap, hue: "sky" },
-  { idx: 3, label: "Grid load", value: "−83%", caption: "demand time-shifted", Icon: Activity, hue: "violet" },
+  { idx: 3, label: "Grid load", value: "−84%", caption: "time-shifted (simulated)", Icon: Activity, hue: "violet" },
 ];
 
 const HUE: Record<Hue, { ring: string; icon: string; value: string }> = {
@@ -406,7 +406,17 @@ export function HowItWorksViz() {
         deferrable task waits through the dirty, strained peak and is
         dispatched at the off-peak trough inside its deadline. Carbon, cost
         and latency move together because they all track grid demand; exact
-        figures vary per region per day.
+        figures vary per region per day. Cost and grid-load figures are
+        labelled projected/simulated above; sources in{" "}
+        <a
+          href="https://github.com/Vitalini/ebb-ai/blob/main/docs/claims.md"
+          target="_blank"
+          rel="noreferrer"
+          className="text-accent hover:underline"
+        >
+          docs/claims.md
+        </a>
+        .
       </p>
     </section>
   );

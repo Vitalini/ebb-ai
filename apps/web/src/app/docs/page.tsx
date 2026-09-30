@@ -600,7 +600,7 @@ const ENVS: Array<{ name: string; desc: string; plugin: string }> = [
   {
     name: "ANTHROPIC_API_KEY · OPENAI_API_KEY",
     plugin: "anthropicApiKey · openaiApiKey",
-    desc: "Required only if you want ebb-ai to actually dispatch provider calls (vs. just queueing them). Either is enough. anthropic and openai can auto-route through a 50%-cheaper Batch API when the deadline allows.",
+    desc: "Required only if you want ebb-ai to actually dispatch provider calls (vs. just queueing them). Either is enough. anthropic and openai can auto-route through a 50%-cheaper Batch API (projected, provider list price) when the deadline allows.",
   },
   {
     name: "GEMINI_API_KEY · GOOGLE_API_KEY",

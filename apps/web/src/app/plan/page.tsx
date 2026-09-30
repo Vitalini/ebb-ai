@@ -56,7 +56,7 @@ export default async function PlanPage({
       1,
       Math.ceil((deadline.getTime() - Date.now()) / (60 * 60 * 1000)) + 1,
     );
-    const horizon = Math.min(Math.max(hoursAhead, DEFAULT_HORIZON_HOURS), 96);
+    const horizon = Math.min(Math.max(hoursAhead, DEFAULT_HORIZON_HOURS), 72);
     const forecast = await loadForecast(region.zone, horizon);
 
     const baseBest = pickBestWindow(forecast, deadline);
@@ -172,7 +172,7 @@ export default async function PlanPage({
       {submitted && !deadline ? (
         <div className="rounded-xl border border-danger/40 bg-danger/5 p-5 text-sm text-danger">
           The deadline you supplied is invalid or in the past. Pick a time
-          inside the next 96 hours.
+          inside the next 72 hours.
         </div>
       ) : null}
 
@@ -214,8 +214,9 @@ function parseDeadline(raw: string | undefined): Date | null {
   const d = new Date(hasOffset ? raw : bareLocal ? `${raw}Z` : raw);
   if (Number.isNaN(d.getTime())) return null;
   if (d.getTime() < Date.now() - 60_000) return null;
-  // Cap at 96 hours into the future to match the forecast horizon.
-  const max = Date.now() + 96 * 60 * 60 * 1000;
+  // Cap at 72 hours into the future to match the product-wide forecast
+  // horizon (MAX_HORIZON_HOURS in packages/core-ts/src/recommend.ts).
+  const max = Date.now() + 72 * 60 * 60 * 1000;
   if (d.getTime() > max) return null;
   return d;
 }

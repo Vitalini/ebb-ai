@@ -80,8 +80,21 @@ function Hero() {
         an open-source MCP scheduler that
         defers non-urgent LLM tasks to off-peak hours — 50 % cheaper via
         Anthropic/OpenAI Batch APIs, faster during providers&apos; expanded
-        off-peak capacity, and 40–70 % lower carbon. Per-task receipts to a
+        off-peak capacity, and lower carbon. Per-task receipts to a
         local SQLite ledger. Apache-2.0.
+      </p>
+      <p className="max-w-2xl text-xs text-fg-dim">
+        50% cheaper: projected, Batch-API list price. Lower carbon: the
+        saving depends on region and day. See{" "}
+        <a
+          href="https://github.com/Vitalini/ebb-ai/blob/main/docs/claims.md"
+          target="_blank"
+          rel="noreferrer"
+          className="text-accent hover:underline"
+        >
+          docs/claims.md
+        </a>
+        .
       </p>
     </section>
   );
@@ -202,22 +215,36 @@ function TilesBlock() {
 function ValueRow() {
   const items: Array<{ label: string; value: string }> = [
     { label: "grid regions", value: "31" },
-    { label: "live carbon feeds", value: "4" },
+    { label: "live carbon feeds", value: "5" },
     { label: "carbon forecast", value: "72h" },
     { label: "intensity bands", value: "5" },
   ];
   return (
-    <dl className="grid grid-cols-2 gap-3 rounded-xl border border-rule bg-bg-elev px-5 py-5 sm:grid-cols-4">
-      {items.map((it) => (
-        <div key={it.label} className="text-center sm:text-left">
-          <dt className="font-mono text-[10px] uppercase tracking-wider text-fg-dim">
-            {it.label}
-          </dt>
-          <dd className="mt-1 font-mono text-base font-semibold text-fg sm:text-lg">
-            {it.value}
-          </dd>
-        </div>
-      ))}
-    </dl>
+    <>
+      <dl className="grid grid-cols-2 gap-3 rounded-xl border border-rule bg-bg-elev px-5 py-5 sm:grid-cols-4">
+        {items.map((it) => (
+          <div key={it.label} className="text-center sm:text-left">
+            <dt className="font-mono text-[10px] uppercase tracking-wider text-fg-dim">
+              {it.label}
+            </dt>
+            <dd className="mt-1 font-mono text-base font-semibold text-fg sm:text-lg">
+              {it.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <p className="mt-2 text-center text-[11px] text-fg-dim sm:text-left">
+        Measured directly from the code — see{" "}
+        <a
+          href="https://github.com/Vitalini/ebb-ai/blob/main/docs/claims.md"
+          target="_blank"
+          rel="noreferrer"
+          className="text-accent hover:underline"
+        >
+          docs/claims.md
+        </a>
+        .
+      </p>
+    </>
   );
 }

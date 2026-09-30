@@ -4,8 +4,9 @@ A one-command install that turns any Claude Code session into a
 carbon-aware AI scheduler. Defer non-urgent LLM tasks (overnight
 summaries, batch analyses, scheduled compliance scans) to cheap
 off-peak windows — ~50 % cost savings via Anthropic / OpenAI Batch
-APIs, 40-70 % lower carbon vs. running immediately, an auditable
-carbon receipt for every dispatch.
+APIs (projected, provider list price), lower carbon than running
+immediately (the saving depends on region and day — see
+[docs/claims.md](../../docs/claims.md)), an auditable carbon receipt for every dispatch.
 
 This package is **not** published to npm. It's the plugin tree that
 Claude Code's marketplace clones into
@@ -105,8 +106,6 @@ Three options to get the result back after a task completes:
 Deferred ✓
   task id        7f3a2b9e
   scheduled for  in 3h, 22:15 UTC
-  est. carbon    0.34 g CO2e
-  savings        38 % cleaner than running now
   band           clean
   check status   /ebb-ai:check 7f3a2b9e
 ```
@@ -119,10 +118,12 @@ status     completed
 region     US-CAL-CISO
 scheduled  22:15 UTC (4h ago)
 completed  22:15:08 UTC
-estimated  0.34 g CO2e
-actual     0.31 g CO2e   (-9 %)
 result     <the summary>
 ```
+
+(Illustrative CLI output — carbon and savings figures are omitted
+here; see a real captured run in
+[`docs/examples/2026-09-30-GB-tick/`](../../docs/examples/2026-09-30-GB-tick/).)
 
 ## Without the plugin
 

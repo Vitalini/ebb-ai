@@ -2,15 +2,16 @@
 
 **Workload scheduling for the agentic-AI economy.**
 *Defer non-urgent LLM tasks to cheap, low-load grid windows. ~50%
-cheaper inference via Batch APIs, smoother data-center load curves,
-auditable carbon receipts. MCP-native, ships as an `npm` package and
-a one-command Claude Code plugin.*
+cheaper inference via Batch APIs (projected, provider list price),
+smoother data-center load curves, auditable carbon receipts.
+MCP-native, ships as an `npm` package and a one-command Claude Code
+plugin.*
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-5eead4)](./LICENSE)
 [![npm (core)](https://img.shields.io/npm/v/%40ebb-ai%2Fcore?label=%40ebb-ai%2Fcore&color=cb3837)](https://www.npmjs.com/package/@ebb-ai/core)
 [![npm (mcp)](https://img.shields.io/npm/v/%40ebb-ai%2Fmcp?label=%40ebb-ai%2Fmcp&color=cb3837)](https://www.npmjs.com/package/@ebb-ai/mcp)
 [![npm (cli)](https://img.shields.io/npm/v/%40ebb-ai%2Fcli?label=%40ebb-ai%2Fcli&color=cb3837)](https://www.npmjs.com/package/@ebb-ai/cli)
-[![Tests](https://img.shields.io/badge/tests-605%20passing-22c55e)](#tests)
+[![Tests](https://img.shields.io/badge/tests-1115%20passing-22c55e)](#tests)
 [![MCP tools](https://img.shields.io/badge/MCP-9%20tools-5eead4)](https://www.ebb-ai.com/docs)
 [![Hosts](https://img.shields.io/badge/MCP%20hosts-13-5eead4)](https://www.ebb-ai.com/docs#install)
 [![Website](https://img.shields.io/badge/website-ebb--ai.com-5eead4)](https://www.ebb-ai.com)
@@ -26,13 +27,16 @@ default. `ebb-ai` makes the choice automatic. Four parallel wins:
 
 1. **Lighter on the grid.** Spreads load away from peak hours, which is
    what ISOs and grid operators want from large compute users.
-2. **50% cheaper.** Auto-routes through Anthropic and OpenAI Batch APIs
-   (24-hour SLA) when the deadline allows. Same prompt, half the bill.
+2. **50% cheaper (projected, Batch API list price).** Auto-routes
+   through Anthropic and OpenAI Batch APIs (24-hour SLA) when the
+   deadline allows. Same prompt, half the bill.
 3. **Faster at off-peak.** Anthropic explicitly expanded off-peak
    capacity in 2026 ([rate-limit policy](https://docs.claude.com/en/api/rate-limits))
    — doubled usage limits outside peak hours, citing smoothed demand.
    Sync calls observe shorter queues.
-4. **40–70% lower carbon.** Per-task carbon receipts against the actual
+4. **Lower carbon.** Dispatch lands in the cleanest grid hour inside
+   the deadline; the saving depends on region and day (see
+   [docs/claims.md](docs/claims.md)). Per-task carbon receipts against the actual
    grid intensity used at dispatch, persisted to a local SQLite ledger.
    Auditable, region-aware, reproducible. v0.10+ uses per-model Wh/token
    coefficients (Patterson 2021, Luccioni 2024, Hugging Face AI Energy
@@ -74,6 +78,11 @@ signer_public_key tTpsWuAS52easY0sgqz5E42aen7tdE5otdfLN6F+kxg=
 | Forecast peak | 2026-10-01T17:00 | 183 gCO2/kWh |
 | Recommended window (72h deadline) | 2026-10-02T09:00 | 88 gCO2/kWh |
 
+*(forecast (projected), one GB run, 2026-09-30 — 88 vs 183 gCO2/kWh is
+~52% lower for this run only; not a general or typical figure. The
+158 gCO2/kWh the receipt records at dispatch is the measured value. See
+[docs/claims.md](docs/claims.md).)*
+
 Price: not available for this run. ebb has no electricity-price feed, and
 its sync vs Batch list-price comparison needs at least two candidate models;
 this run used one unpriced local Ollama model.
@@ -90,14 +99,16 @@ Windsurf, OpenClaw, OpenAI Codex CLI, Pi). The agent asks
 > plugin on ClawHub (`openclaw plugins install clawhub:@vitalini/ebb`),
 > not npm, and shares the queue. **One-command Claude Code plugin**
 > via `/plugin marketplace add Vitalini/ebb-ai && /plugin install ebb-ai`.
-> **Five real-data grid feeds** across **31 regions** (NA/EU/APAC):
+> **Five real-data grid feeds** across **31 regions** (NA/EU/APAC)
+> — measured against the code, see [docs/claims.md](docs/claims.md):
 > UK National Grid ESO Carbon Intensity API (GB, free no key),
 > US EIA Open Data (CAISO / ERCOT / ISO-NE / PJM, free with key),
 > ENTSO-E Transparency Platform (FR / DE / ES / IT / NL / …, free with
 > token), WattTime v3 marginal-emissions forecasts (US ISOs, free with
 > account — takes precedence over EIA where covered), and Electricity Maps
 > as universal fallback. **v0.10:**
-> per-model Wh/token coefficients across 37 LLMs (Patterson 2021,
+> per-model Wh/token coefficients across 59 LLMs (measured, count grows
+> with each catalogue refresh; Patterson 2021,
 > Luccioni 2024, HF AI Energy Score) replace the v0.1–v0.9 flat
 > placeholder. **v0.11:** Ed25519-signed carbon receipts (offline
 > verifiable via `ebb verify`) plus WAL multi-writer SQLite so
@@ -117,9 +128,9 @@ Windsurf, OpenClaw, OpenAI Codex CLI, Pi). The agent asks
 > always-on `ebb tick` CLI with macOS launchd + Linux systemd +
 > pmset/rtcwake wake events, full control surface (`cancel_task` /
 > `expedite_task` / `update_deadline` / `retry_task` / `cancel_all`),
-> receipt redaction, file output, retry-with-backoff. **605 tests
-> passing** (368 TS + 237 Python) across 5 packages and 2 languages.
-> See [QUICKSTART.md](./QUICKSTART.md).
+> receipt redaction, file output, retry-with-backoff. **1,115 tests
+> passing** (650 TS + 465 Python, measured on this branch 2026-09-30)
+> across 5 packages and 2 languages. See [QUICKSTART.md](./QUICKSTART.md).
 
 ### Live demo
 
@@ -151,7 +162,8 @@ overnight" or "rewrite these 5,000 product descriptions by Friday."
 Three things follow:
 
 - **Cost.** Anthropic and OpenAI both offer Batch APIs at a flat **50%
-  discount** for tasks that can wait up to 24 hours. Almost no agent
+  discount (projected, provider list price)** for tasks that can wait
+  up to 24 hours. Almost no agent
   code uses them, because the choice has to be made at the call site.
   `ebb-ai` makes the choice automatic — and routes deadline-tolerant
   work through the cheaper path.
@@ -164,8 +176,9 @@ Three things follow:
   deferrable workloads to off-peak windows reduces the peak the grid
   has to plan for.
 - **Carbon, as a measurable side effect.** Grid carbon intensity
-  varies 30–60% inside a single day. The same dispatch decision that
-  saves cost and smooths load also emits less CO₂. `ebb-ai` writes an
+  swings substantially over a single day as generation mix shifts.
+  The same dispatch decision that saves cost and smooths load also
+  emits less CO₂. `ebb-ai` writes an
   auditable receipt for every dispatch — useful for ESG reporting,
   cost-accounting, and upcoming compute-disclosure regulations.
 
@@ -219,7 +232,7 @@ That ships three slash commands (`/ebb-ai:defer`, `/ebb-ai:check`,
 
 ```
 > /ebb-ai:defer "Summarize today's GitHub notifications" --by 4h
-Deferred ✓ 38% cleaner than now, scheduled for 22:15 UTC, est. 0.34 g CO2e
+Deferred ✓ scheduled for 22:15 UTC (cleanest window inside the deadline)
 
 > /ebb-ai:check
 2 tasks queued · oldest in 1h · cleanest at 03:00 UTC
@@ -329,8 +342,9 @@ pnpm --filter @ebb-ai/web dev
 # → http://localhost:3000
 ```
 
-Pages: live carbon-intensity map (7 regions: CAISO, ERCOT, ISO-NE, PJM,
-GB, FR, DE), 72-hour forecast charts, best-window planner, queue viewer.
+Pages: live carbon-intensity map (31 regions, NA/EU/APAC — measured,
+see [docs/claims.md](docs/claims.md)), 72-hour forecast charts,
+best-window planner, queue viewer.
 
 **Grid data sources** (per zone, falls back to mock on failure):
 
