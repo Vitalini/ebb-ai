@@ -96,6 +96,22 @@ function Hero() {
         </a>
         .
       </p>
+      <p className="max-w-2xl text-xs text-fg-dim">
+        Built by Vitalii Borovyk, independent and open source. See the{" "}
+        <a
+          href="https://github.com/Vitalini/ebb-ai"
+          target="_blank"
+          rel="noreferrer"
+          className="text-accent hover:underline"
+        >
+          GitHub repo
+        </a>{" "}
+        or read{" "}
+        <Link href="/about" className="text-accent hover:underline">
+          more about the project
+        </Link>
+        .
+      </p>
     </section>
   );
 }
