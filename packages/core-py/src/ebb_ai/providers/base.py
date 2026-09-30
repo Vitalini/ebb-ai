@@ -23,6 +23,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
+#: Output ceiling an adapter applies when ``DispatchOptions.max_tokens`` is
+#: ``None``. The Anthropic adapter overrides it with its own, larger default.
+DEFAULT_MAX_TOKENS = 1024
+
 
 @dataclass(slots=True)
 class DispatchOptions:
@@ -31,8 +35,9 @@ class DispatchOptions:
     Parameters
     ----------
     max_tokens:
-        Maximum tokens the provider should generate. Required by some
-        SDKs (Anthropic); optional for others.
+        Maximum tokens the provider should generate. ``None`` lets each
+        adapter apply its own default: 16000 for Anthropic, 1024 for
+        OpenAI, Gemini and Ollama.
     system:
         Optional system prompt.
     metadata:
@@ -43,7 +48,7 @@ class DispatchOptions:
         (e.g. ``temperature``, ``stop_sequences``).
     """
 
-    max_tokens: int = 1024
+    max_tokens: int | None = None
     system: str | None = None
     metadata: dict[str, str] = field(default_factory=dict)
     extra: dict[str, Any] = field(default_factory=dict)
@@ -65,6 +70,31 @@ class DispatchResult:
     input_tokens: int | None = None
     output_tokens: int | None = None
     batch_id: str | None = None
+    stop_reason: str | None = None
+    """Why the model stopped, as the provider reported it (Anthropic
+    ``stop_reason``: ``"end_turn"``, ``"max_tokens"``, ...). ``"max_tokens"``
+    means ``text`` is truncated. ``None`` when the provider reports none."""
+
+
+class ProviderRefusalError(RuntimeError):
+    """The provider declined the request (Anthropic ``stop_reason:
+    "refusal"``).
+
+    The call returned HTTP 200, but its content is not an answer, so it
+    must not be recorded as a completed task. Carries no HTTP status, so
+    the scheduler does not retry it.
+    """
+
+    def __init__(self, provider: str, model: str, category: str | None) -> None:
+        message = f"{provider} refused the request for {model}"
+        if category:
+            message += f" (category: {category})"
+        super().__init__(message)
+        self.provider = provider
+        self.model = model
+        #: Refusal category from ``stop_details.category`` (``"cyber"``,
+        #: ``"bio"``, ...), or ``None``.
+        self.category = category
 
 
 @dataclass(slots=True)
@@ -94,6 +124,8 @@ class BatchResultItem:
     input_tokens: int | None = None
     output_tokens: int | None = None
     total_tokens: int | None = None
+    stop_reason: str | None = None
+    """Provider stop reason for this request; ``"max_tokens"`` means truncated."""
 
 
 @dataclass(slots=True)
@@ -166,10 +198,12 @@ class ProviderAdapter(ABC):
 
 
 __all__ = [
+    "DEFAULT_MAX_TOKENS",
     "BatchHandle",
     "BatchResultItem",
     "BatchRetrieveResult",
     "DispatchOptions",
     "DispatchResult",
     "ProviderAdapter",
+    "ProviderRefusalError",
 ]

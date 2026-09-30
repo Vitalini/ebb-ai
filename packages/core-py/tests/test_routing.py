@@ -34,6 +34,7 @@ from ebb_ai.routing import (
     parse_candidate,
     parse_candidates,
     preview_routing,
+    price_for_model,
     score_candidates,
 )
 from ebb_ai.sign import verify_receipt
@@ -114,14 +115,57 @@ def test_loud_reject_on_missing_price() -> None:
     assert "anthropic:claude-opus-4" not in missing
 
 
+@pytest.mark.parametrize("model", ["claude-opus-4-7", "claude-opus-4-6"])
+def test_opus_4_6_and_4_7_priced_at_5_25(model: str) -> None:
+    p = price_for_model(model)
+    assert p is not None
+    assert (p["in_usd_per_mtok"], p["out_usd_per_mtok"]) == (5, 25)
+
+
+@pytest.mark.parametrize(
+    ("model", "inp", "out"),
+    [
+        ("claude-fable-5-1", 10, 50),
+        ("claude-fable-5", 10, 50),
+        ("claude-opus-5-5", 4, 20),
+        ("claude-opus-5", 5, 25),
+        ("claude-opus-4-8", 5, 25),
+        ("claude-sonnet-5", 2, 10),
+        ("gpt-6-astra", 10, 50),
+        ("gpt-6-sol", 2, 10),
+        ("gpt-6-luna", 0.1, 0.5),
+    ],
+)
+def test_current_models_priced(model: str, inp: float, out: float) -> None:
+    p = price_for_model(model)
+    assert p is not None
+    assert (p["in_usd_per_mtok"], p["out_usd_per_mtok"], p["as_of"]) == (inp, out, "2026-09")
+
+
+def test_vendor_form_id_reaches_same_price_row() -> None:
+    assert price_for_model("global.anthropic.claude-sonnet-5") == price_for_model(
+        "claude-sonnet-5"
+    )
+
+
+def test_retired_models_have_no_price_and_routing_fails_loudly() -> None:
+    for model in ("o1-mini", "gemini-2-0-flash", "claude-opus-4-1"):
+        assert price_for_model(model) is None
+    with pytest.raises(MissingPriceError) as ei:
+        score_candidates(
+            parse_candidates(["openai:o1-mini", "anthropic:claude-sonnet-5"]), 400
+        )
+    assert ei.value.missing == ["openai:o1-mini"]
+
+
 def test_deterministic_seeded_tie_break() -> None:
-    tied = parse_candidates(["gemini:gemini-1-5-pro", "gemini:gemini-2-0-pro"])
+    tied = parse_candidates(["anthropic:claude-opus-5", "anthropic:claude-opus-4-8"])
     weights = {"carbon": 0, "cost": 1, "latency": 0}
     a = score_candidates(tied, 400, weights=weights, rng=lambda: 0.0)
     b = score_candidates(tied, 400, weights=weights, rng=lambda: 0.999)
     assert all(c.score == a.considered[0].score for c in a.considered)
-    assert a.chosen == "gemini:gemini-1-5-pro"
-    assert b.chosen == "gemini:gemini-2-0-pro"
+    assert a.chosen == "anthropic:claude-opus-5"
+    assert b.chosen == "anthropic:claude-opus-4-8"
 
 
 def test_batch_discount_lowers_cost() -> None:
@@ -232,22 +276,22 @@ async def test_dispatch_fallback_when_chosen_adapter_unavailable() -> None:
     s = Scheduler(feed=mock_grid_feed())
     rec = await s.enqueue_provider_call(
         ProviderCallSpec(
-            provider="gemini",
-            model="gemini-2-0-flash",
+            provider="openai",
+            model="gpt-6-luna",
             prompt="hi",
-            candidates=["anthropic:claude-opus-4", "gemini:gemini-2-0-flash"],
+            candidates=["anthropic:claude-opus-4", "openai:gpt-6-luna"],
             route_weights={"carbon": 1, "cost": 0, "latency": 0},
         ),
         DeferOptions(deadline=_deadline(3), region="US-CAL-CISO", task_id="rt-fallback"),
     )
-    assert rec.routing_decision["chosen"] == "gemini:gemini-2-0-flash"
+    assert rec.routing_decision["chosen"] == "openai:gpt-6-luna"
     rec.scheduled_for = (datetime.now(UTC) - timedelta(seconds=1)).isoformat()
     anthropic = SyncAdapter("anthropic")
-    await s.tick({"anthropic": anthropic})  # gemini adapter absent
+    await s.tick({"anthropic": anthropic})  # openai adapter absent
     done = s.get_task(rec.task_id)
     assert done is not None and done.status == "completed"
     assert len(anthropic.dispatch_calls) == 1
-    assert done.receipt.routing["fallbackFrom"] == "gemini:gemini-2-0-flash"
+    assert done.receipt.routing["fallbackFrom"] == "openai:gpt-6-luna"
     assert done.receipt.routing["chosen"] == "anthropic:claude-opus-4"
     assert done.receipt.provider == "anthropic"
 
@@ -260,7 +304,7 @@ async def test_fails_when_no_candidate_adapter_ready() -> None:
             provider="anthropic",
             model="claude-opus-4",
             prompt="hi",
-            candidates=["anthropic:claude-opus-4", "gemini:gemini-2-0-flash"],
+            candidates=["anthropic:claude-opus-4", "openai:gpt-6-luna"],
         ),
         DeferOptions(deadline=_deadline(3), region="US-CAL-CISO", task_id="rt-none"),
     )
@@ -331,7 +375,7 @@ async def test_recommend_window_emits_preview_only_when_two_candidates() -> None
 async def test_recommend_preview_pick_matches_committed_pick() -> None:
     candidates = [
         "anthropic:claude-opus-4",
-        "gemini:gemini-2-0-flash",
+        "openai:gpt-6-luna",
         "ollama:llama-3-1-8b",
     ]
     weights = {"carbon": 1, "cost": 0, "latency": 0}

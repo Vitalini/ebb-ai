@@ -35,6 +35,8 @@
  * modelled with `optionalPerHost` rather than dropped.
  */
 
+import { DEFAULT_MODEL_BY_PROVIDER } from "./providers/defaults.js";
+
 /** The two hosts that register these tools. */
 export type ToolHost = "mcp" | "openclaw";
 
@@ -140,7 +142,7 @@ const candidatesParam: ToolParam = {
   itemKind: "string",
   optional: true,
   description:
-    "Optional cross-provider routing candidates: 'provider:model' strings (e.g. ['anthropic:claude-haiku-4-5','gemini:gemini-2-0-flash','ollama:llama-3-1-8b']) the caller EXPLICITLY allows. With >= 2 entries the scheduler scores them at the chosen dispatch window on a weighted blend of carbon, cost and latency and dispatches the winner (recording the full scored list on the signed receipt). No silent model swaps — routing only ever picks from this list. Absent or a single entry leaves the provider/model behavior unchanged. Every candidate model must exist in the price table or the task is rejected loudly.",
+    "Optional cross-provider routing candidates: 'provider:model' strings (e.g. ['anthropic:claude-haiku-4-5','openai:gpt-6-luna','ollama:llama-3-1-8b']) the caller EXPLICITLY allows. With >= 2 entries the scheduler scores them at the chosen dispatch window on a weighted blend of carbon, cost and latency and dispatches the winner (recording the full scored list on the signed receipt). No silent model swaps — routing only ever picks from this list. Absent or a single entry leaves the provider/model behavior unchanged. Every candidate model must exist in the price table or the task is rejected loudly.",
 };
 
 const routeWeightsParam: ToolParam = {
@@ -163,6 +165,9 @@ const modelParam = (opts: { hosts?: readonly ToolHost[]; description: string }):
   hosts: opts.hosts,
   description: opts.description,
 });
+
+const scheduleModelDescription = (anthropicOverride: string): string =>
+  `Model to dispatch with (e.g. 'claude-sonnet-5' for Anthropic, 'gpt-6-sol' for OpenAI). Defaults per provider: anthropic '${DEFAULT_MODEL_BY_PROVIDER.anthropic}'${anthropicOverride}, openai '${DEFAULT_MODEL_BY_PROVIDER.openai}', gemini '${DEFAULT_MODEL_BY_PROVIDER.gemini}', ollama '${DEFAULT_MODEL_BY_PROVIDER.ollama}'. When >= 2 'candidates' are supplied, routing may overwrite this with the winning candidate.`;
 
 const taskIdRequired: ToolParam = {
   name: "task_id",
@@ -259,7 +264,7 @@ export const TOOL_SURFACE: readonly CanonicalToolDef[] = [
         // never exposed a model parameter.
         hosts: ["mcp"],
         description:
-          "Optional vendor model name (e.g. 'claude-sonnet-4-5'). Affects the reasoning string only.",
+          "Optional vendor model name (e.g. 'claude-sonnet-5'). Affects the reasoning string only.",
       }),
       candidatesParam,
       routeWeightsParam,
@@ -286,9 +291,15 @@ export const TOOL_SURFACE: readonly CanonicalToolDef[] = [
           "Grid-region override (Electricity Maps zone code such as 'US-CAL-CISO'). Defaults to the host's configured region, else a host-timezone guess, else GB.",
       }),
       carbonBudgetParam,
+      // The EBB_DEFAULT_MODEL override is read only by the MCP server, so the
+      // sentence naming it is MCP-only; OpenClaw gets the plain defaults.
       modelParam({
-        description:
-          "Model to dispatch with (e.g. 'claude-sonnet-4-6' for Anthropic, 'gpt-4o' for OpenAI). Defaults to the chosen provider's flagship model. When >= 2 'candidates' are supplied, routing may overwrite this with the winning candidate.",
+        hosts: ["mcp"],
+        description: scheduleModelDescription(" (EBB_DEFAULT_MODEL overrides it)"),
+      }),
+      modelParam({
+        hosts: ["openclaw"],
+        description: scheduleModelDescription(""),
       }),
       providerParam,
       candidatesParam,
@@ -401,7 +412,7 @@ export const TOOL_SURFACE: readonly CanonicalToolDef[] = [
     name: "set_delivery",
     hosts: ["openclaw"],
     description:
-      "Set or change how a scheduled task's result is delivered when it completes. Call this right after schedule_task, once you have ASKED the user how they want the result. The user may pick several modes. Modes: chat (their active OpenClaw chat), telegram, webhook (needs webhook_url), file (needs file_path; format md/html/txt/json/pdf), queue (no push — retrievable via check_queue_status), os (a native desktop notification on the gateway host). PRIVACY BOUNDARY — chat and queue keep the result inside OpenClaw; webhook POSTs the FULL result to whatever URL is supplied (ebb does not restrict or inspect that destination), telegram sends the FULL result to a third-party service, and file writes it to any path on the gateway host. Never pick one of those three on the user's behalf: confirm the destination with them first, and for sensitive tasks prefer chat or queue. Default if the user is unsure: chat.",
+      "Set or change how a scheduled task's result is delivered when it completes. Call this right after schedule_task, once you have ASKED the user how they want the result. The user may pick several modes. Modes: chat (their active OpenClaw chat), telegram, webhook (needs webhook_url), file (needs file_path; format md/html/txt/json/pdf), queue (no push — retrievable via check_queue_status), os (a native desktop notification on the gateway host). PRIVACY BOUNDARY — queue is the only mode that transmits nothing (the result stays in the local ledger; read it back with check_queue_status). chat delivers through the gateway's configured chat channel, which on a Telegram-backed gateway is the SAME Telegram Bot API path as the telegram mode — do not describe chat to the user as staying inside OpenClaw. telegram sends the FULL result to a third-party service, webhook POSTs the FULL result to whatever URL is supplied (ebb does not restrict or inspect that destination), and file writes it to any path on the gateway host. Never pick telegram, webhook or file on the user's behalf: confirm the destination with them first, and for sensitive tasks prefer queue. Default if the user is unsure: chat.",
     params: [
       { ...taskIdRequired, description: "The id returned by schedule_task." },
       { ...deliverParam(false), description: "One or more delivery modes the user chose." },

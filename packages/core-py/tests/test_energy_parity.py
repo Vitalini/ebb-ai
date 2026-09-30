@@ -49,3 +49,4 @@ def test_resolution_matches_fixture(vector: dict[str, Any]) -> None:
     assert resolved.coeffs.wh_per_output_token == pytest.approx(
         vector["whPerOutputToken"], abs=1e-9
     )
+    assert resolved.coeffs.status == vector.get("status")

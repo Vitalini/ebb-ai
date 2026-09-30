@@ -148,6 +148,8 @@ export {
   OpenAIAdapter,
   GeminiAdapter,
   OllamaAdapter,
+  DEFAULT_MODEL_BY_PROVIDER,
+  ProviderRefusalError,
 } from "./providers/index.js";
 export type {
   BatchHandle,
@@ -180,6 +182,7 @@ export {
 export type {
   EnergySourceTier,
   EnergyResolutionTier,
+  ModelLifecycleStatus,
   ModelEnergyCoefficients,
   ModelFamily,
   ResolvedModelEnergy,

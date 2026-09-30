@@ -17,8 +17,11 @@ import pytest
 from ebb_ai.providers import (
     AnthropicAdapter,
     DispatchOptions,
+    GeminiAdapter,
+    OllamaAdapter,
     OpenAIAdapter,
     ProviderAdapter,
+    ProviderRefusalError,
 )
 from ebb_ai.providers.anthropic import _extract_text as _extract_anth
 from ebb_ai.providers.openai import _extract_text as _extract_oai
@@ -65,7 +68,7 @@ async def test_anthropic_dispatch_returns_flattened_text() -> None:
     kwargs = client.messages.create.await_args.kwargs
     assert kwargs["model"] == "claude-sonnet-4-5"
     assert kwargs["messages"] == [{"role": "user", "content": "hi"}]
-    assert kwargs["max_tokens"] == 1024
+    assert kwargs["max_tokens"] == 16000
 
 
 @pytest.mark.asyncio
@@ -163,6 +166,245 @@ def test_anthropic_adapter_is_provider() -> None:
     client = _make_anthropic_client()
     assert isinstance(AnthropicAdapter(client=client), ProviderAdapter)
     assert AnthropicAdapter.name == "anthropic"
+
+
+# --------------------------------------------------------------------- #
+# Anthropic: sampling parameters, output ceiling, stop reasons
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("model", "sent"),
+    [
+        ("claude-sonnet-5", False),
+        ("claude-opus-5", False),
+        ("claude-opus-5-5", False),
+        ("claude-opus-4-8", False),
+        ("claude-opus-4-7", False),
+        ("claude-fable-5-1", False),
+        ("claude-mythos-5-1", False),
+        ("claude-opus-6", False),
+        ("claude-sonnet-4-6", True),
+        ("claude-opus-4-6", True),
+        ("claude-sonnet-4-5", True),
+        ("claude-opus-4-1", True),
+        ("claude-haiku-4-5", True),
+        ("claude-3-5-sonnet-20241022", True),
+        ("us.anthropic.claude-sonnet-4-6-v1:0", True),
+        ("global.anthropic.claude-sonnet-5", False),
+    ],
+)
+async def test_anthropic_dispatch_gates_temperature(model: str, sent: bool) -> None:
+    client = _make_anthropic_client()
+    adapter = AnthropicAdapter(client=client)
+    await adapter.dispatch(model, "hi", DispatchOptions(extra={"temperature": 0.2}))
+    kwargs = client.messages.create.await_args.kwargs
+    assert ("temperature" in kwargs) is sent
+    if sent:
+        assert kwargs["temperature"] == 0.2
+
+
+@pytest.mark.asyncio
+async def test_anthropic_dispatch_drops_every_sampling_param_for_rejecting_model() -> None:
+    client = _make_anthropic_client()
+    adapter = AnthropicAdapter(client=client)
+    await adapter.dispatch(
+        "claude-sonnet-5",
+        "hi",
+        DispatchOptions(
+            extra={"temperature": 0.2, "top_p": 0.9, "top_k": 5, "stop_sequences": ["X"]}
+        ),
+    )
+    kwargs = client.messages.create.await_args.kwargs
+    assert "temperature" not in kwargs
+    assert "top_p" not in kwargs
+    assert "top_k" not in kwargs
+    assert kwargs["stop_sequences"] == ["X"]
+
+
+@pytest.mark.asyncio
+async def test_anthropic_dispatch_batch_gates_temperature() -> None:
+    client = _make_anthropic_client()
+    adapter = AnthropicAdapter(client=client)
+    opts = DispatchOptions(extra={"temperature": 0.4})
+    await adapter.dispatch_batch("claude-opus-5", ["a", "b"], opts)
+    requests = client.messages.batches.create.await_args.kwargs["requests"]
+    assert len(requests) == 2
+    for req in requests:
+        assert "temperature" not in req["params"]
+
+    await adapter.dispatch_batch("claude-haiku-4-5", ["a"], opts)
+    requests = client.messages.batches.create.await_args.kwargs["requests"]
+    assert requests[0]["params"]["temperature"] == 0.4
+
+
+@pytest.mark.asyncio
+async def test_anthropic_defaults_max_tokens_to_16000() -> None:
+    client = _make_anthropic_client()
+    adapter = AnthropicAdapter(client=client)
+    await adapter.dispatch("claude-sonnet-5", "hi", DispatchOptions())
+    assert client.messages.create.await_args.kwargs["max_tokens"] == 16000
+    await adapter.dispatch_batch("claude-sonnet-5", ["hi"])
+    requests = client.messages.batches.create.await_args.kwargs["requests"]
+    assert requests[0]["params"]["max_tokens"] == 16000
+    await adapter.dispatch("claude-sonnet-5", "hi", DispatchOptions(max_tokens=512))
+    assert client.messages.create.await_args.kwargs["max_tokens"] == 512
+
+
+def _anthropic_message(**fields: Any) -> Any:
+    base: dict[str, Any] = {
+        "model": "claude-opus-5",
+        "content": [SimpleNamespace(type="text", text="ok")],
+        "usage": SimpleNamespace(input_tokens=1, output_tokens=1),
+        "stop_reason": "end_turn",
+        "stop_details": None,
+    }
+    base.update(fields)
+    return SimpleNamespace(**base)
+
+
+@pytest.mark.asyncio
+async def test_anthropic_refusal_raises_with_category() -> None:
+    client = _make_anthropic_client(
+        messages_create=AsyncMock(
+            return_value=_anthropic_message(
+                content=[SimpleNamespace(type="text", text="partial")],
+                stop_reason="refusal",
+                stop_details=SimpleNamespace(
+                    type="refusal", category="cyber", explanation="declined"
+                ),
+            )
+        )
+    )
+    adapter = AnthropicAdapter(client=client)
+    with pytest.raises(ProviderRefusalError) as excinfo:
+        await adapter.dispatch("claude-opus-5", "hi")
+    assert excinfo.value.category == "cyber"
+    assert excinfo.value.provider == "anthropic"
+    assert excinfo.value.model == "claude-opus-5"
+
+
+@pytest.mark.asyncio
+async def test_anthropic_refusal_without_details_has_null_category() -> None:
+    client = _make_anthropic_client(
+        messages_create=AsyncMock(return_value=_anthropic_message(stop_reason="refusal"))
+    )
+    with pytest.raises(ProviderRefusalError) as excinfo:
+        await AnthropicAdapter(client=client).dispatch("claude-opus-5", "hi")
+    assert excinfo.value.category is None
+
+
+@pytest.mark.asyncio
+async def test_anthropic_max_tokens_stop_is_reported_on_result() -> None:
+    client = _make_anthropic_client(
+        messages_create=AsyncMock(
+            return_value=_anthropic_message(
+                content=[SimpleNamespace(type="text", text="cut off")],
+                stop_reason="max_tokens",
+            )
+        )
+    )
+    result = await AnthropicAdapter(client=client).dispatch("claude-sonnet-5", "hi")
+    assert result.stop_reason == "max_tokens"
+    assert result.text == "cut off"
+
+
+@pytest.mark.asyncio
+async def test_anthropic_end_turn_is_reported_on_result() -> None:
+    client = _make_anthropic_client(
+        messages_create=AsyncMock(return_value=_anthropic_message())
+    )
+    result = await AnthropicAdapter(client=client).dispatch("claude-sonnet-5", "hi")
+    assert result.stop_reason == "end_turn"
+
+
+def _ended_batch_client(message: Any) -> Any:
+    client = _make_anthropic_client()
+    client.messages.batches.retrieve = AsyncMock(
+        return_value=SimpleNamespace(processing_status="ended")
+    )
+
+    async def _results(_batch_id: str) -> Any:
+        async def gen() -> Any:
+            yield SimpleNamespace(
+                result=SimpleNamespace(type="succeeded", message=message)
+            )
+
+        return gen()
+
+    client.messages.batches.results = _results
+    return client
+
+
+@pytest.mark.asyncio
+async def test_anthropic_retrieve_batch_fails_refused_result() -> None:
+    client = _ended_batch_client(
+        _anthropic_message(
+            content=[],
+            stop_reason="refusal",
+            stop_details=SimpleNamespace(type="refusal", category="bio"),
+        )
+    )
+    result = await AnthropicAdapter(client=client).retrieve_batch("msgbatch_01")
+    assert result.status == "failed"
+    assert result.results is None
+    assert "refus" in (result.error or "").lower()
+    assert "bio" in (result.error or "")
+
+
+@pytest.mark.asyncio
+async def test_anthropic_retrieve_batch_reports_max_tokens_stop() -> None:
+    client = _ended_batch_client(
+        _anthropic_message(
+            content=[SimpleNamespace(type="text", text="cut")],
+            stop_reason="max_tokens",
+        )
+    )
+    result = await AnthropicAdapter(client=client).retrieve_batch("msgbatch_01")
+    assert result.status == "completed"
+    assert result.results[0].stop_reason == "max_tokens"
+    assert result.results[0].text == "cut"
+
+
+# --------------------------------------------------------------------- #
+# Per-adapter max_tokens defaults (DispatchOptions.max_tokens is None)
+
+
+@pytest.mark.asyncio
+async def test_openai_applies_1024_when_max_tokens_is_none() -> None:
+    client = _make_openai_client()
+    await OpenAIAdapter(client=client).dispatch("gpt-4o", "hi", DispatchOptions())
+    assert client.chat.completions.create.await_args.kwargs["max_tokens"] == 1024
+
+
+class _RecordingHttp:
+    def __init__(self, payload: Any) -> None:
+        self._payload = payload
+        self.calls: list[dict[str, Any]] = []
+
+    async def post(self, url: str, **kwargs: Any) -> Any:
+        self.calls.append({"url": url, **kwargs})
+        return SimpleNamespace(
+            status_code=200, text="", json=lambda: self._payload
+        )
+
+
+@pytest.mark.asyncio
+async def test_gemini_applies_1024_when_max_tokens_is_none() -> None:
+    http = _RecordingHttp({"candidates": [{"content": {"parts": [{"text": "x"}]}}]})
+    await GeminiAdapter(api_key="k", client=http).dispatch(
+        "gemini-3.8-flash", "hi", DispatchOptions()
+    )
+    assert http.calls[0]["json"]["generationConfig"]["maxOutputTokens"] == 1024
+
+
+@pytest.mark.asyncio
+async def test_ollama_applies_1024_when_max_tokens_is_none() -> None:
+    http = _RecordingHttp({"message": {"content": "x"}})
+    await OllamaAdapter(host="http://localhost:11434", client=http).dispatch(
+        "llama3.1", "hi", DispatchOptions()
+    )
+    assert http.calls[0]["json"]["options"]["num_predict"] == 1024
 
 
 # --------------------------------------------------------------------- #
@@ -371,3 +613,16 @@ async def test_provider_runs_under_scheduler() -> None:
         assert rec.receipt is not None
     finally:
         await s.shutdown()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", ["gpt-6-sol", "gpt-6-astra", "gpt-6-luna", "GPT-6-sol"])
+async def test_openai_gpt6_sends_max_completion_tokens(model: str) -> None:
+    client = _make_openai_client()
+    await OpenAIAdapter(client=client).dispatch(
+        model, "hi", DispatchOptions(max_tokens=64, extra={"temperature": 0.7})
+    )
+    kwargs = client.chat.completions.create.await_args.kwargs
+    assert kwargs["max_completion_tokens"] == 64
+    assert "max_tokens" not in kwargs
+    assert kwargs["temperature"] == 0.7

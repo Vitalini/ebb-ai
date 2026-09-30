@@ -20,6 +20,7 @@ import {
   parseCandidate,
   parseCandidates,
   previewRouting,
+  priceForModel,
   ROUTING_PREVIEW_DISCLOSURE,
   scoreCandidates,
 } from "../src/routing.js";
@@ -132,10 +133,55 @@ describe("routing — loud reject on a missing price", () => {
   });
 });
 
+describe("routing — September 2026 price table", () => {
+  it("prices Opus 4.6 / 4.7 at $5 / $25", () => {
+    for (const id of ["claude-opus-4-7", "claude-opus-4-6"]) {
+      expect(priceForModel(id)).toMatchObject({ inUsdPerMtok: 5, outUsdPerMtok: 25 });
+    }
+  });
+
+  it("prices every current Claude and GPT-6 model", () => {
+    const expected: Record<string, [number, number]> = {
+      "claude-fable-5-1": [10, 50],
+      "claude-fable-5": [10, 50],
+      "claude-opus-5-5": [4, 20],
+      "claude-opus-5": [5, 25],
+      "claude-opus-4-8": [5, 25],
+      "claude-sonnet-5": [2, 10],
+      "gpt-6-astra": [10, 50],
+      "gpt-6-sol": [2, 10],
+      "gpt-6-luna": [0.1, 0.5],
+    };
+    for (const [id, [inp, out]] of Object.entries(expected)) {
+      expect(priceForModel(id), id).toMatchObject({ inUsdPerMtok: inp, outUsdPerMtok: out, asOf: "2026-09" });
+    }
+    // Vendor-form ids reach the same row through normalization.
+    expect(priceForModel("global.anthropic.claude-sonnet-5")).toBe(priceForModel("claude-sonnet-5"));
+  });
+
+  it("has no price for retired models, so routing to one fails loudly", () => {
+    expect(priceForModel("o1-mini")).toBeUndefined();
+    expect(priceForModel("gemini-2-0-flash")).toBeUndefined();
+    expect(priceForModel("claude-opus-4-1")).toBeUndefined();
+    let err: unknown;
+    try {
+      scoreCandidates({
+        candidates: parseCandidates(["openai:o1-mini", "anthropic:claude-sonnet-5"]),
+        intensityGCo2PerKwh: 400,
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(MissingPriceError);
+    expect((err as MissingPriceError).missing).toEqual(["openai:o1-mini"]);
+  });
+});
+
 describe("routing — deterministic seeded tie-break", () => {
-  // Two hosted models with identical price and (cost-only weights) identical
-  // scores → the tie is broken by the injected rng, reproducibly.
-  const tied = parseCandidates(["gemini:gemini-1-5-pro", "gemini:gemini-2-0-pro"]);
+  // Two hosted models with identical price and energy class (Opus 5 and 4.8
+  // are both $5 / $25) → identical cost-only scores → the tie is broken by
+  // the injected rng, reproducibly.
+  const tied = parseCandidates(["anthropic:claude-opus-5", "anthropic:claude-opus-4-8"]);
   const opts = {
     candidates: tied,
     intensityGCo2PerKwh: 400,
@@ -146,8 +192,8 @@ describe("routing — deterministic seeded tie-break", () => {
     const b = scoreCandidates({ ...opts, rng: () => 0.999 });
     // Both scores are equal (0), so the pick is entirely rng-determined.
     expect(a.considered.every((c) => c.score === a.considered[0]!.score)).toBe(true);
-    expect(a.chosen).toBe("gemini:gemini-1-5-pro");
-    expect(b.chosen).toBe("gemini:gemini-2-0-pro");
+    expect(a.chosen).toBe("anthropic:claude-opus-5");
+    expect(b.chosen).toBe("anthropic:claude-opus-4-8");
   });
 });
 
@@ -221,7 +267,7 @@ describe("routing — preview (recommend_window / dry_run)", () => {
   it("preview pick matches the committed pick given identical forecast + seed", async () => {
     const candidates = [
       "anthropic:claude-opus-4",
-      "gemini:gemini-2-0-flash",
+      "openai:gpt-6-luna",
       "ollama:llama-3-1-8b",
     ];
     const routeWeights = { carbon: 1, cost: 0, latency: 0 };
@@ -328,28 +374,28 @@ describe("routing — Scheduler integration", () => {
 
   it("falls back to the next-best candidate when the chosen adapter is unavailable", async () => {
     const s = new Scheduler({ feed: mockGridFeed() });
-    // carbon=1 makes gemini (lower energy) win, but no gemini adapter is
+    // carbon=1 makes gpt-6-luna (lower energy) win, but no openai adapter is
     // supplied → dispatch falls back to the ready anthropic adapter.
     const rec = await s.enqueueProviderCall(
       {
         type: "provider_call",
-        provider: "gemini",
-        model: "gemini-2-0-flash",
+        provider: "openai",
+        model: "gpt-6-luna",
         prompt: "hi",
-        candidates: ["anthropic:claude-opus-4", "gemini:gemini-2-0-flash"],
+        candidates: ["anthropic:claude-opus-4", "openai:gpt-6-luna"],
         routeWeights: { carbon: 1, cost: 0, latency: 0 },
       },
       { deadline: deadline(3), region: "US-CAL-CISO", taskId: "rt-fallback" },
     );
     const scheduled = s.getTask(rec.taskId);
-    expect(scheduled?.routingDecision?.chosen).toBe("gemini:gemini-2-0-flash");
+    expect(scheduled?.routingDecision?.chosen).toBe("openai:gpt-6-luna");
     if (scheduled) scheduled.scheduledFor = new Date(Date.now() - 1000).toISOString();
     const anthropic = makeSyncAdapter("anthropic");
-    await s.tick({ anthropic }); // gemini adapter absent
+    await s.tick({ anthropic }); // openai adapter absent
     const done = s.getTask(rec.taskId);
     expect(done?.status).toBe("completed");
     expect(anthropic.dispatchCalls).toHaveLength(1);
-    expect(done?.receipt?.routing?.fallbackFrom).toBe("gemini:gemini-2-0-flash");
+    expect(done?.receipt?.routing?.fallbackFrom).toBe("openai:gpt-6-luna");
     expect(done?.receipt?.routing?.chosen).toBe("anthropic:claude-opus-4");
     expect(done?.receipt?.provider).toBe("anthropic");
     s.shutdown();
@@ -363,7 +409,7 @@ describe("routing — Scheduler integration", () => {
         provider: "anthropic",
         model: "claude-opus-4",
         prompt: "hi",
-        candidates: ["anthropic:claude-opus-4", "gemini:gemini-2-0-flash"],
+        candidates: ["anthropic:claude-opus-4", "openai:gpt-6-luna"],
       },
       { deadline: deadline(3), region: "US-CAL-CISO", taskId: "rt-none" },
     );

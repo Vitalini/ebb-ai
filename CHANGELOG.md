@@ -7,7 +7,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-(Nothing pending — see version sections below.)
+### Changed
+
+- **Model catalogue refreshed for September 2026.** Added the current
+  Claude (`claude-fable-5-1`, `claude-fable-5`, `claude-opus-5-5`,
+  `claude-opus-5`, `claude-sonnet-5`), GPT-6 (`gpt-6-astra`, `gpt-6-sol`,
+  `gpt-6-luna`) and Gemini 3 (`gemini-3-1-pro`, `gemini-3-8-flash`,
+  `gemini-3-5-flash-lite`) rows to `energy.json`/`prices.json`, and marked
+  every retired or deprecated id (`claude-opus-4-1`, `claude-opus-3-5`,
+  `claude-opus-3`, `claude-sonnet-3-7`, `claude-sonnet-3-5`,
+  `claude-sonnet-3`, `claude-haiku-3-5`, `claude-haiku-3`,
+  `gemini-2-0-flash`, `gemini-2-0-pro`, `gemini-1-5-pro`,
+  `gemini-1-5-flash`, `o1-mini`, `gpt-4`, `gpt-4-turbo`, `o3-mini`) with a
+  `status` flag instead of leaving it silently current. Family
+  representatives now point at current models (`claude-opus` ->
+  `claude-opus-5`, `claude-sonnet` -> `claude-sonnet-5`, `gpt-6` ->
+  `gpt-6-sol`, `gemini-pro` -> `gemini-3-1-pro`, `gemini-flash` ->
+  `gemini-3-8-flash`), and new `gpt-4-1`/`gpt-5` families are added.
+- **`DEFAULT_MODEL_BY_PROVIDER`** is exported from `@ebb-ai/core`, giving
+  each provider its own current default (`anthropic: claude-sonnet-5`,
+  `openai: gpt-6-sol`, `gemini: gemini-3.8-flash`, `ollama: llama3.1`);
+  the MCP server and the OpenClaw plugin both resolve a missing `model`
+  from it instead of a single shared default.
+- **Anthropic adapters (TS and Python) default `max_tokens` to 16000**
+  (was 1024) so current Claude models are not truncated at the old
+  ceiling.
+- **CI's build-test matrix adds Node 24** alongside 20 and 22.
+
+### Fixed
+
+- **Corrected an inaccurate privacy claim in 0.15.1's own documentation.**
+  0.15.1 stated that `chat` delivery "stays inside OpenClaw". That is
+  wrong on a Telegram-backed gateway: `chat` and `telegram` take the
+  *same* Telegram Bot-API path in `delivery.ts`, so on such a gateway a
+  "chat" result does leave for a third party. ClawHub's review caught the
+  contradiction (`E1`). The `set_delivery` tool description and the plugin
+  README now say so plainly, and both name **`queue`** — not `chat` — as
+  the only mode that transmits nothing. Documentation-only; delivery
+  behaviour is unchanged.
+- **`claude-opus-4-6` / `claude-opus-4-7` pricing corrected** from
+  15/75 to 5/25 per million tokens, matching the current price list.
+- **The Gemini default no longer points at a shut-down model.**
+  `gemini-2-0-flash` was retired 2026-06-01; the MCP server and OpenClaw
+  plugin now default keyless Gemini dispatch to `gemini-3-8-flash`.
+- **A task no longer defaults to a foreign vendor's model id.** The MCP
+  server and OpenClaw plugin previously fell back to one shared default
+  regardless of the requested provider; each provider now resolves its
+  own entry from `DEFAULT_MODEL_BY_PROVIDER`.
+- **`temperature` is no longer sent to models that reject sampling
+  parameters** (Opus 4.7/4.8/5/5.5, Sonnet 5, Fable, Mythos), which
+  previously made the request fail.
+- **A `stop_reason: "refusal"` response now raises `ProviderRefusalError`**
+  with the `stop_details.category`, instead of being returned as if it
+  were a normal (empty or partial) answer.
+
+### Security
+
+- **`@modelcontextprotocol/sdk` bumped to `^1.30.1`**, plus root
+  `pnpm.overrides` for the patched `fast-uri`, `hono`, `qs`, `sharp` and
+  `nanoid` ranges, closing the advisories reachable from the monorepo
+  other than `next` (tracked separately).
+- **`next` 16.2.11 → 16.3.6 in `apps/web`, closing two critical
+  unauthenticated-RCE advisories:** `GHSA-p293-qw3h-jr36` and
+  `GHSA-2xp9-vwfh-vxw4` (the second via the Image Optimization API when
+  AVIF files are used), both fixed upstream in `next@16.3.3`.
+  `eslint-config-next` bumped to match. `pnpm audit --prod` no longer
+  reports either advisory.
 
 ## [0.15.1] — 2026-07-25
 

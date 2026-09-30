@@ -43,14 +43,50 @@ class TestNormalizeModelName:
             == "claude-opus-4-1"
         )
 
+    def test_strips_bedrock_global_and_bare_vendor_prefixes(self) -> None:
+        assert normalize_model_name("global.anthropic.claude-sonnet-5") == "claude-sonnet-5"
+        assert normalize_model_name("anthropic.claude-opus-5") == "claude-opus-5"
+        assert normalize_model_name("meta.llama-4-scout") == "llama-4-scout"
+
     def test_canonicalizes_claude_word_order(self) -> None:
         assert normalize_model_name("claude-3-5-sonnet") == "claude-sonnet-3-5"
         assert (
             normalize_model_name("claude-3-5-sonnet-20241022") == "claude-sonnet-3-5"
         )
+        assert normalize_model_name("claude-5-1-fable") == "claude-fable-5-1"
+        assert normalize_model_name("claude-5-1-mythos") == "claude-mythos-5-1"
+
+    def test_dotted_vendor_ids_map_to_canonical_keys(self) -> None:
+        assert normalize_model_name("gemini-3.8-flash") == "gemini-3-8-flash"
+        assert normalize_model_name("gpt-4.1-mini") == "gpt-4-1-mini"
 
 
 class TestResolveModelEnergy:
+    def test_retired_rows_resolve_and_are_flagged(self) -> None:
+        r = resolve_model_energy("claude-sonnet-3-5")
+        assert r.tier == "exact"
+        assert r.coeffs.status == "retired"
+        assert resolve_model_energy("claude-3-5-sonnet-20241022").tier == "normalized"
+        assert resolve_model_energy("gpt-4").coeffs.status == "deprecated"
+        assert resolve_model_energy("claude-sonnet-5").coeffs.status is None
+
+    def test_new_families_use_current_representatives(self) -> None:
+        opus5 = MODEL_ENERGY_COEFFICIENTS["claude-opus-5"]
+        fable = MODEL_ENERGY_COEFFICIENTS["claude-fable-5-1"]
+        r = resolve_model_energy("claude-opus-6")
+        assert (r.coeffs, r.tier) == (opus5, "family-fallback")
+        r = resolve_model_energy("claude-mythos-5-1")
+        assert (r.coeffs, r.tier) == (fable, "family-fallback")
+        assert (
+            resolve_model_energy("gemini-4-flash").coeffs
+            is MODEL_ENERGY_COEFFICIENTS["gemini-3-8-flash"]
+        )
+        # gpt-4-1 is ordered before gpt-4, so a 4.1 variant never lands on gpt-4.
+        assert resolve_model_energy("gpt-4-1-ultra").coeffs is MODEL_ENERGY_COEFFICIENTS["gpt-4-1"]
+        # The removed never-real row still resolves, through its family.
+        r = resolve_model_energy("claude-opus-3-5")
+        assert (r.coeffs, r.tier) == (opus5, "family-fallback")
+
     def test_tiers(self) -> None:
         assert resolve_model_energy("claude-opus-4-7").tier == "exact"
         assert resolve_model_energy("claude-sonnet-4-5-20251022").tier == "normalized"
@@ -59,7 +95,7 @@ class TestResolveModelEnergy:
         assert resolve_model_energy(None).tier == "default"
 
     def test_family_fallback_uses_representative_coeffs(self) -> None:
-        rep = MODEL_ENERGY_COEFFICIENTS["claude-sonnet-4"]
+        rep = MODEL_ENERGY_COEFFICIENTS["claude-sonnet-5"]
         got = resolve_model_energy("claude-sonnet-9").coeffs
         assert got.wh_per_input_token == rep.wh_per_input_token
         assert got.wh_per_output_token == rep.wh_per_output_token

@@ -21,6 +21,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { validateTables } from "./gen-data-validate.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = join(here, "..");
@@ -37,26 +38,7 @@ const bands = readJson("bands.json");
 const prices = readJson("prices.json");
 
 // ---- validation -----------------------------------------------------------
-const coeffIds = new Set(Object.keys(energy.coefficients));
-for (const fam of energy.families) {
-  if (!coeffIds.has(fam.representative)) {
-    throw new Error(
-      `family "${fam.id}" points at representative "${fam.representative}" which is not a coefficient key`,
-    );
-  }
-}
-// Routing scores carbon and cost off ONE model-id space. Every priced model
-// must have an energy coefficient so a routable candidate can be scored on
-// both dimensions; a price for an id the energy table never heard of is a
-// silent typo waiting to mis-score. (The reverse is fine: an energy-only id
-// simply isn't routable.)
-for (const id of Object.keys(prices.prices)) {
-  if (!coeffIds.has(id)) {
-    throw new Error(
-      `price entry "${id}" has no matching energy coefficient key — routing scores carbon+cost off one id space`,
-    );
-  }
-}
+validateTables({ energy, prices });
 
 // ---- shared numeric emission ----------------------------------------------
 // `String(n)` gives the same decimal text for both languages for every
@@ -73,6 +55,7 @@ function tsCoefficient(c) {
   ];
   if (c.paramsB !== undefined) parts.push(`paramsB: ${num(c.paramsB)}`);
   parts.push(`source: ${JSON.stringify(c.source)}`);
+  if (c.status !== undefined) parts.push(`status: ${JSON.stringify(c.status)}`);
   return `{ ${parts.join(", ")} }`;
 }
 
@@ -220,6 +203,7 @@ function pyCoefficient(c) {
     `"wh_per_output_token": ${num(c.whPerOutputToken)}`,
     `"params_b": ${c.paramsB === undefined ? "None" : num(c.paramsB)}`,
     `"source": ${JSON.stringify(c.source)}`,
+    `"status": ${c.status === undefined ? "None" : JSON.stringify(c.status)}`,
   ];
   return `{${parts.join(", ")}}`;
 }
