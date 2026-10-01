@@ -21,12 +21,14 @@ from ebb_ai import (
     TickResult,
     mock_grid_feed,
 )
+from ebb_ai.grid import GridFeed
 from ebb_ai.providers.base import (
     BatchHandle,
     DispatchOptions,
     DispatchResult,
     ProviderAdapter,
 )
+from ebb_ai.types import GridForecast, GridForecastEntry
 
 # --------------------------------------------------------------------- #
 # Fake adapters
@@ -114,6 +116,40 @@ def _soon() -> str:
     return (datetime.now(UTC) + timedelta(milliseconds=200)).isoformat()
 
 
+class _FutureTroughFeed(GridFeed):
+    """Flat 400 g/kWh curve with a single 50 g/kWh trough ``trough_h`` hours
+    after the current hour.
+
+    ``mock_grid_feed()`` follows the wall clock: between ~11:00 and 15:00 UTC
+    the current hour sits inside US-CAL-CISO's clean band, the scheduler's
+    random tie-break can pick it, and the task becomes due at enqueue time.
+    A lone trough hours away keeps the chosen window strictly in the future
+    whatever the time of day.
+    """
+
+    source = "mock"
+
+    def __init__(self, trough_h: int = 6) -> None:
+        self._trough_h = trough_h
+
+    async def fetch_forecast(self, region: str, hours: int) -> GridForecast:
+        hour0 = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+        entries = [
+            GridForecastEntry(
+                datetime=(hour0 + timedelta(hours=i)).isoformat(),
+                carbon_intensity_g_co2_per_kwh=50 if i == self._trough_h else 400,
+                band="very_clean" if i == self._trough_h else "average",
+            )
+            for i in range(hours)
+        ]
+        return GridForecast(
+            region=region,
+            source="mock",
+            generated_at=datetime.now(UTC).isoformat(),
+            entries=entries,
+        )
+
+
 def _two_days_out() -> str:
     return (datetime.now(UTC) + timedelta(hours=48)).isoformat()
 
@@ -189,19 +225,20 @@ async def test_tick_dispatches_due_task(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_tick_skips_future_tasks() -> None:
-    async with Scheduler(feed=mock_grid_feed()) as s:
+    async with Scheduler(feed=_FutureTroughFeed(trough_h=6)) as s:
         spec = ProviderCallSpec(provider="anthropic", model="m", prompt="p")
-        await s.enqueue_provider_call(
+        rec = await s.enqueue_provider_call(
             spec,
             DeferOptions(
                 deadline=(datetime.now(UTC) + timedelta(days=2)).isoformat(),
                 task_id="future:1",
             ),
         )
+        assert rec.scheduled_for is not None
+        assert datetime.fromisoformat(rec.scheduled_for) > datetime.now(UTC)
         adapter = FakeAdapter()
         result = await s.tick({"anthropic": adapter})
-        # The task was scheduled for some clean window in the future;
-        # tick should not run it now.
+        # The task was scheduled for the trough 6h out; tick must not run it now.
         assert result.dispatched == 0
         assert len(adapter.dispatch_calls) == 0
 
