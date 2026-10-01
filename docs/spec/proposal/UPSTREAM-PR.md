@@ -77,7 +77,7 @@ Including these would balloon the PR; both can be added incrementally once the t
 
 A reference server implementing the proposed fields ships today: [`@ebb-ai/mcp@0.11.0`](https://www.npmjs.com/package/@ebb-ai/mcp) (Apache-2.0). It exposes a `schedule_task` tool that accepts `deadline` and `carbon_budget_g`, backed by a multi-source grid feed (UK Carbon Intensity, EIA, ENTSO-E, Electricity Maps; 31 zones across NA / EU / APAC), per-model energy coefficients (Patterson 2021, Luccioni 2024, HF AI Energy Score), Ed25519-signed receipts (`ebb verify`), and a WAL-enabled persistent SQLite queue (`~/.ebb-ai/queue.db`). Source: <https://github.com/Vitalini/ebb-ai>.
 
-The server has 325 passing automated tests (213 TS + 112 Python), including an even-distribution simulation (10,000 synthetic deferred tasks across the grid regions) that empirically verifies the scheduler does *not* create a new peak at the global cleanest hour — the chosen-hour distribution sits at ~11 % maximum concentration with randomised tie-break + per-region phase, well below the 24-bucket uniform floor of 4.2 %.
+The server has 1,115 passing automated tests (650 TS + 465 Python), including an even-distribution simulation (10,000 synthetic deferred tasks across 7 monitored grid zones) that empirically verifies the scheduler does *not* create a new peak at the global cleanest hour — the chosen-hour distribution sits at ~11 % maximum concentration with randomised tie-break + per-region phase, well below the 24-bucket uniform floor of 4.2 %.
 
 The fields proposed here are exactly the fields `@ebb-ai/mcp` already accepts; merging this proposal would make `@ebb-ai/mcp` a conforming implementation of the standard rather than a provider-specific extension.
 
