@@ -4,7 +4,8 @@ Workload scheduling for the agentic-AI economy — the core TypeScript library.
 
 `@ebb-ai/core` lets your code defer non-urgent LLM tasks to cheap, off-peak
 grid windows. Anthropic and OpenAI Batch APIs already give a flat **50%
-discount** for 24h-tolerant work; `@ebb-ai/core` makes the choice automatic,
+discount (projected, provider list price)** for 24h-tolerant work;
+`@ebb-ai/core` makes the choice automatic,
 picks the cheapest window inside your deadline, and writes an auditable
 receipt (cost + carbon + provider + duration) for every dispatch.
 

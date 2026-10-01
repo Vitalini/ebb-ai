@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { Nav } from "@/components/nav";
+import { VERSION } from "@/lib/version";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -54,7 +55,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "ebb-ai — Carbon-aware scheduling for agentic AI workflows",
     description:
-      "MCP server that defers non-urgent AI tasks to the cleanest grid window. 605 tests, 9 MCP tools, persistent SQLite queue. Apache-2.0.",
+      "MCP server that defers non-urgent AI tasks to the cleanest grid window. 1,115 tests, 9 MCP tools, persistent SQLite queue. Apache-2.0.",
     images: ["/og.png"],
   },
   robots: {
@@ -87,7 +88,7 @@ const jsonLd = {
       operatingSystem: "macOS, Linux, Windows",
       offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
       license: "https://opensource.org/licenses/Apache-2.0",
-      softwareVersion: "0.15.1",
+      softwareVersion: VERSION,
       author: {
         "@type": "Person",
         name: "Vitalii Borovyk",
@@ -146,7 +147,7 @@ export default async function RootLayout({
               (mock fallback when no key is configured)
             </p>
             <p className="font-mono text-fg-dim">
-              v0.15.1 · operator preview · UTC-aligned
+              v{VERSION} · operator preview · UTC-aligned
             </p>
           </div>
         </footer>

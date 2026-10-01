@@ -64,7 +64,8 @@ OLLAMA_HOST=http://localhost:11434   # local Ollama; presence opts the ollama pr
 ```
 
 Providers: `anthropic` and `openai` are batch-capable (their tasks can
-auto-route through a 50%-cheaper Batch API); `gemini` and `ollama` are
+auto-route through a 50%-cheaper Batch API — projected, provider list
+price); `gemini` and `ollama` are
 sync-only. Gemini reads `GEMINI_API_KEY`, falling back to `GOOGLE_API_KEY`.
 Ollama is local and keyless — set `OLLAMA_HOST` (default `http://localhost:11434`)
 to enable it; optionally list local model ids in `OLLAMA_MODELS` (comma-separated)

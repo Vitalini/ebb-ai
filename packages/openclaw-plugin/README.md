@@ -7,8 +7,9 @@ is `ebb`.
 When a user says "do this later", "by tomorrow", "tonight", "overnight",
 "by EOD", "remind me to", or any other deferral phrase, this plugin's
 `schedule_task` tool gets invoked automatically — the LLM dispatch is
-routed to the cleanest electricity-grid hour inside the deadline,
-40-70 % lower carbon vs running immediately.
+routed to the cleanest electricity-grid hour inside the deadline, for
+lower carbon than running immediately (the saving depends on region and
+day — see [docs/claims.md](../../docs/claims.md)).
 
 ## Tools registered
 

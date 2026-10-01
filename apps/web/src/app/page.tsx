@@ -7,6 +7,7 @@ import { HowItWorksViz } from "@/components/how-it-works-viz";
 import { GridGreeting, GridGreetingSkeleton } from "@/components/grid-greeting";
 import { InstallPicker } from "@/components/install-picker";
 import { AgentPrompt } from "@/components/agent-prompt";
+import { VERSION } from "@/lib/version";
 
 export const metadata: Metadata = {
   title: "Carbon-aware scheduling for AI workflows",
@@ -68,7 +69,7 @@ function Hero() {
     <section className="space-y-5 pt-2">
       <div className="inline-flex items-center gap-2 rounded-md border border-accent/40 bg-accent/5 px-3 py-1 font-mono text-xs uppercase tracking-wider text-accent">
         <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-        v0.15.1 · operator preview
+        v{VERSION} · operator preview
       </div>
       <h1 className="text-balance text-3xl font-extrabold leading-[1.1] tracking-tight text-fg sm:text-4xl">
         Defer AI work to <span className="text-accent">balance the grid</span> — cheaper, faster, lower-carbon.
@@ -79,8 +80,37 @@ function Hero() {
         an open-source MCP scheduler that
         defers non-urgent LLM tasks to off-peak hours — 50 % cheaper via
         Anthropic/OpenAI Batch APIs, faster during providers&apos; expanded
-        off-peak capacity, and 40–70 % lower carbon. Per-task receipts to a
+        off-peak capacity, and lower carbon. Per-task receipts to a
         local SQLite ledger. Apache-2.0.
+      </p>
+      <p className="max-w-2xl text-xs text-fg-dim">
+        50% cheaper: projected, Batch-API list price. Lower carbon: the
+        saving depends on region and day. See{" "}
+        <a
+          href="https://github.com/Vitalini/ebb-ai/blob/main/docs/claims.md"
+          target="_blank"
+          rel="noreferrer"
+          className="text-accent hover:underline"
+        >
+          docs/claims.md
+        </a>
+        .
+      </p>
+      <p className="max-w-2xl text-xs text-fg-dim">
+        Built by Vitalii Borovyk, independent and open source. See the{" "}
+        <a
+          href="https://github.com/Vitalini/ebb-ai"
+          target="_blank"
+          rel="noreferrer"
+          className="text-accent hover:underline"
+        >
+          GitHub repo
+        </a>{" "}
+        or read{" "}
+        <Link href="/about" className="text-accent hover:underline">
+          more about the project
+        </Link>
+        .
       </p>
     </section>
   );
@@ -201,22 +231,36 @@ function TilesBlock() {
 function ValueRow() {
   const items: Array<{ label: string; value: string }> = [
     { label: "grid regions", value: "31" },
-    { label: "live carbon feeds", value: "4" },
+    { label: "live carbon feeds", value: "5" },
     { label: "carbon forecast", value: "72h" },
     { label: "intensity bands", value: "5" },
   ];
   return (
-    <dl className="grid grid-cols-2 gap-3 rounded-xl border border-rule bg-bg-elev px-5 py-5 sm:grid-cols-4">
-      {items.map((it) => (
-        <div key={it.label} className="text-center sm:text-left">
-          <dt className="font-mono text-[10px] uppercase tracking-wider text-fg-dim">
-            {it.label}
-          </dt>
-          <dd className="mt-1 font-mono text-base font-semibold text-fg sm:text-lg">
-            {it.value}
-          </dd>
-        </div>
-      ))}
-    </dl>
+    <>
+      <dl className="grid grid-cols-2 gap-3 rounded-xl border border-rule bg-bg-elev px-5 py-5 sm:grid-cols-4">
+        {items.map((it) => (
+          <div key={it.label} className="text-center sm:text-left">
+            <dt className="font-mono text-[10px] uppercase tracking-wider text-fg-dim">
+              {it.label}
+            </dt>
+            <dd className="mt-1 font-mono text-base font-semibold text-fg sm:text-lg">
+              {it.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <p className="mt-2 text-center text-[11px] text-fg-dim sm:text-left">
+        Measured directly from the code — see{" "}
+        <a
+          href="https://github.com/Vitalini/ebb-ai/blob/main/docs/claims.md"
+          target="_blank"
+          rel="noreferrer"
+          className="text-accent hover:underline"
+        >
+          docs/claims.md
+        </a>
+        .
+      </p>
+    </>
   );
 }

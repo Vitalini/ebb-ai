@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TaskStore } from "@ebb-ai/core";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   missingProviderKeysForPending,
   runTickOnce,
@@ -113,5 +113,78 @@ describe("missing-provider-key warning", () => {
 
   it("returns [] for a missing/unreadable db", () => {
     expect(missingProviderKeysForPending(join(dir, "nope.db"))).toEqual([]);
+  });
+});
+
+describe("tick receipts use the region's grid feed", () => {
+  let dir: string;
+  let dbPath: string;
+  const savedHost = process.env.OLLAMA_HOST;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "ebb-tick-feed-"));
+    dbPath = join(dir, "queue.db");
+    process.env.OLLAMA_HOST = "http://ollama.test";
+    // One fetch stub answers both sides of the tick: the GB Carbon
+    // Intensity API (a flat 123 gCO2/kWh curve) and the Ollama chat call.
+    vi.stubGlobal("fetch", async (input: string | URL) => {
+      const url = String(input);
+      if (url.startsWith("https://api.carbonintensity.org.uk/intensity/")) {
+        const from = new Date(url.split("/")[4]!).getTime();
+        const data = Array.from({ length: 96 }, (_, i) => ({
+          from: new Date(from + i * 30 * 60_000).toISOString(),
+          to: new Date(from + (i + 1) * 30 * 60_000).toISOString(),
+          intensity: { forecast: 123, actual: null },
+        }));
+        return Response.json({ data });
+      }
+      if (url === "http://ollama.test/api/chat") {
+        return Response.json({
+          model: "llama3.2:1b",
+          message: { role: "assistant", content: "ok" },
+          done: true,
+          prompt_eval_count: 5,
+          eval_count: 3,
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    const store = new TaskStore({ dbPath });
+    store.upsert({
+      taskId: "due-ollama-gb",
+      status: "scheduled",
+      enqueuedAt: new Date(Date.now() - 60_000).toISOString(),
+      scheduledFor: new Date(Date.now() - 1_000).toISOString(),
+      region: "GB",
+      bodyJson: JSON.stringify({
+        type: "provider_call",
+        provider: "ollama",
+        model: "llama3.2:1b",
+        prompt: "hi",
+      }),
+    });
+    store.close();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    if (savedHost !== undefined) process.env.OLLAMA_HOST = savedHost;
+    else delete process.env.OLLAMA_HOST;
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("records the live feed's intensity, not the mock curve", async () => {
+    const r = await runTickOnce({
+      db: dbPath,
+      region: "GB",
+      envFile: join(dir, "no-env"),
+      budgetConfig: join(dir, "no-config"),
+    });
+    expect(r.message).toContain("1 dispatched");
+    const store = new TaskStore({ dbPath });
+    const receipt = store.get("due-ollama-gb")?.receipt;
+    store.close();
+    expect(receipt?.gridSource).toBe("ukCarbonIntensity");
+    expect(receipt?.intensityGCo2PerKwh).toBe(123);
   });
 });

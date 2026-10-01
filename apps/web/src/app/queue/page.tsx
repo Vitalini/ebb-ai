@@ -121,8 +121,6 @@ status     completed
 region     US-CAL-CISO
 scheduled  22:15 UTC (4h ago)
 completed  22:15:08 UTC
-estimated  0.34 g CO2e
-actual     0.31 g CO2e   (-9 %)
 result     <the LLM response>`}
         </CodeBlock>
       </section>

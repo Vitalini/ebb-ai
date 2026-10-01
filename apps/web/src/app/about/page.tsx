@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { VERSION } from "@/lib/version";
 
 export const metadata: Metadata = {
   title: "About",
@@ -55,9 +56,10 @@ export default function AboutPage() {
         </p>
         <p className="leading-relaxed text-fg-muted">
           <strong className="text-fg">Cost.</strong> Anthropic and OpenAI
-          Batch APIs are priced 50 % below their sync siblings in exchange
-          for a 24-hour SLA. ebb-ai auto-routes through Batch when the
-          deadline allows. The same prompt, half the bill.
+          Batch APIs are priced 50 % below their sync siblings (projected,
+          provider list price) in exchange for a 24-hour SLA. ebb-ai
+          auto-routes through Batch when the deadline allows. The same
+          prompt, half the bill.
         </p>
         <p className="leading-relaxed text-fg-muted">
           <strong className="text-fg">Latency.</strong> Provider servers
@@ -70,10 +72,18 @@ export default function AboutPage() {
         </p>
         <p className="leading-relaxed text-fg-muted">
           <strong className="text-fg">Carbon.</strong> Carbon-intensity in
-          any given grid region swings 5-10× across a single day as solar /
-          wind / hydro come on- and off-line. A prompt dispatched at noon
-          in California can be six times dirtier than the same prompt at
-          4 AM. ebb-ai writes a per-task carbon receipt against the actual
+          any given grid region swings substantially across a single day as
+          solar / wind / hydro come on- and off-line (simulated, from the
+          mock diurnal curve&apos;s per-region floor/amplitude model — see{" "}
+          <a
+            href="https://github.com/Vitalini/ebb-ai/blob/main/docs/claims.md"
+            target="_blank"
+            rel="noreferrer"
+            className="text-accent hover:underline"
+          >
+            docs/claims.md
+          </a>
+          ). ebb-ai writes a per-task carbon receipt against the actual
           grid intensity at the moment of dispatch — auditable, region-aware,
           reproducible from the persistent SQLite ledger.
         </p>
@@ -239,7 +249,7 @@ export default function AboutPage() {
             </p>
             <p className="mt-1 font-semibold text-fg">GitHub repository</p>
             <p className="mt-1 text-sm text-fg-muted">
-              Apache-2.0. TypeScript + Python ports. 605 tests. PRs welcome.
+              Apache-2.0. TypeScript + Python ports. 1,115 tests. PRs welcome.
             </p>
           </a>
           <a
@@ -262,9 +272,19 @@ export default function AboutPage() {
       <section className="space-y-3">
         <h2 className="text-2xl font-bold tracking-tight">Status</h2>
         <p className="leading-relaxed text-fg-muted">
-          v0.12.x (operator preview). The scheduler is production-grade — the
-          even-distribution simulation routes 10 000 synthetic tasks across 31
-          regions with under 11 % max-bucket concentration, the SQLite ledger
+          v{VERSION} (operator preview). The scheduler is production-grade — the
+          even-distribution simulation routes 10,000 synthetic tasks across 7
+          monitored grid zones with a 10.6 % max-bucket concentration
+          (simulated, test asserts &lt;20 %; see{" "}
+          <a
+            href="https://github.com/Vitalini/ebb-ai/blob/main/docs/claims.md"
+            target="_blank"
+            rel="noreferrer"
+            className="text-accent hover:underline"
+          >
+            docs/claims.md
+          </a>
+          ), the SQLite ledger
           survives process restart, and per-region routing is auto-wired. Live
           carbon feeds (UK National Grid ESO, US EIA, ENTSO-E, Electricity
           Maps) back every region on the map; a feed outage falls back to a

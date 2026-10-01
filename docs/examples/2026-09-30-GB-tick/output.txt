@@ -1,0 +1,139 @@
+# ebb-ai example run
+# date (UTC):  2026-09-30T21:03:30Z
+# region:      GB
+# grid feed:   ukCarbonIntensity (National Grid ESO Carbon Intensity API, live, keyless)
+# provider:    ollama / llama3.2:1b (local)
+# commit:      a099280
+
+$ node docs/examples/2026-09-30-GB-tick/run.mjs <tmp>/queue.db docs/examples/2026-09-30-GB-tick/forecast.json
+forecast source: ukCarbonIntensity (forecast)
+forecast entries: 51 hourly, 2026-09-30T21:00:00.000Z .. 2026-10-02T23:00:00.000Z
+forecast now:  2026-09-30T21:00:00.000Z  158 gCO2/kWh
+forecast peak: 2026-10-01T17:00:00.000Z  183 gCO2/kWh
+
+recommendWindow({ region: "GB", model: "llama3.2:1b", deadline: "2026-10-03T21:03:31.762Z" }):
+{
+  "scheduledFor": "2026-10-02T09:00:00.000Z",
+  "intensityGCo2PerKwh": 88,
+  "band": "very_clean",
+  "estimatedCarbonGCo2": 0.3,
+  "estimatedSavingsVsNowPct": 44,
+  "batchEligible": true,
+  "alternatives": [
+    {
+      "scheduledFor": "2026-10-02T12:00:00.000Z",
+      "intensityGCo2PerKwh": 64,
+      "band": "very_clean",
+      "estimatedCarbonGCo2": 0.2,
+      "estimatedSavingsVsNowPct": 59
+    },
+    {
+      "scheduledFor": "2026-10-02T13:00:00.000Z",
+      "intensityGCo2PerKwh": 66,
+      "band": "very_clean",
+      "estimatedCarbonGCo2": 0.2,
+      "estimatedSavingsVsNowPct": 58
+    },
+    {
+      "scheduledFor": "2026-10-02T11:00:00.000Z",
+      "intensityGCo2PerKwh": 68,
+      "band": "very_clean",
+      "estimatedCarbonGCo2": 0.2,
+      "estimatedSavingsVsNowPct": 57
+    }
+  ],
+  "gridSource": "ukCarbonIntensity",
+  "reasoning": "09:00 UTC sits in the cleanest band (very clean mix; one of 8 near-equal low-carbon windows, picked to spread grid load); ~44% cleaner than dispatching now; Batch API saves an additional 50% on cost (24h SLA)"
+}
+
+enqueueProviderCall(ollama/llama3.2:1b, deadline +5 min):
+{
+  "taskId": "t-ef2354ee-eff0-431c-b11e-6edfcb8299b0",
+  "status": "scheduled",
+  "enqueuedAt": "2026-09-30T21:03:32.693Z",
+  "region": "GB",
+  "bodyJson": "{\"type\":\"provider_call\",\"provider\":\"ollama\",\"model\":\"llama3.2:1b\",\"prompt\":\"In one sentence, explain why running AI inference when the grid is cleanest reduces carbon emissions.\"}",
+  "deadline": "2026-09-30T21:08:32.692Z",
+  "scheduledFor": "2026-09-30T21:03:32.971Z",
+  "estimatedCarbonGCo2": 0.5
+}
+task_id=t-ef2354ee-eff0-431c-b11e-6edfcb8299b0
+
+$ node packages/cli/dist/index.js queue list --db <tmp>/queue.db
+task_id                               status      scheduled_for             region          budget_g  
+------------------------------------------------------------------------------------------------------
+t-ef2354ee-eff0-431c-b11e-6edfcb8299b0scheduled   2026-09-30T21:03:32.971Z  GB              -         
+
+$ node packages/cli/dist/index.js tick --db <tmp>/queue.db --region GB
+tick: 1 inspected, 1 dispatched, 0 failed
+
+$ node packages/cli/dist/index.js receipts list --db <tmp>/queue.db
+task_id                               ran_at                    region          est_g_co2   intensity   grid_source     energy_src  duration_ms 
+------------------------------------------------------------------------------------------------------------------------------------------------
+t-ef2354ee-eff0-431c-b11e-6edfcb8299b02026-09-30T21:03:33.059Z  GB              0.5         158         ukCarbonIntensi…measured    360         
+
+$ node packages/cli/dist/index.js stats --db <tmp>/queue.db
+ebb-ai · personal impact
+================================================
+
+Tasks dispatched          1.00
+Estimated CO2e accounted  0.500 g
+Cleanest-window hits      1 (100%)
+Run-now dispatches        0
+Expedited (skip window)   0
+First task                2026-09-30 (1d ago)
+Most recent               2026-09-30 (1d ago)
+
+by region
+------------------------------------------------
+  GB                      1     0.500 g  (0.500/task)
+
+dispatch grid-band distribution
+------------------------------------------------
+  veryClean        0    0%  
+  clean            1  100%  ################################
+  average          0    0%  
+  dirty            0    0%  
+  veryDirty        0    0%  
+
+achievements  (1/7 unlocked)
+------------------------------------------------
+  ✓ 🌱  First Deferral     Queue your first ebb-ai task.
+  · ⚡  Ten Up              Ship 10 deferred tasks.
+  · 🔋  Centurion          Ship 100 deferred tasks.
+  · 🌍  Long Run           Ship 1 000 deferred tasks.
+  · 🗺️  World Tour        Dispatch across three or more grid regions.
+  · 🎯  Sniper             Honour the scored window for 90%+ of completed tasks.
+  · 📅  Endurance          Active across 7+ calendar days.
+
+
+$ node packages/cli/dist/index.js verify t-ef2354ee-eff0-431c-b11e-6edfcb8299b0 --db <tmp>/queue.db
+✓ VALID
+
+task_id           t-ef2354ee-eff0-431c-b11e-6edfcb8299b0
+region            GB
+ran_at            2026-09-30T21:03:33.059Z
+actual_g_co2      0
+estimated_g_co2   0.5
+delta_pct         -100
+intensity_g_kwh   158
+grid_source       ukCarbonIntensity
+energy_source     measured
+energy_resolution family-fallback
+model             llama3.2:1b
+provider          ollama
+
+signer_public_key tTpsWuAS52easY0sgqz5E42aen7tdE5otdfLN6F+kxg=
+signed_at         2026-09-30T21:03:34.050Z
+
+Ed25519 signature verified against canonical payload (512 bytes)
+
+$ node packages/cli/dist/index.js verify --file docs/examples/2026-09-30-GB-tick/receipt.json --json
+{
+  "taskId": "t-ef2354ee-eff0-431c-b11e-6edfcb8299b0",
+  "outcome": "valid",
+  "signerPublicKey": "tTpsWuAS52easY0sgqz5E42aen7tdE5otdfLN6F+kxg=",
+  "reason": "Ed25519 signature verified against canonical payload (512 bytes)"
+}
+
+# provenance: forecast.source=ukCarbonIntensity, receipt.gridSource=ukCarbonIntensity

@@ -23,17 +23,18 @@ in-memory at v0.1. See [`ROADMAP.md`](../../ROADMAP.md) section 4.1.
 
 Modern AI agents call LLM APIs synchronously by default. Three costs follow:
 
-- **Carbon.** Grid carbon intensity varies 30–60% inside a single day
-  across the major US ISOs. Inference at 2 p.m. on a hot day is
-  materially dirtier than the same call at 3 a.m.
+- **Carbon.** Grid carbon intensity swings substantially over a
+  single day across the major US ISOs as generation mix shifts.
+  Inference at 2 p.m. on a hot day can be materially dirtier than the
+  same call at 3 a.m.
 - **Dollars.** Anthropic and OpenAI both offer batch APIs at a flat
-  50% discount for tasks that can wait up to 24 hours. Almost no agent
-  code uses them by default because it requires rewriting the call
-  site.
+  50% discount (projected, provider list price) for tasks that can
+  wait up to 24 hours. Almost no agent code uses them by default
+  because it requires rewriting the call site.
 - **Latency, honestly.** Off-peak *sync* execution is sometimes
   faster because providers throttle and queue at peak. **Batch API
   is *not* faster** — it trades latency (up to 24h SLA) for the
-  50% discount.
+  50% discount (projected, provider list price).
 
 `ebb-ai` fixes all three for any task that is not "answer me right now."
 
@@ -297,7 +298,8 @@ async def dispatch(model: str, prompt: str,
 ```
 
 `AnthropicAdapter` and `OpenAIAdapter` are additionally batch-capable
-(`dispatch_batch` + `retrieve_batch`, a flat 50% discount, 24h SLA). `GeminiAdapter`
+(`dispatch_batch` + `retrieve_batch`, a flat 50% discount — projected,
+provider list price — 24h SLA). `GeminiAdapter`
 and `OllamaAdapter` are sync-only and inherit the base batch stubs — the
 scheduler feature-detects that and keeps their tasks on the sync path:
 

@@ -1,0 +1,263 @@
+{
+  "region": "GB",
+  "source": "ukCarbonIntensity",
+  "generatedAt": "2026-09-30T21:03:31.761Z",
+  "kind": "forecast",
+  "entries": [
+    {
+      "datetime": "2026-09-30T21:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 158,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-09-30T22:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 152,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-09-30T23:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 151,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-01T00:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 159,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-01T01:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 158,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-01T02:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 155,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-01T03:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 152,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-01T04:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 156,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-01T05:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 173,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-01T06:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 172,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-01T07:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 158,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-01T08:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 139,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-01T09:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 115,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-01T10:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 101,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-01T11:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 95,
+      "band": "very_clean"
+    },
+    {
+      "datetime": "2026-10-01T12:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 98,
+      "band": "very_clean"
+    },
+    {
+      "datetime": "2026-10-01T13:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 108,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-01T14:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 123,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-01T15:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 141,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-01T16:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 169,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-01T17:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 183,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-01T18:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 180,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-01T19:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 172,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-01T20:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 160,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-01T21:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 138,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-01T22:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 120,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-01T23:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 109,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-02T00:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 101,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-02T01:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 101,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-02T02:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 100,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-02T03:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 98,
+      "band": "very_clean"
+    },
+    {
+      "datetime": "2026-10-02T04:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 96,
+      "band": "very_clean"
+    },
+    {
+      "datetime": "2026-10-02T05:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 100,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-02T06:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 109,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-02T07:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 118,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-02T08:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 105,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-02T09:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 88,
+      "band": "very_clean"
+    },
+    {
+      "datetime": "2026-10-02T10:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 79,
+      "band": "very_clean"
+    },
+    {
+      "datetime": "2026-10-02T11:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 68,
+      "band": "very_clean"
+    },
+    {
+      "datetime": "2026-10-02T12:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 64,
+      "band": "very_clean"
+    },
+    {
+      "datetime": "2026-10-02T13:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 66,
+      "band": "very_clean"
+    },
+    {
+      "datetime": "2026-10-02T14:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 72,
+      "band": "very_clean"
+    },
+    {
+      "datetime": "2026-10-02T15:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 79,
+      "band": "very_clean"
+    },
+    {
+      "datetime": "2026-10-02T16:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 94,
+      "band": "very_clean"
+    },
+    {
+      "datetime": "2026-10-02T17:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 107,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-02T18:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 116,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-02T19:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 114,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-02T20:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 107,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-02T21:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 108,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-02T22:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 103,
+      "band": "clean"
+    },
+    {
+      "datetime": "2026-10-02T23:00:00.000Z",
+      "carbonIntensityGCo2PerKwh": 97,
+      "band": "very_clean"
+    }
+  ]
+}

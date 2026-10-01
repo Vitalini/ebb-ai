@@ -49,7 +49,7 @@ dashboard must demo cleanly without any external API keys.
 
 | Route | What it shows |
 |---|---|
-| `/` | Live grid of six regions (CAISO, ERCOT, ISO-NE, PJM, FR, DE). Each card: current g CO2e/kWh, band, 24-hour sparkline. Click → forecast. |
+| `/` | Live grid of 31 regions (NA / EU / APAC — measured, see `docs/claims.md`). Each card: current g CO2e/kWh, band, 24-hour sparkline. Click → forecast. |
 | `/forecast?region=US-CAL-CISO` | 72-hour line chart with band-threshold reference lines; tables of the cleanest and dirtiest hours; min/max/avg/swing stats; region picker. |
 | `/plan` | Form: region, deadline (datetime-local), optional carbon budget in grams. Submits to the same page; renders the chosen window with projected carbon, a "copy CLI command" button for ebb-mcp, and the forecast chart with the chosen hour highlighted. |
 | `/queue` | Snapshot of the scheduler queue with carbon receipts on completed tasks. Stub data in v0.2; v0.3 will wire this to the live scheduler. |
