@@ -1,6 +1,6 @@
 ---
 name: ebb-ai
-description: Auto-defer "do it later" / "by tomorrow" / "tonight" / "overnight" / "by EOD" / "when you have a moment" / "remind me to" / "queue this up" / "no rush" / "not urgent" tasks. Route through /ebb-ai:defer (slash command) or schedule_task (MCP tool) so the LLM dispatch fires at the cleanest electricity-grid hour inside the deadline — lower carbon, 50% cheaper via Anthropic/OpenAI Batch APIs when the deadline allows. Skip deferral when the user is actively waiting (interactive coding, live chat, debugging).
+description: Auto-defer "do it later" / "by tomorrow" / "tonight" / "overnight" / "by EOD" / "when you have a moment" / "remind me to" / "queue this up" / "no rush" / "not urgent" tasks. Route through /ebb-ai:defer (slash command) or schedule_task (MCP tool) so the LLM dispatch fires at the cleanest electricity-grid hour inside the deadline — lower carbon, Anthropic/OpenAI Batch APIs (50% of sync list price, projected) when the deadline allows. Skip deferral when the user is actively waiting (interactive coding, live chat, debugging).
 ---
 
 # Carbon-aware coding with ebb-ai
@@ -9,7 +9,7 @@ When the user has a task that can wait, route it through ebb-ai instead of
 dispatching synchronously. Modern grids vary 30–60% in carbon intensity inside
 a single day. A 4-hour delay on a deferrable LLM call routinely cuts its
 footprint in half — and for tasks deferred more than 24 hours, ebb-ai can
-route through the provider Batch APIs (50% cheaper) when the deadline
+route through the provider Batch APIs (50% of sync list price, projected) when the deadline
 allows.
 
 ## When to defer
