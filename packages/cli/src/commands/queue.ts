@@ -11,6 +11,7 @@
 
 import {
   deadlineKindLabel,
+  LAST_TICK_META_KEY,
   loadQuotaResetConfig,
   stripControlChars,
   taskHistory,
@@ -151,7 +152,7 @@ export async function runQueueList(
   const store = new TaskStore({ dbPath });
   try {
     const rows = store.list(filter);
-    const lastTickAt = store.getMeta("last_tick_at");
+    const lastTickAt = store.getMeta(LAST_TICK_META_KEY);
     const rendered = opts.json
       ? JSON.stringify({ last_tick_at: lastTickAt ?? null, tasks: rows.map(summary) }, null, 2)
       : renderQueue(rows, { lastTickAt });
