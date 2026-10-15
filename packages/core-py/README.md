@@ -1,21 +1,28 @@
-# ebb-ai (Python)
+# ebb-ai
 
-**Carbon-aware scheduling for agentic AI workflows.**
+**Run non-urgent LLM tasks at the cleanest grid hour before your deadline — Python library.**
 
-`ebb-ai` defers non-urgent LLM calls to execution windows that are
-simultaneously cleaner on the electricity grid, cheaper at the
-provider, and friendlier to your hardware budget. The same agent code
-that would have made a synchronous LLM call now hands the work to
-`ebb-ai`, which picks the right time and the right route — and writes
-a per-task carbon receipt you can audit.
+ebb-ai takes LLM tasks that can wait, runs them at the lowest-carbon grid hour before a deadline you set, and sends them through the provider Batch API when the deadline allows.
 
-This package is the Python port of [`@ebb-ai/core`](../core-ts/). The
-two stay in lock-step on every public name; the only deliberate
-asymmetry is that the Python port ships **SQLite-backed durable
-persistence** from day one, while the TypeScript port is still
-in-memory at v0.1. See [`ROADMAP.md`](../../ROADMAP.md) section 4.1.
+- `recommend_window()` picks the hour from a live 72-hour carbon-intensity forecast: 5 real-data feeds, 31 regions (measured).
+- `defer()` queues the task in SQLite. Work with a deadline over 24 hours goes through the Anthropic and OpenAI Batch APIs, at 50 % of the sync list price (projected, provider list price).
+- With the `signing` extra, every dispatch writes an Ed25519-signed carbon receipt.
 
-> Status: v0.2 · 2026-05 · pre-PyPI, install from source.
+```bash
+pip install "ebb-ai[anthropic,openai,signing]"     # Python 3.11+
+```
+
+```python
+import asyncio; from datetime import datetime, timedelta, timezone
+from ebb_ai import recommend_window, uk_carbon_intensity_feed
+deadline = datetime.now(timezone.utc) + timedelta(hours=24)
+plan = asyncio.run(recommend_window(region="GB", deadline=deadline, feed=uk_carbon_intensity_feed(), rng=lambda: 0))
+print(plan.scheduled_for, plan.intensity_g_co2_per_kwh, plan.band)
+```
+
+Without `rng`, ebb-ai picks at random among the cleanest band of near-equal hours, so repeated runs spread load and can return different hours; an `rng` that returns 0 gives the strict minimum.
+
+Proof: one real GB run, 2026-09-30. Forecast peak 183 gCO2/kWh vs recommended window 88 gCO2/kWh, about 52 % lower for this run only (forecast, projected). Same API as the TypeScript package [@ebb-ai/core](https://www.npmjs.com/package/@ebb-ai/core). Source: https://github.com/Vitalini/ebb-ai
 
 ---
 
@@ -65,13 +72,12 @@ here: you import `ebb_ai` directly into your own script, notebook or service.
 ## Install
 
 ```bash
-# from source (until the first PyPI release)
-pip install -e packages/core-py
+pip install ebb-ai
 
-# with vendor extras
-pip install -e "packages/core-py[anthropic,openai]"
+# with vendor extras and receipt signing
+pip install "ebb-ai[anthropic,openai,signing]"
 
-# dev install for contributors
+# from source, for contributors (in a clone of https://github.com/Vitalini/ebb-ai)
 pip install -e "packages/core-py[dev,anthropic,openai]"
 ```
 
@@ -382,24 +388,15 @@ The test suite covers:
 
 ---
 
-## Roadmap
+## Changes
 
-- **v0.2 (this release)** — scheduler, grid feeds, SQLite persistence,
-  Anthropic + OpenAI adapters with Batch API.
-- **v0.3** — per-model energy coefficients; WattTime marginal-emissions
-  feed (shipped: `watttime_feed`, disclosed via `signal_type="marginal"`);
-  multi-writer DB with WAL mode; richer receipt fields (model, provider,
-  token counts) propagated by the scheduler itself.
-- **v0.4** — Gemini adapter; local-Ollama route; MCP spec PRs for
-  `priority` / `deadline` / `carbon_budget` fields.
-
-See [`ROADMAP.md`](../../ROADMAP.md) for the full 24-week plan.
+Release notes: https://github.com/Vitalini/ebb-ai/blob/main/CHANGELOG.md
 
 ---
 
 ## License
 
-[Apache License 2.0](../../LICENSE) — patent grant included.
+[Apache License 2.0](https://github.com/Vitalini/ebb-ai/blob/main/LICENSE) — patent grant included.
 
 ---
 

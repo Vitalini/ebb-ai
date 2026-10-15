@@ -1,16 +1,26 @@
 # @ebb-ai/cli
 
-The `ebb` binary — cron-tick drain, launchd install, and sleep-prevention
-for the [ebb-ai](https://github.com/Vitalini/ebb-ai) carbon-aware scheduler.
+**The `ebb` command: runs your queued ebb-ai tasks when their cleanest grid hour arrives.**
 
-## Install
+`ebb` drains the ebb-ai task queue on a timer. A task that your agent deferred runs at the lowest-carbon hour before its deadline, also when no agent session is open.
 
-From the repo root:
+- `ebb tick` dispatches every task that is due. `ebb install` wires it to launchd on macOS.
+- `ebb queue list` and `ebb receipts list` show queued tasks and their carbon receipts.
+- `ebb verify <task-id>` checks a receipt's Ed25519 signature offline.
 
 ```bash
-pnpm --filter @ebb-ai/core build
-pnpm --filter @ebb-ai/cli build
+npm install -g @ebb-ai/cli
 ```
+
+```bash
+ebb install --laptop          # run `ebb tick` on a schedule; register wake events across sleep
+ebb queue list                # what is waiting, and for which hour
+ebb tick --region GB          # dispatch what is due now
+ebb receipts list             # one carbon receipt per completed task
+ebb verify <task-id>          # check the receipt signature
+```
+
+Proof: one real GB run, 2026-09-30 (`ebb tick` + `ebb verify`). Forecast peak 183 gCO2/kWh vs recommended window 88 gCO2/kWh, about 52 % lower for this run only (forecast, projected). The task had a 5-minute deadline and ran at once; its receipt records 158 gCO2/kWh (measured). Raw output: https://github.com/Vitalini/ebb-ai/tree/main/docs/examples/2026-09-30-GB-tick
 
 ## Commands
 
@@ -19,6 +29,8 @@ ebb tick           — drain due tasks via provider adapters
 ebb install        — wire up launchd (macOS) or print systemd / schtasks templates
 ebb queue list     — print queued / scheduled / running / completed tasks
 ebb receipts list  — print carbon receipts for completed tasks
+ebb stats          — local-only personal-impact stats from the queue ledger
+ebb verify         — verify the Ed25519 signature on a carbon receipt
 ebb register-wake  — schedule a macOS wake event 30s before a task
 ```
 
@@ -27,7 +39,7 @@ Run `ebb <command> --help` for flags.
 ## Quickstart — keep tasks alive across laptop sleep
 
 ```bash
-node packages/cli/dist/index.js install --laptop
+ebb install --laptop
 # follow the printed launchctl load / systemctl commands
 ```
 
@@ -85,3 +97,14 @@ is not set. (Ollama is keyless, so a pending Ollama task is never flagged.)
 Wake events (`pmset` / `rtcwake`) need root. When not running as root,
 `ebb register-wake` prints the exact `sudoers` line to pre-authorize the
 command without a password prompt.
+
+## Develop
+
+From the root of a clone of https://github.com/Vitalini/ebb-ai:
+
+```bash
+pnpm install
+pnpm --filter @ebb-ai/core build
+pnpm --filter @ebb-ai/cli build
+node packages/cli/dist/index.js --help
+```

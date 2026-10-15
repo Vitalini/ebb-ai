@@ -12,6 +12,7 @@
  * path), not `recommendWindow`, which is the whole point of the §2.1 fix.
  */
 
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { Scheduler } from "../src/scheduler.js";
 import { selectWindow, inDeadlineEntries } from "../src/select-window.js";
@@ -263,5 +264,50 @@ describe("committing scheduler path spreads dispatch hours (§2.1)", () => {
     // The whole point of §2.1: committed tasks do NOT all pile on one hour.
     expect(hours.size).toBeGreaterThan(1);
     sched.shutdown();
+  });
+});
+
+// Shared with packages/core-py/tests/test_select_window.py: if the TS and
+// Python selection policies drift, one of the two suites goes red.
+interface SelectWindowVector {
+  id: string;
+  now: string;
+  deadline: string;
+  rng: number;
+  entries: Array<{ datetime: string; intensity: number; band: GridForecastEntry["band"] }>;
+  expected: {
+    chosen_datetime: string;
+    chosen_intensity: number;
+    band_size: number;
+    tolerance: number;
+  } | null;
+}
+
+const vectors = (
+  JSON.parse(
+    readFileSync(new URL("./fixtures/select-window-vectors.json", import.meta.url), "utf8"),
+  ) as { vectors: SelectWindowVector[] }
+).vectors;
+
+describe("cross-language selectWindow vectors", () => {
+  it.each(vectors)("$id", (v) => {
+    const entries: GridForecastEntry[] = v.entries.map((e) => ({
+      datetime: e.datetime,
+      carbonIntensityGCo2PerKwh: e.intensity,
+      band: e.band,
+    }));
+    const result = selectWindow(entries, new Date(v.deadline), {
+      now: () => new Date(v.now),
+      rng: () => v.rng,
+    });
+    if (v.expected === null) {
+      expect(result).toBeUndefined();
+      return;
+    }
+    expect(result).toBeDefined();
+    expect(result!.chosen.datetime).toBe(v.expected.chosen_datetime);
+    expect(result!.chosen.carbonIntensityGCo2PerKwh).toBe(v.expected.chosen_intensity);
+    expect(result!.band).toHaveLength(v.expected.band_size);
+    expect(result!.tolerance).toBeCloseTo(v.expected.tolerance, 9);
   });
 });

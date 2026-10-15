@@ -1,20 +1,45 @@
 # ebb-ai
 
-**Workload scheduling for the agentic-AI economy.**
-*Defer non-urgent LLM tasks to cheap, low-load grid windows. ~50%
-cheaper inference via Batch APIs (projected, provider list price),
-smoother data-center load curves, auditable carbon receipts.
-MCP-native, ships as an `npm` package and a one-command Claude Code
-plugin.*
+**Run non-urgent LLM tasks at the cleanest grid hour before your deadline.**
 
-[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-5eead4)](./LICENSE)
-[![npm (core)](https://img.shields.io/npm/v/%40ebb-ai%2Fcore?label=%40ebb-ai%2Fcore&color=cb3837)](https://www.npmjs.com/package/@ebb-ai/core)
-[![npm (mcp)](https://img.shields.io/npm/v/%40ebb-ai%2Fmcp?label=%40ebb-ai%2Fmcp&color=cb3837)](https://www.npmjs.com/package/@ebb-ai/mcp)
-[![npm (cli)](https://img.shields.io/npm/v/%40ebb-ai%2Fcli?label=%40ebb-ai%2Fcli&color=cb3837)](https://www.npmjs.com/package/@ebb-ai/cli)
-[![Tests](https://img.shields.io/badge/tests-1115%20passing-22c55e)](#tests)
-[![MCP tools](https://img.shields.io/badge/MCP-9%20tools-5eead4)](https://www.ebb-ai.com/docs)
-[![Hosts](https://img.shields.io/badge/MCP%20hosts-13-5eead4)](https://www.ebb-ai.com/docs#install)
-[![Website](https://img.shields.io/badge/website-ebb--ai.com-5eead4)](https://www.ebb-ai.com)
+ebb-ai takes the LLM tasks your agent does not need right now, runs them at the lowest-carbon grid hour before a deadline you set, and sends them through the provider Batch API when the deadline allows.
+
+- Picks the dispatch hour from a live 72-hour grid carbon-intensity forecast: 5 real-data feeds, 31 regions (measured, counted in code).
+- Routes work with a deadline over 24 hours through the Anthropic and OpenAI Batch APIs, at 50 % of the sync list price (projected, provider list price).
+- Writes a signed carbon receipt per task to a local SQLite ledger. `ebb verify` checks it offline.
+
+[![npm](https://img.shields.io/npm/v/%40ebb-ai%2Fcore?label=npm)](https://www.npmjs.com/package/@ebb-ai/core) [![PyPI](https://img.shields.io/pypi/v/ebb-ai)](https://pypi.org/project/ebb-ai/) [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-5eead4)](./LICENSE) [![Glama](https://glama.ai/mcp/servers/Vitalini/ebb-ai/badges/score.svg)](https://glama.ai/mcp/servers/Vitalini/ebb-ai)
+
+```bash
+npm install @ebb-ai/core                                  # TypeScript / Node
+pip install "ebb-ai[anthropic,openai,signing]"            # Python 3.11+
+claude plugin marketplace add Vitalini/ebb-ai && claude plugin install ebb-ai   # Claude Code
+npx -y @ebb-ai/mcp                                        # any other MCP host
+```
+
+```ts
+// save as plan.mjs, run: node plan.mjs   (GB uses the free UK feed, no API key)
+import { recommendWindow, ukCarbonIntensityFeed } from "@ebb-ai/core";
+const deadline = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+const plan = await recommendWindow({ region: "GB", deadline }, { feed: ukCarbonIntensityFeed(), rng: () => 0 });
+console.log(plan.scheduledFor, plan.intensityGCo2PerKwh, plan.band);
+// 2026-10-16T11:00:00.000Z 66 very_clean   (forecast value on 2026-10-15; yours will differ)
+```
+
+```python
+import asyncio; from datetime import datetime, timedelta, timezone
+from ebb_ai import recommend_window, uk_carbon_intensity_feed
+deadline = datetime.now(timezone.utc) + timedelta(hours=24)
+plan = asyncio.run(recommend_window(region="GB", deadline=deadline, feed=uk_carbon_intensity_feed(), rng=lambda: 0))
+print(plan.scheduled_for, plan.intensity_g_co2_per_kwh, plan.band)
+# 2026-10-16T11:00:00.000Z 66 very_clean   (forecast value on 2026-10-15; yours will differ)
+```
+
+Without `rng`, ebb-ai picks at random among the cleanest band of near-equal hours, so repeated runs spread load and can return different hours; an `rng` that returns 0 gives the strict minimum.
+
+**Proof:** one real run (GB, 2026-09-30, live National Grid ESO forecast). Forecast peak 183 gCO2/kWh, recommended window 88 gCO2/kWh: about 52 % lower, for this run only (forecast, projected). The test task had a 5-minute deadline, so it ran at once; its signed receipt records 158 gCO2/kWh (measured). [Raw output and reproducer](docs/examples/2026-09-30-GB-tick/) · [every number and its source](docs/claims.md)
+
+**In an agent:** in Claude Code, `/ebb-ai:defer "Summarize today's notifications" --by 4h`. In any other MCP host, the agent calls `recommend_window` and `schedule_task` (9 MCP tools, 13 hosts — [host configs](https://www.ebb-ai.com/docs#install)).
 
 ## Why defer non-urgent AI work?
 
@@ -93,7 +118,7 @@ Windsurf, OpenClaw, OpenAI Codex CLI, Pi). The agent asks
 `recommend_window`, sees the plan, then commits via `schedule_task`
 — or doesn't.
 
-> **Status:** v0.16.0 (this release) · 2026-10-01 · published on npm and PyPI
+> **Status:** v0.16.1 (this release) · 2026-10-15 · published on npm and PyPI
 > · `@ebb-ai/{core,mcp,cli}` on npm under the
 > `@ebb-ai` org; `ebb-ai` on PyPI; `@vitalini/ebb` OpenClaw
 > plugin on ClawHub (`openclaw plugins install clawhub:@vitalini/ebb`),
@@ -131,6 +156,11 @@ Windsurf, OpenClaw, OpenAI Codex CLI, Pi). The agent asks
 > receipt redaction, file output, retry-with-backoff. **1,115 tests
 > passing** (650 TS + 465 Python, measured on this branch 2026-09-30)
 > across 5 packages and 2 languages. See [QUICKSTART.md](./QUICKSTART.md).
+
+[![Tests](https://img.shields.io/badge/tests-1115%20passing-22c55e)](#tests)
+[![MCP tools](https://img.shields.io/badge/MCP-9%20tools-5eead4)](https://www.ebb-ai.com/docs)
+[![Hosts](https://img.shields.io/badge/MCP%20hosts-13-5eead4)](https://www.ebb-ai.com/docs#install)
+[![Website](https://img.shields.io/badge/website-ebb--ai.com-5eead4)](https://www.ebb-ai.com)
 
 ### Live demo
 
@@ -226,9 +256,10 @@ claude plugin marketplace add Vitalini/ebb-ai
 claude plugin install ebb-ai
 ```
 
-That ships three slash commands (`/ebb-ai:defer`, `/ebb-ai:check`,
-`/ebb-ai:grid`), a `carbon-aware-coding` skill, and auto-wires the
-`@ebb-ai/mcp` MCP server. Full plugin reference: **[`PLUGIN.md`](./PLUGIN.md)**.
+That ships eight slash commands (`/ebb-ai:defer`, `/ebb-ai:plan`,
+`/ebb-ai:check`, `/ebb-ai:cancel`, `/ebb-ai:expedite`, `/ebb-ai:reschedule`,
+`/ebb-ai:retry`, `/ebb-ai:grid`), an `ebb-ai` skill, and auto-wires the
+`@ebb-ai/mcp` MCP server. Full plugin reference: **[`packages/claude-code-plugin/README.md`](./packages/claude-code-plugin/README.md)**.
 
 ```
 > /ebb-ai:defer "Summarize today's GitHub notifications" --by 4h
@@ -270,14 +301,19 @@ macOS):
 }
 ```
 
-The MCP server exposes three tools to the agent:
+The MCP server exposes nine tools to the agent (measured, `toolsForHost("mcp")` in
+[`packages/core-ts/src/tool-surface.ts`](packages/core-ts/src/tool-surface.ts)):
 
 - `get_grid_forecast(region, hours?)` — returns the next N hours of
   carbon intensity for a grid region (e.g. `US-CAL-CISO`).
+- `recommend_window(deadline, region?, ...)` — plans the cleanest window
+  inside the deadline without queueing anything.
 - `schedule_task(prompt, deadline, model?, carbon_budget_g?)` — queues a
   task for execution at the cleanest window inside the deadline.
 - `check_queue_status(task_id?)` — lists pending tasks and any
   completed receipts.
+- `cancel_task`, `expedite_task`, `update_deadline`, `retry_task`,
+  `cancel_all` — control a queued task (or the whole queue).
 
 ### As a library
 
@@ -320,8 +356,10 @@ adapter.
 ### Python
 
 ```bash
-pip install -e "packages/core-py[anthropic,openai]"
+pip install "ebb-ai[anthropic,openai,signing]"
 ```
+
+From a clone, see [Install (development)](#install-development).
 
 ```python
 import asyncio
@@ -344,7 +382,8 @@ pnpm --filter @ebb-ai/web dev
 
 Pages: live carbon-intensity map (31 regions, NA/EU/APAC — measured,
 see [docs/claims.md](docs/claims.md)), 72-hour forecast charts,
-best-window planner, queue viewer.
+best-window planner, and a queue explainer (`/queue`); see your own queue
+with `ebb queue list`.
 
 **Grid data sources** (per zone, falls back to mock on failure):
 
@@ -389,6 +428,12 @@ pnpm build          # builds @ebb-ai/core and @ebb-ai/mcp
 pnpm test           # runs vitest across packages
 ```
 
+Python package from the clone (editable):
+
+```bash
+pip install -e "packages/core-py[anthropic,openai,signing]"
+```
+
 Requirements: Node 20+, pnpm 9+. Python 3.11+ if working on the Python
 package.
 
@@ -396,8 +441,6 @@ package.
 
 ## Documentation
 
-- [`ROADMAP.md`](./ROADMAP.md) — 24-week execution plan, architecture,
-  roadmap, success metrics.
 - [`docs/`](./docs/) — design docs, MCP spec proposals (forthcoming).
 - [`examples/`](./examples/) — OpenClaw demo skill, Claude Code config.
 
@@ -412,7 +455,7 @@ package.
 ## Contributing
 
 This project is in active early development. Issues and PRs welcome;
-see the `ROADMAP.md` roadmap for current scope. Major new features should
+see [`CHANGELOG.md`](./CHANGELOG.md) for what has shipped. Major new features should
 be discussed in an issue first to avoid duplicate effort.
 
 ---

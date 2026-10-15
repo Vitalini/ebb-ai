@@ -14,9 +14,12 @@ committing path), not ``recommend_window``, which is the point of §2.1.
 
 from __future__ import annotations
 
+import json
 import math
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -260,3 +263,51 @@ def test_default_rng_returns_unit_interval() -> None:
         v = _default_rng()
         assert 0.0 <= v < 1.0
     assert not math.isnan(_default_rng())
+
+
+# Shared with packages/core-ts/test/select-window.test.ts: if the TS and
+# Python selection policies drift, one of the two suites goes red.
+SELECT_WINDOW_VECTORS_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "core-ts"
+    / "test"
+    / "fixtures"
+    / "select-window-vectors.json"
+)
+SELECT_WINDOW_VECTORS: list[dict[str, Any]] = json.loads(
+    SELECT_WINDOW_VECTORS_PATH.read_text(encoding="utf-8")
+)["vectors"]
+
+
+def _iso(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+@pytest.mark.parametrize(
+    "vector", SELECT_WINDOW_VECTORS, ids=[v["id"] for v in SELECT_WINDOW_VECTORS]
+)
+def test_select_window_vector(vector: dict[str, Any]) -> None:
+    entries = [
+        GridForecastEntry(
+            datetime=e["datetime"],
+            carbon_intensity_g_co2_per_kwh=e["intensity"],
+            band=e["band"],
+        )
+        for e in vector["entries"]
+    ]
+    now = _iso(vector["now"])
+    result = select_window(
+        entries,
+        _iso(vector["deadline"]),
+        now=lambda: now,
+        rng=lambda: vector["rng"],
+    )
+    expected = vector["expected"]
+    if expected is None:
+        assert result is None
+        return
+    assert result is not None
+    assert result.chosen.datetime == expected["chosen_datetime"]
+    assert result.chosen.carbon_intensity_g_co2_per_kwh == expected["chosen_intensity"]
+    assert len(result.band) == expected["band_size"]
+    assert result.tolerance == pytest.approx(expected["tolerance"])
