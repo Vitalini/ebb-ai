@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TaskStore } from "@ebb-ai/core";
@@ -186,5 +186,64 @@ describe("tick receipts use the region's grid feed", () => {
     store.close();
     expect(receipt?.gridSource).toBe("ukCarbonIntensity");
     expect(receipt?.intensityGCo2PerKwh).toBe(123);
+  });
+});
+
+describe("ebb tick pre-tick step (quota sweep, last_tick_at)", () => {
+  let dir: string;
+  let db: string;
+  const savedOllama = process.env.OLLAMA_HOST;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "ebb-cli-quota-"));
+    db = join(dir, "queue.db");
+    // An adapter must exist for the tick to run. The seeded tasks use the
+    // anthropic provider, which has no adapter here, so even a task the
+    // window picker makes due now fails fast without a network call.
+    process.env.OLLAMA_HOST = "http://127.0.0.1:9";
+  });
+  afterEach(() => {
+    if (savedOllama !== undefined) process.env.OLLAMA_HOST = savedOllama;
+    else delete process.env.OLLAMA_HOST;
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  function seed(label: string, prevReset: Date): void {
+    const store = new TaskStore({ dbPath: db });
+    store.upsert({
+      taskId: `quota-${label}`,
+      status: "scheduled",
+      enqueuedAt: new Date(prevReset.getTime() - 3 * 86_400_000).toISOString(),
+      // A far-future window, so the unchanged task is never due in this tick.
+      scheduledFor: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+      region: "DE",
+      bodyJson: JSON.stringify({ type: "provider_call", provider: "anthropic", model: "m", prompt: "p" }),
+      deadline: new Date(prevReset.getTime() - 2 * 3_600_000).toISOString(),
+      deadlineKind: "quota_reset",
+      quotaProvider: label,
+    });
+    store.close();
+  }
+
+  it("re-resolves a passed quota deadline, names a missing label, and records last_tick_at", async () => {
+    const prevReset = new Date(Math.floor((Date.now() - 3_600_000) / 60_000) * 60_000);
+    const day = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][prevReset.getUTCDay()];
+    const config = join(dir, "config");
+    writeFileSync(config, `EBB_QUOTA_RESET_CLAUDE=${day} ${prevReset.toISOString().slice(11, 16)} UTC\n`);
+    seed("claude", prevReset);
+    seed("codex", prevReset);
+
+    const r = await runTickOnce({ db, envFile: "/nonexistent/ebb/env", budgetConfig: config });
+    expect(r.message).toMatch(/quota reset \(claude\) passed for quota-claude/);
+    expect(r.message).toMatch(/"codex" is not configured/);
+
+    const store = new TaskStore({ dbPath: db });
+    const expected = prevReset.getTime() + 7 * 86_400_000 - 2 * 3_600_000;
+    expect(store.get("quota-claude")!.deadline).toBe(new Date(expected).toISOString());
+    expect(store.get("quota-codex")!.deadline).toBe(
+      new Date(prevReset.getTime() - 2 * 3_600_000).toISOString(),
+    );
+    expect(store.getMeta("last_tick_at")).toBeDefined();
+    store.close();
   });
 });

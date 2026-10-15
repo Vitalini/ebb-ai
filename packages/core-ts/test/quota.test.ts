@@ -19,7 +19,13 @@ import {
   sweepQuotaDeadlines,
   TaskStore,
 } from "../src/index.js";
-import type { QuotaResetConfig, QuotaResetSchedule } from "../src/index.js";
+import type {
+  GridForecast,
+  ProviderAdapter,
+  QuotaResetConfig,
+  QuotaResetSchedule,
+} from "../src/index.js";
+import type { GridFeed } from "../src/types.js";
 
 const BERLIN_MON_10: QuotaResetSchedule = {
   label: "claude",
@@ -227,5 +233,106 @@ describe("sweepQuotaDeadlines", () => {
     expect(store.get("q4")!.deadline).toBe("2026-10-26T07:00:00.000Z");
     expect(messages).toHaveLength(1);
     store.close();
+  });
+});
+
+describe("prepareTick + Scheduler.tick (AE9)", () => {
+  const SPEC = JSON.stringify({
+    type: "provider_call",
+    provider: "anthropic",
+    model: "claude-sonnet-4-5",
+    prompt: "weekly digest",
+  });
+
+  /** Forecast whose cleanest hour is `cleanAtH` hours from now. */
+  function feedCleanestAt(cleanAtH: number): GridFeed {
+    return {
+      source: "mock",
+      async fetchForecast(region: string, hours = 72): Promise<GridForecast> {
+        const now = Date.now();
+        return {
+          region,
+          source: "mock",
+          generatedAt: new Date(now).toISOString(),
+          entries: Array.from({ length: Math.min(hours, 72) }, (_, h) => ({
+            datetime: new Date(now + h * 3_600_000).toISOString(),
+            carbonIntensityGCo2PerKwh: h === cleanAtH ? 50 : 400,
+            band: h === cleanAtH ? ("very_clean" as const) : ("dirty" as const),
+          })),
+        };
+      },
+    };
+  }
+
+  function adapter(withBatch: boolean): ProviderAdapter & { calls: number } {
+    const a: ProviderAdapter & { calls: number } = {
+      provider: "anthropic",
+      ready: true,
+      calls: 0,
+      async dispatch(model) {
+        a.calls += 1;
+        return { text: "ok", model, provider: "anthropic", raw: null };
+      },
+    } as ProviderAdapter & { calls: number };
+    if (withBatch) {
+      a.dispatchBatch = async (_model, prompts) => ({
+        batchId: "b-1",
+        provider: "anthropic",
+        size: prompts.length,
+      });
+    }
+    return a;
+  }
+
+  async function run(cleanAtH: number, withBatch: boolean) {
+    // Monday 2026-10-19 11:00 Berlin: the 10:00 reset passed after the
+    // stored 08:00 deadline, and the task's window is overdue.
+    vi.useFakeTimers({ now: new Date("2026-10-19T09:00:00Z"), toFake: ["Date"] });
+    const store = new TaskStore({ dbPath: join(dir, "queue.db") });
+    store.upsert({
+      taskId: "q",
+      status: "scheduled",
+      enqueuedAt: "2026-10-15T10:00:00.000Z",
+      scheduledFor: "2026-10-19T05:00:00.000Z",
+      region: "DE",
+      bodyJson: SPEC,
+      deadline: "2026-10-19T06:00:00.000Z",
+      deadlineKind: "quota_reset",
+      quotaProvider: "claude",
+    });
+    const scheduler = new Scheduler({
+      store,
+      feed: feedCleanestAt(cleanAtH),
+      signing: false,
+      rng: () => 0,
+    });
+    const a = adapter(withBatch);
+    await prepareTick(scheduler, { quotaConfig: { claude: BERLIN_MON_10 } });
+    await scheduler.tick({ anthropic: a });
+    const row = store.get("q")!;
+    store.close();
+    return { row, calls: a.calls };
+  }
+
+  it("a sync-only adapter does not dispatch the task; it stays scheduled with next week's deadline", async () => {
+    const { row, calls } = await run(10, false);
+    expect(calls).toBe(0);
+    expect(row.status).toBe("scheduled");
+    expect(row.deadline).toBe("2026-10-26T07:00:00.000Z");
+    expect(Date.parse(row.scheduledFor!)).toBeGreaterThan(Date.parse("2026-10-19T09:00:00Z"));
+  });
+
+  it("a batch-capable adapter submits it with the new deadline", async () => {
+    const { row, calls } = await run(10, true);
+    expect(calls).toBe(0);
+    expect(row.status).toBe("submitted");
+    expect(row.deadline).toBe("2026-10-26T07:00:00.000Z");
+  });
+
+  it("when the cleanest hour is now, it is dispatched in that tick against the new deadline", async () => {
+    const { row, calls } = await run(0, false);
+    expect(calls).toBe(1);
+    expect(row.status).toBe("completed");
+    expect(row.deadline).toBe("2026-10-26T07:00:00.000Z");
   });
 });

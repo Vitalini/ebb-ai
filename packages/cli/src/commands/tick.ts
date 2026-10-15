@@ -12,8 +12,10 @@ import {
   buildDefaultGridFeed,
   GeminiAdapter,
   loadCarbonBudgetConfig,
+  loadQuotaResetConfig,
   OllamaAdapter,
   OpenAIAdapter,
+  prepareTick,
   resolveRegion,
   Scheduler,
   TaskStore,
@@ -34,7 +36,10 @@ export interface TickCommandOptions {
   region?: string;
   /** Override the secrets file path (tests). Defaults to ~/.config/ebb/env. */
   envFile?: string;
-  /** Override the carbon-budget config path (tests). Defaults to ~/.ebb-ai/config. */
+  /**
+   * Override the ~/.ebb-ai/config path (tests): carbon budget and quota
+   * reset schedules are both read from it.
+   */
   budgetConfig?: string;
 }
 
@@ -199,8 +204,17 @@ export async function runTickOnce(
       : {}),
   });
   try {
+    // Shared pre-tick step (same as the OpenClaw loop): record last_tick_at
+    // and re-resolve quota_reset tasks whose weekly reset already passed, so
+    // they are rescheduled through the window picker, not dispatched late.
+    const preTick = await prepareTick(scheduler, {
+      quotaConfig: loadQuotaResetConfig(
+        opts.budgetConfig !== undefined ? { path: opts.budgetConfig } : {},
+      ),
+    });
     const result = await scheduler.tick(adapters);
     let msg = `tick: ${result.inspected} inspected, ${result.dispatched} dispatched, ${result.failed} failed`;
+    for (const line of preTick) msg += `\n${line}`;
     for (const a of firedAlerts) {
       msg +=
         `\n!! CARBON BUDGET ALERT: ${a.windowKind} carbon budget crossed — ` +
