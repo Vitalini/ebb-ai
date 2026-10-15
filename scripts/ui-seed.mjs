@@ -9,7 +9,9 @@
 //   node scripts/ui-seed.mjs            seed, print the ledger path
 //   node scripts/ui-seed.mjs --serve    seed, then serve `ebb ui` on it
 //   node scripts/ui-seed.mjs --empty    an empty ledger (empty states)
-//   --db <path>                         write here instead of a temp dir
+//   --db <path>                         write a NEW ledger here instead of a
+//                                       temp dir (refuses an existing file
+//                                       and anything under ~/.ebb-ai)
 //   --port <n>                          port for --serve
 //
 // --serve runs the built CLI (`pnpm build` first) with HOME pointed at the
@@ -19,8 +21,8 @@
 
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -39,6 +41,18 @@ const option = (name) => {
   return i >= 0 ? args[i + 1] : undefined;
 };
 
+// Seed rows are throwaway prompts: they must never land in a real ledger,
+// where a running dispatcher would send them to a provider.
+if (option("--db")) {
+  const target = resolve(option("--db"));
+  const ebbHome = resolve(homedir(), ".ebb-ai");
+  const rel = relative(ebbHome, target);
+  const insideEbbHome = rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+  if (existsSync(target) || insideEbbHome) {
+    console.error(`ui-seed: refusing ${target}: --db must name a new file outside ${ebbHome}.`);
+    process.exit(1);
+  }
+}
 const dir = mkdtempSync(join(tmpdir(), "ebb-ui-seed-"));
 const dbPath = option("--db") ? resolve(option("--db")) : join(dir, "queue.db");
 mkdirSync(dirname(dbPath), { recursive: true });
@@ -279,8 +293,8 @@ store.close();
 
 console.log(`ui-seed: ${count} tasks in ${dbPath}`);
 if (!flag("--serve")) {
-  console.log(`Try it:  ebb ui --db ${dbPath}`);
-  console.log(`   or:   node scripts/ui-seed.mjs --serve   (mock forecast, secrets stripped)`);
+  console.log(`Try it:  node scripts/ui-seed.mjs --serve   (mock forecast, provider secrets stripped)`);
+  console.log(`   or:   ebb ui --db ${dbPath}   (your real environment: Start dispatcher would use your provider keys)`);
   process.exit(0);
 }
 

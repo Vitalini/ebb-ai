@@ -38,7 +38,7 @@ ebb receipts list  — print carbon receipts for completed tasks
 ebb stats          — local-only personal-impact stats from the queue ledger
 ebb verify         — verify the Ed25519 signature on a carbon receipt
 ebb register-wake  — schedule a macOS wake event 30s before a task
-ebb ui             — local task page: timeline, inbox, task detail, actions (127.0.0.1 only; never dispatches)
+ebb ui             — local task page: agenda, journal, timeline, task detail and actions (127.0.0.1 only)
 ```
 
 Run `ebb <command> --help` for flags.

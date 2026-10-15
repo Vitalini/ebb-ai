@@ -127,7 +127,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   step, no remote resource; every module is in the server's fixed static map.
 - `scripts/ui-seed.mjs` writes a throwaway ledger with a realistic mix of
   tasks for trying the page (`--serve` runs `ebb ui` on it with the mock
-  forecast and provider secrets removed from the environment).
+  forecast and provider secrets removed from the environment). `--db` takes
+  only a new file outside `~/.ebb-ai`, so a seed never lands in a real ledger.
 - `repeat` defaults to `none` for every task, `deadline_kind: "quota_reset"`
   included: a quota task runs once unless `repeat` (or `--repeat weekly`) is
   given.

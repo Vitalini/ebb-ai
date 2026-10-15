@@ -272,6 +272,8 @@ describe("ebb ui assets", () => {
         file,
         expect.stringMatching(/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function|setAttribute\(["']style/),
       ]);
+      // The token lives in module memory only: no browser storage, no cookie.
+      expect([file, js]).not.toEqual([file, expect.stringMatching(/localStorage|sessionStorage|document\.cookie|indexedDB/)]);
     }
   });
 
