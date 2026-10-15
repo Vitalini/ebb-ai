@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -212,6 +212,53 @@ describe("ebb ui server", () => {
         req.end();
       });
       expect([path, r]).toEqual([path, 404]);
+    }
+  });
+});
+
+describe("ebb ui assets", () => {
+  const dir = join(__dirname, "..", "ui");
+  const read = (f: string) => readFileSync(join(dir, f), "utf8");
+
+  it("index.html references only relative asset paths", () => {
+    const html = read("index.html");
+    const refs = [...html.matchAll(/(?:src|href)="([^"]+)"/g)].map((m) => m[1]!);
+    expect(refs.length).toBeGreaterThan(0);
+    for (const ref of refs) expect(ref).toMatch(/^(#|data:,$|[a-z]+\.(js|css)$)/);
+    expect(html).not.toMatch(/https?:\/\//);
+  });
+
+  it("app.js loads nothing remote and never writes HTML from data", () => {
+    const js = read("app.js");
+    // The SVG namespace URI is an identifier, not a request.
+    expect(js.replaceAll("http://www.w3.org/2000/svg", "")).not.toMatch(/https?:\/\//);
+    expect(js).not.toMatch(/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function/);
+  });
+
+  it("app.css loads no web font or remote resource", () => {
+    const css = read("app.css");
+    expect(css).not.toMatch(/@import|@font-face|url\(/);
+  });
+
+  it("the real asset directory is served", async () => {
+    const tmp = mkdtempSync(join(tmpdir(), "ebb-ui-assets-"));
+    const ui = await startUiServer({
+      token: TOKEN,
+      dbPath: join(tmp, "queue.db"),
+      feed: mockGridFeed(),
+      defaultRegion: "FR",
+      quota: () => ({}),
+      daemonStatus: () => "unknown",
+    });
+    try {
+      for (const [path, type] of [["/", "text/html"], ["/app.js", "text/javascript"], ["/app.css", "text/css"]] as const) {
+        const res = await fetch(`${ui.url.replace(/\/$/, "")}${path}`);
+        expect(res.status).toBe(200);
+        expect(res.headers.get("content-type")).toContain(type);
+      }
+    } finally {
+      await ui.close();
+      rmSync(tmp, { recursive: true, force: true });
     }
   });
 });
