@@ -43,6 +43,7 @@ export {
   CarbonBudgetExceededError,
   defer,
   InvalidDeadlineError,
+  LAST_TICK_META_KEY,
   pickBestWindow,
   Scheduler,
 } from "./scheduler.js";
@@ -126,6 +127,23 @@ export type {
   CarbonBudgetWindowKind,
   LoadCarbonBudgetOptions,
 } from "./budget.js";
+// Quota-reset deadlines and the shared pre-tick step (v0.17).
+export {
+  DEFAULT_QUOTA_MARGIN_H,
+  loadQuotaResetConfig,
+  nextQuotaReset,
+  prepareTick,
+  previousQuotaReset,
+  resolveQuotaDeadline,
+  resolveQuotaProvider,
+  sweepQuotaDeadlines,
+} from "./quota.js";
+export type {
+  LoadQuotaResetOptions,
+  QuotaResetConfig,
+  QuotaResetSchedule,
+  ResolveQuotaProviderResult,
+} from "./quota.js";
 export {
   mockGridFeed,
   electricityMapsFeed,

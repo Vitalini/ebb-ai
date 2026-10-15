@@ -61,6 +61,8 @@ import type {
 
 const DEFAULT_REGION = "US-CAL-CISO";
 const MAX_HORIZON_HOURS = 72;
+/** Ledger meta key holding the ISO time a ticker last ran. */
+export const LAST_TICK_META_KEY = "last_tick_at";
 
 /**
  * The adapters map `tick` (and the expedite / retry / batch helpers) accept:
@@ -360,6 +362,37 @@ export class Scheduler {
   /** Snapshot every task ever persisted (queued, running, completed, failed). */
   listPersistedTasks(): TaskRecord<unknown>[] {
     return this.store?.list() ?? [];
+  }
+
+  /**
+   * Mark a finished task read (v0.17). Returns true iff this call set the
+   * marker. No-op without a store, for unfinished tasks, or when already read.
+   */
+  markTaskRead(taskId: string, at: Date = new Date()): boolean {
+    const changed = this.store?.markRead(taskId, at) ?? false;
+    if (changed) {
+      const cached = this.tasks.get(taskId);
+      if (cached) cached.readAt = at.toISOString();
+    }
+    return changed;
+  }
+
+  /** Clear a task's read marker (v0.17). Returns true iff it was set. */
+  markTaskUnread(taskId: string): boolean {
+    const changed = this.store?.markUnread(taskId) ?? false;
+    const cached = this.tasks.get(taskId);
+    if (cached) cached.readAt = undefined;
+    return changed;
+  }
+
+  /** Record that a ticker ran at `at` (ledger meta `last_tick_at`). No-op without a store. */
+  recordTickRun(at: Date = new Date()): void {
+    this.store?.setMeta(LAST_TICK_META_KEY, at.toISOString());
+  }
+
+  /** When a ticker (`ebb tick` or the OpenClaw loop) last ran, if ever recorded. */
+  lastTickAt(): string | undefined {
+    return this.store?.getMeta(LAST_TICK_META_KEY);
   }
 
   /**
