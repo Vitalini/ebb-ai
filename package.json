@@ -21,18 +21,21 @@
   "scripts": {
     "gen:data": "node scripts/gen-data.mjs",
     "gen:data:check": "node scripts/gen-data.mjs && git diff --exit-code -- packages/core-ts/src/data/tables.generated.ts packages/core-py/src/ebb_ai/_data.py",
+    "gen:images": "node scripts/render-images.mjs",
+    "gen:images:check": "node scripts/check-images.mjs",
     "build": "pnpm -r --filter=./packages/* build",
     "test": "pnpm -r --filter=./packages/* test",
     "typecheck": "pnpm -r --filter=./packages/* typecheck",
     "lint:py": "cd packages/core-py && .venv/bin/ruff check . && .venv/bin/pytest -q",
     "check:versions": "node scripts/check-versions.mjs",
-    "preflight": "pnpm check:versions && pnpm gen:data:check && pnpm typecheck && pnpm test && pnpm lint:py",
+    "preflight": "pnpm check:versions && pnpm gen:data:check && pnpm typecheck && pnpm test && pnpm lint:py && pnpm gen:images:check",
     "clean": "pnpm -r --filter=./packages/* clean && rm -rf node_modules",
     "release:npm": "pnpm -r --filter=./packages/* build && pnpm --filter @ebb-ai/core --filter @ebb-ai/cli --filter @ebb-ai/mcp publish --access public --no-git-checks"
   },
   "devDependencies": {
-    "typescript": "^5.6.3",
     "@types/node": "^22.20.4",
+    "playwright-core": "1.63.0",
+    "typescript": "^5.6.3",
     "vitest": "^4.1.11"
   },
   "pnpm": {

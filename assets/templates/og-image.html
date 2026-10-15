@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>{{css}}
+.frame {
+  display: flex;
+  align-items: center;
+  gap: 56px;
+  width: 1200px;
+  height: 630px;
+  padding: 64px;
+}
+.text { flex: 0 0 440px; }
+.wordmark { font-size: 96px; }
+.tagline { margin-top: 32px; font-size: 36px; }
+.command { margin-top: 40px; padding: 14px 22px; font-size: 27px; }
+.figure { flex: 1 1 auto; }
+.caption { margin-top: 18px; font-size: 24px; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="text">
+    <div class="wordmark">Ebb AI</div>
+    <p class="tagline">Run non-urgent LLM tasks at the cleanest grid hour before your deadline.</p>
+    <div class="command">npx -y @ebb-ai/mcp</div>
+  </div>
+  <div class="figure">
+    <div class="chart">{{chart}}</div>
+    <p class="caption">{{caption}}</p>
+  </div>
+</div>
+</body>
+</html>

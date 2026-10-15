@@ -64,6 +64,10 @@ jobs:
         run: node scripts/gen-data.mjs
       - name: fail if generated tables are stale
         run: git diff --exit-code -- packages/core-ts/src/data/tables.generated.ts packages/core-py/src/ebb_ai/_data.py
+      # Dependency-free: inputs hash, PNG sha256 and dimensions against
+      # assets/images.lock.json. CI does not render the images.
+      - name: fail if generated images are stale
+        run: node scripts/check-images.mjs
 
   python:
     name: python (3.11 + 3.12)
