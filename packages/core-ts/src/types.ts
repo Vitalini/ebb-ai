@@ -46,6 +46,34 @@ export interface DeferOptions {
    * Ignored unless `candidates` has >= 2 entries.
    */
   routeWeights?: Partial<RouteWeights>;
+  /** Short task title. Defaults to the first line of the redacted prompt (80 chars). */
+  title?: string;
+  /** Host that enqueued the task (`cli`, `mcp`, `openclaw`); absent for library callers. */
+  originHost?: TaskOriginHost;
+  /** Working directory the task was enqueued from, when known. */
+  originCwd?: string;
+  /** Task this one continues (reply chains); stored and shown, not set by v0.17 hosts. */
+  parentTaskId?: string;
+  /** How `deadline` was chosen. Default `absolute`. */
+  deadlineKind?: DeadlineKind;
+  /** Quota label (e.g. `claude`) for a `quota_reset` deadline; required with that kind only. */
+  quotaProvider?: string;
+}
+
+/** Host that enqueued a task. */
+export type TaskOriginHost = "cli" | "mcp" | "openclaw";
+
+/**
+ * How a task's deadline was chosen. `absolute`: the caller gave a time.
+ * `quota_reset`: the host resolved "before the weekly quota reset" for a
+ * configured provider label; tickers re-resolve it once that reset passes.
+ */
+export type DeadlineKind = "absolute" | "quota_reset";
+
+/** One turn of a task's message history. */
+export interface TaskMessage {
+  role: "user" | "assistant";
+  content: string;
 }
 
 /**
@@ -245,6 +273,23 @@ export interface TaskRecord<T = unknown> {
    * Absent when routing was not used.
    */
   routingDecision?: RoutingDecision;
+  /** Short title, stored redacted at enqueue (v0.17). Insert-only. */
+  title?: string;
+  /** Host that enqueued the task (v0.17). Insert-only. */
+  originHost?: TaskOriginHost;
+  /** Working directory at enqueue, when known (v0.17). Insert-only. */
+  originCwd?: string;
+  /**
+   * When a surface first showed the finished task (v0.17). Written only by
+   * `TaskStore.markRead` / `markUnread`; never by `upsert`.
+   */
+  readAt?: string;
+  /** Parent task in a reply chain (v0.17). Insert-only. */
+  parentTaskId?: string;
+  /** Deadline kind (v0.17); a legacy row with no kind reads as `absolute`. */
+  deadlineKind?: DeadlineKind;
+  /** Quota label for a `quota_reset` deadline (v0.17). */
+  quotaProvider?: string;
 }
 
 /**
@@ -300,6 +345,12 @@ export interface ProviderCallSpec {
   candidates?: string[];
   /** Optional routing weights; see {@link DeferOptions.routeWeights}. */
   routeWeights?: Partial<RouteWeights>;
+  /**
+   * Prior conversation turns, oldest first (v0.17). The current user turn
+   * stays in `prompt`; the assistant reply is the task's result text.
+   * Redacted with `prompt` at terminal transitions.
+   */
+  messages?: TaskMessage[];
 }
 
 /** Per-task outcome returned by `Scheduler.tick`. */
@@ -377,6 +428,12 @@ export interface RecommendOptions {
   candidates?: string[];
   /** Optional routing weights; see {@link DeferOptions.routeWeights}. */
   routeWeights?: Partial<RouteWeights>;
+  /**
+   * Prior conversation turns, oldest first (v0.17). The current user turn
+   * stays in `prompt`; the assistant reply is the task's result text.
+   * Redacted with `prompt` at terminal transitions.
+   */
+  messages?: TaskMessage[];
 }
 
 /**

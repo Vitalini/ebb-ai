@@ -133,12 +133,15 @@ export type {
   GridForecastEntry,
   GridSignalType,
   CarbonReceipt,
+  DeadlineKind,
   ProviderCallSpec,
   ProviderName,
   RecommendAlternative,
   RecommendOptions,
   RecommendResult,
   TaskRecord,
+  TaskMessage,
+  TaskOriginHost,
   TaskStatus,
   TickResult,
   TickResultEntry,
@@ -158,7 +161,7 @@ export type {
   ProviderAdapter,
 } from "./providers/index.js";
 export { TaskStore } from "./storage/sqlite.js";
-export type { TaskStoreOptions } from "./storage/sqlite.js";
+export type { TaskListFilter, TaskStoreOptions } from "./storage/sqlite.js";
 export {
   FALLBACK_REGION,
   TIMEZONE_REGION,
