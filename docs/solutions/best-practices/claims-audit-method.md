@@ -67,6 +67,18 @@ curl -s localhost:3000/ | sed '/<script/,/<\/script>/d' | grep -c "31 regions"  
 | 183/88 gCO2/kWh (forecast window) | projected | read from one real run's 72h forecast — still a prediction |
 | 158 gCO2/kWh (at dispatch) | measured | recorded directly in the run's signed receipt |
 
+## Sweep every surface that carries copy, not just READMEs (PR #43)
+
+The 0.16.1 sweep found unlabelled "50% cheaper" and "faster" claims outside the files the first audit covered. A claim lives wherever a string is published. Grep each number across all of these before release:
+
+- `README.md` and `packages/*/README.md`
+- plugin manifests: `.claude-plugin/marketplace.json`, `packages/claude-code-plugin/.claude-plugin/plugin.json`
+- `packages/claude-code-plugin/skills/ebb-ai/SKILL.md`
+- MCP tool descriptions in `packages/core-ts/src/tool-surface.ts`, **and** the matching `tool-surface.test.ts.snap` (update both or the snapshot test fails)
+- the site hero in `apps/web/src/app/page.tsx`
+
+Rules applied: "50% cheaper" became "50% of sync list price (projected)" (a vendor-published figure, class projected). "faster" was dropped from the hero because nothing measures it. A README snippet output comment (claim #33) gets its own row, because the number depends on a live feed and changes between runs.
+
 ## Related
 
 - `docs/claims.md` — the full audit table and legend this guidance generalizes from (32 rows, PR #37).
