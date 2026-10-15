@@ -124,17 +124,33 @@ export async function refreshStatus() {
   }
 }
 
+/** series id -> signature of its pending rows when the projection was fetched */
+const seriesSig = new Map();
+
 async function loadSeries() {
-  const ids = new Set(
-    state.pending.filter((t) => t.series_id && t.repeat && t.repeat !== "none").map((t) => t.series_id),
-  );
-  for (const id of [...state.series.keys()]) if (!ids.has(id)) state.series.delete(id);
+  const sigs = new Map();
+  for (const t of state.pending) {
+    if (!t.series_id || !t.repeat || t.repeat === "none") continue;
+    sigs.set(t.series_id, `${sigs.get(t.series_id) || ""}|${JSON.stringify(t)}`);
+  }
+  for (const id of [...state.series.keys()]) {
+    if (!sigs.has(id)) {
+      state.series.delete(id);
+      seriesSig.delete(id);
+    }
+  }
+  // One request per series whose pending rows changed, not one per series on
+  // every stream event.
+  const stale = [...sigs].filter(([id, sig]) => seriesSig.get(id) !== sig || !state.series.has(id));
+  if (stale.length === 0) return;
   await Promise.all(
-    [...ids].map(async (id) => {
+    stale.map(async ([id, sig]) => {
       try {
         state.series.set(id, await api.series(id));
+        seriesSig.set(id, sig);
       } catch {
         state.series.delete(id);
+        seriesSig.delete(id);
       }
     }),
   );
@@ -226,10 +242,24 @@ async function commit(op, send) {
   }
 }
 
+const CONFIRM_RETRIES = 5;
+
 async function confirmOps(ids) {
   const ready = ids.map((id) => state.ops.get(id)).filter((op) => op && op.posted);
   if (ready.length === 0) return;
-  await refresh();
+  if (!(await refresh())) {
+    // A failed or superseded refresh says nothing about the write: keep the
+    // optimistic patch and try again, so the old state never flashes back.
+    for (const op of ready) {
+      if (state.ops.get(op.id) !== op) continue;
+      op.tries = (op.tries || 0) + 1;
+      clearTimeout(op.timer);
+      if (op.tries < CONFIRM_RETRIES) op.timer = setTimeout(() => confirmOps([op.id]), 1000);
+      else state.ops.delete(op.id);
+    }
+    if (ready.some((op) => !state.ops.has(op.id))) notify();
+    return;
+  }
   for (const op of ready) {
     if (state.ops.get(op.id) !== op) continue;
     clearTimeout(op.timer);
@@ -299,10 +329,17 @@ export function cancelPending(id) {
 
 /** Send every delayed cancel now (the page is going away). */
 export function flushDelayed() {
+  if (delayed.size === 0) return;
   for (const [id, d] of delayed) {
     postKeepalive(tasksPath(id, "cancel"), d.series ? { series: true } : {});
+    // The cancel is sent: a page restored from the back/forward cache must
+    // not offer Undo for it or keep the row in its pending look.
+    d.toast.element.remove();
+    state.ops.delete(id);
   }
   delayed.clear();
+  notify();
+  void refresh();
 }
 
 // ── change stream (SSE read over fetch so the bearer header applies) ─────

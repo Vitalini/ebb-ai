@@ -52,7 +52,14 @@ export function toast(message, opts = {}) {
     el.append(bar);
   }
   root.append(el);
-  while (root.children.length > MAX_VISIBLE) root.firstElementChild.remove();
+  // Evict the oldest toast that carries no pending commit. An Undo toast
+  // stays until it expires (its expiry is the commit), so the stack may grow
+  // past the cap when several cancels wait at once.
+  while (root.children.length > MAX_VISIBLE) {
+    const old = [...root.children].find((c) => !c.classList.contains("toast-countdown"));
+    if (!old) break;
+    old.remove();
+  }
   if (timeout > 0) timer = setTimeout(() => close("timeout"), timeout);
   return { dismiss: () => close("dismiss"), expire: () => close("timeout"), element: el };
 }
