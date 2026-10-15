@@ -20,6 +20,8 @@
  * installed without forcing both SDK dependencies on every consumer.
  */
 
+import type { TaskMessage } from "../types.js";
+
 export interface DispatchOptions {
   /** Sampling temperature; vendor-specific defaults if omitted. */
   temperature?: number;
@@ -30,6 +32,20 @@ export interface DispatchOptions {
   /** Free-form metadata forwarded to the provider request (e.g. the
    *  Anthropic `metadata` field). Not recorded on the carbon receipt. */
   metadata?: Record<string, string>;
+  /**
+   * Prior conversation turns, oldest first (ui v2 reply). Sent before the
+   * current prompt; Gemini maps `assistant` to its `model` role. Absent or
+   * empty means a single-turn request, exactly as before.
+   */
+  messages?: TaskMessage[];
+}
+
+/** Prior turns followed by the current prompt as the last user turn. */
+export function conversation(
+  prompt: string,
+  options: Pick<DispatchOptions, "messages"> = {},
+): TaskMessage[] {
+  return [...(options.messages ?? []), { role: "user", content: prompt }];
 }
 
 export interface DispatchResult {

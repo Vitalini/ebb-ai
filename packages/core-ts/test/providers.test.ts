@@ -535,3 +535,118 @@ describe("OpenAIAdapter", () => {
     expect(r.results?.[0]?.usage?.totalTokens).toBe(11);
   });
 });
+
+describe("message history (ui v2 reply, KTD7)", () => {
+  const HISTORY = [
+    { role: "user" as const, content: "first question" },
+    { role: "assistant" as const, content: "first answer" },
+  ];
+
+  it("Anthropic sync sends prior turns in order, then the prompt", async () => {
+    let captured: { messages?: unknown; system?: string } = {};
+    const adapter = new AnthropicAdapter({
+      apiKey: "test",
+      client: {
+        messages: {
+          create: async (req: typeof captured) => {
+            captured = req;
+            return { content: [{ type: "text", text: "ok" }], usage: {} };
+          },
+        },
+      },
+    });
+    await adapter.dispatch("claude-sonnet-4-5", "follow-up", {
+      system: "be brief",
+      messages: HISTORY,
+    });
+    expect(captured.system).toBe("be brief");
+    expect(captured.messages).toEqual([...HISTORY, { role: "user", content: "follow-up" }]);
+  });
+
+  it("Anthropic batch request params carry the turns", async () => {
+    let requests: Array<{ params: { messages: unknown } }> = [];
+    const adapter = new AnthropicAdapter({
+      apiKey: "test",
+      client: {
+        messages: {
+          create: async () => ({}),
+          batches: {
+            create: async (req: { requests: typeof requests }) => {
+              requests = req.requests;
+              return { id: "msgbatch_h" };
+            },
+          },
+        },
+      },
+    });
+    await adapter.dispatchBatch("claude-sonnet-4-5", ["follow-up"], { messages: HISTORY });
+    expect(requests[0]?.params.messages).toEqual([
+      ...HISTORY,
+      { role: "user", content: "follow-up" },
+    ]);
+  });
+
+  it("Anthropic without messages sends exactly one user turn (regression)", async () => {
+    let captured: { messages?: unknown } = {};
+    const adapter = new AnthropicAdapter({
+      apiKey: "test",
+      client: {
+        messages: {
+          create: async (req: typeof captured) => {
+            captured = req;
+            return { content: [{ type: "text", text: "ok" }], usage: {} };
+          },
+        },
+      },
+    });
+    await adapter.dispatch("claude-sonnet-4-5", "solo");
+    expect(captured.messages).toEqual([{ role: "user", content: "solo" }]);
+  });
+
+  it("OpenAI sync puts system first, then the turns, then the prompt", async () => {
+    let captured: { messages?: unknown } = {};
+    const adapter = new OpenAIAdapter({
+      apiKey: "test",
+      client: {
+        chat: {
+          completions: {
+            create: async (req: typeof captured) => {
+              captured = req;
+              return { choices: [{ message: { content: "ok" } }] };
+            },
+          },
+        },
+      },
+    });
+    await adapter.dispatch("gpt-4.1-mini", "follow-up", { system: "sys", messages: HISTORY });
+    expect(captured.messages).toEqual([
+      { role: "system", content: "sys" },
+      ...HISTORY,
+      { role: "user", content: "follow-up" },
+    ]);
+  });
+
+  it("OpenAI batch JSONL lines carry the turns; none means the old body", async () => {
+    const lines: string[] = [];
+    const adapter = new OpenAIAdapter({
+      apiKey: "test",
+      client: {
+        chat: { completions: { create: async () => ({}) } },
+        files: {
+          create: async (req: { file: Blob }) => {
+            lines.push(await req.file.text());
+            return { id: "file_h" };
+          },
+        },
+        batches: { create: async () => ({ id: "batch_h" }) },
+      },
+    });
+    await adapter.dispatchBatch("gpt-4.1-mini", ["follow-up"], { messages: HISTORY });
+    await adapter.dispatchBatch("gpt-4.1-mini", ["solo"]);
+    expect(JSON.parse(lines[0]!).body.messages).toEqual([
+      ...HISTORY,
+      { role: "user", content: "follow-up" },
+    ]);
+    expect(JSON.parse(lines[1]!).body.messages).toEqual([{ role: "user", content: "solo" }]);
+  });
+});

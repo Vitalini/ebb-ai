@@ -1949,6 +1949,7 @@ export class Scheduler {
         temperature: spec.temperature,
         maxTokens: spec.maxTokens,
         system: spec.systemPrompt,
+        messages: spec.messages,
       }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -2144,6 +2145,7 @@ export class Scheduler {
           temperature: spec.temperature,
           maxTokens: spec.maxTokens,
           system: spec.systemPrompt,
+          messages: spec.messages,
         }),
       );
       try {

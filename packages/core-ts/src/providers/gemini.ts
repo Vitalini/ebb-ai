@@ -26,6 +26,7 @@
  * on the sync path (batch-incapable adapters are a first-class case).
  */
 
+import { conversation } from "./base.js";
 import type {
   DispatchOptions,
   DispatchResult,
@@ -105,7 +106,10 @@ export class GeminiAdapter implements ProviderAdapter {
     }
 
     const body: Record<string, unknown> = {
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      contents: conversation(prompt, options).map((m) => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.content }],
+      })),
     };
     if (options.system) {
       body.systemInstruction = { parts: [{ text: options.system }] };

@@ -10,6 +10,7 @@
  *     to /v1/files, then referenced by id from POST /v1/batches.
  */
 
+import { conversation } from "./base.js";
 import type {
   BatchHandle,
   BatchRetrieveResult,
@@ -78,6 +79,15 @@ function completionParams(
   return params;
 }
 
+/** Chat messages: the optional system turn, prior turns, then the prompt. */
+function chatMessages(
+  prompt: string,
+  options: DispatchOptions,
+): Array<{ role: string; content: string }> {
+  const turns = conversation(prompt, options);
+  return options.system ? [{ role: "system", content: options.system }, ...turns] : turns;
+}
+
 export class OpenAIAdapter implements ProviderAdapter {
   readonly provider = "openai";
   private readonly apiKey: string | undefined;
@@ -100,12 +110,7 @@ export class OpenAIAdapter implements ProviderAdapter {
     options: DispatchOptions = {},
   ): Promise<DispatchResult> {
     const client = await this.getClient();
-    const messages = options.system
-      ? [
-          { role: "system", content: options.system },
-          { role: "user", content: prompt },
-        ]
-      : [{ role: "user", content: prompt }];
+    const messages = chatMessages(prompt, options);
     const res = (await client.chat.completions.create({
       model,
       messages,
@@ -144,12 +149,7 @@ export class OpenAIAdapter implements ProviderAdapter {
     const client = await this.getClient();
     const jsonl = prompts
       .map((prompt, i) => {
-        const messages = options.system
-          ? [
-              { role: "system", content: options.system },
-              { role: "user", content: prompt },
-            ]
-          : [{ role: "user", content: prompt }];
+        const messages = chatMessages(prompt, options);
         const body = {
           custom_id: `ebb-${i}`,
           method: "POST",

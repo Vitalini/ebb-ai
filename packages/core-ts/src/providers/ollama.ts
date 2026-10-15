@@ -19,6 +19,7 @@
  * hosted providers. There is no special-cased "local" carbon logic here.
  */
 
+import { conversation } from "./base.js";
 import type {
   DispatchOptions,
   DispatchResult,
@@ -102,12 +103,10 @@ export class OllamaAdapter implements ProviderAdapter {
       ollamaOptions.num_predict = options.maxTokens;
     }
 
-    const messages = options.system
-      ? [
-          { role: "system", content: options.system },
-          { role: "user", content: prompt },
-        ]
-      : [{ role: "user", content: prompt }];
+    const messages = [
+      ...(options.system ? [{ role: "system", content: options.system }] : []),
+      ...conversation(prompt, options),
+    ];
 
     const body: Record<string, unknown> = {
       model,

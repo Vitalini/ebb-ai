@@ -350,6 +350,60 @@ describe("task actions (ui v2)", () => {
       ]);
     });
 
+    it("a reply child dispatches the full conversation through tick (AE3)", async () => {
+      const s = sched();
+      const parent = await enqueue(s);
+      s.runNow(parent.taskId);
+      await s.tick({ anthropic: adapter() });
+      const child = await sched().replyToTask(parent.taskId, "and the CHANGELOG?");
+      const ui = sched();
+      ui.runNow(child.taskId);
+      const seen: unknown[] = [];
+      const rec: ProviderAdapter = {
+        provider: "anthropic",
+        ready: true,
+        async dispatch(model, prompt, o) {
+          seen.push([...(o?.messages ?? []), { role: "user", content: prompt }]);
+          return { text: "ok", model, provider: "anthropic", raw: null };
+        },
+      };
+      await sched().tick({ anthropic: rec });
+      expect(seen).toEqual([
+        [
+          { role: "user", content: SPEC.prompt },
+          { role: "assistant", content: `reply to ${SPEC.prompt}` },
+          { role: "user", content: "and the CHANGELOG?" },
+        ],
+      ]);
+    });
+
+    it("the batch path sends the history too", async () => {
+      const s = sched();
+      const history = [
+        { role: "user" as const, content: "q" },
+        { role: "assistant" as const, content: "a" },
+      ];
+      await s.enqueueProviderCall(
+        { ...SPEC, messages: history },
+        { deadline: new Date(Date.now() + 72 * H), region: "DE" },
+      );
+      let sent: unknown;
+      const rec: ProviderAdapter = {
+        provider: "anthropic",
+        ready: true,
+        async dispatch() {
+          throw new Error("sync path not expected");
+        },
+        async dispatchBatch(_m, prompts, o) {
+          sent = o?.messages;
+          return { batchId: "b", provider: "anthropic", size: prompts.length };
+        },
+      };
+      const res = await sched().tick({ anthropic: rec });
+      expect(res.batchSubmitted).toBe(1);
+      expect(sent).toEqual(history);
+    });
+
     it("refuses failed and cancelled parents (AE4)", async () => {
       const s = sched();
       const cancelled = await enqueue(s);
