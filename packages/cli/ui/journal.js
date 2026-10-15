@@ -28,7 +28,7 @@ const expanded = new Set();
 /** task id -> detail body, or {error} */
 const details = new Map();
 
-export function journalFilters() {
+function journalFilters() {
   const q = new URLSearchParams(location.hash.split("?")[1] || "");
   return { status: q.get("status") || "", provider: q.get("provider") || "", kind: q.get("kind") || "" };
 }

@@ -2,7 +2,7 @@
 // untrusted model or user text: they only ever reach the page as text
 // nodes or attribute values, never as markup.
 
-export const SVG_NS = "http://www.w3.org/2000/svg";
+const SVG_NS = "http://www.w3.org/2000/svg";
 
 /** Element builder: h("p", {class: "x"}, "text", child). */
 export function h(tag, attrs = {}, ...children) {
@@ -53,7 +53,7 @@ export function swapChildren(el, children) {
 // ── time ────────────────────────────────────────────────────────────────
 
 const HOUR = 3_600_000;
-export const DAY = 24 * HOUR;
+const DAY = 24 * HOUR;
 const LOCALE = "en-GB";
 
 export function parse(iso) {
@@ -143,18 +143,18 @@ export function ago(ms, now = Date.now()) {
   return `${Math.round(hr / 24)} days ago`;
 }
 
+const pad2 = (n) => String(n).padStart(2, "0");
+
 /** Value for <input type="date"> in local time. */
 export function dateInput(ms) {
   const d = new Date(ms);
-  const p = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
 /** Value for <input type="time"> in local time. */
 export function timeInput(ms) {
   const d = new Date(ms);
-  const p = (n) => String(n).padStart(2, "0");
-  return `${p(d.getHours())}:${p(d.getMinutes())}`;
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
 /** Local date + time inputs to epoch ms (NaN when invalid). */
@@ -209,10 +209,6 @@ export function grams(g) {
 export const PENDING = ["queued", "scheduled", "submitted", "running"];
 export const FINISHED = ["completed", "failed", "cancelled"];
 
-export function isPending(t) {
-  return PENDING.includes(t.status);
-}
-
 export function isFinished(t) {
   return FINISHED.includes(t.status);
 }
@@ -238,7 +234,7 @@ export function providerModel(t) {
 }
 
 /** "claude-sonnet-4-5-20250929" -> "sonnet-4-5". */
-export function shortModel(m) {
+function shortModel(m) {
   return String(m).replace(/^claude-/, "").replace(/-\d{8}$/, "").replace(/-latest$/, "");
 }
 
@@ -256,9 +252,4 @@ export function typing(target = document.activeElement) {
   if (!target) return false;
   const tag = target.tagName;
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable;
-}
-
-/** Prefer reduced motion? */
-export function calm() {
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }

@@ -61,7 +61,7 @@ export async function get(path) {
  * POST a write. `body` undefined sends no body and no content type (the
  * body-less routes refuse one); an object is sent as JSON.
  */
-export async function post(path, body) {
+async function post(path, body) {
   const init = { method: "POST" };
   if (body !== undefined) {
     init.json = true;

@@ -42,7 +42,7 @@ export function runAt(t) {
 }
 
 /** Pending, due, but no tick picked it up in two intervals (or none runs). */
-export function isOverdue(t, now = Date.now()) {
+function isOverdue(t, now = Date.now()) {
   if (t.status !== "queued" && t.status !== "scheduled") return false;
   if (t._op || ranNow.has(t.task_id)) return false;
   const at = runAt(t);

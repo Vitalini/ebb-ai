@@ -14,7 +14,7 @@ import { errorToast, toast } from "./toast.js";
 
 const FORECAST_TTL_MS = 10 * 60_000;
 const CONFIRM_FALLBACK_MS = 5_000;
-export const UNDO_MS = 5_000;
+const UNDO_MS = 5_000;
 
 export const state = {
   loaded: false,
@@ -60,7 +60,7 @@ export function notify() {
 // ── reads ───────────────────────────────────────────────────────────────
 
 /** Every known task with optimistic patches applied, keyed by id. */
-export function allTasks() {
+function allTasks() {
   const out = new Map();
   for (const t of [...state.finished, ...state.pending]) out.set(t.task_id, t);
   for (const [id, op] of state.ops) {
@@ -142,7 +142,7 @@ async function loadSeries() {
 }
 
 /** Regions with pending work, plus the default region. */
-export function regions() {
+function regions() {
   const out = new Set(state.pending.map((t) => t.region).filter(Boolean));
   if (state.status?.default_region) out.add(state.status.default_region);
   return [...out];

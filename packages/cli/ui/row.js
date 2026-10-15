@@ -23,7 +23,7 @@ import {
 import { forecastAt } from "./state.js";
 
 /** Band for a task: forecast at its scheduled hour, else the receipt intensity. */
-export function taskBand(t) {
+function taskBand(t) {
   const at = parse(t.scheduled_for);
   if (t.status !== "completed" && Number.isFinite(at)) {
     const p = forecastAt(t.region, at);
