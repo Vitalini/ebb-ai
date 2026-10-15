@@ -212,7 +212,13 @@ async function commit(op, send) {
       state.expired = true;
       notify();
     } else {
-      const msg = err instanceof ApiError ? err.message : "Network error; nothing changed.";
+      // 409 carries the core's one-line refusal; other statuses (500 "action
+      // failed", 400 validation) say only that the server did not apply it.
+      const msg = !(err instanceof ApiError)
+        ? "Network error; nothing changed."
+        : err.status === 409 || err.status === 400
+          ? err.message
+          : "the server could not apply it; nothing changed.";
       errorToast(`${capital(op.action || "Action")} failed: ${msg}`);
       void refresh();
     }

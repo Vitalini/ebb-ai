@@ -246,9 +246,11 @@ async function startDispatcher(button) {
     if (err instanceof SessionExpired) {
       state.expired = true;
     } else if (err instanceof ApiError && err.status === 409) {
-      toast("A dispatcher started from this page is already running.");
+      // Two refusals share 409: a child of this page runs, or another
+      // dispatcher ticked the ledger recently. The server's line says which.
+      toast(`Not started: ${err.message}.`);
     } else {
-      errorToast(`Could not start the dispatcher${err instanceof ApiError ? `: ${err.message}` : "."}`);
+      errorToast(`Could not start the dispatcher${err instanceof ApiError ? `: ${err.message}.` : "."}`);
     }
   } finally {
     if (button) button.disabled = false;
