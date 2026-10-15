@@ -11,19 +11,22 @@ describe("osNotifyCommand", () => {
   const title = "ebb-ai: done: summarize";
   const body = 'line "one"\n42 gCO2e';
 
-  it("darwin uses osascript with an escaped AppleScript literal", () => {
-    const mac = osNotifyCommand("darwin", title, body)!;
+  it("darwin passes the text to a fixed AppleScript as argv after --", () => {
+    const hostile = '-e "x" & do shell script "id"';
+    const mac = osNotifyCommand("darwin", hostile, body)!;
     expect(mac.cmd).toBe("osascript");
-    expect(mac.args[0]).toBe("-e");
-    expect(mac.args[1]).toContain(`with title "${title}"`);
-    expect(mac.args[1]).toContain('\\"one\\"');
+    expect(mac.args.slice(-3)).toEqual(["--", hostile, body]);
+    const script = mac.args.slice(0, -3).join("\n");
+    expect(script).toContain("item 1 of argv");
+    expect(script).not.toContain("do shell script");
+    expect(script).not.toContain("one");
     expect(mac.env).toBeUndefined();
   });
 
-  it("linux uses notify-send with -- before the title", () => {
-    const linux = osNotifyCommand("linux", "-u critical", body)!;
+  it("linux uses notify-send with -- before the title and escapes body markup", () => {
+    const linux = osNotifyCommand("linux", "-u critical", '<a href="x">y</a> & z')!;
     expect(linux.cmd).toBe("notify-send");
-    expect(linux.args).toEqual(["--", "-u critical", body]);
+    expect(linux.args).toEqual(["--", "-u critical", '&lt;a href="x"&gt;y&lt;/a&gt; &amp; z']);
   });
 
   it("win32 keeps hostile text out of the script and passes it through env", () => {

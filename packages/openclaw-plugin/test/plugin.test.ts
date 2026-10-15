@@ -941,10 +941,8 @@ describe("ebb OpenClaw plugin — result delivery", () => {
 
     const mac = osNotifyCommand("darwin", title, body)!;
     expect(mac.cmd).toBe("osascript");
-    expect(mac.args[0]).toBe("-e");
-    // AppleScript: quotes in the payload are backslash-escaped, title embedded.
-    expect(mac.args[1]).toContain('with title "ebb-ai — task t-1 complete"');
-    expect(mac.args[1]).toContain('\\"one\\"');
+    // AppleScript: a fixed script; the text arrives as argv after --.
+    expect(mac.args.slice(-3)).toEqual(["--", title, body]);
 
     const linux = osNotifyCommand("linux", title, body)!;
     expect(linux.cmd).toBe("notify-send");

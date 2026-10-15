@@ -4,10 +4,9 @@
  * so core stays free of `child_process` and the hosts own the side effect.
  *
  * Title and body are untrusted (prompt and model output). The builder keeps
- * them out of any script text it can: Linux gets them as argv after `--`,
- * Windows reads them from environment variables the host sets on the spawn,
- * and the AppleScript literal escapes the only two characters it treats as
- * special (`\` and `"`).
+ * them out of every script text: macOS and Linux get them as argv after
+ * `--`, and Windows reads them from environment variables the host sets on
+ * the spawn (or from inert base64 literals, see `windowsText`).
  */
 
 import { stripControlChars } from "./history.js";
@@ -29,9 +28,22 @@ export interface OsNotifyCommand {
 export const WIN_NOTIFY_TITLE_VAR = "EBB_NOTIFY_TITLE";
 export const WIN_NOTIFY_BODY_VAR = "EBB_NOTIFY_BODY";
 
-/** Escape a string for embedding inside an AppleScript double-quoted literal. */
-function escapeAppleScript(s: string): string {
-  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+/** Fixed AppleScript: the text arrives as `argv`, never as script source. */
+const MAC_NOTIFY_SCRIPT = [
+  "-e",
+  "on run argv",
+  "-e",
+  "display notification (item 2 of argv) with title (item 1 of argv)",
+  "-e",
+  "end run",
+];
+
+/**
+ * notify-send bodies go through a markup parser on most Linux daemons
+ * (`<b>`, `<a href>`); escape it so model output stays plain text.
+ */
+function escapeMarkup(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function winToastScript(titleExpr: string, bodyExpr: string): string {
@@ -75,13 +87,10 @@ export function osNotifyCommand(
   opts: OsNotifyOptions = {},
 ): OsNotifyCommand | null {
   if (platform === "darwin") {
-    const script = `display notification "${escapeAppleScript(
-      body,
-    )}" with title "${escapeAppleScript(title)}"`;
-    return { cmd: "osascript", args: ["-e", script] };
+    return { cmd: "osascript", args: [...MAC_NOTIFY_SCRIPT, "--", title, body] };
   }
   if (platform === "linux") {
-    return { cmd: "notify-send", args: ["--", title, body] };
+    return { cmd: "notify-send", args: ["--", title, escapeMarkup(body)] };
   }
   if (platform === "win32") {
     const base = ["-NoProfile", "-NonInteractive", "-Command"];

@@ -1,3 +1,4 @@
+import type { SpawnOptions } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -296,15 +297,15 @@ describe("ebb tick notifications", () => {
   });
 
   function run(extra: Partial<Parameters<typeof runTickOnce>[0]> = {}) {
-    const calls: Array<{ cmd: string; args: string[] }> = [];
+    const calls: Array<{ cmd: string; args: string[]; opts: SpawnOptions }> = [];
     const result = runTickOnce({
       db: dbPath,
       region: "FR",
       envFile: join(dir, "no-env"),
       budgetConfig: join(dir, "no-config"),
       platform: "linux",
-      spawnNotify: (cmd, args) => {
-        calls.push({ cmd, args });
+      spawnNotify: (cmd, args, opts) => {
+        calls.push({ cmd, args, opts });
       },
       ...extra,
     });
@@ -338,6 +339,26 @@ describe("ebb tick notifications", () => {
     const { result, calls } = run({ budgetConfig: config });
     await result;
     expect(calls).toHaveLength(0);
+  });
+
+  it("win32 passes the text through env vars with a timeout on the child", async () => {
+    const { result, calls } = run({ platform: "win32" });
+    await result;
+    expect(calls).toHaveLength(3);
+    for (const c of calls) {
+      expect(c.cmd).toBe("powershell");
+      expect(c.opts.timeout).toBeGreaterThan(0);
+      expect(c.opts.env?.EBB_NOTIFY_TITLE).toMatch(/^ebb-ai: (done|failed): title /);
+      expect(c.opts.env?.PATH).toBe(process.env.PATH);
+      expect(c.args.join(" ")).not.toContain("title ok-1");
+    }
+  });
+
+  it("an unknown platform posts nothing and keeps the outcome", async () => {
+    const { result, calls } = run({ platform: "aix" });
+    const r = await result;
+    expect(calls).toHaveLength(0);
+    expect(r.message).toContain("2 dispatched, 1 failed");
   });
 
   it("a throwing spawner does not change the outcome", async () => {
