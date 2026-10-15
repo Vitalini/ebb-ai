@@ -1,4 +1,4 @@
-# ebb-ai
+# Ebb AI
 
 **Run non-urgent LLM tasks at the cleanest grid hour before your deadline — Python library.**
 

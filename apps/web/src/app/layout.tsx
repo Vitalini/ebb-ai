@@ -6,8 +6,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "ebb-ai · carbon-aware scheduling for AI compute",
-    template: "%s · ebb-ai",
+    default: "Ebb AI · carbon-aware scheduling for AI compute",
+    template: "%s · Ebb AI",
   },
   description:
     "Open-source MCP server and CLI that defer non-urgent AI tasks to the cleanest electricity-grid window inside your deadline. Live carbon-intensity map of grid regions across North America, Europe and Asia-Pacific. Apache-2.0.",
@@ -32,14 +32,14 @@ export const metadata: Metadata = {
   ],
   authors: [{ name: "Vitalii Borovyk", url: "https://github.com/Vitalini" }],
   creator: "Vitalii Borovyk",
-  publisher: "ebb-ai",
+  publisher: "Ebb AI",
   category: "developer tools",
   openGraph: {
-    title: "ebb-ai — Carbon-aware scheduling for agentic AI workflows",
+    title: "Ebb AI — Carbon-aware scheduling for agentic AI workflows",
     description:
       "MCP server that defers non-urgent AI tasks to the cleanest grid window inside your deadline. Per-task carbon receipts, Anthropic + OpenAI Batch APIs, durable SQLite queue. Apache-2.0.",
     url: "https://www.ebb-ai.com",
-    siteName: "ebb-ai",
+    siteName: "Ebb AI",
     locale: "en_US",
     type: "website",
     images: [
@@ -53,7 +53,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "ebb-ai — Carbon-aware scheduling for agentic AI workflows",
+    title: "Ebb AI — Carbon-aware scheduling for agentic AI workflows",
     description:
       "MCP server that defers non-urgent AI tasks to the cleanest grid window. 1,115 tests, 9 MCP tools, persistent SQLite queue. Apache-2.0.",
     images: ["/og-image.png"],
@@ -80,7 +80,7 @@ const jsonLd = {
     {
       "@type": "SoftwareApplication",
       "@id": "https://www.ebb-ai.com/#software",
-      name: "ebb-ai",
+      name: "Ebb AI",
       url: "https://www.ebb-ai.com",
       description:
         "Open-source carbon-aware scheduler for agentic AI workflows. Defers non-urgent LLM calls to the cleanest electricity-grid window inside a deadline via the Model Context Protocol.",
@@ -102,7 +102,7 @@ const jsonLd = {
       "@type": "WebSite",
       "@id": "https://www.ebb-ai.com/#website",
       url: "https://www.ebb-ai.com",
-      name: "ebb-ai",
+      name: "Ebb AI",
       description:
         "Carbon-aware scheduling for agentic AI workflows. Live electricity-grid carbon-intensity map for major LLM-provider regions.",
       publisher: { "@id": "https://www.ebb-ai.com/#software" },

@@ -77,7 +77,7 @@ function Hero() {
       </h1>
       <p className="max-w-2xl text-base leading-relaxed text-fg-muted sm:text-lg">
         US data centers are projected to reach 6.7–12 % of national grid
-        load by 2028 (DOE 2024), driven primarily by AI compute. ebb-ai is
+        load by 2028 (DOE 2024), driven primarily by AI compute. Ebb AI is
         an open-source MCP scheduler that
         defers non-urgent LLM tasks to off-peak hours — 50 % cheaper via
         Anthropic/OpenAI Batch APIs, and lower carbon. Per-task receipts to a

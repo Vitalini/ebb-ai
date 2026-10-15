@@ -1,4 +1,4 @@
-# Claude Code plugin — ebb-ai
+# Claude Code plugin — Ebb AI
 
 A one-command install that turns any Claude Code session into a
 carbon-aware AI scheduler. Defer non-urgent LLM tasks (overnight

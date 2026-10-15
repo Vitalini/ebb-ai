@@ -5,10 +5,10 @@ import { VERSION } from "@/lib/version";
 export const metadata: Metadata = {
   title: "About",
   description:
-    "ebb-ai is an open-source carbon-aware scheduler for agentic AI workflows. It defers non-urgent LLM calls to the cleanest electricity-grid window inside your deadline, with per-task carbon receipts and full audit log.",
+    "Ebb AI is an open-source carbon-aware scheduler for agentic AI workflows. It defers non-urgent LLM calls to the cleanest electricity-grid window inside your deadline, with per-task carbon receipts and full audit log.",
   alternates: { canonical: "https://www.ebb-ai.com/about" },
   openGraph: {
-    title: "About ebb-ai",
+    title: "About Ebb AI",
     description:
       "Why a carbon-aware scheduler for LLM workflows exists, who it's for, and how it actually moves the needle.",
     url: "https://www.ebb-ai.com/about",
@@ -33,7 +33,7 @@ export default function AboutPage() {
           Smarter scheduling for AI workloads.
         </h1>
         <p className="text-lg leading-relaxed text-fg-muted">
-          ebb-ai is an open-source MCP scheduler. Give it any LLM task with a
+          Ebb AI is an open-source MCP scheduler. Give it any LLM task with a
           deadline, and it routes the dispatch to off-peak hours — when the
           electricity grid is less loaded, providers&apos; APIs are cheaper and
           faster, and per-task carbon is lower. A single shift with four
@@ -58,14 +58,14 @@ export default function AboutPage() {
           ), driven primarily by AI compute. Today, agent code dispatches
           synchronously by default — every &quot;summarize this overnight&quot;
           and &quot;analyze by Friday&quot; request piles onto peak hours.
-          ebb-ai automates the deferral: a huge fraction of agent work
+          Ebb AI automates the deferral: a huge fraction of agent work
           (nightly digests, evaluator sweeps, batch enrichment, long-horizon
           research) doesn&apos;t need to run right now and shouldn&apos;t.
         </p>
         <p className="leading-relaxed text-fg-muted">
           <strong className="text-fg">Cost.</strong> Anthropic and OpenAI
           Batch APIs are priced 50 % below their sync siblings (projected,
-          provider list price) in exchange for a 24-hour SLA. ebb-ai
+          provider list price) in exchange for a 24-hour SLA. Ebb AI
           auto-routes through Batch when the deadline allows. The same
           prompt, half the bill.
         </p>
@@ -91,7 +91,7 @@ export default function AboutPage() {
           >
             docs/claims.md
           </a>
-          ). ebb-ai writes a per-task carbon receipt against the actual
+          ). Ebb AI writes a per-task carbon receipt against the actual
           grid intensity at the moment of dispatch — auditable, region-aware,
           reproducible from the persistent SQLite ledger.
         </p>
@@ -103,12 +103,12 @@ export default function AboutPage() {
           <li>
             Your agent (Claude Code, Claude Desktop, Cursor, Windsurf,
             Continue, Cline, Zed, Goose, OpenClaw, or any MCP host) calls
-            one of ebb-ai&apos;s nine MCP tools — for example,{" "}
+            one of Ebb AI&apos;s nine MCP tools — for example,{" "}
             <code className="rounded bg-bg-elev px-1 font-mono text-sm">schedule_task</code>{" "}
             with a prompt, region, and deadline.
           </li>
           <li>
-            ebb-ai fetches the live carbon-intensity forecast for that
+            Ebb AI fetches the live carbon-intensity forecast for that
             region — UK National Grid ESO (key-less), U.S. EIA, ENTSO-E
             for Europe, or Electricity Maps as universal fallback.
           </li>
@@ -152,7 +152,7 @@ export default function AboutPage() {
           <li>
             <strong className="text-fg">Compute infrastructure operators</strong>{" "}
             — anyone managing inference fleets where grid load and off-peak
-            capacity shape provisioning decisions. ebb-ai gives them per-task
+            capacity shape provisioning decisions. Ebb AI gives them per-task
             telemetry about when their tasks actually run.
           </li>
           <li>
@@ -172,7 +172,7 @@ export default function AboutPage() {
             ledger makes longitudinal study cheap.
           </li>
           <li>
-            <strong className="text-fg">MCP host implementers</strong> — ebb-ai
+            <strong className="text-fg">MCP host implementers</strong> — Ebb AI
             is a reference implementation of load-aware scheduling extensions to
             the Model Context Protocol; the{" "}
             <a

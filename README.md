@@ -1,10 +1,10 @@
 <p align="center"><img src="assets/readme-hero.png" alt="Ebb AI: GB grid carbon-intensity forecast from 2026-09-30, peak 183 and recommended hour 88 gCO2/kWh (forecast, projected, one run)" width="800"></p>
 
-# ebb-ai
+# Ebb AI
 
 **Run non-urgent LLM tasks at the cleanest grid hour before your deadline.**
 
-ebb-ai takes the LLM tasks your agent does not need right now, runs them at the lowest-carbon grid hour before a deadline you set, and sends them through the provider Batch API when the deadline allows.
+Ebb AI takes the LLM tasks your agent does not need right now, runs them at the lowest-carbon grid hour before a deadline you set, and sends them through the provider Batch API when the deadline allows.
 
 - Picks the dispatch hour from a live 72-hour grid carbon-intensity forecast: 5 real-data feeds, 31 regions (measured, counted in code).
 - Routes work with a deadline over 24 hours through the Anthropic and OpenAI Batch APIs, at 50 % of the sync list price (projected, provider list price).
