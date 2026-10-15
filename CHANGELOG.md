@@ -7,17 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] — 2026-10-15
+
+Deferred tasks become something you can see and steer: `ebb ui` is a local
+task manager, every surface can cancel, reschedule, run now or reply, tasks
+can repeat, and a deadline can be "before my weekly quota resets".
+
 ### Added
 
+- **`ebb ui`, a local task manager.** `ebb ui` serves a page with three
+  views and a detail drawer. **Agenda** (the default) lists pending tasks by
+  day (Today, Tomorrow, weekday, Later) with the carbon band of each run
+  hour and each day's cleanest hour; overdue tasks and unread failures sit in
+  "Needs attention"; repeating series show their next projected runs.
+  **Journal** lists finished tasks newest first with status, provider and
+  kind filters and rows that expand to the result, receipt and gCO2e.
+  **Timeline** is the forecast curve coloured by band with tasks at their
+  scheduled hour. The drawer shows result, conversation with a reply box,
+  receipt, origin with a copyable `claude --resume` line, chain and series,
+  and the actions the task's state allows. Cancel (5 s Undo), reschedule,
+  move to a day (drag a row onto a day header or "Run now", or the move-to
+  list on touch and keyboard), run now, mark read or unread, stop series and
+  Start dispatcher all write optimistically and are confirmed by the change
+  stream. Keyboard: j/k, Enter, Esc, c, C, r, m, n, u, R, 1-3, /, ?. Light
+  and dark, 400 px wide screens, reduced motion. The header shows when the
+  dispatcher last ran, and a banner warns when no tick daemon is installed.
+  No dependency, no build step, no remote resource. The server listens on
+  127.0.0.1 only, refuses a foreign `Host` or `Origin` header, and requires a
+  random per-run token on every API request; live updates come over
+  server-sent events.
+- **`ebb ui` write API.** `POST /api/tasks/:id/{cancel,reschedule,run-now,reply}`,
+  `GET /api/series/:id`, and `POST /api/dispatcher/start`, which starts
+  `ebb tick --daemon --interval 60` detached (log in
+  `~/.ebb-ai/logs/ui-tick.log`) when no dispatcher runs; it returns 409 while
+  the child it started is alive or while any ticker ticked recently. A
+  refused action returns 409 with the rule; any other error returns 500 with a
+  generic body. `/api/status` reports the dispatcher as `running`, `stale` or
+  `never`. The server writes the ledger only; it never dispatches.
 - **Task actions from any process.** Core gains `Scheduler.runNow` (marks a
   task due for the next tick, `intensitySource: "expedited"`, never
   batch-routed), `Scheduler.rescheduleTask` (a new deadline, an exact time,
   or a day given as two instants), `Scheduler.replyToTask` and
   `cancelTask(id, { series })`. Every write re-reads the row and writes with
-  a status compare-and-set (`TaskStore.transitionIf`), and every dispatcher
-  terminal write is conditional on `running`, so a cancel from `ebb ui` or the
-  CLI is never overwritten by a ticker. `taskActions` and `displayTitle`
-  compute allowed actions and titles once for every surface.
+  a status compare-and-set (`TaskStore.transitionIf`). `taskActions` and
+  `displayTitle` compute allowed actions and titles once for every surface.
 - **Repeating tasks.** `repeat: "none" | "daily" | "weekly" | "quota_reset"`
   on a provider-call task starts a series (`series_id` = the first task id).
   When an occurrence completes, fails, or is cancelled as a skip, core
@@ -28,37 +61,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   failure does not roll (a retry that completes rolls it). A next occurrence,
   or a day target, is held at a fallback hour until the forecast covers its
   first 24 hours; the new `replanSweep` (run by `prepareTick`) then gives it a
-  carbon window. MCP
-  `schedule_task` takes `repeat`; `/ebb-ai:defer` takes `--repeat`.
+  carbon window. MCP `schedule_task` takes `repeat`; `/ebb-ai:defer` takes
+  `--repeat`.
 - **Reply.** `reply_task` (MCP and OpenClaw), `ebb queue reply` and the
   `ebb ui` API create a child task that sends the parent's conversation plus
   the new text to the same provider and model. All four adapters (Anthropic,
   OpenAI, Gemini, Ollama) send prior turns on the sync path; Anthropic and
   OpenAI also on the batch path. The history is capped at 200,000
   characters; the oldest turns are dropped first.
-- **Return to the session.** `/ebb-ai:defer` passes `${CLAUDE_SESSION_ID}` as
-  `origin_session_id`; `ebb queue show`, `check_queue_status` and the
-  `ebb ui` API print `cd <cwd> && claude --resume <id>`.
-- **`ebb queue cancel | reschedule | run-now | reply`** and
-  `ebb queue list --series <id>`.
-- **`ebb ui` write API.** `POST /api/tasks/:id/{cancel,reschedule,run-now,reply}`,
-  `GET /api/series/:id`, and `POST /api/dispatcher/start`, which starts
-  `ebb tick --daemon --interval 60` detached (log in
-  `~/.ebb-ai/logs/ui-tick.log`) when no dispatcher runs; it returns 409 while
-  the child it started is alive or while any ticker ticked recently. A
-  refused action returns 409 with the rule; any other error returns 500 with a
-  generic body. `/api/status`
-  reports the dispatcher as `running`, `stale` or `never`. The server writes
-  the ledger only; it never dispatches. The page itself is unchanged in this
-  release (v1 keeps working against the extended API).
-
-- **Task titles, origin and read state.** Every task now stores a title (given
-  at enqueue, else the first line of the prompt cut to 80 characters, with
-  API-key-looking strings redacted), the host that enqueued it (`mcp`,
-  `openclaw`, `cli`) and its working directory, a parent task id (stored, not
-  yet set by any host), and a `read_at` marker. A finished task counts as
-  unread until a surface shows its result. Prior conversation turns can be
-  stored in `body_json.messages` and are redacted with the prompt.
 - **`quota_reset` deadlines.** MCP `schedule_task` accepts
   `deadline_kind: "quota_reset"` and an optional `quota_provider`; `deadline`
   is then not needed. Configure the weekly reset per label in
@@ -74,30 +84,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   passes before the task runs (machine asleep, daemon down), `ebb tick` and
   the OpenClaw dispatch loop re-resolve it to the following reset and
   reschedule the task through the normal window picker, writing only while
-  the task is still queued or scheduled (the Python ticker does not run this
-  sweep in this release). A quota deadline
-  is often days away, and any deadline more than 24 hours out lets an
-  `anthropic` or `openai` task route through the provider Batch API, so
-  its result can arrive up to the provider's 24-hour batch SLA after the
-  chosen window.
-- **`ebb queue show <id>`** prints a task's title, origin, deadline (with the
-  quota label), prompt, history, result, receipt and routing; `--raw` adds
-  the vendor payload, `--json` prints the record and its history,
-  `--no-mark-read` leaves the read marker alone.
-- **`ebb queue unread <id>`** clears the read marker again.
-- **`ebb queue list`** gains title, deadline and kind columns, `--unread`,
-  `--kind <absolute|quota_reset>`, `--json`, and a `last tick` line.
-- **`last_tick_at`.** `ebb tick` and the OpenClaw dispatch loop record when
-  they last ran (ledger `meta` table); `ebb queue list` and MCP
-  `check_queue_status` show it.
-- **`ebb ui`.** A local task page: a timeline of queued tasks on the forecast
-  curve (with a "Before quota reset" group and the provider-batch list), an
-  inbox of unread finished tasks, and a task detail view (prompt, result,
-  receipt, raw vendor response behind a toggle). It shows when the
-  dispatcher last ran and warns when no tick daemon is installed. Its only
-  write is the read marker. It listens on 127.0.0.1 only, refuses a foreign
-  `Host` or `Origin` header, and requires a random per-run token on every
-  API request; live updates come over server-sent events.
+  the task is still queued or scheduled. A quota deadline is often days
+  away, and any deadline more than 24 hours out lets an `anthropic` or
+  `openai` task route through the provider Batch API, so its result can
+  arrive up to the provider's 24-hour batch SLA after the chosen window.
+- **Task titles, origin and read state.** Every task now stores a title (given
+  at enqueue, else the first line of the prompt cut to 80 characters, with
+  API-key-looking strings redacted), the host that enqueued it (`mcp`,
+  `openclaw`, `cli`) and its working directory, a parent task id, and a
+  `read_at` marker. A finished task counts as unread until a surface shows
+  its result. Prior conversation turns are stored in `body_json.messages`
+  and are redacted with the prompt.
 - **Desktop notifications from `ebb tick`.** One notification per task that
   completed or failed, with the title, a redacted preview or the error, the
   grams and `ebb queue show <id>`. Off with `--no-notify` or `EBB_NOTIFY=0`
@@ -105,64 +102,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Claude Code SessionStart hook.** The plugin prints one line at session
   start when finished tasks are unread (`ebb queue list --unread --hook`);
   silent when nothing is unread or the CLI is not installed.
-
-### Changed
-
-- **`ebb ui` v2 front end.** The page is now a task manager with three
-  views and a detail drawer. **Agenda** (the default) lists pending tasks by
-  day (Today, Tomorrow, weekday, Later) with the carbon band of each run
-  hour and each day's cleanest hour; overdue tasks and unread failures sit in
-  "Needs attention"; repeating series show their next projected runs.
-  **Journal** lists finished tasks newest first with status, provider and
-  kind filters and rows that expand to the result, receipt and gCO2e.
-  **Timeline** is the forecast curve coloured by band with tasks at their
-  scheduled hour. The drawer shows result, conversation with a reply box,
-  receipt, origin with a copyable `claude --resume` line, chain and series,
-  and the actions the task's state allows. Cancel (5 s Undo), reschedule,
-  move to a day (drag a row onto a day header or "Run now", or the move-to
-  list on touch and keyboard), run now, mark read or unread, stop series and
-  Start dispatcher all write optimistically and are confirmed by the change
-  stream. Keyboard: j/k, Enter, Esc, c, C, r, m, n, u, R, 1-3, /, ?. Light
-  and dark, 400 px wide screens, reduced motion. Still no dependency, no build
-  step, no remote resource; every module is in the server's fixed static map.
+- **Return to the session.** `/ebb-ai:defer` passes `${CLAUDE_SESSION_ID}` as
+  `origin_session_id`; `ebb queue show`, `check_queue_status` and the
+  `ebb ui` API print `cd <cwd> && claude --resume <id>`.
+- **New `ebb queue` commands.** `ebb queue cancel | reschedule | run-now |
+  reply`, `ebb queue list --series <id>`, `ebb queue show <id>` (title,
+  origin, deadline with the quota label, prompt, history, result, receipt
+  and routing; `--raw` adds the vendor payload, `--json` prints the record
+  and its history, `--no-mark-read` leaves the read marker alone) and
+  `ebb queue unread <id>` (clears the read marker again). `ebb queue list`
+  gains title, deadline and kind columns, `--unread`,
+  `--kind <absolute|quota_reset>`, `--json`, and a `last tick` line.
+- **`last_tick_at`.** `ebb tick` and the OpenClaw dispatch loop record when
+  they last ran (ledger `meta` table); `ebb queue list` and MCP
+  `check_queue_status` show it.
+- **Repo and site images.** `pnpm gen:images` renders the GitHub social
+  preview, the README hero and the site Open Graph card from one real GB
+  forecast (`docs/examples/2026-09-30-GB-tick/`); `pnpm gen:images:check`
+  guards drift in `pnpm preflight` and CI.
 - `scripts/ui-seed.mjs` writes a throwaway ledger with a realistic mix of
   tasks for trying the page (`--serve` runs `ebb ui` on it with the mock
   forecast and provider secrets removed from the environment). `--db` takes
   only a new file outside `~/.ebb-ai`, so a seed never lands in a real ledger.
-- `repeat` defaults to `none` for every task, `deadline_kind: "quota_reset"`
-  included: a quota task runs once unless `repeat` (or `--repeat weekly`) is
-  given.
-- `cancel_task` on a repeating task skips that occurrence and queues the next
-  one; pass `series: true` to end the series.
 
+### Changed
+
+- **Brand name.** The display name is "Ebb AI": the README, the site, and
+  the core-py and Claude Code plugin README headings. Package names,
+  commands and URLs keep `ebb-ai`.
+- **Tool counts.** The MCP server exposes 10 tools and OpenClaw 11
+  (`reply_task` is new); the READMEs and the site say so.
+- **README.** It opens with the rendered hero image and describes `ebb ui`
+  and the task actions.
 - **`check_queue_status`** (MCP and OpenClaw) shows the title, origin,
   deadline kind and stored prompt of a task, and viewing a completed or
   failed task marks it read. The list view shows titles and quota markers.
+  The detail view also shows series, repeat, session, resume command,
+  parent and children.
+- **`cancel_task`** on a repeating task skips that occurrence and queues the
+  next one; pass `series: true` to end the series.
 - **`update_deadline`** with an explicit deadline turns a `quota_reset` task
   into an `absolute` one.
 - **Ledger schema.** New nullable columns `title`, `origin_host`,
   `origin_cwd`, `read_at`, `parent_task_id`, `deadline_kind`,
-  `quota_provider`, an index on `parent_task_id`, and a `meta` table. They
-  are added on first open by the TS and Python cores. Tasks that finished
-  before the upgrade are marked read once, so the inbox starts empty.
+  `quota_provider`, `series_id`, `repeat`, `origin_session_id` and
+  `not_before`, indexes on `parent_task_id` and `series_id`, and a `meta`
+  table. They are added on first open by the TS and Python cores. Tasks that
+  finished before the upgrade are marked read once, so the inbox starts
+  empty.
 - Task text that the CLI prints (titles, prompts, results, errors) is
   stripped of terminal control characters.
 - The OS notification command builder moved from the OpenClaw plugin to
-  `@ebb-ai/core` (`osNotifyCommand`). Notification text no longer reaches
-  script source: macOS and Linux pass it as argv after `--`, Windows reads
-  it from environment variables (OpenClaw: from inert base64 literals).
+  `@ebb-ai/core` (`osNotifyCommand`).
+- The site's Open Graph and Twitter card is `/og-image.png`; the stale v0.5
+  `og.png` is removed, and `/about` now carries the card too.
 
-### Upgrade note
+### Fixed
 
-- The ledger gains `series_id`, `repeat`, `origin_session_id` and
-  `not_before` (added on open, by the TS and the Python core). The Python core
-  stores them but does not act on them: its ticker sends no reply history,
-  rolls no series and ignores `not_before`. Run `ebb tick` or the OpenClaw
-  loop on a ledger with reply children or repeating tasks.
+- **A cancel is no longer overwritten by a ticker.** Every dispatcher
+  terminal write (completed, failed, submitted, the batch poll) is
+  conditional on the row still being `running`, so a cancel from `ebb ui`,
+  the CLI or an MCP host that lands during dispatch stands.
+- **Notification text no longer reaches script source.** The OpenClaw `os`
+  delivery embedded the escaped text in an AppleScript string. macOS and
+  Linux now pass it as argv after `--`, Windows reads it from environment
+  variables (OpenClaw: from inert base64 literals).
+
+### Upgrade notes
 
 - The tick daemon runs the globally installed `@ebb-ai/cli`. After upgrading,
   reinstall it (`npm install -g @ebb-ai/cli`), or the quota-reset sweep and
   `last_tick_at` do not run.
+- The Python core migrates and stores the new columns but does not act on
+  them: its ticker sends no reply history, rolls no series, ignores
+  `not_before` and does not run the quota-reset sweep. Run `ebb tick` or the
+  OpenClaw loop on a ledger with reply children, repeating tasks or
+  `quota_reset` deadlines.
+- `repeat` defaults to `none` for every task, `deadline_kind: "quota_reset"`
+  included: a quota task runs once unless `repeat` (or `--repeat weekly`) is
+  given.
 
 ## [0.16.1] — 2026-10-15
 
@@ -1643,7 +1661,8 @@ their mind, and how to mitigate the operational failure modes
   Batches APIs. Direct Batch routing lands in v0.2.
 - Python port (`ebb-ai` PyPI) is a placeholder. v0.2.
 
-[Unreleased]: https://github.com/Vitalini/ebb-ai/compare/v0.16.1...HEAD
+[Unreleased]: https://github.com/Vitalini/ebb-ai/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/Vitalini/ebb-ai/compare/v0.16.1...v0.17.0
 [0.16.1]: https://github.com/Vitalini/ebb-ai/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/Vitalini/ebb-ai/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/Vitalini/ebb-ai/compare/v0.15.0...v0.15.1
