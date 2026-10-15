@@ -9,13 +9,13 @@
     "source": "github",
     "subfolder": "packages/mcp-server"
   },
-  "version": "0.16.0",
+  "version": "0.16.1",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@ebb-ai/mcp",
-      "version": "0.16.0",
+      "version": "0.16.1",
       "transport": { "type": "stdio" },
       "environmentVariables": [
         { "name": "EBB_DEFAULT_REGION", "description": "Default grid region, e.g. GB, US-CAL-CISO, DE", "isRequired": false, "isSecret": false },

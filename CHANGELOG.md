@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.1] — 2026-10-15
+
+### Docs
+
+- **Ten-second README head.** The README opens with what ebb-ai does,
+  install lines for npm, PyPI, the Claude Code plugin and any MCP host,
+  and TS and Python snippets that pass a pinned `rng` (an `rng` that
+  returns 0 gives the strict minimum; without it the pick is random
+  inside the cleanest band of near-equal hours). The body lists all nine
+  MCP tools and uses the published `pip install`.
+- **npm and PyPI package heads.** `@ebb-ai/cli`, `@ebb-ai/mcp` and
+  `ebb-ai` (PyPI) READMEs open with commands that work from a published
+  install; monorepo build steps move to "Develop". The PyPI README no
+  longer says "pre-PyPI" and has no relative links. Package descriptions
+  match the new heads.
+
+### Fixed
+
+- **Labelled cost claim.** The Claude Code plugin manifest, marketplace
+  entry, skill and the `schedule_task` tool description say "50% of sync
+  list price (projected)" instead of an unlabelled "50% cheaper"
+  (`docs/claims.md` row 4).
+- **Unbacked claims removed.** The `schedule_task` tool description no
+  longer claims "faster sync calls", and the plugin skill no longer says
+  grids vary "30–60%" or that a 4-hour delay "cuts its footprint in
+  half"; it cites the one GB run instead (`docs/claims.md` row 31). The
+  README plugin section lists the real eight slash commands.
+- **Site hero.** The h1 reads "Run your agent's non-urgent LLM tasks at
+  the cleanest grid hour." and the hero no longer claims "faster".
+
+### Added
+
+- **MCP Registry metadata.** `@ebb-ai/mcp` carries
+  `"mcpName": "io.github.Vitalini/ebb-ai"`, and
+  `packages/mcp-server/server.json` describes the server for the MCP
+  Registry. `scripts/check-versions.mjs` checks both of its version
+  fields.
+- **Cross-language window-selection fixture.**
+  `packages/core-ts/test/fixtures/select-window-vectors.json` drives
+  `selectWindow` (TS) and `select_window` (Python) with a pinned `rng`,
+  so the two selection policies cannot drift apart unnoticed.
+
 ## [0.16.0] — 2026-09-30
 
 ### Release
@@ -1444,7 +1486,8 @@ their mind, and how to mitigate the operational failure modes
   Batches APIs. Direct Batch routing lands in v0.2.
 - Python port (`ebb-ai` PyPI) is a placeholder. v0.2.
 
-[Unreleased]: https://github.com/Vitalini/ebb-ai/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/Vitalini/ebb-ai/compare/v0.16.1...HEAD
+[0.16.1]: https://github.com/Vitalini/ebb-ai/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/Vitalini/ebb-ai/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/Vitalini/ebb-ai/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/Vitalini/ebb-ai/compare/v0.14.1...v0.15.0
