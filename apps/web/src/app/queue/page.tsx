@@ -102,14 +102,16 @@ export default function QueuePage() {
           dispatch or cancel anything.
         </p>
         <p className="leading-relaxed text-fg-muted">
-          The page listens on 127.0.0.1 only. Every request needs a random
-          token that is printed once with the link and changes each time
-          you start it. Nothing leaves your machine.
+          The page listens on 127.0.0.1 only. Every API request needs a
+          random token that is printed once with the link and changes each
+          time you start it. Task data never leaves your machine; the
+          timeline asks the grid provider your tick already uses for the
+          forecast.
         </p>
         <CodeBlock>
 {`ebb ui
 ebb ui: http://127.0.0.1:53817/#token=<random, per run>
-Serving on 127.0.0.1 only. Press Ctrl-C to stop.`}
+Serving on 127.0.0.1 only. The link carries a one-run access token; do not share it. Press Ctrl-C to stop.`}
         </CodeBlock>
         <p className="leading-relaxed text-fg-muted">
           <code className="rounded bg-bg-elev px-1 font-mono text-sm">ebb tick</code>{" "}

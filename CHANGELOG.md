@@ -51,9 +51,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   curve (with a "Before quota reset" group and the provider-batch list), an
   inbox of unread finished tasks, and a task detail view (prompt, result,
   receipt, raw vendor response behind a toggle). It shows when the
-  dispatcher last ran and warns when no tick daemon is installed. It is
-  read-only, listens on 127.0.0.1 only, and requires a random per-run token
-  on every API request; live updates come over server-sent events.
+  dispatcher last ran and warns when no tick daemon is installed. Its only
+  write is the read marker. It listens on 127.0.0.1 only, refuses a foreign
+  `Host` or `Origin` header, and requires a random per-run token on every
+  API request; live updates come over server-sent events.
 - **Desktop notifications from `ebb tick`.** One notification per task that
   completed or failed, with the title, a redacted preview or the error, the
   grams and `ebb queue show <id>`. Off with `--no-notify` or `EBB_NOTIFY=0`
@@ -78,8 +79,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stripped of terminal control characters.
 - The OS notification command builder moved from the OpenClaw plugin to
   `@ebb-ai/core` (`osNotifyCommand`). Notification text no longer reaches
-  script source: Linux passes it after `--`, Windows reads it from
-  environment variables (OpenClaw: from inert base64 literals).
+  script source: macOS and Linux pass it as argv after `--`, Windows reads
+  it from environment variables (OpenClaw: from inert base64 literals).
 
 ### Upgrade note
 

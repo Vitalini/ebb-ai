@@ -386,8 +386,8 @@ ebb queue show <id>         # one task: prompt, result, receipt
 `ebb ui` serves a page with a timeline (queued tasks on the forecast
 curve, with a "Before quota reset" group), an inbox of finished tasks you
 have not opened, and a task detail view with the prompt, result, receipt
-and the raw vendor response. It is read-only: it never dispatches or
-cancels, and it shows when the dispatcher (`ebb tick`) last ran.
+and the raw vendor response. Its only write is the read marker: it never
+dispatches or cancels, and it shows when the dispatcher (`ebb tick`) last ran.
 It listens on 127.0.0.1 only, and every API request needs a random token
 that is printed once with the link and changes on every start.
 
