@@ -375,6 +375,27 @@ asyncio.run(defer(
 ))
 ```
 
+### Your queue: `ebb ui`, notifications, session line
+
+```bash
+ebb ui                      # opens the local task page in your browser
+ebb queue list --unread     # the same inbox in the terminal
+ebb queue show <id>         # one task: prompt, result, receipt
+```
+
+`ebb ui` serves a page with a timeline (queued tasks on the forecast
+curve, with a "Before quota reset" group), an inbox of finished tasks you
+have not opened, and a task detail view with the prompt, result, receipt
+and the raw vendor response. It is read-only: it never dispatches or
+cancels, and it shows when the dispatcher (`ebb tick`) last ran.
+It listens on 127.0.0.1 only, and every API request needs a random token
+that is printed once with the link and changes on every start.
+
+`ebb tick` posts a desktop notification for each task that completes or
+fails (macOS, Linux with `notify-send`, Windows). Turn it off with
+`ebb tick --no-notify` or `EBB_NOTIFY=0` in `~/.ebb-ai/config`. The Claude
+Code plugin adds one line at session start when finished tasks are unread.
+
 ### Dashboard
 
 ```bash
@@ -384,9 +405,8 @@ pnpm --filter @ebb-ai/web dev
 
 Pages: live carbon-intensity map (31 regions, NA/EU/APAC — measured,
 see [docs/claims.md](docs/claims.md)), 72-hour forecast charts,
-best-window planner, and a queue explainer (`/queue`); see your own queue
-with `ebb queue list` (`--unread` for finished tasks you have not opened)
-and one task with `ebb queue show <id>`.
+best-window planner, and a queue explainer (`/queue`). The site never
+sees your queue; open your own with `ebb ui` (below).
 
 **Grid data sources** (per zone, falls back to mock on failure):
 

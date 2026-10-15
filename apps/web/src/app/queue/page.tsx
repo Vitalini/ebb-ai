@@ -3,8 +3,8 @@
  *
  * The site is read-only and doesn't have access to your local
  * SQLite ledger. This page explains the queue lifecycle, the status
- * vocabulary, and how to inspect it from the CLI. No synthetic
- * counters, no fake task list.
+ * vocabulary, and how to inspect it locally with `ebb ui` and the CLI.
+ * No synthetic counters, no fake task list.
  */
 
 import type { Metadata } from "next";
@@ -13,7 +13,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Scheduler queue",
   description:
-    "How ebb-ai's task queue works — six statuses, one SQLite file, inspectable from the CLI. No telemetry; your queue is your queue.",
+    "How ebb-ai's task queue works — seven statuses, one SQLite file, a local task page (ebb ui) and the CLI. No telemetry; your queue is your queue.",
   alternates: { canonical: "https://www.ebb-ai.com/queue" },
 };
 
@@ -27,6 +27,11 @@ const STATUSES: Array<{ name: string; description: string }> = [
     name: "scheduled",
     description:
       "Window picked. Will dispatch at the chosen UTC hour inside the deadline. Sits here until the tick daemon fires.",
+  },
+  {
+    name: "submitted",
+    description:
+      "Sent to the provider's Batch API (deadline more than 24 h away). The provider runs it within its 24 h batch window; a later tick collects the result.",
   },
   {
     name: "running",
@@ -85,14 +90,48 @@ export default function QueuePage() {
       </section>
 
       <section className="space-y-3">
+        <h2 className="text-2xl font-bold tracking-tight">See it on your machine: ebb ui</h2>
+        <p className="leading-relaxed text-fg-muted">
+          <code className="rounded bg-bg-elev px-1 font-mono text-sm">ebb ui</code>{" "}
+          opens a local page with three views: a timeline of queued tasks
+          on the forecast curve (tasks that must run before your weekly
+          quota resets are listed as their own group), an inbox of finished
+          tasks you have not opened, and a task detail view with the
+          prompt, the result, the carbon receipt and the raw provider
+          response. It shows when the dispatcher last ran. It cannot
+          dispatch or cancel anything.
+        </p>
+        <p className="leading-relaxed text-fg-muted">
+          The page listens on 127.0.0.1 only. Every request needs a random
+          token that is printed once with the link and changes each time
+          you start it. Nothing leaves your machine.
+        </p>
+        <CodeBlock>
+{`ebb ui
+ebb ui: http://127.0.0.1:53817/#token=<random, per run>
+Serving on 127.0.0.1 only. Press Ctrl-C to stop.`}
+        </CodeBlock>
+        <p className="leading-relaxed text-fg-muted">
+          <code className="rounded bg-bg-elev px-1 font-mono text-sm">ebb tick</code>{" "}
+          also posts a desktop notification when a task completes or
+          fails, and the Claude Code plugin prints one line at session
+          start when finished tasks are unread.
+        </p>
+      </section>
+
+      <section className="space-y-3">
         <h2 className="text-2xl font-bold tracking-tight">Inspect from the CLI</h2>
         <CodeBlock>
 {`# All tasks (any status)
 ebb queue list
 
-# Filter by status
+# Filter by status, deadline kind, or unread results
 ebb queue list --status scheduled
-ebb queue list --status failed
+ebb queue list --kind quota_reset
+ebb queue list --unread
+
+# One task: prompt, result, receipt (marks it read)
+ebb queue show <task_id>
 
 # Receipts only (completed tasks)
 ebb receipts list
@@ -130,13 +169,11 @@ result     <the LLM response>`}
           Why not show a live queue here?
         </h2>
         <p className="leading-relaxed text-fg-muted">
-          The site is read-only and doesn&apos;t have a back-channel to
-          your machine. Surfacing a {`"live"`} queue on a public
-          dashboard means
-          either centralizing the queue server-side (privacy-bad) or
-          fabricating a demo (honesty-bad). A later release will add an{" "}
-          <em>opt-in</em> HTTP control plane the dashboard can talk to;
-          until then the queue is local-first by design.
+          This site has no back-channel to your machine, and it should not:
+          a live queue here would mean storing your prompts on a server.
+          The live view is{" "}
+          <code className="rounded bg-bg-elev px-1 font-mono text-sm">ebb ui</code>
+          , served from your own machine.
         </p>
       </section>
 
