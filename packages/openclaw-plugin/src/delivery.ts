@@ -463,6 +463,9 @@ export function notificationContent(task: CompletedTask): {
 // re-exported here so existing imports keep working.
 export { osNotifyCommand };
 
+/** A notifier that has not exited after this long is killed. */
+const NOTIFY_TIMEOUT_MS = 5_000;
+
 /** Run a spawned command, resolving to a delivery-style outcome. Never throws;
  *  a missing binary (ENOENT) or a non-zero exit becomes an honest failure. */
 function runNotifyCommand(
@@ -472,7 +475,8 @@ function runNotifyCommand(
   return new Promise((resolve) => {
     let child: ReturnType<SpawnFn>;
     try {
-      child = spawnImpl(cmd, args, { stdio: "ignore" });
+      // The timeout kills a hung notifier so delivery never waits on it.
+      child = spawnImpl(cmd, args, { stdio: "ignore", timeout: NOTIFY_TIMEOUT_MS });
     } catch (err) {
       resolve({
         ok: false,
@@ -496,11 +500,11 @@ function runNotifyCommand(
             : err.message,
       });
     });
-    child.on("close", (code: number | null) => {
+    child.on("close", (code: number | null, signal: NodeJS.Signals | null) => {
       done(
-        code === 0 || code === null
+        code === 0 || (code === null && signal === null)
           ? { ok: true, detail: `notified via ${cmd}` }
-          : { ok: false, detail: `${cmd} exited ${code}` },
+          : { ok: false, detail: signal ? `${cmd} killed (${signal})` : `${cmd} exited ${code}` },
       );
     });
   });
