@@ -257,7 +257,7 @@ export default function AboutPage() {
             </p>
             <p className="mt-1 font-semibold text-fg">GitHub repository</p>
             <p className="mt-1 text-sm text-fg-muted">
-              Apache-2.0. TypeScript + Python ports. 1,115 tests. PRs welcome.
+              Apache-2.0. TypeScript + Python ports. 1,355 tests. PRs welcome.
             </p>
           </a>
           <a
