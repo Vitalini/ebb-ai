@@ -124,8 +124,8 @@ ${ticks}
 <path class="curve" d="${line}" stroke-width="${stroke}"/>
 <circle class="peak-dot" cx="${px}" cy="${py}" r="${dot}" stroke-width="3"/>
 <circle class="rec-dot" cx="${rx}" cy="${ry}" r="${dot}" stroke-width="3"/>
-<text class="mark-label peak-label" x="${px}" y="${fmt(py - label * 0.7)}" font-size="${label}" text-anchor="middle">peak 183</text>
-<text class="mark-label rec-label" x="${fmt(rx - label * 0.5)}" y="${recLabelY}" font-size="${label}" text-anchor="end">recommended 88</text>
+<text class="mark-label peak-label" x="${px}" y="${fmt(py - label * 0.7)}" font-size="${label}" text-anchor="middle">peak ${peakValue}</text>
+<text class="mark-label rec-label" x="${fmt(rx - label * 0.5)}" y="${recLabelY}" font-size="${label}" text-anchor="end">recommended ${points[recIdx].value}</text>
 <text class="unit-label" x="${fmt(rx - label * 0.5)}" y="${unitY}" font-size="${fmt(label * 0.8)}" text-anchor="end">gCO₂/kWh</text>
 </svg>`;
 }

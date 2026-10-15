@@ -15,9 +15,9 @@
 // change in how Chrome draws the same input is therefore not detected.
 
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const LOCK_PATH = "assets/images.lock.json";
@@ -32,8 +32,10 @@ export const OUTPUTS = {
 
 const SOCIAL_PREVIEW_MAX_BYTES = 1024 * 1024;
 
+// Exactly the files render-images.mjs reads. A directory listing would also
+// pick up untracked files (.DS_Store, editor swap files) and break the hash.
 export function inputPaths() {
-  const templates = readdirSync(join(ROOT, TEMPLATES_DIR))
+  const templates = ["base.css", ...Object.values(OUTPUTS).map((spec) => spec.template)]
     .map((name) => `${TEMPLATES_DIR}/${name}`);
   return [...templates, "scripts/render-images.mjs", DATA_PATH].sort();
 }
@@ -114,6 +116,10 @@ function check() {
   console.log(`check-images: ${Object.keys(OUTPUTS).length} images match ${LOCK_PATH}`);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// realpath on both sides: a symlinked path (macOS /tmp) must still run the check.
+if (
+  process.argv[1] &&
+  realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1])
+) {
   check();
 }
