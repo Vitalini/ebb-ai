@@ -1,0 +1,106 @@
+/* ebb ui design tokens. Every colour, size and duration in app.css comes
+   from here. Light is the default; dark follows the OS setting. Each band
+   fg/bg pair meets WCAG AA (4.5:1) at 12 px; ui-server.test.ts checks it. */
+
+:root {
+  color-scheme: light dark;
+
+  --bg: #f6f6f2;
+  --surface: #ffffff;
+  --surface-2: #eef0ea;
+  --line: #dde1da;
+  --fg: #1a201d;
+  --fg-muted: #5a655f;
+  --accent: #1d6b4d;
+  --accent-fg: #ffffff;
+  --accent-soft: #e1efe7;
+  --danger: #a8361f;
+  --danger-soft: #f8e4de;
+  --warn: #8a6200;
+  --warn-soft: #f6edd3;
+  --scrim: rgb(16 20 18 / 0.32);
+  --shadow: 0 1px 2px rgb(16 20 18 / 0.06), 0 8px 24px rgb(16 20 18 / 0.10);
+
+  --band-very-clean: #0e5a39;
+  --band-very-clean-bg: #d9f1e3;
+  --band-clean: #3b6912;
+  --band-clean-bg: #e8f2d4;
+  --band-average: #755600;
+  --band-average-bg: #f5ecc9;
+  --band-dirty: #954612;
+  --band-dirty-bg: #f8e0cd;
+  --band-very-dirty: #981c1c;
+  --band-very-dirty-bg: #f6d7d7;
+
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --fs-xs: 12px;  --lh-xs: 16px;
+  --fs-sm: 13px;  --lh-sm: 18px;
+  --fs-md: 15px;  --lh-md: 22px;
+  --fs-lg: 18px;  --lh-lg: 24px;
+  --fs-xl: 22px;  --lh-xl: 28px;
+  --fs-2xl: 28px; --lh-2xl: 34px;
+  --w-regular: 400;
+  --w-medium: 500;
+  --w-bold: 600;
+
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+
+  --r-1: 6px;
+  --r-2: 10px;
+  --r-pill: 999px;
+
+  --row-h: 56px;
+  --touch: 44px;
+  --drawer-w: 440px;
+  --header-h: 56px;
+  --tabbar-h: 60px;
+
+  --t-fast: 120ms;
+  --t-med: 200ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #101412;
+    --surface: #171c19;
+    --surface-2: #1f2521;
+    --line: #2d3531;
+    --fg: #e6ece8;
+    --fg-muted: #9aa8a0;
+    --accent: #5cc796;
+    --accent-fg: #0b1410;
+    --accent-soft: #163024;
+    --danger: #f08a74;
+    --danger-soft: #3a1d17;
+    --warn: #e3b341;
+    --warn-soft: #33290f;
+    --scrim: rgb(0 0 0 / 0.5);
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.4);
+
+    --band-very-clean: #86e2b0;
+    --band-very-clean-bg: #11301f;
+    --band-clean: #b8dd7e;
+    --band-clean-bg: #25311a;
+    --band-average: #e9c96a;
+    --band-average-bg: #342c13;
+    --band-dirty: #f1a46c;
+    --band-dirty-bg: #392415;
+    --band-very-dirty: #f38e8e;
+    --band-very-dirty-bg: #3c1b1b;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --t-fast: 0ms;
+    --t-med: 0ms;
+  }
+}

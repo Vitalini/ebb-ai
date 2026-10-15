@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { daemonStatus } from "../src/platform/index.js";
 import { FORECAST_CACHE_MS, handleApi, type ApiContext } from "../src/ui/api.js";
 import { TaskEvents } from "../src/ui/events.js";
-import { isLoopbackHost, startUiServer, type UiServer } from "../src/ui/server.js";
+import { isLoopbackHost, startUiServer, STATIC_FILES, UI_MODULES, type UiServer } from "../src/ui/server.js";
 
 const TOKEN = "test-token-0123456789";
 
@@ -263,16 +263,69 @@ describe("ebb ui assets", () => {
     expect(html).not.toMatch(/https?:\/\//);
   });
 
-  it("app.js loads nothing remote and never writes HTML from data", () => {
-    const js = read("app.js");
-    // The SVG namespace URI is an identifier, not a request.
-    expect(js.replaceAll("http://www.w3.org/2000/svg", "")).not.toMatch(/https?:\/\//);
-    expect(js).not.toMatch(/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function/);
+  it("no module loads anything remote or writes HTML from data", () => {
+    for (const file of UI_MODULES) {
+      const js = read(file);
+      // The SVG namespace URI is an identifier, not a request.
+      expect([file, js.replaceAll("http://www.w3.org/2000/svg", "")]).not.toEqual([file, expect.stringMatching(/https?:\/\//)]);
+      expect([file, js]).not.toEqual([
+        file,
+        expect.stringMatching(/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function|setAttribute\(["']style/),
+      ]);
+    }
   });
 
-  it("app.css loads no web font or remote resource", () => {
-    const css = read("app.css");
-    expect(css).not.toMatch(/@import|@font-face|url\(/);
+  it("every module import resolves to a served module", () => {
+    for (const file of UI_MODULES) {
+      for (const m of read(file).matchAll(/^import\s[^;]*?from\s+"([^"]+)";/gms)) {
+        expect([file, m[1]]).toEqual([file, expect.stringMatching(/^\.\/[a-z]+\.js$/)]);
+        expect(UI_MODULES).toContain(m[1]!.slice(2));
+      }
+    }
+  });
+
+  it("the static map and the ui directory list the same files", () => {
+    const onDisk = readdirSync(dir).sort();
+    const mapped = Object.values(STATIC_FILES).map((f) => f.file).sort();
+    expect(mapped).toEqual(onDisk);
+  });
+
+  it("stylesheets load no web font or remote resource", () => {
+    for (const file of ["tokens.css", "app.css"]) {
+      expect([file, read(file)]).not.toEqual([file, expect.stringMatching(/@import|@font-face|url\(/)]);
+    }
+  });
+
+  it("every carbon band label pair meets WCAG AA (4.5:1) in light and dark", () => {
+    const css = read("tokens.css");
+    const dark = css.slice(css.indexOf("@media (prefers-color-scheme: dark)"));
+    const light = css.slice(0, css.indexOf("@media (prefers-color-scheme: dark)"));
+    const lum = (hex: string) => {
+      const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+      const [r, g, b] = c.map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+      return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+    };
+    const ratio = (a: string, b: string) => {
+      const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+      return (hi! + 0.05) / (lo! + 0.05);
+    };
+    const token = (block: string, name: string) => {
+      const m = new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6});`).exec(block);
+      if (!m) throw new Error(`token --${name} missing`);
+      return m[1]!;
+    };
+    let pairs = 0;
+    for (const block of [light, dark]) {
+      for (const band of ["very-clean", "clean", "average", "dirty", "very-dirty"]) {
+        const r = ratio(token(block, `band-${band}`), token(block, `band-${band}-bg`));
+        expect([band, r >= 4.5]).toEqual([band, true]);
+        pairs++;
+      }
+      for (const [fg, bg] of [["fg", "bg"], ["fg-muted", "surface"], ["accent-fg", "accent"], ["danger", "surface"], ["warn", "surface"]]) {
+        expect([fg, bg, ratio(token(block, fg!), token(block, bg!)) >= 4.5]).toEqual([fg, bg, true]);
+      }
+    }
+    expect(pairs).toBe(10);
   });
 
   it("the real asset directory is served", async () => {
@@ -286,10 +339,19 @@ describe("ebb ui assets", () => {
       daemonStatus: () => "unknown",
     });
     try {
-      for (const [path, type] of [["/", "text/html"], ["/app.js", "text/javascript"], ["/app.css", "text/css"]] as const) {
+      for (const [path, asset] of Object.entries(STATIC_FILES)) {
         const res = await fetch(`${ui.url.replace(/\/$/, "")}${path}`);
-        expect(res.status).toBe(200);
-        expect(res.headers.get("content-type")).toContain(type);
+        expect([path, res.status]).toEqual([path, 200]);
+        expect(res.headers.get("content-type")).toBe(asset.type);
+        expect(res.headers.get("content-security-policy")).toContain("default-src 'self'");
+        expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+        expect(path === "/" ? "text/html" : path.endsWith(".css") ? "text/css" : "text/javascript").toBe(
+          asset.type.split(";")[0],
+        );
+      }
+      for (const path of ["/nope.js", "/ui/app.js", "/__proto__", "/constructor"]) {
+        const res = await fetch(`${ui.url.replace(/\/$/, "")}${path}`);
+        expect([path, res.status]).toEqual([path, 404]);
       }
     } finally {
       await ui.close();
