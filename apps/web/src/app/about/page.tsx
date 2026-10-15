@@ -103,7 +103,7 @@ export default function AboutPage() {
           <li>
             Your agent (Claude Code, Claude Desktop, Cursor, Windsurf,
             Continue, Cline, Zed, Goose, OpenClaw, or any MCP host) calls
-            one of Ebb AI&apos;s nine MCP tools — for example,{" "}
+            one of Ebb AI&apos;s ten MCP tools — for example,{" "}
             <code className="rounded bg-bg-elev px-1 font-mono text-sm">schedule_task</code>{" "}
             with a prompt, region, and deadline.
           </li>

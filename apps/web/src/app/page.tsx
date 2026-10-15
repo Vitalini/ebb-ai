@@ -45,7 +45,7 @@ const TILES: Array<{
     href: "/docs",
     Icon: BookOpen,
     title: "Docs & commands",
-    body: "All 8 /ebb-ai:* slash commands, 9 MCP tools, install matrix for every host. Architecture deep-dive.",
+    body: "All 8 /ebb-ai:* slash commands, 10 MCP tools, install matrix for every host. Architecture deep-dive.",
   },
 ];
 

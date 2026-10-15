@@ -210,7 +210,7 @@ type ToolFactory = (def: ToolDefinition) => unknown;
  * Wrap the SDK's tool factory so every `execute` receives the RESOLVED plugin
  * config instead of the raw one.
  *
- * One seam for all ten tools: the raw `config` OpenClaw passes is merged over
+ * One seam for all eleven tools: the raw `config` OpenClaw passes is merged over
  * this plugin's block in the captured gateway config, and the delivery-store
  * path is published to the delivery module. Doing it here means no tool body
  * has to remember to resolve config — and, critically, no tool body has any

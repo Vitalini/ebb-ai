@@ -51,6 +51,7 @@ The agent gets a `task_id`; the task lands at the cleanest hour.
 - `update_deadline` — re-score against a new deadline
 - `expedite_task` — dispatch immediately, bypass the cleanest window
 - `retry_task` — re-dispatch a failed task
+- `reply_task` — continue a completed task with a follow-up message
 
 ## Claude Code slash commands (8)
 
