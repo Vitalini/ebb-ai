@@ -1,7 +1,10 @@
 /**
- * JSON API handlers for `ebb ui`. Read-only over the ledger except for the
- * read marker (`POST /api/tasks/:id/read` and `/unread`). Nothing here
- * dispatches, cancels or reschedules a task.
+ * JSON API handlers for `ebb ui`. Reads go through the `TaskStore`. Writes
+ * (ui v2) go through `ctx.scheduler`, a `Scheduler` built with NO adapters:
+ * cancel, reschedule, run now and reply only write the ledger, with a
+ * compare-and-set, and the dispatcher (`ebb tick` or the OpenClaw loop)
+ * runs the task. Nothing here dispatches a provider call. A refused action
+ * returns 409 with the core's one-line rule, never a stack or a path.
  *
  * Task strings are untrusted (prompts and model output). They leave here as
  * JSON values; the page renders them with `textContent` only.
@@ -11,12 +14,17 @@ import {
   deadlineKindLabel,
   LAST_TICK_META_KEY,
   nextQuotaReset,
+  resolveQuotaDeadline,
+  resumeCommand,
+  taskActions,
   taskHistory,
   taskPrompt,
   taskResultText,
   type DeadlineKind,
   type GridFeed,
   type QuotaResetConfig,
+  type RescheduleTarget,
+  type Scheduler,
   type TaskRecord,
   type TaskStatus,
   type TaskStore,
@@ -24,12 +32,14 @@ import {
 
 import {
   rawPayload,
+  sortSeries,
   taskSummary,
   VALID_KINDS,
   VALID_STATUSES,
   withoutRaw,
 } from "../commands/queue.js";
 import type { DaemonStatus } from "../platform/index.js";
+import type { DispatcherControl } from "./dispatcher.js";
 
 export interface ApiContext {
   store: TaskStore;
@@ -40,6 +50,26 @@ export interface ApiContext {
   quota: () => QuotaResetConfig;
   daemonStatus: () => DaemonStatus;
   now?: () => Date;
+  /** Write path (ui v2): a Scheduler with no adapters. Absent = read-only. */
+  scheduler?: Scheduler;
+  /** Start dispatcher and dispatcher state (ui v2). */
+  dispatcher?: DispatcherControl;
+}
+
+/** Longest reply text, in characters. */
+export const REPLY_MAX_CHARS = 32_000;
+
+/**
+ * How each POST route treats its body (KTD9). `json`: the route reads a
+ * JSON object (Content-Type application/json required). `none`: no body.
+ */
+export function postBodyKind(pathname: string): "json" | "none" | undefined {
+  const route = pathname.split("/").filter(Boolean).slice(1);
+  if (route.length === 2 && route[0] === "dispatcher" && route[1] === "start") return "none";
+  if (route.length !== 3 || route[0] !== "tasks") return undefined;
+  if (route[2] === "cancel" || route[2] === "reschedule" || route[2] === "reply") return "json";
+  if (route[2] === "read" || route[2] === "unread" || route[2] === "run-now") return "none";
+  return undefined;
 }
 
 export interface ApiResponse {
@@ -72,8 +102,14 @@ function listSummary(r: TaskRecord<unknown>): Record<string, unknown> {
     ...taskSummary(r),
     parent_task_id: r.parentTaskId ?? null,
     estimated_carbon_g: r.estimatedCarbonGCo2 ?? null,
+    // What the task cost (receipt) or is expected to cost (schedule time).
+    carbon_g: r.receipt?.actualCarbonGCo2 ?? r.estimatedCarbonGCo2 ?? null,
+    intensity_g_per_kwh: r.receipt?.intensityGCo2PerKwh ?? null,
+    actions: taskActions(r),
   };
 }
+
+const MAX_LIST_LIMIT = 1000;
 
 function listTasks(ctx: ApiContext, params: URLSearchParams): ApiResponse {
   const statuses = (params.get("status") ?? "")
@@ -88,14 +124,32 @@ function listTasks(ctx: ApiContext, params: URLSearchParams): ApiResponse {
     return error(400, `unknown kind ${kind}`);
   }
   const unread = params.get("unread") === "1" || params.get("unread") === "true";
+  const series = params.get("series") ?? undefined;
+  const rawLimit = params.get("limit");
+  const limit = rawLimit === null ? undefined : Number(rawLimit);
+  if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIST_LIMIT)) {
+    return error(400, `limit must be an integer from 1 to ${MAX_LIST_LIMIT}`);
+  }
   const base = {
     ...(kind ? { deadlineKind: kind as DeadlineKind } : {}),
     ...(unread ? { unread: true } : {}),
+    ...(series ? { seriesId: series } : {}),
   };
-  const rows =
+  let rows =
     statuses.length === 0
       ? ctx.store.list(base)
       : statuses.flatMap((status) => ctx.store.list({ ...base, status: status as TaskStatus }));
+  if (series) rows = sortSeries(rows);
+  // `limit` keeps the newest rows by enqueue time; the order stays as listed.
+  if (limit !== undefined && rows.length > limit) {
+    const keep = new Set(
+      [...rows]
+        .sort((a, b) => b.enqueuedAt.localeCompare(a.enqueuedAt))
+        .slice(0, limit)
+        .map((r) => r.taskId),
+    );
+    rows = rows.filter((r) => keep.has(r.taskId));
+  }
   return {
     status: 200,
     body: {
@@ -116,6 +170,14 @@ function taskDetail(ctx: ApiContext, taskId: string): ApiResponse {
       ...listSummary(r),
       enqueued_at: r.enqueuedAt,
       origin_cwd: r.originCwd ?? null,
+      origin_session_id: r.originSessionId ?? null,
+      resume_command: resumeCommand(r) ?? null,
+      parent: parentSummary(ctx, r),
+      children: ctx.store
+        .list()
+        .filter((c) => c.parentTaskId === r.taskId)
+        .map(listSummary),
+      series: r.seriesId ? seriesInfo(ctx, r.seriesId) : null,
       deadline_label: deadlineKindLabel(r, quota),
       quota_margin_h: schedule?.marginH ?? null,
       prompt: taskPrompt(r) ?? null,
@@ -128,6 +190,196 @@ function taskDetail(ctx: ApiContext, taskId: string): ApiResponse {
       raw: rawPayload(r) ?? null,
     },
   };
+}
+
+function parentSummary(ctx: ApiContext, r: TaskRecord<unknown>): Record<string, unknown> | null {
+  if (!r.parentTaskId) return null;
+  const p = ctx.store.get(r.parentTaskId);
+  return p ? listSummary(p) : { task_id: r.parentTaskId, missing: true };
+}
+
+const DAY_MS = 86_400_000;
+
+/**
+ * Up to `count` deadlines after `fromMs` for a series rule: whole periods
+ * for daily/weekly; the label's next resets minus margin for quota_reset
+ * (+7 days without a config). Empty for an ended series.
+ */
+function projectDeadlines(
+  rule: string,
+  fromMs: number,
+  label: string | undefined,
+  quota: QuotaResetConfig,
+  count: number,
+): string[] {
+  const out: string[] = [];
+  const schedule = rule === "quota_reset" && label ? quota[label] : undefined;
+  let t = fromMs;
+  for (let i = 0; i < count; i++) {
+    if (rule === "daily") t += DAY_MS;
+    else if (rule === "weekly") t += 7 * DAY_MS;
+    else if (rule === "quota_reset") {
+      t = schedule ? resolveQuotaDeadline(schedule, new Date(t + 60_000)).deadline.getTime() : t + 7 * DAY_MS;
+    } else break;
+    out.push(new Date(t).toISOString());
+  }
+  return out;
+}
+
+function seriesInfo(ctx: ApiContext, seriesId: string): Record<string, unknown> | null {
+  const rows = sortSeries(ctx.store.list({ seriesId }));
+  if (rows.length === 0) return null;
+  const last = rows[rows.length - 1]!;
+  const rule = last.repeat ?? "none";
+  const label = [...rows].reverse().find((r) => r.quotaProvider)?.quotaProvider;
+  const lastDeadline = last.deadline ? Date.parse(last.deadline) : Number.NaN;
+  return {
+    series_id: seriesId,
+    repeat: rule,
+    ended: rule === "none",
+    occurrences: rows.length,
+    next_deadlines: Number.isFinite(lastDeadline)
+      ? projectDeadlines(rule, lastDeadline, label, ctx.quota(), 8)
+      : [],
+  };
+}
+
+function seriesDetail(ctx: ApiContext, seriesId: string): ApiResponse {
+  const info = seriesInfo(ctx, seriesId);
+  if (!info) return error(404, "series not found");
+  return {
+    status: 200,
+    body: {
+      ...info,
+      occurrences: sortSeries(ctx.store.list({ seriesId })).map(listSummary),
+    },
+  };
+}
+
+// ── Write actions (ui v2) ─────────────────────────────────────────────────
+
+type Body = Record<string, unknown>;
+
+function onlyKeys(body: Body, allowed: readonly string[]): string | undefined {
+  const extra = Object.keys(body).filter((k) => !allowed.includes(k));
+  return extra.length > 0 ? `unknown field ${extra[0]}` : undefined;
+}
+
+/** An ISO instant from the body, or the 400 message when it is not one. */
+function instant(value: unknown, name: string): Date | string {
+  if (typeof value !== "string" || value.length === 0 || value.length > 64) {
+    return `${name} must be an ISO-8601 string`;
+  }
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? `${name} is not an ISO-8601 instant` : d;
+}
+
+/**
+ * Run one write through the action scheduler: 404 for an unknown task,
+ * 409 with the core's rule when the task's state refuses it.
+ */
+async function act(
+  ctx: ApiContext,
+  taskId: string,
+  run: (s: Scheduler) => Promise<TaskRecord<unknown>> | TaskRecord<unknown>,
+  status = 200,
+): Promise<ApiResponse> {
+  if (!ctx.scheduler) return error(405, "this server is read-only");
+  if (!ctx.store.get(taskId)) return error(404, "task not found");
+  let out: TaskRecord<unknown>;
+  try {
+    out = await run(ctx.scheduler);
+  } catch (err) {
+    return error(409, oneLine(err));
+  }
+  const fresh = ctx.store.get(out.taskId) ?? out;
+  const changed = out.taskId === taskId ? [taskId] : [taskId, out.taskId];
+  return { status, body: listSummary(fresh), changedIds: changed };
+}
+
+/** The core's message on one line, without anything after a newline. */
+function oneLine(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  return msg.split("\n")[0]!.slice(0, 300);
+}
+
+function cancelAction(ctx: ApiContext, taskId: string, body: Body): Promise<ApiResponse> | ApiResponse {
+  const bad = onlyKeys(body, ["series"]);
+  if (bad) return error(400, bad);
+  if (body.series !== undefined && typeof body.series !== "boolean") {
+    return error(400, "series must be a boolean");
+  }
+  return act(ctx, taskId, (s) => {
+    // The core cancel is idempotent; the API reports a finished task as a
+    // refused action (409), so a second click says what happened.
+    const current = ctx.store.get(taskId)!;
+    if (!taskActions(current).cancel) {
+      throw new Error(`cancel: task ${taskId} is ${current.status}; only pending tasks can be cancelled`);
+    }
+    return s.cancelTask(taskId, { series: body.series === true });
+  });
+}
+
+function rescheduleAction(ctx: ApiContext, taskId: string, body: Body): Promise<ApiResponse> | ApiResponse {
+  const bad = onlyKeys(body, ["deadline", "at", "day_start", "day_end"]);
+  if (bad) return error(400, bad);
+  const has = (k: string) => body[k] !== undefined;
+  const shapes = [has("deadline"), has("at"), has("day_start") || has("day_end")].filter(Boolean);
+  if (shapes.length !== 1) {
+    return error(400, "pass exactly one of {deadline}, {at} or {day_start, day_end}");
+  }
+  const now = (ctx.now?.() ?? new Date()).getTime();
+  let target: RescheduleTarget;
+  if (has("deadline") || has("at")) {
+    const key = has("deadline") ? "deadline" : "at";
+    const d = instant(body[key], key);
+    if (typeof d === "string") return error(400, d);
+    if (d.getTime() < now - 5_000) return error(400, `${key} is in the past`);
+    target = key === "deadline" ? { deadline: d } : { at: d };
+  } else {
+    const start = instant(body.day_start, "day_start");
+    if (typeof start === "string") return error(400, start);
+    const end = instant(body.day_end, "day_end");
+    if (typeof end === "string") return error(400, end);
+    const span = end.getTime() - start.getTime();
+    if (span < 3_600_000 || span > 25 * 3_600_000) return error(400, "a day must span 1 to 25 hours");
+    if (end.getTime() < now) return error(400, "day_end is in the past");
+    target = { dayStart: start, dayEnd: end };
+  }
+  return act(ctx, taskId, (s) => s.rescheduleTask(taskId, target));
+}
+
+function replyAction(ctx: ApiContext, taskId: string, body: Body): Promise<ApiResponse> | ApiResponse {
+  const bad = onlyKeys(body, ["text", "deadline"]);
+  if (bad) return error(400, bad);
+  if (typeof body.text !== "string" || body.text.trim().length === 0 || body.text.length > REPLY_MAX_CHARS) {
+    return error(400, `text must be 1 to ${REPLY_MAX_CHARS} characters`);
+  }
+  let deadline: Date | undefined;
+  if (body.deadline !== undefined) {
+    const d = instant(body.deadline, "deadline");
+    if (typeof d === "string") return error(400, d);
+    deadline = d;
+  }
+  const text = body.text;
+  return act(
+    ctx,
+    taskId,
+    (s) => s.replyToTask(taskId, text, deadline ? { deadline } : {}),
+    201,
+  );
+}
+
+function startDispatcher(ctx: ApiContext): ApiResponse {
+  if (!ctx.dispatcher) return error(404, "not found");
+  try {
+    const res = ctx.dispatcher.start();
+    if (!res.ok) return { status: 409, body: { error: "a dispatcher started from this page is running", ...res.meta } };
+    return { status: 201, body: res.meta };
+  } catch {
+    // The spawn error can name paths; the page needs only the fact.
+    return error(500, "could not start the dispatcher");
+  }
 }
 
 function setRead(ctx: ApiContext, taskId: string, read: boolean): ApiResponse {
@@ -183,6 +435,7 @@ function status(ctx: ApiContext): ApiResponse {
       db_path: ctx.dbPath,
       default_region: ctx.defaultRegion,
       last_tick_at: ctx.store.getMeta(LAST_TICK_META_KEY) ?? null,
+      dispatcher: ctx.dispatcher?.state() ?? null,
       quota: Object.entries(quota).map(([label, s]) => ({
         label,
         next_reset: nextQuotaReset(s, now).toISOString(),
@@ -201,6 +454,8 @@ export async function handleApi(
   method: string,
   pathname: string,
   params: URLSearchParams,
+  /** Parsed JSON object of a body route (the server checked type and size). */
+  body: Body = {},
 ): Promise<ApiResponse> {
   const parts = pathname.split("/").filter(Boolean); // ["api", ...]
   const route = parts.slice(1);
@@ -208,6 +463,19 @@ export async function handleApi(
   if (route.length === 1 && route[0] === "tasks") return get ? listTasks(ctx, params) : error(405, "method not allowed");
   if (route.length === 1 && route[0] === "forecast") return get ? forecast(ctx, params) : error(405, "method not allowed");
   if (route.length === 1 && route[0] === "status") return get ? status(ctx) : error(405, "method not allowed");
+  if (route.length === 2 && route[0] === "dispatcher" && route[1] === "start") {
+    return method === "POST" ? startDispatcher(ctx) : error(405, "method not allowed");
+  }
+  if (route.length === 2 && route[0] === "series") {
+    if (!get) return error(405, "method not allowed");
+    let seriesId: string;
+    try {
+      seriesId = decodeURIComponent(route[1]!);
+    } catch {
+      return error(400, "bad series id");
+    }
+    return seriesDetail(ctx, seriesId);
+  }
   if (route[0] === "tasks" && route.length >= 2) {
     let taskId: string;
     try {
@@ -218,6 +486,19 @@ export async function handleApi(
     if (route.length === 2) return get ? taskDetail(ctx, taskId) : error(405, "method not allowed");
     if (route.length === 3 && (route[2] === "read" || route[2] === "unread")) {
       return method === "POST" ? setRead(ctx, taskId, route[2] === "read") : error(405, "method not allowed");
+    }
+    if (route.length === 3) {
+      const post = method === "POST";
+      switch (route[2]) {
+        case "cancel":
+          return post ? cancelAction(ctx, taskId, body) : error(405, "method not allowed");
+        case "reschedule":
+          return post ? rescheduleAction(ctx, taskId, body) : error(405, "method not allowed");
+        case "reply":
+          return post ? replyAction(ctx, taskId, body) : error(405, "method not allowed");
+        case "run-now":
+          return post ? act(ctx, taskId, (s) => s.runNow(taskId)) : error(405, "method not allowed");
+      }
     }
   }
   return error(404, "not found");

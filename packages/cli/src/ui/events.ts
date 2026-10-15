@@ -76,7 +76,10 @@ export class TaskEvents {
   private snapshot(): Map<string, string> {
     const out = new Map<string, string>();
     for (const r of this.store.list()) {
-      out.set(r.taskId, `${r.status}|${r.readAt ?? ""}|${r.scheduledFor ?? ""}|${r.deadline ?? ""}`);
+      out.set(
+        r.taskId,
+        `${r.status}|${r.readAt ?? ""}|${r.scheduledFor ?? ""}|${r.deadline ?? ""}|${r.repeat ?? ""}`,
+      );
     }
     return out;
   }

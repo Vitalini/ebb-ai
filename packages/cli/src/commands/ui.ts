@@ -1,7 +1,10 @@
 /**
  * `ebb ui` — serve the local task page (timeline, inbox, task detail) on
- * 127.0.0.1 with a per-run bearer token. Read-only: the page never
- * dispatches or cancels; only `ebb tick` dispatches.
+ * 127.0.0.1 with a per-run bearer token. The page can cancel, reschedule,
+ * run now and reply (ui v2): each action writes the ledger through a
+ * Scheduler with no adapters. It never dispatches; `ebb tick` (or the
+ * OpenClaw loop) does, and the page can start `ebb tick --daemon` when no
+ * dispatcher is running.
  */
 
 import { spawn } from "node:child_process";
@@ -17,6 +20,8 @@ import { readEnvCredentials } from "../env.js";
 import { daemonStatus } from "../platform/index.js";
 import { startUiServer, type UiServer } from "../ui/server.js";
 import { loadEnvFileIntoProcess } from "./env-file.js";
+import { resolveLauncher } from "./install.js";
+import { actionScheduler } from "./queue.js";
 import { defaultDbPath } from "./tick.js";
 
 export interface UiCommandOptions {
@@ -53,15 +58,28 @@ export async function startUi(opts: UiCommandOptions = {}): Promise<{ server: Ui
   loadEnvFileIntoProcess();
   const env = readEnvCredentials();
   const token = newToken();
+  const dbPath = opts.db ?? defaultDbPath();
+  const feed = buildDefaultGridFeed(env.grid);
+  const defaultRegion = resolveRegion(undefined, opts.region).region;
+  const scheduler = actionScheduler({ dbPath, feed, region: defaultRegion });
   const server = await startUiServer({
     token,
     port: opts.port ?? 0,
-    dbPath: opts.db ?? defaultDbPath(),
-    feed: buildDefaultGridFeed(env.grid),
-    defaultRegion: resolveRegion(undefined, opts.region).region,
+    dbPath,
+    feed,
+    defaultRegion,
     quota: () => loadQuotaResetConfig(),
     daemonStatus: () => daemonStatus(),
+    // Writes only: this scheduler has no adapters and never dispatches.
+    scheduler,
+    // Start dispatcher spawns this same binary: `<launcher> tick --daemon`.
+    launcher: resolveLauncher(undefined, []),
   });
+  const close = server.close.bind(server);
+  server.close = async () => {
+    await close();
+    scheduler.shutdown();
+  };
   return { server, link: `${server.url}#token=${token}` };
 }
 
