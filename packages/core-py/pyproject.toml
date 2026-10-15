@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ebb-ai"
-version = "0.16.1"
+version = "0.17.0"
 description = "Run non-urgent LLM tasks at the cleanest grid hour before a deadline, via Batch APIs when allowed."
 readme = "README.md"
 license = { text = "Apache-2.0" }

@@ -120,7 +120,7 @@ Windsurf, OpenClaw, OpenAI Codex CLI, Pi). The agent asks
 `recommend_window`, sees the plan, then commits via `schedule_task`
 — or doesn't.
 
-> **Status:** v0.16.1 (this release) · 2026-10-15 · published on npm and PyPI
+> **Status:** v0.17.0 (this release) · 2026-10-15 · published on npm and PyPI
 > · `@ebb-ai/{core,mcp,cli}` on npm under the
 > `@ebb-ai` org; `ebb-ai` on PyPI; `@vitalini/ebb` OpenClaw
 > plugin on ClawHub (`openclaw plugins install clawhub:@vitalini/ebb`),
@@ -155,11 +155,11 @@ Windsurf, OpenClaw, OpenAI Codex CLI, Pi). The agent asks
 > always-on `ebb tick` CLI with macOS launchd + Linux systemd +
 > pmset/rtcwake wake events, full control surface (`cancel_task` /
 > `expedite_task` / `update_deadline` / `retry_task` / `cancel_all`),
-> receipt redaction, file output, retry-with-backoff. **1,115 tests
-> passing** (650 TS + 465 Python, measured on this branch 2026-09-30)
+> receipt redaction, file output, retry-with-backoff. **1,355 tests
+> passing** (874 TS + 481 Python, measured on this branch 2026-10-15)
 > across 5 packages and 2 languages. See [QUICKSTART.md](./QUICKSTART.md).
 
-[![Tests](https://img.shields.io/badge/tests-1115%20passing-22c55e)](#tests)
+[![Tests](https://img.shields.io/badge/tests-1355%20passing-22c55e)](#tests)
 [![MCP tools](https://img.shields.io/badge/MCP-10%20tools-5eead4)](https://www.ebb-ai.com/docs)
 [![Hosts](https://img.shields.io/badge/MCP%20hosts-13-5eead4)](https://www.ebb-ai.com/docs#install)
 [![Website](https://img.shields.io/badge/website-ebb--ai.com-5eead4)](https://www.ebb-ai.com)
