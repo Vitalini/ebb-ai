@@ -12,7 +12,7 @@ export type TaskChangeListener = (ids: string[]) => void;
 
 export class TaskEvents {
   private readonly listeners = new Set<TaskChangeListener>();
-  private fingerprints = new Map<string, string>();
+  private fingerprints: Map<string, string>;
   private version: number;
   private timer: NodeJS.Timeout | undefined;
 
