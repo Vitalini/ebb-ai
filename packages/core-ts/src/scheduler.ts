@@ -36,7 +36,8 @@ import {
   type RoutingDecision,
   type RoutingPreview,
 } from "./routing.js";
-import { deriveTitle, displayTitle, taskActions, taskHistory } from "./history.js";
+import { deriveTitle, displayTitle, isRepeating, taskActions, taskHistory } from "./history.js";
+import { resolveQuotaDeadline, type QuotaResetConfig } from "./quota.js";
 import { redactBodyJson, redactPrompt } from "./redact.js";
 import { selectWindow } from "./select-window.js";
 import {
@@ -181,6 +182,14 @@ export interface SchedulerOptions {
    * `carbonBudget` is also set.
    */
   onCarbonAlert?: (alert: CarbonAlert) => void | Promise<void>;
+  /**
+   * Quota reset schedules (ui v2), read when a `repeat: "quota_reset"`
+   * series rolls over: the successor's deadline is the label's next reset
+   * minus the margin. Without it the successor falls back to +7 days and
+   * the quota sweep corrects the drift. A getter, so a long-lived scheduler
+   * sees config edits.
+   */
+  quotaConfig?: () => QuotaResetConfig;
 }
 
 export class Scheduler {
@@ -203,6 +212,7 @@ export class Scheduler {
   private readonly onCarbonAlert:
     | ((alert: CarbonAlert) => void | Promise<void>)
     | undefined;
+  private readonly quotaConfig: (() => QuotaResetConfig) | undefined;
 
   constructor(opts: SchedulerOptions = {}) {
     this.feed = opts.feed ?? mockGridFeed();
@@ -216,6 +226,7 @@ export class Scheduler {
     this.signingConfig = opts.signing ?? {};
     this.carbonBudget = opts.carbonBudget;
     this.onCarbonAlert = opts.onCarbonAlert;
+    this.quotaConfig = opts.quotaConfig;
   }
 
   /**
@@ -899,6 +910,82 @@ export class Scheduler {
     return true;
   }
 
+  /**
+   * Series rollover (ui v2, KTD6). Called when an occurrence with a repeat
+   * rule finishes (completed, failed, or cancelled as a skip), BEFORE its
+   * terminal write and before its body is redacted. Inserts the successor
+   * `<series_id>~<n+1>` with `insertIfAbsent`, so two dispatchers create one
+   * successor and a crash between the two writes leaves the series alive.
+   * The successor is `scheduled` and unplanned: `notBefore` = the previous
+   * deadline, `scheduledFor` = its deadline minus one hour, no estimate;
+   * `replanSweep` gives it a window once the forecast reaches it. No
+   * forecast is fetched here. A stop written by another process (stored
+   * `repeat = none`) wins. Failures are logged, never thrown.
+   */
+  private rollSeries(record: TaskRecord<unknown>): void {
+    if (!isRepeating(record) || !record.seriesId || !record.bodyJson) return;
+    try {
+      const stored = this.store?.get(record.taskId);
+      const rule = stored ? stored.repeat : record.repeat;
+      if (!rule || rule === "none") return;
+      const now = Date.now();
+      const prevMs = record.deadline ? Date.parse(record.deadline) : now;
+      let deadlineMs: number;
+      let deadlineKind = record.deadlineKind;
+      let quotaProvider = record.quotaProvider;
+      if (rule === "quota_reset") {
+        // Kind and label follow the series rule, so one moved (absolute)
+        // occurrence does not detach the series from the reset.
+        deadlineKind = "quota_reset";
+        quotaProvider = this.seriesQuotaLabel(record) ?? quotaProvider;
+        const schedule = quotaProvider ? this.quotaConfig?.()[quotaProvider] : undefined;
+        deadlineMs = schedule
+          ? resolveQuotaDeadline(schedule, new Date(Math.max(prevMs, now + HOUR_MS))).deadline.getTime()
+          : nextPeriod(prevMs, 7 * DAY_MS, now);
+      } else {
+        deadlineMs = nextPeriod(prevMs, rule === "daily" ? DAY_MS : 7 * DAY_MS, now);
+      }
+      const successor: TaskRecord<unknown> = {
+        taskId: `${record.seriesId}~${occurrenceNumber(record) + 1}`,
+        status: "scheduled",
+        enqueuedAt: new Date(now).toISOString(),
+        region: record.region,
+        carbonBudgetG: record.carbonBudgetG,
+        bodyJson: record.bodyJson,
+        deadline: new Date(deadlineMs).toISOString(),
+        notBefore: new Date(prevMs).toISOString(),
+        scheduledFor: new Date(Math.max(deadlineMs - HOUR_MS, prevMs)).toISOString(),
+        title: record.title,
+        originHost: record.originHost,
+        originCwd: record.originCwd,
+        originSessionId: record.originSessionId,
+        seriesId: record.seriesId,
+        repeat: rule,
+        deadlineKind,
+        quotaProvider: deadlineKind === "quota_reset" ? quotaProvider : undefined,
+      };
+      if (this.store) {
+        if (this.store.insertIfAbsent(successor)) this.cacheRow(successor);
+      } else if (!this.tasks.has(successor.taskId)) {
+        this.tasks.set(successor.taskId, successor);
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[ebb-ai/scheduler] series rollover after ${record.taskId} failed: ${describeErr(err)}`,
+      );
+    }
+  }
+
+  /** The newest quota label stored on any occurrence of the record's series. */
+  private seriesQuotaLabel(record: TaskRecord<unknown>): string | undefined {
+    const rows = this.store?.list({ seriesId: record.seriesId! }) ?? [];
+    for (let i = rows.length - 1; i >= 0; i--) {
+      if (rows[i]!.quotaProvider) return rows[i]!.quotaProvider;
+    }
+    return undefined;
+  }
+
   /** Snapshot the current state of one task. */
   getTask<T>(taskId: string): TaskRecord<T> | undefined {
     return this.resolveTask(taskId) as TaskRecord<T> | undefined;
@@ -948,6 +1035,8 @@ export class Scheduler {
         bodyJson: redactBodyJson(record.bodyJson),
         repeat: opts.series ? "none" : record.repeat,
       };
+      // Cancel as a skip keeps the series going; a stop ends it.
+      if (!opts.series) this.rollSeries(record);
       // A miss means another process moved the row (claimed or finished it)
       // between our read and this write: re-read and try once more.
       if (!this.writeIf(record, next, [record.status])) continue;
@@ -1019,7 +1108,8 @@ export class Scheduler {
     }
     const absolute = {
       deadlineKind: "absolute" as const,
-      quotaProvider: undefined,
+      // A quota_reset series keeps its label for the next occurrence.
+      quotaProvider: record.repeat === "quota_reset" ? record.quotaProvider : undefined,
       intensitySource: undefined,
     };
     if (shape.kind === "at") {
@@ -1893,6 +1983,7 @@ export class Scheduler {
         const msg =
           `tick: no configured/ready adapter for any routing candidate ` +
           `(${routing.considered.map((c) => candidateId(c)).join(", ")})`;
+        this.rollSeries(record);
         this.failTask(record.taskId, new Error(msg));
         return { taskId: record.taskId, status: "failed", error: msg };
       }
@@ -1911,6 +2002,7 @@ export class Scheduler {
     }
     if (!adapter) {
       const msg = `tick: no adapter configured for provider ${spec.provider}`;
+      this.rollSeries(record);
       this.failTask(record.taskId, new Error(msg));
       return { taskId: record.taskId, status: "failed", error: msg };
     }
@@ -1953,6 +2045,7 @@ export class Scheduler {
       }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      this.rollSeries(record);
       this.writeIf(
         record,
         { ...record, status: "failed", completedAt: new Date().toISOString(), error: msg },
@@ -2085,6 +2178,7 @@ export class Scheduler {
       intensitySource: source,
       bodyJson: redactBodyJson(record.bodyJson),
     };
+    this.rollSeries(record);
     try {
       if (!this.writeIf(record, completed, ["running"])) {
         // eslint-disable-next-line no-console
@@ -2180,6 +2274,7 @@ export class Scheduler {
         record.error = undefined;
         return this.dispatchProviderCall(record, adapters);
       }
+      this.rollSeries(record);
       this.writeIf(
         record,
         { ...record, status: "failed", completedAt: new Date().toISOString(), error: msg },
@@ -2250,6 +2345,7 @@ export class Scheduler {
     }
     if (poll.status === "failed" || poll.status === "expired") {
       const msg = poll.error ?? `batch ${poll.status}`;
+      this.rollSeries(record);
       this.writeIf(
         record,
         { ...record, status: "failed", completedAt: new Date().toISOString(), error: msg },
@@ -2261,6 +2357,7 @@ export class Scheduler {
     const first = poll.results?.[0];
     if (!first) {
       const msg = "batch completed with no results";
+      this.rollSeries(record);
       this.writeIf(
         record,
         { ...record, status: "failed", completedAt: new Date().toISOString(), error: msg },
@@ -2352,6 +2449,7 @@ export class Scheduler {
       intensitySource: "scored",
       bodyJson: redactBodyJson(record.bodyJson),
     };
+    this.rollSeries(record);
     try {
       if (!this.writeIf(record, completed, ["running"])) {
         return {
@@ -2501,6 +2599,26 @@ function identityFields(
 
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
+
+/**
+ * The next deadline of a period series: `prevMs` plus whole periods until
+ * it is at least one hour ahead of `now`.
+ */
+function nextPeriod(prevMs: number, periodMs: number, now: number): number {
+  let next = prevMs + periodMs;
+  if (next < now + HOUR_MS) {
+    next += Math.ceil((now + HOUR_MS - next) / periodMs) * periodMs;
+  }
+  return next;
+}
+
+/** Occurrence number of a series row: the series id itself is 1, `<id>~n` is n. */
+function occurrenceNumber(record: TaskRecord<unknown>): number {
+  const prefix = `${record.seriesId}~`;
+  if (!record.taskId.startsWith(prefix)) return 1;
+  const n = Number.parseInt(record.taskId.slice(prefix.length), 10);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
 
 /** One-line refusal in the shared style: `<action>: task <id> is <status>; <allowed>`. */
 function refusal(action: string, record: TaskRecord<unknown>, allowed: string): string {

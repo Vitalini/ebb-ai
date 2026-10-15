@@ -334,6 +334,9 @@ function getQueueRuntime(config: PluginConfig): QueueRuntime {
     store,
     defaultRegion: resolveRegion(undefined, config.defaultRegion).region,
     eager: false,
+    // A quota_reset series rolls to the label's next reset (ui v2). A
+    // getter: the long-lived gateway sees config edits.
+    quotaConfig: () => loadQuotaResetConfig(),
     ...(carbonBudget
       ? {
           carbonBudget,

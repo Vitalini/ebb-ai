@@ -444,7 +444,10 @@ export class TaskStore {
            repeat             = @repeat,
            deadline_kind      = COALESCE(@deadline_kind, deadline_kind),
            quota_provider     = CASE
-             WHEN @deadline_kind = 'absolute' THEN NULL
+             -- A quota_reset series keeps its label on a moved (absolute)
+             -- occurrence: rollover reads it back for the next one.
+             WHEN @deadline_kind = 'absolute' AND COALESCE(@repeat, 'none') <> 'quota_reset'
+               THEN NULL
              ELSE COALESCE(@quota_provider, quota_provider)
            END
          WHERE task_id = @task_id AND status IN (${placeholders})`,
