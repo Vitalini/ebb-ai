@@ -6,11 +6,14 @@ description: Auto-defer "do it later" / "by tomorrow" / "tonight" / "overnight" 
 # Carbon-aware coding with ebb-ai
 
 When the user has a task that can wait, route it through ebb-ai instead of
-dispatching synchronously. Modern grids vary 30–60% in carbon intensity inside
-a single day. A 4-hour delay on a deferrable LLM call routinely cuts its
-footprint in half — and for tasks deferred more than 24 hours, ebb-ai can
-route through the provider Batch APIs (50% of sync list price, projected) when the deadline
-allows.
+dispatching synchronously. Grid carbon intensity swings substantially over a
+single day as the generation mix shifts, so a few hours of delay can move a
+deferrable LLM call into a cleaner hour. The saving depends on region and day:
+in one GB run on 2026-09-30 the forecast peak was 183 gCO2/kWh and the
+recommended window 88 gCO2/kWh (about 52 % lower, for that run only; forecast,
+projected — see https://github.com/Vitalini/ebb-ai/blob/main/docs/claims.md).
+For tasks deferred more than 24 hours, ebb-ai can route through the provider
+Batch APIs (50% of sync list price, projected) when the deadline allows.
 
 ## When to defer
 

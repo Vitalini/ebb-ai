@@ -256,8 +256,9 @@ claude plugin marketplace add Vitalini/ebb-ai
 claude plugin install ebb-ai
 ```
 
-That ships three slash commands (`/ebb-ai:defer`, `/ebb-ai:check`,
-`/ebb-ai:grid`), a `carbon-aware-coding` skill, and auto-wires the
+That ships eight slash commands (`/ebb-ai:defer`, `/ebb-ai:plan`,
+`/ebb-ai:check`, `/ebb-ai:cancel`, `/ebb-ai:expedite`, `/ebb-ai:reschedule`,
+`/ebb-ai:retry`, `/ebb-ai:grid`), an `ebb-ai` skill, and auto-wires the
 `@ebb-ai/mcp` MCP server. Full plugin reference: **[`PLUGIN.md`](./PLUGIN.md)**.
 
 ```

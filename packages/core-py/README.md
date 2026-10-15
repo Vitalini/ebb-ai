@@ -388,16 +388,9 @@ The test suite covers:
 
 ---
 
-## Roadmap
+## Changes
 
-- **v0.2 (this release)** — scheduler, grid feeds, SQLite persistence,
-  Anthropic + OpenAI adapters with Batch API.
-- **v0.3** — per-model energy coefficients; WattTime marginal-emissions
-  feed (shipped: `watttime_feed`, disclosed via `signal_type="marginal"`);
-  multi-writer DB with WAL mode; richer receipt fields (model, provider,
-  token counts) propagated by the scheduler itself.
-- **v0.4** — Gemini adapter; local-Ollama route; MCP spec PRs for
-  `priority` / `deadline` / `carbon_budget` fields.
+Release notes: https://github.com/Vitalini/ebb-ai/blob/main/CHANGELOG.md
 
 ---
 
