@@ -224,7 +224,41 @@ def _redact_body_json(body_json: str | None) -> str | None:
         value = spec.get(key)
         if isinstance(value, str):
             spec[key] = _redact_prompt(value, patterns)
+    # Prior conversation turns (v0.17, written by TS hosts) carry the same
+    # kind of secrets as the prompt, so they follow the same rule.
+    messages = spec.get("messages")
+    if isinstance(messages, list):
+        spec["messages"] = [
+            {**m, "content": _redact_prompt(m["content"], patterns)}
+            if isinstance(m, dict) and isinstance(m.get("content"), str)
+            else m
+            for m in messages
+        ]
     return json.dumps(spec)
+
+
+#: Maximum stored task title length, in characters (mirrors TS TITLE_MAX_CHARS).
+_TITLE_MAX_CHARS: Final[int] = 80
+# C0 controls (newline included), DEL and C1 controls.
+_CONTROL_CHARS: Final[re.Pattern[str]] = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+
+
+def _derive_title(prompt: str, patterns: list[str] | None) -> str | None:
+    """Derive a task title from a prompt (v0.17). Mirrors the TS ``deriveTitle``.
+
+    First non-empty line of the redacted prompt, control characters removed,
+    whitespace collapsed, cut to 80 characters with an ellipsis. The title is
+    never rewritten at terminal transitions, so it is redacted when stored.
+    """
+    redacted = _redact_prompt(prompt, patterns)
+    for raw_line in re.split(r"\r?\n", redacted):
+        line = _CONTROL_CHARS.sub("", raw_line.replace("\t", " "))
+        line = re.sub(r"\s+", " ", line).strip()
+        if line:
+            if len(line) <= _TITLE_MAX_CHARS:
+                return line
+            return line[: _TITLE_MAX_CHARS - 1].rstrip() + "\u2026"
+    return None
 
 
 #: Backoff waits (seconds) between retryable dispatch attempts: 4 attempts
@@ -552,7 +586,14 @@ CREATE TABLE IF NOT EXISTS tasks (
     estimated_carbon_g REAL,
     deadline          TEXT,
     batch_id          TEXT,
-    routing_decision  TEXT
+    routing_decision  TEXT,
+    title             TEXT,
+    origin_host       TEXT,
+    origin_cwd        TEXT,
+    read_at           TEXT,
+    parent_task_id    TEXT,
+    deadline_kind     TEXT,
+    quota_provider    TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_enqueued_at ON tasks(enqueued_at);
@@ -573,6 +614,13 @@ CREATE TABLE IF NOT EXISTS carbon_budget_alerts (
     task_id       TEXT,
     alerted_at    TEXT NOT NULL,
     PRIMARY KEY (window_kind, window_start, threshold_g)
+);
+
+-- Ledger-wide key/value facts that are not tasks (v0.17), e.g. last_tick_at
+-- written by the TS tickers. Same table as the TS port.
+CREATE TABLE IF NOT EXISTS meta (
+    key    TEXT PRIMARY KEY,
+    value  TEXT NOT NULL
 );
 """
 
@@ -677,6 +725,56 @@ async def _ensure_routing_decision_column(conn: aiosqlite.Connection) -> None:
         await conn.commit()
 
 
+#: v0.17 task-visibility columns, added in this order. Names match the TS
+#: port's schema exactly — the DB file is shared cross-language.
+_VISIBILITY_COLUMNS: Final[tuple[str, ...]] = (
+    "title",
+    "origin_host",
+    "origin_cwd",
+    "parent_task_id",
+    "deadline_kind",
+    "quota_provider",
+)
+
+
+async def _ensure_task_visibility_columns(conn: aiosqlite.Connection) -> None:
+    """Idempotent migration: add the v0.17 task-visibility columns.
+
+    Adds ``title``, ``origin_host``, ``origin_cwd``, ``parent_task_id``,
+    ``deadline_kind``, ``quota_provider`` and ``read_at``, then the
+    ``tasks_parent_idx`` index. When THIS call adds ``read_at`` it also
+    backfills ``read_at = completed_at`` on finished rows, so tasks that
+    finished before read markers existed do not flood the inbox. Mirrors
+    the TS ``ensureColumns``; whichever process migrates first backfills.
+    """
+    async with conn.execute("SELECT name FROM pragma_table_info('tasks')") as cur:
+        rows = await cur.fetchall()
+    names = {row[0] for row in rows}
+
+    async def add(name: str) -> bool:
+        if name in names:
+            return False
+        try:
+            await conn.execute(f"ALTER TABLE tasks ADD COLUMN {name} TEXT")
+        except aiosqlite.OperationalError as err:
+            if "duplicate column name" not in str(err).lower():
+                raise
+            return False
+        return True
+
+    for name in _VISIBILITY_COLUMNS:
+        await add(name)
+    if await add("read_at"):
+        await conn.execute(
+            "UPDATE tasks SET read_at = COALESCE(completed_at, enqueued_at) "
+            "WHERE status IN ('completed', 'failed') AND read_at IS NULL"
+        )
+    await conn.execute(
+        "CREATE INDEX IF NOT EXISTS tasks_parent_idx ON tasks(parent_task_id)"
+    )
+    await conn.commit()
+
+
 class _TaskStore:
     """Optional SQLite-backed durable queue.
 
@@ -728,6 +826,7 @@ class _TaskStore:
         await _ensure_deadline_column(conn)
         await _ensure_batch_id_column(conn)
         await _ensure_routing_decision_column(conn)
+        await _ensure_task_visibility_columns(conn)
         self._conn = conn
         # The ledger stores prompts (redacted only at terminal
         # transitions) next to a 0600 signing key — keep the DB and its
@@ -763,8 +862,11 @@ class _TaskStore:
                     task_id, status, enqueued_at, scheduled_for, completed_at,
                     region, carbon_budget_g, result_json, error, receipt_json,
                     intensity_source, body_json, estimated_carbon_g, deadline,
-                    batch_id, routing_decision
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    batch_id, routing_decision, title, origin_host, origin_cwd,
+                    parent_task_id, deadline_kind, quota_provider
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                )
                 ON CONFLICT(task_id) DO UPDATE SET
                     status            = excluded.status,
                     scheduled_for     = excluded.scheduled_for,
@@ -779,7 +881,12 @@ class _TaskStore:
                     estimated_carbon_g = excluded.estimated_carbon_g,
                     deadline          = excluded.deadline,
                     batch_id          = excluded.batch_id,
-                    routing_decision  = excluded.routing_decision
+                    routing_decision  = excluded.routing_decision,
+                    deadline_kind     = COALESCE(excluded.deadline_kind, tasks.deadline_kind),
+                    quota_provider    = CASE
+                        WHEN excluded.deadline_kind = 'absolute' THEN NULL
+                        ELSE COALESCE(excluded.quota_provider, tasks.quota_provider)
+                    END
                 """,
                 (
                     record.task_id,
@@ -800,6 +907,15 @@ class _TaskStore:
                     json.dumps(record.routing_decision)
                     if record.routing_decision is not None
                     else None,
+                    # Identity columns are insert-only (absent from DO UPDATE);
+                    # read_at is never written here, so a mark set by another
+                    # process survives. Mirrors the TS store.
+                    record.title,
+                    record.origin_host,
+                    record.origin_cwd,
+                    record.parent_task_id,
+                    record.deadline_kind,
+                    record.quota_provider,
                 ),
             )
             await conn.commit()
@@ -1016,6 +1132,17 @@ def _row_to_record(row: Any) -> TaskRecord:
     except (IndexError, KeyError):
         routing_raw = None
     routing_decision = json.loads(routing_raw) if routing_raw else None
+    # v0.17 task-visibility columns, read defensively (absent before the
+    # migration ran on this connection's schema).
+    visibility: dict[str, Any] = {}
+    for column in (*_VISIBILITY_COLUMNS, "read_at"):
+        try:
+            visibility[column] = row[column]
+        except (IndexError, KeyError):
+            visibility[column] = None
+    deadline_kind = (
+        "quota_reset" if visibility["deadline_kind"] == "quota_reset" else "absolute"
+    )
     return TaskRecord(
         task_id=row["task_id"],
         status=row["status"],
@@ -1033,6 +1160,13 @@ def _row_to_record(row: Any) -> TaskRecord:
         deadline=deadline,
         batch_id=batch_id,
         routing_decision=routing_decision,
+        title=visibility["title"],
+        origin_host=visibility["origin_host"],
+        origin_cwd=visibility["origin_cwd"],
+        read_at=visibility["read_at"],
+        parent_task_id=visibility["parent_task_id"],
+        deadline_kind=deadline_kind,
+        quota_provider=visibility["quota_provider"],
     )
 
 
@@ -1475,6 +1609,8 @@ class Scheduler:
             carbon_budget_g=opts.carbon_budget_g,
             body_json=json.dumps(spec.to_dict()),
             deadline=_iso_utc(deadline),
+            title=_derive_title(spec.prompt, spec.redact_in_receipt),
+            deadline_kind="absolute",
         )
         self._tasks[task_id] = record
         if self._store is not None and self._connected:
