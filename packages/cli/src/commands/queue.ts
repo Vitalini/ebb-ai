@@ -28,7 +28,7 @@ import type {
 } from "@ebb-ai/core";
 import { defaultDbPath } from "./tick.js";
 
-const VALID_STATUSES: ReadonlySet<TaskStatus> = new Set([
+export const VALID_STATUSES: ReadonlySet<TaskStatus> = new Set([
   "queued",
   "scheduled",
   "running",
@@ -39,7 +39,7 @@ const VALID_STATUSES: ReadonlySet<TaskStatus> = new Set([
   "cancelled",
 ]);
 
-const VALID_KINDS: ReadonlySet<DeadlineKind> = new Set(["absolute", "quota_reset"]);
+export const VALID_KINDS: ReadonlySet<DeadlineKind> = new Set(["absolute", "quota_reset"]);
 
 export interface QueueListOptions {
   db?: string;
@@ -105,8 +105,11 @@ export function renderQueue(
   return [header, sep, ...lines, "", tick].join("\n");
 }
 
-/** The fields `queue list --json` prints per task (no prompt, no result). */
-function summary(r: TaskRecord<unknown>): Record<string, unknown> {
+/**
+ * The fields `queue list --json` and the `ebb ui` list API print per task
+ * (no prompt, no result).
+ */
+export function taskSummary(r: TaskRecord<unknown>): Record<string, unknown> {
   return {
     task_id: r.taskId,
     title: r.title ?? null,
@@ -154,7 +157,7 @@ export async function runQueueList(
     const rows = store.list(filter);
     const lastTickAt = store.getMeta(LAST_TICK_META_KEY);
     const rendered = opts.json
-      ? JSON.stringify({ last_tick_at: lastTickAt ?? null, tasks: rows.map(summary) }, null, 2)
+      ? JSON.stringify({ last_tick_at: lastTickAt ?? null, tasks: rows.map(taskSummary) }, null, 2)
       : renderQueue(rows, { lastTickAt });
     return { rows, rendered };
   } finally {
@@ -178,7 +181,7 @@ export interface QueueShowResult {
   rendered: string;
 }
 
-function rawPayload(record: TaskRecord<unknown>): unknown {
+export function rawPayload(record: TaskRecord<unknown>): unknown {
   const r = record.result as { raw?: unknown } | undefined;
   return r && typeof r === "object" ? r.raw : undefined;
 }
@@ -296,7 +299,7 @@ export async function runQueueShow(
   }
 }
 
-function withoutRaw(result: unknown): unknown {
+export function withoutRaw(result: unknown): unknown {
   if (!result || typeof result !== "object" || !("raw" in result)) return result;
   const { raw: _raw, ...rest } = result as Record<string, unknown>;
   return rest;

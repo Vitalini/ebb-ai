@@ -8,6 +8,7 @@
  *   ebb receipts list  print carbon receipts for completed tasks
  *   ebb stats          local-only personal-impact summary
  *   ebb register-wake  schedule a macOS wake event 30s before a task
+ *   ebb ui             local task page (timeline, inbox, detail) on 127.0.0.1
  */
 
 import { createRequire } from "node:module";
@@ -18,6 +19,7 @@ import { runReceiptsList } from "./commands/receipts.js";
 import { runRegisterWake } from "./commands/register-wake.js";
 import { runStats } from "./commands/stats.js";
 import { runTick } from "./commands/tick.js";
+import { runUi } from "./commands/ui.js";
 import { runVerify } from "./commands/verify.js";
 
 /**
@@ -245,6 +247,29 @@ export function buildProgram(): Command {
         // eslint-disable-next-line no-console
         console.log(res.message);
         process.exit(res.ok ? 0 : 1);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error((err as Error).message);
+        process.exit(1);
+      }
+    });
+
+  program
+    .command("ui")
+    .description("Open the local task page: timeline, inbox, task detail (127.0.0.1 only, read-only)")
+    .option("--db <path>", "SQLite queue path", undefined)
+    .option("--port <port>", "Port on 127.0.0.1 (default: a free port)", (v) => parseInt(v, 10), 0)
+    .option("--region <code>", "Region for the forecast curve", undefined)
+    .option("--no-open", "Print the URL without opening a browser")
+    .action(async (opts: { db?: string; port?: number; region?: string; open?: boolean }) => {
+      try {
+        const code = await runUi({
+          db: opts.db,
+          port: opts.port,
+          region: opts.region,
+          open: opts.open !== false,
+        });
+        process.exit(code);
       } catch (err) {
         // eslint-disable-next-line no-console
         console.error((err as Error).message);

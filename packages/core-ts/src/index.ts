@@ -167,6 +167,7 @@ export {
 export type { GridFeedCredentials } from "./grid.js";
 export type {
   DeferOptions,
+  GridFeed,
   GridForecast,
   GridForecastEntry,
   GridSignalType,
