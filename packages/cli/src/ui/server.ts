@@ -5,8 +5,10 @@
  *   - binds 127.0.0.1 only; there is no host option;
  *   - every `/api/*` request (JSON and SSE) needs `Authorization: Bearer
  *     <token>`; the token is random per run and compared in constant time;
- *   - a `Host` header other than 127.0.0.1:<port> or localhost:<port> gets
- *     403, which blocks DNS-rebinding pages;
+ *   - a `Host` header whose name is not 127.0.0.1, localhost or [::1] (with
+ *     no port or this server's port) gets 403, which blocks DNS-rebinding
+ *     pages; an `Origin` header, when sent, must name the same loopback
+ *     host, so a page on another origin gets 403 too;
  *   - no CORS headers, so other origins cannot read responses;
  *   - static files come from a fixed map; no request path touches the disk.
  * The static page holds no data; it reads the token from the URL fragment,
@@ -69,6 +71,19 @@ function digest(s: string): Buffer {
   return createHash("sha256").update(s).digest();
 }
 
+const LOOPBACK_NAMES = new Set([LOOPBACK, "localhost", "[::1]"]);
+
+/**
+ * True when `host` (a Host header, or the host part of an Origin) names a
+ * loopback address with no port or with `port`. Anything else, including a
+ * DNS name that resolves to 127.0.0.1, is refused.
+ */
+export function isLoopbackHost(host: string, port: number): boolean {
+  const m = /^(\[::1\]|[^:]+)(?::(\d+))?$/.exec(host.trim().toLowerCase());
+  if (!m || !LOOPBACK_NAMES.has(m[1]!)) return false;
+  return m[2] === undefined || Number(m[2]) === port;
+}
+
 function send(res: ServerResponse, status: number, body?: unknown, type = "application/json; charset=utf-8"): void {
   res.writeHead(status, { ...SECURITY_HEADERS, ...(body === undefined ? {} : { "content-type": type }) });
   if (body === undefined) res.end();
@@ -90,8 +105,11 @@ export async function startUiServer(opts: UiServerOptions): Promise<UiServer> {
   };
 
   const hostAllowed = (req: IncomingMessage): boolean => {
-    const host = (req.headers.host ?? "").toLowerCase();
-    return host === `${LOOPBACK}:${port}` || host === `localhost:${port}`;
+    if (!isLoopbackHost(req.headers.host ?? "", port)) return false;
+    const origin = req.headers.origin;
+    if (origin === undefined) return true;
+    const m = /^http:\/\/([^/]+)$/i.exec(origin);
+    return !!m && isLoopbackHost(m[1]!, port);
   };
 
   const openStream = (req: IncomingMessage, res: ServerResponse): void => {
@@ -123,10 +141,7 @@ export async function startUiServer(opts: UiServerOptions): Promise<UiServer> {
           return method === "GET" ? openStream(req, res) : send(res, 405, { error: "method not allowed" });
         }
         const out = await handleApi(ctx, method, url.pathname, url.searchParams);
-        if (method === "POST" && out.status === 204) {
-          const id = decodeURIComponent(url.pathname.split("/")[3] ?? "");
-          events.emit([id]);
-        }
+        if (out.changedIds) events.emit(out.changedIds);
         return send(res, out.status, out.body);
       }
       const asset = STATIC_FILES[url.pathname];
@@ -137,8 +152,9 @@ export async function startUiServer(opts: UiServerOptions): Promise<UiServer> {
       } catch {
         return send(res, 404, "not found", "text/plain; charset=utf-8");
       }
-    })().catch((err: unknown) => {
-      if (!res.headersSent) send(res, 500, { error: (err as Error).message });
+    })().catch(() => {
+      // No error text in the response: it can carry paths or provider detail.
+      if (!res.headersSent) send(res, 500, { error: "internal error" });
       else res.end();
     });
   });

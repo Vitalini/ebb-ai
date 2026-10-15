@@ -7,7 +7,9 @@ import { mockGridFeed, TaskStore, type TaskRecord } from "@ebb-ai/core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { daemonStatus } from "../src/platform/index.js";
-import { startUiServer, type UiServer } from "../src/ui/server.js";
+import { FORECAST_CACHE_MS, handleApi, type ApiContext } from "../src/ui/api.js";
+import { TaskEvents } from "../src/ui/events.js";
+import { isLoopbackHost, startUiServer, type UiServer } from "../src/ui/server.js";
 
 const TOKEN = "test-token-0123456789";
 
@@ -93,19 +95,52 @@ describe("ebb ui server", () => {
     expect((await api("/api/tasks")).status).toBe(200);
   });
 
-  it("refuses a foreign Host header (DNS rebinding, AE6)", async () => {
-    const status = await new Promise<number>((resolve, reject) => {
-      const req = request(
-        { host: "127.0.0.1", port: ui.port, path: "/api/tasks", headers: { host: `evil.example:${ui.port}`, authorization: `Bearer ${TOKEN}` } },
-        (res) => {
-          res.resume();
-          resolve(res.statusCode ?? 0);
-        },
-      );
+  const raw = (path: string, headers: Record<string, string>, method = "GET") =>
+    new Promise<number>((resolve, reject) => {
+      const req = request({ host: "127.0.0.1", port: ui.port, path, method, headers }, (res) => {
+        res.resume();
+        resolve(res.statusCode ?? 0);
+      });
       req.on("error", reject);
       req.end();
     });
-    expect(status).toBe(403);
+
+  it("accepts only loopback Host headers and refuses foreign ones (DNS rebinding, AE6)", async () => {
+    const auth = { authorization: `Bearer ${TOKEN}` };
+    for (const host of [`127.0.0.1:${ui.port}`, `localhost:${ui.port}`, `[::1]:${ui.port}`, "localhost", "127.0.0.1", "[::1]", `LOCALHOST:${ui.port}`]) {
+      expect(await raw("/api/tasks", { ...auth, host }), host).toBe(200);
+    }
+    for (const host of [`evil.example:${ui.port}`, `localhost:${ui.port + 1}`, `127.0.0.1.evil.example:${ui.port}`, `localhost.:${ui.port}`, "127.0.0.2", `[::2]:${ui.port}`]) {
+      expect(await raw("/api/tasks", { ...auth, host }), host).toBe(403);
+    }
+    // The page itself is guarded too, so a rebound page cannot read it.
+    expect(await raw("/", { host: `evil.example:${ui.port}` })).toBe(403);
+  });
+
+  it("refuses a foreign Origin header", async () => {
+    const base = { authorization: `Bearer ${TOKEN}`, host: `127.0.0.1:${ui.port}` };
+    expect(await raw("/api/tasks", { ...base, origin: `http://127.0.0.1:${ui.port}` })).toBe(200);
+    expect(await raw("/api/tasks", { ...base, origin: `http://localhost:${ui.port}` })).toBe(200);
+    expect(await raw("/api/tasks", { ...base, origin: "https://evil.example" })).toBe(403);
+    expect(await raw("/api/tasks", { ...base, origin: "null" })).toBe(403);
+    expect(await raw("/api/tasks/done-1/read", { ...base, origin: "https://evil.example" }, "POST")).toBe(403);
+  });
+
+  it("sends JSON with nosniff and no CORS headers", async () => {
+    const res = await api("/api/tasks");
+    expect(res.headers.get("content-type")).toMatch(/^application\/json/);
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(res.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  it("never changes read state on GET, and refuses POST on read-only routes", async () => {
+    expect((await api("/api/tasks/done-1/read")).status).toBe(405);
+    expect((await api("/api/tasks/done-1/unread")).status).toBe(405);
+    const unread = (await (await api("/api/tasks?unread=1")).json()) as { tasks: unknown[] };
+    expect(unread.tasks).toHaveLength(1);
+    for (const path of ["/api/tasks", "/api/status", "/api/forecast", "/api/events"]) {
+      expect((await api(path, { method: "POST" })).status, path).toBe(405);
+    }
   });
 
   it("filters by kind and unread, and the list carries no prompt", async () => {
@@ -260,5 +295,67 @@ describe("ebb ui assets", () => {
       await ui.close();
       rmSync(tmp, { recursive: true, force: true });
     }
+  });
+});
+
+describe("ebb ui internals", () => {
+  it("isLoopbackHost accepts loopback names with no port or the server port", () => {
+    expect(isLoopbackHost("127.0.0.1:4000", 4000)).toBe(true);
+    expect(isLoopbackHost("[::1]", 4000)).toBe(true);
+    expect(isLoopbackHost("localhost:4001", 4000)).toBe(false);
+    expect(isLoopbackHost("::1", 4000)).toBe(false);
+    expect(isLoopbackHost("localhost:4000:1", 4000)).toBe(false);
+  });
+
+  it("caches the forecast so change events do not spend provider quota", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "ebb-ui-fc-"));
+    const store = new TaskStore({ dbPath: join(dir, "queue.db") });
+    const inner = mockGridFeed();
+    let calls = 0;
+    let now = new Date("2026-10-15T12:00:00Z");
+    const ctx: ApiContext = {
+      store,
+      dbPath: "x",
+      feed: { ...inner, fetchForecast: (r, h) => (calls++, inner.fetchForecast(r, h)) },
+      defaultRegion: "FR",
+      quota: () => ({}),
+      daemonStatus: () => "unknown",
+      now: () => now,
+    };
+    try {
+      const q = new URLSearchParams("region=FR&hours=24");
+      expect((await handleApi(ctx, "GET", "/api/forecast", q)).status).toBe(200);
+      expect((await handleApi(ctx, "GET", "/api/forecast", q)).status).toBe(200);
+      expect(calls).toBe(1);
+      now = new Date(now.getTime() + FORECAST_CACHE_MS);
+      await handleApi(ctx, "GET", "/api/forecast", q);
+      expect(calls).toBe(2);
+    } finally {
+      store.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("a ledger read that throws during a poll is skipped, not fatal", () => {
+    let version = 1;
+    let fail = false;
+    const store = {
+      dataVersion: () => version,
+      list: () => {
+        if (fail) throw new Error("SQLITE_BUSY");
+        return [];
+      },
+    } as unknown as TaskStore;
+    const events = new TaskEvents(store, 10_000);
+    const seen: string[][] = [];
+    events.subscribe((ids) => seen.push(ids));
+    fail = true;
+    version = 2;
+    expect(() => events.poll()).not.toThrow();
+    fail = false;
+    // The version was not consumed, so the retry still looks at the ledger.
+    events.poll();
+    expect(seen).toEqual([]);
+    events.stop();
   });
 });

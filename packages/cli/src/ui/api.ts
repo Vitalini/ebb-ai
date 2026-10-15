@@ -45,10 +45,21 @@ export interface ApiContext {
 export interface ApiResponse {
   status: number;
   body?: unknown;
+  /** Task ids this request changed; the server pushes them to the stream. */
+  changedIds?: string[];
 }
 
 /** Most hours of forecast one request returns. */
 export const MAX_FORECAST_HOURS = 72;
+
+/**
+ * How long one forecast answer is reused. The page asks on every change
+ * event; without a cache each one would spend the grid provider's quota,
+ * which the tick needs for scheduling.
+ */
+export const FORECAST_CACHE_MS = 10 * 60_000;
+
+const forecastCache = new WeakMap<ApiContext, Map<string, { at: number; body: unknown }>>();
 
 const REGION_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
@@ -127,7 +138,7 @@ function setRead(ctx: ApiContext, taskId: string, read: boolean): ApiResponse {
   }
   if (read) ctx.store.markRead(taskId, ctx.now?.() ?? new Date());
   else ctx.store.markUnread(taskId);
-  return { status: 204 };
+  return { status: 204, changedIds: [taskId] };
 }
 
 async function forecast(ctx: ApiContext, params: URLSearchParams): Promise<ApiResponse> {
@@ -135,23 +146,30 @@ async function forecast(ctx: ApiContext, params: URLSearchParams): Promise<ApiRe
   if (!REGION_RE.test(region)) return error(400, "invalid region");
   const rawHours = Number(params.get("hours") ?? 24);
   const hours = Math.min(MAX_FORECAST_HOURS, Math.max(1, Number.isFinite(rawHours) ? Math.ceil(rawHours) : 24));
+  const now = (ctx.now?.() ?? new Date()).getTime();
+  let cache = forecastCache.get(ctx);
+  if (!cache) forecastCache.set(ctx, (cache = new Map()));
+  const key = `${region}|${hours}`;
+  const hit = cache.get(key);
+  if (hit && now - hit.at < FORECAST_CACHE_MS) return { status: 200, body: hit.body };
   try {
     const f = await ctx.feed.fetchForecast(region, hours);
-    return {
-      status: 200,
-      body: {
-        region: f.region,
-        source: f.source,
-        generated_at: f.generatedAt,
-        points: f.entries.slice(0, hours).map((e) => ({
-          t: e.datetime,
-          g: e.carbonIntensityGCo2PerKwh,
-          band: e.band,
-        })),
-      },
+    for (const [k, v] of cache) if (now - v.at >= FORECAST_CACHE_MS) cache.delete(k);
+    const body = {
+      region: f.region,
+      source: f.source,
+      generated_at: f.generatedAt,
+      points: f.entries.slice(0, hours).map((e) => ({
+        t: e.datetime,
+        g: e.carbonIntensityGCo2PerKwh,
+        band: e.band,
+      })),
     };
-  } catch (err) {
-    return error(502, `forecast unavailable: ${(err as Error).message}`);
+    cache.set(key, { at: now, body });
+    return { status: 200, body };
+  } catch {
+    // The provider error can name a URL or key; the page needs only the fact.
+    return error(502, "forecast unavailable");
   }
 }
 

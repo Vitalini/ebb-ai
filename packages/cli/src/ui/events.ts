@@ -43,7 +43,9 @@ export class TaskEvents {
 
   /** Push a change the poller cannot see (the server's own write). */
   emit(ids: string[]): void {
-    this.fingerprints = this.snapshot();
+    // Fingerprints stay as they are: re-reading them here could absorb a
+    // tick commit that landed between the write and the next poll. The next
+    // external commit may report these ids once more, which is harmless.
     for (const fn of this.listeners) fn(ids);
   }
 
@@ -56,8 +58,14 @@ export class TaskEvents {
       return;
     }
     if (v === this.version) return;
+    let next: Map<string, string>;
+    try {
+      next = this.snapshot();
+    } catch {
+      // A busy or locked ledger: keep the old version so the next poll retries.
+      return;
+    }
     this.version = v;
-    const next = this.snapshot();
     const changed: string[] = [];
     for (const [id, fp] of next) if (this.fingerprints.get(id) !== fp) changed.push(id);
     for (const id of this.fingerprints.keys()) if (!next.has(id)) changed.push(id);
