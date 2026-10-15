@@ -43,11 +43,22 @@ export {
   CarbonBudgetExceededError,
   defer,
   InvalidDeadlineError,
+  LAST_TICK_META_KEY,
   pickBestWindow,
   Scheduler,
 } from "./scheduler.js";
 export type { SchedulerOptions, TickAdapters } from "./scheduler.js";
 export { recommendWindow } from "./recommend.js";
+// Task visibility (v0.17): titles, history, display helpers.
+export {
+  TITLE_MAX_CHARS,
+  deadlineKindLabel,
+  deriveTitle,
+  stripControlChars,
+  taskHistory,
+  taskPrompt,
+  taskResultText,
+} from "./history.js";
 // Cross-provider routing (ROADMAP item 1).
 export {
   scoreCandidates,
@@ -116,6 +127,23 @@ export type {
   CarbonBudgetWindowKind,
   LoadCarbonBudgetOptions,
 } from "./budget.js";
+// Quota-reset deadlines and the shared pre-tick step (v0.17).
+export {
+  DEFAULT_QUOTA_MARGIN_H,
+  loadQuotaResetConfig,
+  nextQuotaReset,
+  prepareTick,
+  previousQuotaReset,
+  resolveQuotaDeadline,
+  resolveQuotaProvider,
+  sweepQuotaDeadlines,
+} from "./quota.js";
+export type {
+  LoadQuotaResetOptions,
+  QuotaResetConfig,
+  QuotaResetSchedule,
+  ResolveQuotaProviderResult,
+} from "./quota.js";
 export {
   mockGridFeed,
   electricityMapsFeed,
@@ -133,12 +161,15 @@ export type {
   GridForecastEntry,
   GridSignalType,
   CarbonReceipt,
+  DeadlineKind,
   ProviderCallSpec,
   ProviderName,
   RecommendAlternative,
   RecommendOptions,
   RecommendResult,
   TaskRecord,
+  TaskMessage,
+  TaskOriginHost,
   TaskStatus,
   TickResult,
   TickResultEntry,
@@ -158,7 +189,7 @@ export type {
   ProviderAdapter,
 } from "./providers/index.js";
 export { TaskStore } from "./storage/sqlite.js";
-export type { TaskStoreOptions } from "./storage/sqlite.js";
+export type { TaskListFilter, TaskStoreOptions } from "./storage/sqlite.js";
 export {
   FALLBACK_REGION,
   TIMEZONE_REGION,

@@ -209,7 +209,7 @@ function normalizeWindowKind(raw: string | undefined): CarbonBudgetWindowKind | 
  * file so the config format is one the project already establishes.
  * `#` comments, blank lines, one layer of surrounding quotes.
  */
-function parseKeyValues(contents: string): Record<string, string> {
+export function parseKeyValues(contents: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const rawLine of contents.split(/\r?\n/)) {
     const line = rawLine.trim();

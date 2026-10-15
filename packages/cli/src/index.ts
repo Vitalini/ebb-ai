@@ -13,7 +13,7 @@
 import { createRequire } from "node:module";
 import { Command } from "commander";
 import { runInstall, type InstallMode } from "./commands/install.js";
-import { runQueueList } from "./commands/queue.js";
+import { runQueueList, runQueueShow, runQueueUnread } from "./commands/queue.js";
 import { runReceiptsList } from "./commands/receipts.js";
 import { runRegisterWake } from "./commands/register-wake.js";
 import { runStats } from "./commands/stats.js";
@@ -91,11 +91,62 @@ export function buildProgram(): Command {
     .description("List queued / scheduled / running / completed tasks")
     .option("--db <path>", "SQLite queue path", undefined)
     .option("--status <status>", "Filter by status", undefined)
+    .option("--kind <kind>", "Filter by deadline kind: absolute | quota_reset", undefined)
+    .option("--unread", "Only completed or failed tasks nobody has viewed yet")
+    .option("--json", "Emit JSON instead of the table")
     .action(async (opts) => {
       try {
-        const res = await runQueueList({ db: opts.db, status: opts.status });
+        const res = await runQueueList({
+          db: opts.db,
+          status: opts.status,
+          kind: opts.kind,
+          unread: opts.unread === true,
+          json: opts.json === true,
+        });
         // eslint-disable-next-line no-console
         console.log(res.rendered);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error((err as Error).message);
+        process.exit(1);
+      }
+    });
+  queue
+    .command("show <task-id>")
+    .description("Show one task: prompt, result, receipt; marks a finished task read")
+    .option("--db <path>", "SQLite queue path", undefined)
+    .option("--raw", "Include the raw vendor payload")
+    .option("--json", "Emit JSON (the record plus its message history)")
+    .option("--no-mark-read", "Do not mark the task read (for scripts)")
+    .action(async (taskId: string, opts: {
+      db?: string;
+      raw?: boolean;
+      json?: boolean;
+      markRead?: boolean;
+    }) => {
+      try {
+        const res = await runQueueShow(taskId, {
+          db: opts.db,
+          raw: opts.raw === true,
+          json: opts.json === true,
+          markRead: opts.markRead !== false,
+        });
+        // eslint-disable-next-line no-console
+        console.log(res.rendered);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error((err as Error).message);
+        process.exit(1);
+      }
+    });
+  queue
+    .command("unread <task-id>")
+    .description("Mark a task unread again, so it shows in the inbox")
+    .option("--db <path>", "SQLite queue path", undefined)
+    .action(async (taskId: string, opts: { db?: string }) => {
+      try {
+        // eslint-disable-next-line no-console
+        console.log(await runQueueUnread(taskId, { db: opts.db }));
       } catch (err) {
         // eslint-disable-next-line no-console
         console.error((err as Error).message);

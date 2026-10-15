@@ -23,6 +23,7 @@ Check the status of one or all ebb-ai deferred tasks.
    - `task_id` — the parsed id, omit for the list view.
 2. Render the result as a compact table — never raw JSON. For each task:
    - `id` (last 8 chars suffice)
+   - `title` — when the response carries one
    - `status` — `queued`, `scheduled`, `running`, `completed`, `failed`,
      `cancelled`
    - `scheduled_for` — relative time ("in 2h", "yesterday 14:30")
@@ -39,9 +40,15 @@ Check the status of one or all ebb-ai deferred tasks.
      - `energy_source` — confidence tier of the per-model energy
        coefficients (`measured` / `estimated` / `fallback`)
    - For `failed`: short error reason.
-3. If exactly one task is requested and the response carries a `Result:`
-   block (the LLM response), include it verbatim under the table.
-4. End with a short hint line:
+3. If exactly one task is requested, show its `title`, `origin`,
+   `deadline_kind` (for a quota reset: the label, reset time and margin) and
+   the `prompt:` line. If the response carries a `Result:` block (the LLM
+   response), include it verbatim under the table. Viewing a completed or
+   failed task marks it read; the user can undo that with
+   `ebb queue unread <task_id>`.
+4. For the list view, relay the `last_tick_at` line: it shows when the
+   dispatcher last ran ("never recorded" means nothing has dispatched yet).
+5. End with a short hint line:
    - If anything is `queued` or `scheduled`: "Next dispatch tick: ~5 min
      (if the `ebb tick` daemon is installed — otherwise run
      `ebb tick --once`)."

@@ -23,6 +23,7 @@ Convert their wording to an ISO-8601 deadline and call `schedule_task`:
 | "no rush" / "not urgent"     | +48 h                                   |
 | "schedule this for X"        | parse X explicitly                      |
 | "queue this up"              | +12 h                                   |
+| "before my weekly limit resets" / "before the quota resets" | `deadline_kind: "quota_reset"` (no `deadline`) |
 
 If the user does NOT signal "later" (e.g. "summarize this", "write a
 function", "what does X do"), do not auto-defer. Run inline.
@@ -41,6 +42,14 @@ Parse `$ARGUMENTS` into:
   they want to defer.
 - **`--by <duration>`** — deadline. Accepts `2h`, `30m`, `24h`, `3d`, or an
   ISO-8601 timestamp. **Default: 24h from now.** Must resolve to the future.
+  `--by quota-reset` (or `--by quota-reset:<label>`, e.g. `quota-reset:claude`)
+  means "before the next weekly subscription-quota reset": pass
+  `deadline_kind: "quota_reset"` (and `quota_provider: "<label>"` when a label
+  is named) and no `deadline`. The server resolves the deadline from
+  `EBB_QUOTA_RESET_<LABEL>` in `~/.ebb-ai/config`; if it answers that no
+  quota reset is configured, relay its message.
+- **`--title <text>`** — optional short title. Default: the first line of
+  the prompt.
 - **`--budget <grams>`** — optional hard cap on grams CO2-equivalent. If the
   scheduler can't find a window that meets it, the task fails fast with a
   `CarbonBudgetExceededError`.
@@ -68,9 +77,13 @@ Parse `$ARGUMENTS` into:
 
 1. Convert `--by` to an absolute ISO-8601 deadline (`now + duration` if a
    duration, otherwise the parsed timestamp). Validate it is in the future.
+   For `--by quota-reset[:<label>]` skip this step.
 2. Call the `ebb-ai` MCP server's **`schedule_task`** tool with:
    - `prompt` — the parsed user prompt
-   - `deadline` — the ISO-8601 deadline you computed
+   - `deadline` — the ISO-8601 deadline you computed (omit for quota reset)
+   - `deadline_kind` — `"quota_reset"` for `--by quota-reset`, otherwise omit
+   - `quota_provider` — the label from `--by quota-reset:<label>`, otherwise omit
+   - `title` — the parsed `--title`, omit if not given
    - `region` — the parsed zone, omit if the user gave none (the server
      resolves its timezone-based default)
    - `carbon_budget_g` — the parsed budget, omit if not given
@@ -88,8 +101,9 @@ Parse `$ARGUMENTS` into:
    ```
    Deferred ✓
      task id        <task_id>
+     title          <title>
      scheduled for  <scheduled_for as relative + absolute, e.g. "in 3h, 22:15 UTC">
-     deadline       <deadline>
+     deadline       <deadline> (plus the deadline_kind line for a quota reset)
      est. carbon    <estimated_carbon_g_co2> g CO2e
      region         <region>
      grid source    <grid_source>
@@ -120,6 +134,7 @@ Parse `$ARGUMENTS` into:
 /ebb-ai:defer translate the README to Russian --by 24h --budget 0.5 --region GB
 /ebb-ai:defer regenerate the test fixtures --by 2026-05-15T08:00:00Z --model claude-haiku-4-5
 /ebb-ai:defer overnight log triage --by 8h --region US-MIDA-PJM --output ~/.ebb-ai/inbox/log-triage.json
+/ebb-ai:defer refactor the test helpers --by quota-reset:claude
 ```
 
 ## Related commands

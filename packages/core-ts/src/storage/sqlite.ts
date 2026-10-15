@@ -27,6 +27,12 @@
  *   - body_json          persisted provider-call spec (nullable, v0.4)
  *   - estimated_carbon_g REAL, schedule-time projection (nullable, v0.9)
  *   - deadline           ISO-8601 normalized deadline (nullable, v0.12)
+ *   - title, origin_host, origin_cwd, parent_task_id
+ *                        task identity, written once at insert (v0.17)
+ *   - read_at            ISO-8601, set when a surface showed the finished
+ *                        task (v0.17); written only by markRead/markUnread
+ *   - deadline_kind      "absolute" | "quota_reset" (nullable = absolute, v0.17)
+ *   - quota_provider     quota label for a quota_reset deadline (v0.17)
  *
  * `result_json` is serialized via JSON.stringify; values that are not
  * JSON-serializable are stored as `{ "_repr": "<toString>" }` so audit
@@ -36,7 +42,13 @@
 import { chmodSync, existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
-import type { CarbonReceipt, TaskRecord, TaskStatus } from "../types.js";
+import type {
+  CarbonReceipt,
+  DeadlineKind,
+  TaskOriginHost,
+  TaskRecord,
+  TaskStatus,
+} from "../types.js";
 
 const requireFn = createRequire(import.meta.url);
 
@@ -72,7 +84,14 @@ CREATE TABLE IF NOT EXISTS tasks (
   estimated_carbon_g REAL,
   deadline          TEXT,
   batch_id          TEXT,
-  routing_decision  TEXT
+  routing_decision  TEXT,
+  title             TEXT,
+  origin_host       TEXT,
+  origin_cwd        TEXT,
+  read_at           TEXT,
+  parent_task_id    TEXT,
+  deadline_kind     TEXT,
+  quota_provider    TEXT
 );
 CREATE INDEX IF NOT EXISTS tasks_status_idx ON tasks(status);
 CREATE INDEX IF NOT EXISTS tasks_enqueued_idx ON tasks(enqueued_at);
@@ -92,6 +111,13 @@ CREATE TABLE IF NOT EXISTS carbon_budget_alerts (
   task_id       TEXT,
   alerted_at    TEXT NOT NULL,
   PRIMARY KEY (window_kind, window_start, threshold_g)
+);
+
+-- Small key/value table for ledger-wide facts that are not tasks, e.g.
+-- last_tick_at (when a ticker last ran). Derived state, never signed.
+CREATE TABLE IF NOT EXISTS meta (
+  key    TEXT PRIMARY KEY,
+  value  TEXT NOT NULL
 );
 `;
 
@@ -116,14 +142,17 @@ function ensureColumns(db: SqliteDatabase): void {
     .prepare(`SELECT name FROM pragma_table_info('tasks')`)
     .all() as Array<{ name: string }>;
   const have = new Set(rows.map((r) => r.name));
-  const addColumn = (name: string, type: string): void => {
-    if (have.has(name)) return;
+  /** Returns true iff THIS call added the column. */
+  const addColumn = (name: string, type: string): boolean => {
+    if (have.has(name)) return false;
     try {
       db.exec(`ALTER TABLE tasks ADD COLUMN ${name} ${type}`);
+      return true;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       // Another process migrated between our pragma check and the ALTER.
       if (!/duplicate column name/i.test(msg)) throw err;
+      return false;
     }
   };
   addColumn("body_json", "TEXT");
@@ -133,6 +162,26 @@ function ensureColumns(db: SqliteDatabase): void {
   // routing_decision (ROADMAP item 1): the scored cross-provider routing
   // decision, persisted at schedule time and folded into the receipt.
   addColumn("routing_decision", "TEXT");
+  // v0.17 task visibility: identity, read marker, deadline kind.
+  addColumn("title", "TEXT");
+  addColumn("origin_host", "TEXT");
+  addColumn("origin_cwd", "TEXT");
+  addColumn("parent_task_id", "TEXT");
+  addColumn("deadline_kind", "TEXT");
+  addColumn("quota_provider", "TEXT");
+  if (addColumn("read_at", "TEXT")) {
+    // One-time backfill, only in the process that added the column: tasks
+    // that finished before read markers existed count as read, so an
+    // upgrade does not flood the inbox with history. The Python port runs
+    // the same backfill; whichever process migrates first does it.
+    db.exec(
+      `UPDATE tasks SET read_at = COALESCE(completed_at, enqueued_at)
+        WHERE status IN ('completed', 'failed') AND read_at IS NULL`,
+    );
+  }
+  db.exec(
+    `CREATE INDEX IF NOT EXISTS tasks_parent_idx ON tasks(parent_task_id)`,
+  );
 }
 
 function safeStringify(value: unknown): string | null {
@@ -151,6 +200,15 @@ function safeParse(s: string | null | undefined): unknown {
   } catch {
     return undefined;
   }
+}
+
+/** Filters for {@link TaskStore.list}; all given filters must match. */
+export interface TaskListFilter {
+  status?: TaskStatus;
+  /** Only finished (`completed` / `failed`) tasks with no read marker. */
+  unread?: boolean;
+  /** `absolute` also matches legacy rows with no stored kind. */
+  deadlineKind?: DeadlineKind;
 }
 
 export interface TaskStoreOptions {
@@ -224,11 +282,13 @@ export class TaskStore {
       INSERT INTO tasks (
         task_id, status, enqueued_at, scheduled_for, completed_at,
         region, carbon_budget_g, result_json, error, receipt_json, intensity_source,
-        body_json, estimated_carbon_g, deadline, batch_id, routing_decision
+        body_json, estimated_carbon_g, deadline, batch_id, routing_decision,
+        title, origin_host, origin_cwd, parent_task_id, deadline_kind, quota_provider
       ) VALUES (
         @task_id, @status, @enqueued_at, @scheduled_for, @completed_at,
         @region, @carbon_budget_g, @result_json, @error, @receipt_json, @intensity_source,
-        @body_json, @estimated_carbon_g, @deadline, @batch_id, @routing_decision
+        @body_json, @estimated_carbon_g, @deadline, @batch_id, @routing_decision,
+        @title, @origin_host, @origin_cwd, @parent_task_id, @deadline_kind, @quota_provider
       )
       ON CONFLICT(task_id) DO UPDATE SET
         status             = excluded.status,
@@ -244,8 +304,18 @@ export class TaskStore {
         estimated_carbon_g = excluded.estimated_carbon_g,
         deadline           = excluded.deadline,
         batch_id           = excluded.batch_id,
-        routing_decision   = excluded.routing_decision
+        routing_decision   = excluded.routing_decision,
+        deadline_kind      = COALESCE(excluded.deadline_kind, tasks.deadline_kind),
+        quota_provider     = CASE
+          WHEN excluded.deadline_kind = 'absolute' THEN NULL
+          ELSE COALESCE(excluded.quota_provider, tasks.quota_provider)
+        END
     `);
+    // Identity columns (title, origin_*, parent_task_id) are written on
+    // insert only and are deliberately absent from DO UPDATE. read_at is
+    // never written here: the tick and the UI are separate processes, and
+    // an in-memory record without readAt must not clear a mark another
+    // process set. Use markRead / markUnread.
     stmt.run({
       task_id: record.taskId,
       status: record.status,
@@ -263,6 +333,12 @@ export class TaskStore {
       deadline: record.deadline ?? null,
       batch_id: record.batchId ?? null,
       routing_decision: safeStringify(record.routingDecision),
+      title: record.title ?? null,
+      origin_host: record.originHost ?? null,
+      origin_cwd: record.originCwd ?? null,
+      parent_task_id: record.parentTaskId ?? null,
+      deadline_kind: record.deadlineKind ?? null,
+      quota_provider: record.quotaProvider ?? null,
     });
   }
 
@@ -273,17 +349,117 @@ export class TaskStore {
     return row ? rowToRecord(row) : undefined;
   }
 
-  list(filter?: { status?: TaskStatus }): TaskRecord<unknown>[] {
+  list(filter?: TaskListFilter): TaskRecord<unknown>[] {
+    const where: string[] = [];
+    const params: unknown[] = [];
     if (filter?.status) {
-      return this.db
-        .prepare(`SELECT * FROM tasks WHERE status = ? ORDER BY enqueued_at ASC`)
-        .all(filter.status)
-        .map(rowToRecord);
+      where.push(`status = ?`);
+      params.push(filter.status);
     }
+    if (filter?.unread) {
+      where.push(`status IN ('completed', 'failed') AND read_at IS NULL`);
+    }
+    if (filter?.deadlineKind === "absolute") {
+      where.push(`(deadline_kind IS NULL OR deadline_kind = 'absolute')`);
+    } else if (filter?.deadlineKind) {
+      where.push(`deadline_kind = ?`);
+      params.push(filter.deadlineKind);
+    }
+    const clause = where.length > 0 ? ` WHERE ${where.join(" AND ")}` : "";
     return this.db
-      .prepare(`SELECT * FROM tasks ORDER BY enqueued_at ASC`)
-      .all()
+      .prepare(`SELECT * FROM tasks${clause} ORDER BY enqueued_at ASC`)
+      .all(...params)
       .map(rowToRecord);
+  }
+
+  /**
+   * Mark a finished task read. Only `completed` / `failed` rows that are
+   * still unread change; returns true iff this call set the marker, so a
+   * second call never moves the first timestamp.
+   */
+  markRead(taskId: string, at: Date | string = new Date()): boolean {
+    const iso = typeof at === "string" ? at : at.toISOString();
+    const res = this.db
+      .prepare(
+        `UPDATE tasks SET read_at = ?
+          WHERE task_id = ? AND read_at IS NULL
+            AND status IN ('completed', 'failed')`,
+      )
+      .run(iso, taskId);
+    return Number(res.changes) === 1;
+  }
+
+  /** Clear a task's read marker. Returns true iff the marker was set. */
+  markUnread(taskId: string): boolean {
+    const res = this.db
+      .prepare(
+        `UPDATE tasks SET read_at = NULL WHERE task_id = ? AND read_at IS NOT NULL`,
+      )
+      .run(taskId);
+    return Number(res.changes) === 1;
+  }
+
+  /**
+   * SQLite's `PRAGMA data_version`: changes whenever ANOTHER connection
+   * commits to this database file. Cheap change detector for pollers.
+   */
+  dataVersion(): number {
+    const row = this.db.prepare(`PRAGMA data_version`).get() as
+      | { data_version: number | bigint }
+      | undefined;
+    return Number(row?.data_version ?? 0);
+  }
+
+  /** Read one ledger-wide meta value (e.g. `last_tick_at`). */
+  getMeta(key: string): string | undefined {
+    const row = this.db
+      .prepare(`SELECT value FROM meta WHERE key = ?`)
+      .get(key) as { value: string } | undefined;
+    return row?.value;
+  }
+
+  /** Write one ledger-wide meta value. */
+  setMeta(key: string, value: string): void {
+    this.db
+      .prepare(
+        `INSERT INTO meta (key, value) VALUES (?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      )
+      .run(key, value);
+  }
+
+  /**
+   * Conditional write for the quota sweep: store the columns a reschedule
+   * (or a budget failure) changes, but only while the row is still pending
+   * (`queued` / `scheduled`). Returns false when another process moved the
+   * row on (claimed, submitted, finished) in the meantime; nothing is written.
+   */
+  updateIfPending(record: TaskRecord<unknown>): boolean {
+    const res = this.db
+      .prepare(
+        `UPDATE tasks SET
+           status             = @status,
+           scheduled_for      = @scheduled_for,
+           completed_at       = @completed_at,
+           error              = @error,
+           body_json          = @body_json,
+           estimated_carbon_g = @estimated_carbon_g,
+           deadline           = @deadline,
+           routing_decision   = @routing_decision
+         WHERE task_id = @task_id AND status IN ('queued', 'scheduled')`,
+      )
+      .run({
+        task_id: record.taskId,
+        status: record.status,
+        scheduled_for: record.scheduledFor ?? null,
+        completed_at: record.completedAt ?? null,
+        error: record.error ?? null,
+        body_json: record.bodyJson ?? null,
+        estimated_carbon_g: record.estimatedCarbonGCo2 ?? null,
+        deadline: record.deadline ?? null,
+        routing_decision: safeStringify(record.routingDecision),
+      });
+    return Number(res.changes) === 1;
   }
 
   /**
@@ -405,6 +581,18 @@ function rowToRecord(row: Record<string, unknown>): TaskRecord<unknown> {
     routingDecision: safeParse(row.routing_decision as string | null) as
       | TaskRecord["routingDecision"]
       | undefined,
+    title: (row.title as string | null | undefined) ?? undefined,
+    originHost:
+      ((row.origin_host as string | null | undefined) as TaskOriginHost | null) ??
+      undefined,
+    originCwd: (row.origin_cwd as string | null | undefined) ?? undefined,
+    readAt: (row.read_at as string | null | undefined) ?? undefined,
+    parentTaskId: (row.parent_task_id as string | null | undefined) ?? undefined,
+    deadlineKind:
+      (row.deadline_kind as string | null | undefined) === "quota_reset"
+        ? "quota_reset"
+        : "absolute",
+    quotaProvider: (row.quota_provider as string | null | undefined) ?? undefined,
   };
 }
 

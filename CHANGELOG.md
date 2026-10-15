@@ -7,6 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Task titles, origin and read state.** Every task now stores a title (given
+  at enqueue, else the first line of the prompt cut to 80 characters, with
+  API-key-looking strings redacted), the host that enqueued it (`mcp`,
+  `openclaw`, `cli`) and its working directory, a parent task id (stored, not
+  yet set by any host), and a `read_at` marker. A finished task counts as
+  unread until a surface shows its result. Prior conversation turns can be
+  stored in `body_json.messages` and are redacted with the prompt.
+- **`quota_reset` deadlines.** MCP `schedule_task` accepts
+  `deadline_kind: "quota_reset"` and an optional `quota_provider`; `deadline`
+  is then not needed. Configure the weekly reset per label in
+  `~/.ebb-ai/config`:
+
+  ```
+  EBB_QUOTA_RESET_CLAUDE=mon 10:00 Europe/Berlin
+  EBB_QUOTA_MARGIN_H_CLAUDE=2
+  ```
+
+  The zone is optional (system zone by default) and the margin defaults to
+  2 hours. The deadline is the next reset minus the margin. If that reset
+  passes before the task runs (machine asleep, daemon down), `ebb tick` and
+  the OpenClaw dispatch loop re-resolve it to the following reset and
+  reschedule the task through the normal window picker, writing only while
+  the task is still queued or scheduled (the Python ticker does not run this
+  sweep in this release). A quota deadline
+  is often days away, and any deadline more than 24 hours out lets an
+  `anthropic` or `openai` task route through the provider Batch API, so
+  its result can arrive up to the provider's 24-hour batch SLA after the
+  chosen window.
+- **`ebb queue show <id>`** prints a task's title, origin, deadline (with the
+  quota label), prompt, history, result, receipt and routing; `--raw` adds
+  the vendor payload, `--json` prints the record and its history,
+  `--no-mark-read` leaves the read marker alone.
+- **`ebb queue unread <id>`** clears the read marker again.
+- **`ebb queue list`** gains title, deadline and kind columns, `--unread`,
+  `--kind <absolute|quota_reset>`, `--json`, and a `last tick` line.
+- **`last_tick_at`.** `ebb tick` and the OpenClaw dispatch loop record when
+  they last ran (ledger `meta` table); `ebb queue list` and MCP
+  `check_queue_status` show it.
+
+### Changed
+
+- **`check_queue_status`** (MCP and OpenClaw) shows the title, origin,
+  deadline kind and stored prompt of a task, and viewing a completed or
+  failed task marks it read. The list view shows titles and quota markers.
+- **`update_deadline`** with an explicit deadline turns a `quota_reset` task
+  into an `absolute` one.
+- **Ledger schema.** New nullable columns `title`, `origin_host`,
+  `origin_cwd`, `read_at`, `parent_task_id`, `deadline_kind`,
+  `quota_provider`, an index on `parent_task_id`, and a `meta` table. They
+  are added on first open by the TS and Python cores. Tasks that finished
+  before the upgrade are marked read once, so the inbox starts empty.
+- Task text that the CLI prints (titles, prompts, results, errors) is
+  stripped of terminal control characters.
+
+### Upgrade note
+
+- The tick daemon runs the globally installed `@ebb-ai/cli`. After upgrading,
+  reinstall it (`npm install -g @ebb-ai/cli`), or the quota-reset sweep and
+  `last_tick_at` do not run.
+
 ## [0.16.1] — 2026-10-15
 
 ### Docs

@@ -377,6 +377,23 @@ class TaskRecord:
     was not used.
     """
 
+    # v0.17 task visibility. Same columns as the TS ledger; this port reads
+    # them and preserves them on write, and sets ``title`` at enqueue.
+    title: str | None = None
+    """Short title, stored redacted at enqueue. Insert-only."""
+    origin_host: str | None = None
+    """Host that enqueued the task (``cli``, ``mcp``, ``openclaw``). Insert-only."""
+    origin_cwd: str | None = None
+    """Working directory at enqueue, when known. Insert-only."""
+    read_at: str | None = None
+    """When a surface first showed the finished task. Never written by upsert."""
+    parent_task_id: str | None = None
+    """Parent task in a reply chain. Insert-only."""
+    deadline_kind: Literal["absolute", "quota_reset"] | None = None
+    """How the deadline was chosen; a legacy row reads as ``absolute``."""
+    quota_provider: str | None = None
+    """Quota label for a ``quota_reset`` deadline."""
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "task_id": self.task_id,
@@ -395,6 +412,13 @@ class TaskRecord:
             "deadline": self.deadline,
             "batch_id": self.batch_id,
             "routing_decision": self.routing_decision,
+            "title": self.title,
+            "origin_host": self.origin_host,
+            "origin_cwd": self.origin_cwd,
+            "read_at": self.read_at,
+            "parent_task_id": self.parent_task_id,
+            "deadline_kind": self.deadline_kind,
+            "quota_provider": self.quota_provider,
         }
 
 

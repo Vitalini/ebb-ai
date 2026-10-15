@@ -309,9 +309,11 @@ The MCP server exposes nine tools to the agent (measured, `toolsForHost("mcp")` 
 - `recommend_window(deadline, region?, ...)` — plans the cleanest window
   inside the deadline without queueing anything.
 - `schedule_task(prompt, deadline, model?, carbon_budget_g?)` — queues a
-  task for execution at the cleanest window inside the deadline.
+  task for execution at the cleanest window inside the deadline;
+  `deadline_kind: "quota_reset"` sets the deadline to the next configured
+  quota reset minus a margin.
 - `check_queue_status(task_id?)` — lists pending tasks and any
-  completed receipts.
+  completed receipts; viewing one finished task marks it read.
 - `cancel_task`, `expedite_task`, `update_deadline`, `retry_task`,
   `cancel_all` — control a queued task (or the whole queue).
 
@@ -383,7 +385,8 @@ pnpm --filter @ebb-ai/web dev
 Pages: live carbon-intensity map (31 regions, NA/EU/APAC — measured,
 see [docs/claims.md](docs/claims.md)), 72-hour forecast charts,
 best-window planner, and a queue explainer (`/queue`); see your own queue
-with `ebb queue list`.
+with `ebb queue list` (`--unread` for finished tasks you have not opened)
+and one task with `ebb queue show <id>`.
 
 **Grid data sources** (per zone, falls back to mock on failure):
 

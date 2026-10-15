@@ -1090,3 +1090,179 @@ describe("ebb OpenClaw plugin — result delivery", () => {
     }
   });
 });
+
+describe("ebb OpenClaw plugin — task visibility (v0.17)", () => {
+  let tmp: string;
+  let dbPath: string;
+  let savedHome: string | undefined;
+
+  beforeAll(() => {
+    tmp = mkdtempSync(join(tmpdir(), "ebb-visibility-test-"));
+    dbPath = join(tmp, "queue.db");
+    // The pre-tick quota sweep reads ~/.ebb-ai/config; point HOME at a
+    // temp dir so the test controls that file.
+    savedHome = process.env.HOME;
+    process.env.HOME = tmp;
+  });
+  afterAll(() => {
+    process.env.HOME = savedHome;
+    rmSync(tmp, { recursive: true, force: true });
+  });
+  beforeEach(() => setLlmBridgeForTest(undefined));
+
+  it("schedule_task stores origin_host 'openclaw' and a title", async () => {
+    setLlmBridgeForTest(async () => ({ text: "" }));
+    let taskId: string;
+    try {
+      const sched = (await tool("schedule_task").execute(
+        // DE: no ENTSO-E token in tests, so the feed uses the mock curve
+        // and the test makes no network call.
+        { prompt: "Nightly digest\nwith details", deadline: deadlineISO(), region: "DE" },
+        { dbPath },
+      )) as { task_id: string };
+      taskId = sched.task_id;
+    } finally {
+      setLlmBridgeForTest(undefined);
+    }
+    const store = new TaskStore({ dbPath });
+    expect(store.get(taskId)!.originHost).toBe("openclaw");
+    expect(store.get(taskId)!.title).toBe("Nightly digest");
+    store.close();
+  });
+
+  it("the dispatch loop re-resolves a quota task whose reset passed instead of dispatching it (AE9)", async () => {
+    // A weekly reset that happened one hour ago (UTC), margin 2 h.
+    const now = Date.now();
+    const prevReset = new Date(Math.floor((now - 3_600_000) / 60_000) * 60_000);
+    const day = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][prevReset.getUTCDay()];
+    const hhmm = prevReset.toISOString().slice(11, 16);
+    const { mkdirSync } = await import("node:fs");
+    mkdirSync(join(tmp, ".ebb-ai"), { recursive: true });
+    writeFileSync(
+      join(tmp, ".ebb-ai", "config"),
+      `EBB_QUOTA_RESET_CLAUDE=${day} ${hhmm} UTC\nEBB_QUOTA_MARGIN_H_CLAUDE=2\n`,
+    );
+    const store = new TaskStore({ dbPath });
+    store.upsert({
+      taskId: "quota-ae9",
+      status: "scheduled",
+      enqueuedAt: new Date(now - 3 * 86_400_000).toISOString(),
+      scheduledFor: new Date(now - 4 * 3_600_000).toISOString(),
+      // DE: no ENTSO-E token in tests, so the feed falls back to the mock
+      // curve and the reschedule makes no network call.
+      region: "DE",
+      bodyJson: JSON.stringify({
+        type: "provider_call",
+        provider: "anthropic",
+        model: "claude-sonnet-4-5",
+        prompt: "weekly sweep",
+      }),
+      deadline: new Date(prevReset.getTime() - 2 * 3_600_000).toISOString(),
+      deadlineKind: "quota_reset",
+      quotaProvider: "claude",
+    });
+
+    const dispatched: string[] = [];
+    const stub = {
+      provider: "anthropic" as const,
+      ready: true,
+      async dispatch(model: string, prompt: string) {
+        dispatched.push(prompt);
+        return { text: "ok", model, provider: "anthropic", raw: {} };
+      },
+    };
+    await runDispatchTick({ dbPath }, { anthropic: stub });
+
+    const row = store.get("quota-ae9")!;
+    const expectedDeadline = prevReset.getTime() + 7 * 86_400_000 - 2 * 3_600_000;
+    expect(row.deadline).toBe(new Date(expectedDeadline).toISOString());
+    expect(row.deadlineKind).toBe("quota_reset");
+    // Rescheduled through the window picker: dispatched only if the picker
+    // chose the current hour, never against the stale deadline.
+    if (row.status === "scheduled") {
+      expect(Date.parse(row.scheduledFor!)).toBeGreaterThan(now - 3_600_000);
+      expect(dispatched).toHaveLength(0);
+    }
+    expect(store.getMeta("last_tick_at")).toBeDefined();
+    store.close();
+  });
+
+  it("check_queue_status marks a viewed finished task read and reports last_tick_at", async () => {
+    const store = new TaskStore({ dbPath });
+    store.upsert({
+      taskId: "done-v",
+      status: "completed",
+      enqueuedAt: "2026-10-10T00:00:00.000Z",
+      completedAt: "2026-10-10T01:00:00.000Z",
+      region: "GB",
+      title: "Done task",
+      result: { text: "answer" },
+    });
+    const list = (await tool("check_queue_status").execute({}, { dbPath })) as {
+      last_tick_at: string | null;
+      tasks: Array<{ task_id: string; title: string | null }>;
+    };
+    expect(list.tasks.find((t) => t.task_id === "done-v")?.title).toBe("Done task");
+    expect("last_tick_at" in list).toBe(true);
+    expect(store.get("done-v")!.readAt).toBeUndefined();
+    const one = (await tool("check_queue_status").execute(
+      { task_id: "done-v" },
+      { dbPath },
+    )) as { readAt?: string; title?: string };
+    expect(one.title).toBe("Done task");
+    expect(one.readAt).toBeDefined();
+    expect(store.get("done-v")!.readAt).toBeDefined();
+    store.close();
+  });
+
+  it("check_queue_status shows the stored prompt without control characters", async () => {
+    const store = new TaskStore({ dbPath });
+    store.upsert({
+      taskId: "queued-p",
+      status: "scheduled",
+      enqueuedAt: new Date().toISOString(),
+      region: "DE",
+      bodyJson: JSON.stringify({
+        type: "provider_call",
+        provider: "anthropic",
+        model: "claude-sonnet-4-5",
+        prompt: "Line one\n\u001b[31mred\u001b[0m",
+      }),
+    });
+    store.close();
+    const one = (await tool("check_queue_status").execute(
+      { task_id: "queued-p" },
+      { dbPath },
+    )) as { prompt?: string; bodyJson?: string };
+    expect(one.prompt).toBe("Line one\n[31mred[0m");
+    expect(one.bodyJson).toBeUndefined();
+  });
+
+  it("update_deadline turns a quota_reset task into an absolute one", async () => {
+    const store = new TaskStore({ dbPath });
+    store.upsert({
+      taskId: "quota-move",
+      status: "scheduled",
+      enqueuedAt: new Date().toISOString(),
+      scheduledFor: new Date(Date.now() + 3_600_000).toISOString(),
+      region: "DE",
+      bodyJson: JSON.stringify({
+        type: "provider_call",
+        provider: "anthropic",
+        model: "claude-sonnet-4-5",
+        prompt: "move me",
+      }),
+      deadline: deadlineISO(48),
+      deadlineKind: "quota_reset",
+      quotaProvider: "claude",
+    });
+    await tool("update_deadline").execute(
+      { task_id: "quota-move", deadline: deadlineISO(12) },
+      { dbPath },
+    );
+    const row = store.get("quota-move")!;
+    expect(row.deadlineKind).toBe("absolute");
+    expect(row.quotaProvider).toBeUndefined();
+    store.close();
+  });
+});
