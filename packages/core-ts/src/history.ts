@@ -3,6 +3,7 @@
  * display text. Pure functions; no I/O.
  */
 
+import type { QuotaResetConfig } from "./quota.js";
 import { redactPrompt } from "./redact.js";
 import type { ProviderCallSpec, TaskMessage, TaskRecord } from "./types.js";
 
@@ -102,12 +103,21 @@ export function taskHistory(record: TaskRecord<unknown>): TaskMessage[] {
   return out;
 }
 
-/** Short label for a task's deadline kind: `quota reset (claude)` or `absolute`. */
+/**
+ * Display label for a task's deadline kind (R21). `absolute` for a plain
+ * deadline; `quota reset (claude)` for a quota deadline, extended with
+ * `, reset_at <iso>, margin_h <n>` when `quota` has the label (the reset is
+ * the stored deadline plus the margin configured now).
+ */
 export function deadlineKindLabel(
-  record: Pick<TaskRecord<unknown>, "deadlineKind" | "quotaProvider">,
+  record: Pick<TaskRecord<unknown>, "deadlineKind" | "quotaProvider" | "deadline">,
+  quota: QuotaResetConfig = {},
 ): string {
-  if (record.deadlineKind === "quota_reset") {
-    return `quota reset (${record.quotaProvider ?? "unknown"})`;
-  }
-  return "absolute";
+  if (record.deadlineKind !== "quota_reset") return "absolute";
+  const label = `quota reset (${record.quotaProvider ?? "unknown"})`;
+  const schedule = quota[record.quotaProvider ?? ""];
+  const deadlineMs = record.deadline ? Date.parse(record.deadline) : Number.NaN;
+  if (!schedule || !Number.isFinite(deadlineMs)) return label;
+  const resetAt = new Date(deadlineMs + schedule.marginH * 3_600_000);
+  return `${label}, reset_at ${resetAt.toISOString()}, margin_h ${schedule.marginH}`;
 }

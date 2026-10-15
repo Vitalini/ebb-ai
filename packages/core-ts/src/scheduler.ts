@@ -902,10 +902,15 @@ export class Scheduler {
    * Re-score and reschedule a queued/scheduled task against a new
    * deadline. Throws if the task is already running or terminal, or
    * if the new deadline is invalid.
+   *
+   * `opts.deadlineKind: "absolute"` turns a `quota_reset` task into a plain
+   * deadline (a caller-chosen time replaces the quota rule). Omitted, the
+   * stored kind is kept, which is what the quota sweep relies on.
    */
   async updateDeadline(
     taskId: string,
     newDeadline: string | Date,
+    opts: { deadlineKind?: "absolute" } = {},
   ): Promise<TaskRecord<unknown>> {
     const record = this.resolveTask(taskId);
     if (!record) {
@@ -923,6 +928,10 @@ export class Scheduler {
     }
     const parsedDeadline = normalizeDeadline(newDeadline);
     record.deadline = parsedDeadline.toISOString();
+    if (opts.deadlineKind === "absolute") {
+      record.deadlineKind = "absolute";
+      record.quotaProvider = undefined;
+    }
     const existingTimer = this.pendingTimers.get(taskId);
     if (existingTimer) {
       clearTimeout(existingTimer);

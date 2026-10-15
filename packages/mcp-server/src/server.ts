@@ -35,16 +35,22 @@ import {
 import {
   AnthropicAdapter,
   buildDefaultGridFeed,
+  deadlineKindLabel,
   DEFAULT_MODEL_BY_PROVIDER,
   GeminiAdapter,
+  loadQuotaResetConfig,
   OllamaAdapter,
   OpenAIAdapter,
   paramOptionalForHost,
   paramsForHost,
   loadCarbonBudgetConfig,
   recommendWindow,
+  resolveQuotaDeadline,
+  resolveQuotaProvider,
   resolveRegion,
   Scheduler,
+  stripControlChars,
+  taskPrompt,
   toolsForHost,
   type CanonicalToolDef,
   type CarbonBudgetConfig,
@@ -52,6 +58,7 @@ import {
   type GridForecast,
   type ProviderCallSpec,
   type ProviderName,
+  type QuotaResetConfig,
   type TaskRecord,
   type TickAdapters,
   type ToolParam,
@@ -333,6 +340,20 @@ export interface EbbServerDeps {
   defaultModel?: string;
   /** Aggregate carbon-budget config (tests). Defaults to `loadCarbonBudgetConfig()`. */
   carbonBudget?: CarbonBudgetConfig;
+  /**
+   * Quota-reset config path (tests). Defaults to `~/.ebb-ai/config`. Read on
+   * each quota-aware call so config edits apply without a restart.
+   */
+  quotaConfigPath?: string;
+}
+
+/**
+ * The working directory to record as a task's origin: the host's project
+ * directory (MCP hosts launch servers from the workspace). `/` and the home
+ * directory carry no information, so they are not stored.
+ */
+export function originCwd(cwd: string = process.cwd()): string | undefined {
+  return cwd === "/" || cwd === homedir() ? undefined : cwd;
 }
 
 /**
@@ -384,6 +405,10 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
     });
   const persistedAt =
     dbPath === undefined || dbPath === ":memory:" ? "(in-memory)" : dbPath;
+  const loadQuota = (): QuotaResetConfig =>
+    loadQuotaResetConfig(
+      deps.quotaConfigPath !== undefined ? { path: deps.quotaConfigPath } : {},
+    );
 
   const server = new Server(
     { name: "ebb-mcp", version: SERVER_VERSION },
@@ -456,7 +481,10 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
       if (name === "schedule_task") {
         const parsed = schemaOf("schedule_task").parse(args) as {
           prompt: string;
-          deadline: string;
+          deadline?: string;
+          title?: string;
+          deadline_kind?: "absolute" | "quota_reset";
+          quota_provider?: string;
           model?: string;
           region?: string;
           carbon_budget_g?: number;
@@ -469,6 +497,40 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
           route_weights?: { carbon?: number; cost?: number; latency?: number };
         };
         try {
+          // Resolve the deadline. A quota_reset task gets the next reset
+          // minus margin from ~/.ebb-ai/config; `ebb tick` re-resolves it if
+          // that reset passes before the task runs.
+          let deadline: string;
+          let quotaLine = "";
+          const kindOpts: {
+            deadlineKind?: "absolute" | "quota_reset";
+            quotaProvider?: string;
+          } = {};
+          if (parsed.deadline_kind === "quota_reset") {
+            const pick = resolveQuotaProvider(loadQuota(), parsed.quota_provider);
+            if (!pick.ok) throw new Error(pick.error);
+            const resolved = resolveQuotaDeadline(pick.schedule, new Date());
+            deadline = resolved.deadline.toISOString();
+            kindOpts.deadlineKind = "quota_reset";
+            kindOpts.quotaProvider = pick.schedule.label;
+            quotaLine =
+              `deadline_kind: quota reset (${pick.schedule.label}), ` +
+              `reset_at ${resolved.resetAt.toISOString()}, margin_h ${pick.schedule.marginH}\n`;
+          } else {
+            if (parsed.quota_provider !== undefined) {
+              throw new Error(`quota_provider is only valid with deadline_kind "quota_reset"`);
+            }
+            if (!parsed.deadline) {
+              throw new Error(`deadline is required unless deadline_kind is "quota_reset"`);
+            }
+            deadline = parsed.deadline;
+          }
+          const identity = {
+            title: parsed.title,
+            originHost: "mcp" as const,
+            originCwd: originCwd(),
+            ...kindOpts,
+          };
           // dry_run: return the planned dispatch without persisting.
           if (parsed.dry_run) {
             const provider = parsed.provider ?? "anthropic";
@@ -485,7 +547,7 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
               routeWeights: parsed.route_weights,
             };
             const plan = await scheduler.previewProviderCall(spec, {
-              deadline: parsed.deadline,
+              deadline,
               region: parsed.region,
               carbonBudgetG: parsed.carbon_budget_g,
             });
@@ -500,7 +562,8 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
                     `model: ${spec.model}\n` +
                     `region: ${plan.region}\n` +
                     `scheduled_for: ${plan.scheduledFor}\n` +
-                    `deadline: ${parsed.deadline}\n` +
+                    `deadline: ${deadline}\n` +
+                    quotaLine +
                     `intensity_g_co2_per_kwh: ${plan.intensityGCo2PerKwh}\n` +
                     `band: ${plan.band}\n` +
                     `estimated_carbon_g_co2: ${plan.estimatedCarbonGCo2}\n` +
@@ -530,9 +593,10 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
               routeWeights: parsed.route_weights,
             };
             const record = await scheduler.enqueueProviderCall(spec, {
-              deadline: parsed.deadline,
+              deadline,
               region: parsed.region,
               carbonBudgetG: parsed.carbon_budget_g,
+              ...identity,
             });
             const gridSource = await fetchGridSource(feed, record.region);
             return {
@@ -542,12 +606,14 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
                   text:
                     `Task persisted (provider_call, dispatchable by \`ebb tick\`).\n` +
                     `task_id: ${record.taskId}\n` +
+                    (record.title ? `title: ${record.title}\n` : "") +
                     `provider: ${spec.provider}\n` +
                     `model: ${spec.model}\n` +
                     `region: ${record.region}\n` +
                     `status: ${record.status}\n` +
                     `scheduled_for: ${record.scheduledFor ?? "(immediate)"}\n` +
-                    `deadline: ${parsed.deadline}\n` +
+                    `deadline: ${deadline}\n` +
+                    quotaLine +
                     `estimated_carbon_g_co2: ${record.estimatedCarbonGCo2 ?? "(not scored)"}\n` +
                     (record.routingDecision
                       ? `routing: ${record.routingDecision.reasoning}\n`
@@ -577,9 +643,10 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
               note: "closure placeholder — dispatch=true on schedule_task to persist a real provider_call",
             }),
             {
-              deadline: parsed.deadline,
+              deadline,
               region: parsed.region,
               carbonBudgetG: parsed.carbon_budget_g,
+              ...identity,
             },
           );
           return {
@@ -591,7 +658,7 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
                   `task_id: ${record.taskId}\n` +
                   `region: ${record.region}\n` +
                   `status: ${record.status}\n` +
-                  `deadline: ${parsed.deadline}\n` +
+                  `deadline: ${deadline}\n` +
                   `Note: dispatch=false placeholder. Will NOT actually call ` +
                   `the LLM. Remove dispatch=false to enqueue a real ` +
                   `provider_call (default in v0.7.1+).`,
@@ -628,8 +695,18 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
               isError: true,
             };
           }
+          // Viewing a finished task's result marks it read (v0.17); the
+          // store ignores unfinished tasks and already-read ones.
+          if (task.status === "completed" || task.status === "failed") {
+            scheduler.markTaskRead(task.taskId);
+          }
           return {
-            content: [{ type: "text", text: formatTask(task) }],
+            content: [
+              {
+                type: "text",
+                text: formatTask(scheduler.getTask(task.taskId) ?? task, loadQuota()),
+              },
+            ],
           };
         }
         // Persisted ledger first (survives MCP-host restarts), in-memory
@@ -638,7 +715,9 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
         // Aggregate carbon-budget status block (ROADMAP item 4): appended
         // only when a budget is configured and a store backs the scheduler.
         const budget = scheduler.getCarbonBudgetStatus();
-        const summary = formatQueueSummary(all);
+        const summary = formatQueueSummary(all, {
+          lastTickAt: scheduler.lastTickAt(),
+        });
         return {
           content: [
             {
@@ -712,7 +791,10 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
           deadline: string;
         };
         try {
-          const rec = await scheduler.updateDeadline(parsed.task_id, parsed.deadline);
+          // An explicit deadline replaces a quota_reset rule (v0.17).
+          const rec = await scheduler.updateDeadline(parsed.task_id, parsed.deadline, {
+            deadlineKind: "absolute",
+          });
           return {
             content: [
               {
@@ -914,19 +996,32 @@ export function routingBlockPayload(
   };
 }
 
-export function formatTask(task: TaskRecord<unknown> | undefined): string {
+export function formatTask(
+  task: TaskRecord<unknown> | undefined,
+  quota: QuotaResetConfig = {},
+): string {
   if (!task) return "";
-  const lines = [
-    `task_id: ${task.taskId}`,
+  const lines = [`task_id: ${task.taskId}`];
+  if (task.title) lines.push(`title: ${task.title}`);
+  lines.push(
     `status: ${task.status}`,
     `region: ${task.region}`,
     `enqueued_at: ${task.enqueuedAt}`,
-  ];
+  );
+  if (task.originHost)
+    lines.push(`origin: ${task.originHost}${task.originCwd ? ` (${task.originCwd})` : ""}`);
+  if (task.parentTaskId) lines.push(`parent_task_id: ${task.parentTaskId}`);
   if (task.scheduledFor) lines.push(`scheduled_for: ${task.scheduledFor}`);
   if (task.deadline) lines.push(`deadline: ${task.deadline}`);
+  lines.push(`deadline_kind: ${deadlineKindLabel(task, quota)}`);
   if (task.completedAt) lines.push(`completed_at: ${task.completedAt}`);
+  if (task.readAt) lines.push(`read_at: ${task.readAt}`);
   if (task.carbonBudgetG)
     lines.push(`carbon_budget_g: ${task.carbonBudgetG}`);
+  const prompt = taskPrompt(task);
+  if (prompt !== undefined) {
+    lines.push(`prompt: ${stripControlChars(prompt, { multiline: true })}`);
+  }
   if (task.receipt) {
     lines.push("");
     lines.push("Carbon receipt:");
@@ -993,9 +1088,13 @@ export function formatTask(task: TaskRecord<unknown> | undefined): string {
 
 export function formatQueueSummary(
   tasks: ReadonlyArray<TaskRecord<unknown> | undefined>,
+  opts: { lastTickAt?: string } = {},
 ): string {
+  // When a ticker (`ebb tick` or the OpenClaw loop) last ran: tells the
+  // caller whether scheduled tasks are actually being dispatched.
+  const tickLine = `last_tick_at: ${opts.lastTickAt ?? "never recorded"}`;
   if (tasks.length === 0) {
-    return "Queue is empty.";
+    return `Queue is empty.\n${tickLine}`;
   }
   const counts: Record<string, number> = {};
   for (const t of tasks) {
@@ -1005,6 +1104,7 @@ export function formatQueueSummary(
   const lines = [
     `Total tasks: ${tasks.length}`,
     ...Object.entries(counts).map(([s, n]) => `  ${s}: ${n}`),
+    tickLine,
     "",
     "Tasks:",
   ];
@@ -1013,6 +1113,8 @@ export function formatQueueSummary(
     lines.push(
       `  ${t.taskId} | ${t.status.padEnd(10)} | region=${t.region}${
         t.scheduledFor ? ` | sched=${t.scheduledFor}` : ""
+      }${t.deadlineKind === "quota_reset" ? ` | quota=${t.quotaProvider ?? "?"}` : ""}${
+        t.title ? ` | ${t.title}` : ""
       }`,
     );
   }

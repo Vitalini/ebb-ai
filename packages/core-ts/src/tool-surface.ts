@@ -283,7 +283,17 @@ export const TOOL_SURFACE: readonly CanonicalToolDef[] = [
         description:
           "The prompt or task description to dispatch when the chosen window arrives.",
       },
-      deadlineParam,
+      // OpenClaw keeps `deadline` required. On MCP it is optional because a
+      // `deadline_kind: "quota_reset"` task has its deadline resolved by the
+      // server from the quota config.
+      { ...deadlineParam, hosts: ["openclaw"] },
+      {
+        ...deadlineParam,
+        hosts: ["mcp"],
+        optional: true,
+        description:
+          "ISO-8601 timestamp (e.g. '2026-05-13T08:00:00-04:00') by which the task must have completed. Must be in the future. Required unless deadline_kind is 'quota_reset', in which case it is ignored.",
+      },
       regionParam({
         // Optional on BOTH hosts for schedule_task.
         optionalPerHost: { mcp: true, openclaw: true },
@@ -338,6 +348,31 @@ export const TOOL_SURFACE: readonly CanonicalToolDef[] = [
         description:
           "Optional regex patterns to strip from the prompt before storing it on the receipt. Omit to use the default redaction of API-key-looking strings.",
       },
+      {
+        name: "title",
+        kind: "string",
+        optional: true,
+        hosts: ["mcp"],
+        description:
+          "Optional short title for the task (shown in queue lists). Defaults to the first line of the prompt, cut to 80 characters. API-key-looking strings are redacted.",
+      },
+      {
+        name: "deadline_kind",
+        kind: "enum",
+        values: ["absolute", "quota_reset"],
+        optional: true,
+        hosts: ["mcp"],
+        description:
+          "How the deadline is chosen. 'absolute' (default): use 'deadline'. 'quota_reset': run before the next weekly subscription-quota reset, minus a safety margin, as configured in ~/.ebb-ai/config (EBB_QUOTA_RESET_<LABEL>=<weekday> <HH:MM> [<IANA zone>], optional EBB_QUOTA_MARGIN_H_<LABEL>=<hours>, default 2). Use it when the user says 'before my weekly limit resets' or similar.",
+      },
+      {
+        name: "quota_provider",
+        kind: "string",
+        optional: true,
+        hosts: ["mcp"],
+        description:
+          "Quota label for deadline_kind 'quota_reset' (e.g. 'claude', 'codex'). Optional when exactly one label is configured.",
+      },
       // ── OpenClaw-only parameters (result delivery) ──
       deliverParam(true),
       webhookUrlParam,
@@ -349,7 +384,7 @@ export const TOOL_SURFACE: readonly CanonicalToolDef[] = [
     name: "check_queue_status",
     hosts: ["mcp", "openclaw"],
     description:
-      "Report on the ebb-ai task queue. With no arguments, returns a summary of all known tasks (including tasks persisted by previous sessions — the queue survives host restarts). With task_id, returns full detail for one task including any carbon receipt (estimated vs actual grams, grid_source, energy_source). Read-only.",
+      "Report on the ebb-ai task queue. With no arguments, returns a summary of all known tasks (including tasks persisted by previous sessions — the queue survives host restarts). With task_id, returns full detail for one task, including its title, prompt, result and any carbon receipt (estimated vs actual grams, grid_source, energy_source); viewing a completed or failed task marks it read. Never changes a task's status.",
     params: [
       {
         name: "task_id",

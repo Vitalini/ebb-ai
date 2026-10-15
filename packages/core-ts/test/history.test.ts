@@ -85,6 +85,29 @@ describe("deadlineKindLabel", () => {
     );
     expect(deadlineKindLabel({ deadlineKind: undefined })).toBe("absolute");
   });
+
+  it("adds the reset instant and margin when the label is configured", () => {
+    const quota = {
+      claude: {
+        label: "claude",
+        weekday: 1,
+        hour: 10,
+        minute: 0,
+        timeZone: "UTC",
+        marginH: 2,
+      },
+    };
+    expect(
+      deadlineKindLabel(
+        {
+          deadlineKind: "quota_reset",
+          quotaProvider: "claude",
+          deadline: "2026-10-19T08:00:00.000Z",
+        },
+        quota,
+      ),
+    ).toBe("quota reset (claude), reset_at 2026-10-19T10:00:00.000Z, margin_h 2");
+  });
 });
 
 describe("taskHistory", () => {

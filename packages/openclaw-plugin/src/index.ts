@@ -55,7 +55,7 @@
  * Tools:
  *   - schedule_task       — queue a task at the cleanest hour
  *   - recommend_window    — preview the cleanest hour (read-only, no DB)
- *   - check_queue_status  — list all tasks / detail one (read-only)
+ *   - check_queue_status  — list all tasks / detail one (marks a finished task read)
  *   - cancel_task         — cancel a queued task (idempotent)
  *   - get_grid_forecast   — hourly carbon-intensity forecast (read-only, no DB)
  *   - update_deadline     — move a queued task's deadline
@@ -77,6 +77,8 @@ import {
   DEFAULT_MODEL_BY_PROVIDER,
   getToolDefOrThrow,
   loadCarbonBudgetConfig,
+  loadQuotaResetConfig,
+  prepareTick,
   recommendWindow,
   resolveRegion,
   Scheduler,
@@ -393,6 +395,17 @@ export async function runDispatchTick(
   // plugin block from the captured gateway config when one is available.
   const cfg = effectiveConfig(config);
   const { scheduler, store } = getQueueRuntime(cfg);
+  // Shared pre-tick step (same as `ebb tick`): record last_tick_at and
+  // re-resolve quota_reset tasks whose weekly reset already passed, so they
+  // are rescheduled through the window picker instead of dispatched late.
+  // Quota schedules come from the ~/.ebb-ai/config FILE (no env reads).
+  const preTickMessages = await prepareTick(scheduler, {
+    quotaConfig: loadQuotaResetConfig(),
+  });
+  for (const message of preTickMessages) {
+    // eslint-disable-next-line no-console
+    console.warn(`[ebb-ai] dispatcher: ${message}`);
+  }
   const adapters = adaptersOverride ?? buildAdapters(cfg);
   const covered = new Set<string>(
     Object.entries(adapters)
@@ -729,6 +742,7 @@ export default defineToolPlugin({
             deadline: new Date(params.deadline),
             region,
             carbonBudgetG: params.carbon_budget_g,
+            originHost: "openclaw",
           },
         );
 
@@ -868,6 +882,11 @@ export default defineToolPlugin({
                 "Call this tool with no arguments to list every task.",
             );
           }
+          // Viewing a finished task's result marks it read (v0.17).
+          if (task.status === "completed" || task.status === "failed") {
+            const now = new Date();
+            if (scheduler.markTaskRead(task.taskId, now)) task.readAt = now.toISOString();
+          }
           // Omit bodyJson — it is the internal serialized request spec and
           // is misleading as a status field: it shows the requested model,
           // not the model that actually ran. The receipt records what ran.
@@ -885,8 +904,11 @@ export default defineToolPlugin({
         }
         return {
           total: tasks.length,
+          // When a ticker last ran (this loop or `ebb tick`), v0.17.
+          last_tick_at: scheduler.lastTickAt() ?? null,
           tasks: tasks.map((t) => ({
             task_id: t.taskId,
+            title: t.title ?? null,
             status: t.status,
             region: t.region,
             scheduled_for: t.scheduledFor ?? null,
