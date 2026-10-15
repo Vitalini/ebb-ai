@@ -111,7 +111,10 @@ function render() {
   const focused = document.activeElement?.closest?.("#view .row[data-task-id]")?.dataset.taskId;
   const focusedSelect = document.activeElement?.closest?.("#view select")?.name;
   const wrap = h("div", { class: `view-inner view-${currentView}` });
-  VIEWS[currentView](wrap, { selectedId: detailId(), width: view.clientWidth - 2 * gutter() });
+  // currentView comes from the hash; parseRoute already limits it to the
+  // three names, and this lookup refuses anything else on its own.
+  const renderView = Object.hasOwn(VIEWS, currentView) ? VIEWS[currentView] : renderAgenda;
+  renderView(wrap, { selectedId: detailId(), width: view.clientWidth - 2 * gutter() });
   // Keep the live DOM when nothing changed, so a click or hover in flight
   // is not lost to an identical redraw (the stream fires on every tick).
   if (view.firstElementChild?.isEqualNode(wrap)) {
