@@ -82,7 +82,9 @@ import {
   recommendWindow,
   resolveRegion,
   Scheduler,
+  stripControlChars,
   TaskStore,
+  taskPrompt,
   type CarbonAlert,
   type ProviderCallSpec,
   type TaskRecord,
@@ -893,8 +895,14 @@ export default defineToolPlugin({
           const { bodyJson: _bodyJson, ...view } = task;
           const provenance = receiptProvenance(task.receipt);
           const synthetic = task.receipt?.gridSource === "mock";
+          // The stored prompt (redacted once the task finished), as the
+          // shared check_queue_status description promises.
+          const prompt = taskPrompt(task);
           return {
             ...view,
+            ...(prompt !== undefined
+              ? { prompt: stripControlChars(prompt, { multiline: true }) }
+              : {}),
             // Surface receipt provenance (actual/delta/intensity/grid_source/
             // energy_source) in one place, mirroring the MCP server.
             ...(provenance ? { receipt_provenance: provenance } : {}),
@@ -977,9 +985,11 @@ export default defineToolPlugin({
       ) {
         captureOpenClawRuntime(context);
         const { scheduler } = getQueueRuntime(config);
+        // An explicit deadline replaces a quota_reset rule, as in MCP.
         const record = await scheduler.updateDeadline(
           params.task_id,
           new Date(params.deadline),
+          { deadlineKind: "absolute" },
         );
         return {
           task_id: params.task_id,

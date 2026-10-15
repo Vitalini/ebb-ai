@@ -1115,7 +1115,9 @@ describe("ebb OpenClaw plugin — task visibility (v0.17)", () => {
     let taskId: string;
     try {
       const sched = (await tool("schedule_task").execute(
-        { prompt: "Nightly digest\nwith details", deadline: deadlineISO(), region: "GB" },
+        // DE: no ENTSO-E token in tests, so the feed uses the mock curve
+        // and the test makes no network call.
+        { prompt: "Nightly digest\nwith details", deadline: deadlineISO(), region: "DE" },
         { dbPath },
       )) as { task_id: string };
       taskId = sched.task_id;
@@ -1210,6 +1212,57 @@ describe("ebb OpenClaw plugin — task visibility (v0.17)", () => {
     expect(one.title).toBe("Done task");
     expect(one.readAt).toBeDefined();
     expect(store.get("done-v")!.readAt).toBeDefined();
+    store.close();
+  });
+
+  it("check_queue_status shows the stored prompt without control characters", async () => {
+    const store = new TaskStore({ dbPath });
+    store.upsert({
+      taskId: "queued-p",
+      status: "scheduled",
+      enqueuedAt: new Date().toISOString(),
+      region: "DE",
+      bodyJson: JSON.stringify({
+        type: "provider_call",
+        provider: "anthropic",
+        model: "claude-sonnet-4-5",
+        prompt: "Line one\n\u001b[31mred\u001b[0m",
+      }),
+    });
+    store.close();
+    const one = (await tool("check_queue_status").execute(
+      { task_id: "queued-p" },
+      { dbPath },
+    )) as { prompt?: string; bodyJson?: string };
+    expect(one.prompt).toBe("Line one\n[31mred[0m");
+    expect(one.bodyJson).toBeUndefined();
+  });
+
+  it("update_deadline turns a quota_reset task into an absolute one", async () => {
+    const store = new TaskStore({ dbPath });
+    store.upsert({
+      taskId: "quota-move",
+      status: "scheduled",
+      enqueuedAt: new Date().toISOString(),
+      scheduledFor: new Date(Date.now() + 3_600_000).toISOString(),
+      region: "DE",
+      bodyJson: JSON.stringify({
+        type: "provider_call",
+        provider: "anthropic",
+        model: "claude-sonnet-4-5",
+        prompt: "move me",
+      }),
+      deadline: deadlineISO(48),
+      deadlineKind: "quota_reset",
+      quotaProvider: "claude",
+    });
+    await tool("update_deadline").execute(
+      { task_id: "quota-move", deadline: deadlineISO(12) },
+      { dbPath },
+    );
+    const row = store.get("quota-move")!;
+    expect(row.deadlineKind).toBe("absolute");
+    expect(row.quotaProvider).toBeUndefined();
     store.close();
   });
 });
