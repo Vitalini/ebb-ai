@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/readme-hero.png" alt="Ebb AI: GB grid carbon-intensity forecast from 2026-09-30, peak 183 and recommended hour 88 gCO2/kWh (forecast, projected, one run)" width="800"></p>
+
 # ebb-ai
 
 **Run non-urgent LLM tasks at the cleanest grid hour before your deadline.**
