@@ -10,20 +10,26 @@
 import {
   AnthropicAdapter,
   buildDefaultGridFeed,
+  carbonBudgetConfigPath,
   GeminiAdapter,
   loadCarbonBudgetConfig,
   loadQuotaResetConfig,
   OllamaAdapter,
   OpenAIAdapter,
+  osNotifyCommand,
+  parseKeyValues,
   prepareTick,
   resolveRegion,
   Scheduler,
+  taskNotificationContent,
   TaskStore,
   type CarbonAlert,
   type TickAdapters,
+  type TickResultEntry,
 } from "@ebb-ai/core";
-import { existsSync } from "node:fs";
-import { homedir } from "node:os";
+import { spawn, type SpawnOptions } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir, platform as osPlatform } from "node:os";
 import { join } from "node:path";
 import { readEnvCredentials, type ProviderCredentials } from "../env.js";
 import { loadEnvFileIntoProcess } from "./env-file.js";
@@ -41,6 +47,75 @@ export interface TickCommandOptions {
    * reset schedules are both read from it.
    */
   budgetConfig?: string;
+  /** `false` (`--no-notify`) posts no OS notification for finished tasks. */
+  notify?: boolean;
+  /** Spawner for the notification command (tests). Defaults to node's spawn. */
+  spawnNotify?: NotifySpawner;
+  /** Platform for the notification command (tests). Defaults to os.platform(). */
+  platform?: NodeJS.Platform;
+}
+
+/** Starts a notification process; the tick never waits on it. */
+export type NotifySpawner = (cmd: string, args: string[], opts: SpawnOptions) => void;
+
+const NOTIFY_TIMEOUT_MS = 5_000;
+
+const defaultSpawnNotify: NotifySpawner = (cmd, args, opts) => {
+  const child = spawn(cmd, args, opts);
+  // A missing binary (no notify-send) or a failed toast is not a tick error.
+  child.on("error", () => {});
+  child.unref();
+};
+
+/** `EBB_NOTIFY=0` (or false/off/no) in ~/.ebb-ai/config turns notifications off. */
+export function notifyDisabledInConfig(path: string = carbonBudgetConfigPath()): boolean {
+  try {
+    if (!existsSync(path)) return false;
+    const v = parseKeyValues(readFileSync(path, "utf8")).EBB_NOTIFY;
+    return v !== undefined && /^(0|false|off|no)$/i.test(v.trim());
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Post one OS notification per task that reached `completed` or `failed`
+ * in this tick. Best-effort: an unknown platform, a missing record, or a
+ * spawner that throws is skipped silently.
+ */
+function notifyFinished(
+  dbPath: string,
+  entries: TickResultEntry[],
+  opts: TickCommandOptions,
+): void {
+  const finished = entries.filter((e) => e.status === "completed" || e.status === "failed");
+  if (finished.length === 0) return;
+  const platform = opts.platform ?? osPlatform();
+  const spawnNotify = opts.spawnNotify ?? defaultSpawnNotify;
+  let store: TaskStore | undefined;
+  try {
+    store = new TaskStore({ dbPath });
+    for (const entry of finished) {
+      const record = store.get(entry.taskId);
+      if (!record) continue;
+      const { title, body } = taskNotificationContent(record);
+      const command = osNotifyCommand(platform, title, body);
+      if (!command) return;
+      try {
+        spawnNotify(command.cmd, command.args, {
+          stdio: "ignore",
+          timeout: NOTIFY_TIMEOUT_MS,
+          ...(command.env ? { env: { ...process.env, ...command.env } } : {}),
+        });
+      } catch {
+        // ignore: a notification never changes the tick outcome
+      }
+    }
+  } catch {
+    // unreadable ledger: skip notifications
+  } finally {
+    store?.close();
+  }
 }
 
 export interface TickRunResult {
@@ -213,6 +288,9 @@ export async function runTickOnce(
       ),
     });
     const result = await scheduler.tick(adapters);
+    if (opts.notify !== false && !notifyDisabledInConfig(opts.budgetConfig)) {
+      notifyFinished(dbPath, result.results, opts);
+    }
     let msg = `tick: ${result.inspected} inspected, ${result.dispatched} dispatched, ${result.failed} failed`;
     for (const line of preTick) msg += `\n${line}`;
     for (const a of firedAlerts) {

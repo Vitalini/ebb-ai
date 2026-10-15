@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>ebb tasks</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="app.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="top">
+    <span class="brand">ebb</span>
+    <nav aria-label="Views">
+      <a href="#/timeline" id="nav-timeline">Timeline</a>
+      <a href="#/inbox" id="nav-inbox">Inbox <span class="badge" id="unread-badge" hidden></span></a>
+    </nav>
+    <span class="tick" id="last-tick"></span>
+  </header>
+  <div id="banner" class="banner" role="status" hidden></div>
+  <div id="conn" class="conn" role="status" hidden>Disconnected, retrying…</div>
+  <main id="view" tabindex="-1"></main>
+  <aside id="drawer" class="drawer" aria-label="Task detail" hidden></aside>
+</body>
+</html>

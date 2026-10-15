@@ -28,6 +28,7 @@ import { createRequire } from "node:module";
 import { homedir, platform as osPlatform } from "node:os";
 import { dirname, join } from "node:path";
 
+import { osNotifyCommand } from "@ebb-ai/core";
 import type { CarbonAlert, CarbonReceipt, TaskRecord } from "@ebb-ai/core";
 
 export type DeliveryMode =
@@ -458,50 +459,12 @@ export function notificationContent(task: CompletedTask): {
   };
 }
 
-/** Escape a string for embedding inside an AppleScript double-quoted literal. */
-function escapeAppleScript(s: string): string {
-  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-}
+// The per-platform command builder lives in core (shared with `ebb tick`);
+// re-exported here so existing imports keep working.
+export { osNotifyCommand };
 
-/**
- * Build the per-platform notification command (binary + argv). Pure and
- * side-effect-free so tests can assert it directly; returns null for a
- * platform we do not support.
- */
-export function osNotifyCommand(
-  platform: NodeJS.Platform,
-  title: string,
-  body: string,
-): { cmd: string; args: string[] } | null {
-  if (platform === "darwin") {
-    const script = `display notification "${escapeAppleScript(
-      body,
-    )}" with title "${escapeAppleScript(title)}"`;
-    return { cmd: "osascript", args: ["-e", script] };
-  }
-  if (platform === "linux") {
-    return { cmd: "notify-send", args: [title, body] };
-  }
-  if (platform === "win32") {
-    const esc = (s: string) => s.replace(/'/g, "''");
-    const script = [
-      "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType=WindowsRuntime] | Out-Null;",
-      "$t = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02);",
-      `$texts = $t.GetElementsByTagName('text'); $texts.Item(0).AppendChild($t.CreateTextNode('${esc(
-        title,
-      )}')) | Out-Null; $texts.Item(1).AppendChild($t.CreateTextNode('${esc(
-        body,
-      )}')) | Out-Null;`,
-      "$toast = [Windows.UI.Notifications.ToastNotification]::new($t);",
-      "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('ebb-ai').Show($toast);",
-    ].join(" ");
-    return {
-      cmd: "powershell",
-      args: ["-NoProfile", "-NonInteractive", "-Command", script],
-    };
-  }
-  return null;
-}
+/** A notifier that has not exited after this long is killed. */
+const NOTIFY_TIMEOUT_MS = 5_000;
 
 /** Run a spawned command, resolving to a delivery-style outcome. Never throws;
  *  a missing binary (ENOENT) or a non-zero exit becomes an honest failure. */
@@ -512,7 +475,8 @@ function runNotifyCommand(
   return new Promise((resolve) => {
     let child: ReturnType<SpawnFn>;
     try {
-      child = spawnImpl(cmd, args, { stdio: "ignore" });
+      // The timeout kills a hung notifier so delivery never waits on it.
+      child = spawnImpl(cmd, args, { stdio: "ignore", timeout: NOTIFY_TIMEOUT_MS });
     } catch (err) {
       resolve({
         ok: false,
@@ -536,11 +500,11 @@ function runNotifyCommand(
             : err.message,
       });
     });
-    child.on("close", (code: number | null) => {
+    child.on("close", (code: number | null, signal: NodeJS.Signals | null) => {
       done(
-        code === 0 || code === null
+        code === 0 || (code === null && signal === null)
           ? { ok: true, detail: `notified via ${cmd}` }
-          : { ok: false, detail: `${cmd} exited ${code}` },
+          : { ok: false, detail: signal ? `${cmd} killed (${signal})` : `${cmd} exited ${code}` },
       );
     });
   });
@@ -549,7 +513,9 @@ function runNotifyCommand(
 async function deliverOs(task: CompletedTask): Promise<DeliveryOutcome> {
   const platform = osPlatform();
   const { title, body } = notificationContent(task);
-  const command = osNotifyCommand(platform, title, body);
+  // The plugin reads no environment, so it cannot merge env vars into the
+  // spawn; the Windows text travels as inert base64 literals instead.
+  const command = osNotifyCommand(platform, title, body, { windowsText: "base64" });
   if (!command) {
     return {
       mode: "os",

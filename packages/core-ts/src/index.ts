@@ -110,11 +110,21 @@ export type {
   Achievement,
 } from "./aggregator.js";
 // Aggregate carbon-budget alerts (ROADMAP item 4).
+// Desktop notifications (v0.17): pure command builder, hosts spawn it.
+export {
+  NOTIFY_PREVIEW_CHARS,
+  WIN_NOTIFY_BODY_VAR,
+  WIN_NOTIFY_TITLE_VAR,
+  osNotifyCommand,
+  taskNotificationContent,
+} from "./notify.js";
+export type { OsNotifyCommand, OsNotifyOptions } from "./notify.js";
 export {
   carbonBudgetConfigPath,
   carbonBudgetStatus,
   carbonBudgetUsage,
   loadCarbonBudgetConfig,
+  parseKeyValues,
   receiptCarbonG,
   windowBounds,
 } from "./budget.js";
@@ -157,6 +167,7 @@ export {
 export type { GridFeedCredentials } from "./grid.js";
 export type {
   DeferOptions,
+  GridFeed,
   GridForecast,
   GridForecastEntry,
   GridSignalType,

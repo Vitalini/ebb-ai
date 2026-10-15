@@ -1,3 +1,4 @@
+import type { SpawnOptions } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -245,5 +246,133 @@ describe("ebb tick pre-tick step (quota sweep, last_tick_at)", () => {
     );
     expect(store.getMeta("last_tick_at")).toBeDefined();
     store.close();
+  });
+});
+
+describe("ebb tick notifications", () => {
+  let dir: string;
+  let dbPath: string;
+  const savedHost = process.env.OLLAMA_HOST;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "ebb-tick-notify-"));
+    dbPath = join(dir, "queue.db");
+    process.env.OLLAMA_HOST = "http://ollama.test";
+    vi.stubGlobal("fetch", async (input: string | URL) => {
+      const url = String(input);
+      if (url === "http://ollama.test/api/chat") {
+        return Response.json({
+          model: "llama3.2:1b",
+          message: { role: "assistant", content: "ok" },
+          done: true,
+          prompt_eval_count: 5,
+          eval_count: 3,
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    const store = new TaskStore({ dbPath });
+    const due = (taskId: string, provider: string) =>
+      store.upsert({
+        taskId,
+        status: "scheduled",
+        enqueuedAt: new Date(Date.now() - 60_000).toISOString(),
+        scheduledFor: new Date(Date.now() - 1_000).toISOString(),
+        region: "FR",
+        title: `title ${taskId}`,
+        bodyJson: JSON.stringify({ type: "provider_call", provider, model: "llama3.2:1b", prompt: "hi" }),
+      });
+    due("ok-1", "ollama");
+    due("ok-2", "ollama");
+    // No anthropic adapter is registered, so this one fails fast.
+    due("bad-1", "anthropic");
+    store.close();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    if (savedHost !== undefined) process.env.OLLAMA_HOST = savedHost;
+    else delete process.env.OLLAMA_HOST;
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  function run(extra: Partial<Parameters<typeof runTickOnce>[0]> = {}) {
+    const calls: Array<{ cmd: string; args: string[]; opts: SpawnOptions }> = [];
+    const result = runTickOnce({
+      db: dbPath,
+      region: "FR",
+      envFile: join(dir, "no-env"),
+      budgetConfig: join(dir, "no-config"),
+      platform: "linux",
+      spawnNotify: (cmd, args, opts) => {
+        calls.push({ cmd, args, opts });
+      },
+      ...extra,
+    });
+    return { result, calls };
+  }
+
+  it("posts one notification per completed or failed task (AE8)", async () => {
+    const { result, calls } = run();
+    const r = await result;
+    expect(r.message.split("\n")[0]).toBe("tick: 3 inspected, 2 dispatched, 1 failed");
+    expect(r.exitCode).toBe(1);
+    expect(calls).toHaveLength(3);
+    expect(calls.every((c) => c.cmd === "notify-send" && c.args[0] === "--")).toBe(true);
+    const titles = calls.map((c) => c.args[1]).sort();
+    expect(titles).toEqual([
+      "ebb-ai: done: title ok-1",
+      "ebb-ai: done: title ok-2",
+      "ebb-ai: failed: title bad-1",
+    ]);
+  });
+
+  it("--no-notify posts nothing", async () => {
+    const { result, calls } = run({ notify: false });
+    await result;
+    expect(calls).toHaveLength(0);
+  });
+
+  it("EBB_NOTIFY=0 in the config posts nothing", async () => {
+    const config = join(dir, "config");
+    writeFileSync(config, "EBB_NOTIFY=0\n");
+    const { result, calls } = run({ budgetConfig: config });
+    await result;
+    expect(calls).toHaveLength(0);
+  });
+
+  it("win32 passes the text through env vars with a timeout on the child", async () => {
+    const { result, calls } = run({ platform: "win32" });
+    await result;
+    expect(calls).toHaveLength(3);
+    for (const c of calls) {
+      expect(c.cmd).toBe("powershell");
+      expect(c.opts.timeout).toBeGreaterThan(0);
+      expect(c.opts.env?.EBB_NOTIFY_TITLE).toMatch(/^ebb-ai: (done|failed): title /);
+      expect(c.opts.env?.PATH).toBe(process.env.PATH);
+      expect(c.args.join(" ")).not.toContain("title ok-1");
+    }
+  });
+
+  it("an unknown platform posts nothing and keeps the outcome", async () => {
+    const { result, calls } = run({ platform: "aix" });
+    const r = await result;
+    expect(calls).toHaveLength(0);
+    expect(r.message).toContain("2 dispatched, 1 failed");
+  });
+
+  it("a throwing spawner does not change the outcome", async () => {
+    const r = await runTickOnce({
+      db: dbPath,
+      region: "FR",
+      envFile: join(dir, "no-env"),
+      budgetConfig: join(dir, "no-config"),
+      platform: "linux",
+      spawnNotify: () => {
+        throw new Error("boom");
+      },
+    });
+    expect(r.exitCode).toBe(1);
+    expect(r.message).toContain("2 dispatched, 1 failed");
   });
 });

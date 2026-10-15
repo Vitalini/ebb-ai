@@ -26,9 +26,11 @@ import type {
   TaskRecord,
   TaskStatus,
 } from "@ebb-ai/core";
+import { existsSync } from "node:fs";
+
 import { defaultDbPath } from "./tick.js";
 
-const VALID_STATUSES: ReadonlySet<TaskStatus> = new Set([
+export const VALID_STATUSES: ReadonlySet<TaskStatus> = new Set([
   "queued",
   "scheduled",
   "running",
@@ -39,7 +41,7 @@ const VALID_STATUSES: ReadonlySet<TaskStatus> = new Set([
   "cancelled",
 ]);
 
-const VALID_KINDS: ReadonlySet<DeadlineKind> = new Set(["absolute", "quota_reset"]);
+export const VALID_KINDS: ReadonlySet<DeadlineKind> = new Set(["absolute", "quota_reset"]);
 
 export interface QueueListOptions {
   db?: string;
@@ -49,6 +51,11 @@ export interface QueueListOptions {
   /** `absolute` or `quota_reset`. */
   kind?: string;
   json?: boolean;
+  /**
+   * SessionStart-hook mode: one line naming the unread count, or nothing.
+   * Never throws; a missing or unreadable ledger prints nothing.
+   */
+  hook?: boolean;
 }
 
 export interface QueueListResult {
@@ -105,8 +112,11 @@ export function renderQueue(
   return [header, sep, ...lines, "", tick].join("\n");
 }
 
-/** The fields `queue list --json` prints per task (no prompt, no result). */
-function summary(r: TaskRecord<unknown>): Record<string, unknown> {
+/**
+ * The fields `queue list --json` and the `ebb ui` list API print per task
+ * (no prompt, no result).
+ */
+export function taskSummary(r: TaskRecord<unknown>): Record<string, unknown> {
   return {
     task_id: r.taskId,
     title: r.title ?? null,
@@ -144,9 +154,41 @@ function buildFilter(opts: QueueListOptions): TaskListFilter {
   return filter;
 }
 
+/**
+ * The Claude Code SessionStart line: `N unread ebb task(s), run `ebb ui``,
+ * or "" when nothing is unread. It names no task text, so nothing from a
+ * prompt or a model reply reaches the session context.
+ */
+export function renderHookLine(unreadCount: number): string {
+  if (unreadCount <= 0) return "";
+  const noun = unreadCount === 1 ? "task" : "tasks";
+  return stripControlChars(`${unreadCount} unread ebb ${noun}, run \`ebb ui\` to read them.`);
+}
+
+function runQueueHook(opts: QueueListOptions): QueueListResult {
+  const dbPath = opts.db ?? defaultDbPath();
+  // Do not create a ledger just to report that it is empty.
+  if (dbPath !== ":memory:" && !existsSync(dbPath)) return { rows: [], rendered: "" };
+  let store: TaskStore | undefined;
+  try {
+    store = new TaskStore({ dbPath });
+    const rows = store.list({ unread: true });
+    return { rows, rendered: renderHookLine(rows.length) };
+  } catch {
+    return { rows: [], rendered: "" };
+  } finally {
+    try {
+      store?.close();
+    } catch {
+      // ignore
+    }
+  }
+}
+
 export async function runQueueList(
   opts: QueueListOptions = {},
 ): Promise<QueueListResult> {
+  if (opts.hook) return runQueueHook(opts);
   const filter = buildFilter(opts);
   const dbPath = opts.db ?? defaultDbPath();
   const store = new TaskStore({ dbPath });
@@ -154,7 +196,7 @@ export async function runQueueList(
     const rows = store.list(filter);
     const lastTickAt = store.getMeta(LAST_TICK_META_KEY);
     const rendered = opts.json
-      ? JSON.stringify({ last_tick_at: lastTickAt ?? null, tasks: rows.map(summary) }, null, 2)
+      ? JSON.stringify({ last_tick_at: lastTickAt ?? null, tasks: rows.map(taskSummary) }, null, 2)
       : renderQueue(rows, { lastTickAt });
     return { rows, rendered };
   } finally {
@@ -178,7 +220,7 @@ export interface QueueShowResult {
   rendered: string;
 }
 
-function rawPayload(record: TaskRecord<unknown>): unknown {
+export function rawPayload(record: TaskRecord<unknown>): unknown {
   const r = record.result as { raw?: unknown } | undefined;
   return r && typeof r === "object" ? r.raw : undefined;
 }
@@ -296,7 +338,7 @@ export async function runQueueShow(
   }
 }
 
-function withoutRaw(result: unknown): unknown {
+export function withoutRaw(result: unknown): unknown {
   if (!result || typeof result !== "object" || !("raw" in result)) return result;
   const { raw: _raw, ...rest } = result as Record<string, unknown>;
   return rest;

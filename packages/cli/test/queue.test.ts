@@ -1,4 +1,5 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -157,5 +158,96 @@ describe("queue list / show / unread (task visibility)", () => {
     expect(await runQueueUnread("t-done", { db })).toContain("marked unread");
     expect(readAt("t-done")).toBeUndefined();
     await expect(runQueueUnread("missing-id", { db })).rejects.toThrow(/no task/);
+  });
+});
+
+describe("ebb queue list --hook (Claude Code SessionStart)", () => {
+  let dir: string;
+  let db: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "ebb-hook-"));
+    db = join(dir, "queue.db");
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  function seedDone(n: number): void {
+    const store = new TaskStore({ dbPath: db });
+    for (let i = 0; i < n; i++) {
+      store.upsert({
+        taskId: `done-${i}`,
+        status: "completed",
+        enqueuedAt: "2026-06-01T10:00:00.000Z",
+        completedAt: `2026-06-01T11:0${i}:00.000Z`,
+        region: "FR",
+        title: `title\u001b[2J ${i}`,
+      });
+    }
+    store.close();
+  }
+
+  it("names the unread count and drops it after a mark read (AE1)", async () => {
+    seedDone(2);
+    expect((await runQueueList({ db, unread: true, hook: true })).rendered).toBe(
+      "2 unread ebb tasks, run `ebb ui` to read them.",
+    );
+    const store = new TaskStore({ dbPath: db });
+    store.markRead("done-0");
+    store.close();
+    expect((await runQueueList({ db, unread: true, hook: true })).rendered).toBe(
+      "1 unread ebb task, run `ebb ui` to read them.",
+    );
+  });
+
+  it("prints nothing when nothing is unread", async () => {
+    seedDone(0);
+    expect((await runQueueList({ db, hook: true })).rendered).toBe("");
+  });
+
+  it("prints nothing for a missing ledger and does not create one", async () => {
+    const missing = join(dir, "nope", "queue.db");
+    expect((await runQueueList({ db: missing, hook: true })).rendered).toBe("");
+    expect(existsSync(missing)).toBe(false);
+  });
+
+  describe("hooks.json command", () => {
+    const hooksFile = join(__dirname, "..", "..", "claude-code-plugin", "hooks", "hooks.json");
+    const command = (
+      JSON.parse(readFileSync(hooksFile, "utf8")) as {
+        hooks: { SessionStart: Array<{ hooks: Array<{ type: string; command: string }> }> };
+      }
+    ).hooks.SessionStart[0]!.hooks[0]!;
+
+    function runHook(stub: string | null): { status: number | null; stdout: string } {
+      const bin = join(dir, "bin");
+      mkdirSync(bin, { recursive: true });
+      if (stub !== null) {
+        writeFileSync(join(bin, "ebb"), `#!/bin/sh\n${stub}\n`);
+        chmodSync(join(bin, "ebb"), 0o755);
+      }
+      const r = spawnSync("/bin/sh", ["-c", command.command], {
+        env: { PATH: `${bin}:/usr/bin:/bin` },
+        encoding: "utf8",
+      });
+      return { status: r.status, stdout: r.stdout };
+    }
+
+    it("is a command hook", () => {
+      expect(command.type).toBe("command");
+    });
+
+    it("stays silent with exit 0 when ebb is not installed", () => {
+      expect(runHook(null)).toEqual({ status: 0, stdout: "" });
+    });
+
+    it("stays silent with exit 0 when an older ebb rejects --hook", () => {
+      expect(runHook(`echo "error: unknown option '--hook'" >&2; exit 1`)).toEqual({ status: 0, stdout: "" });
+    });
+
+    it("passes the CLI line through", () => {
+      expect(runHook(`echo "2 unread ebb tasks, run \\\`ebb ui\\\` to read them."`).stdout).toBe(
+        "2 unread ebb tasks, run `ebb ui` to read them.\n",
+      );
+    });
   });
 });
