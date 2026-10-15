@@ -948,7 +948,7 @@ describe("ebb OpenClaw plugin — result delivery", () => {
 
     const linux = osNotifyCommand("linux", title, body)!;
     expect(linux.cmd).toBe("notify-send");
-    expect(linux.args).toEqual([title, body]);
+    expect(linux.args).toEqual(["--", title, body]);
 
     const win = osNotifyCommand("win32", title, body)!;
     expect(win.cmd).toBe("powershell");

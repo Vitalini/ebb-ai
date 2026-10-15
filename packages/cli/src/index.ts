@@ -53,8 +53,10 @@ export function buildProgram(): Command {
     .option("--daemon", "Loop forever, draining every --interval seconds")
     .option("--interval <sec>", "Daemon interval seconds", (v) => parseInt(v, 10), 60)
     .option("--region <code>", "Default region for hydrated tasks", undefined)
+    .option("--no-notify", "Do not post an OS notification per finished task")
     .action(async (opts) => {
       const code = await runTick({
+        notify: opts.notify !== false,
         db: opts.db,
         once: opts.once === true,
         daemon: opts.daemon === true,
