@@ -216,7 +216,7 @@ async function renderTimeline(view) {
   const byTime = (a, b) => (Date.parse(a.scheduled_for) || 0) - (Date.parse(b.scheduled_for) || 0);
   const scheduled = tasks.filter((t) => t.status !== "submitted").sort(byTime);
   const absolute = scheduled.filter((t) => t.deadline_kind !== "quota_reset");
-  const quota = tasks.filter((t) => t.deadline_kind === "quota_reset").sort(byTime);
+  const quota = scheduled.filter((t) => t.deadline_kind === "quota_reset");
   const submitted = tasks.filter((t) => t.status === "submitted");
   const runs = (t) => `${t.status} · runs ${fmtTime(t.scheduled_for)} · deadline ${fmtTime(t.deadline)}`;
 
@@ -281,7 +281,7 @@ function receiptBlock(r, taskId) {
   ];
 }
 
-async function renderDrawer(taskId) {
+async function renderDrawer(taskId, seq) {
   const drawer = document.getElementById("drawer");
   const back = h("a", { href: `#/${lastView}` }, "← Back");
   let t;
@@ -289,11 +289,17 @@ async function renderDrawer(taskId) {
     t = await apiJson(`/api/tasks/${encodeURIComponent(taskId)}`);
   } catch (err) {
     if (err instanceof SessionExpired) throw err;
+    // A newer render owns the drawer now (the user navigated away).
+    if (seq !== renderSeq) return;
+    drawer.dataset.taskId = "";
     drawer.replaceChildren(back, h("h1", {}, "Task not found"), h("a", { href: "#/timeline" }, "Go to the timeline"));
     drawer.hidden = false;
     return;
   }
+  if (seq !== renderSeq) return;
   const finished = t.status === "completed" || t.status === "failed";
+  // Keep the raw-response toggle open when a change event redraws the same task.
+  const rawOpen = drawer.dataset.taskId === t.task_id && !!drawer.querySelector("details")?.open;
   const parts = [
     back,
     h("h1", {}, taskName(t)),
@@ -322,10 +328,13 @@ async function renderDrawer(taskId) {
     if (t.receipt) parts.push(...receiptBlock(t.receipt, t.task_id));
     if (t.routing) parts.push(h("h2", {}, "Routing"), kv([["chosen", t.routing.chosen], ["reasoning", t.routing.reasoning]]));
     if (t.raw !== null) {
-      parts.push(h("details", {}, h("summary", {}, "Raw vendor response"), h("pre", {}, JSON.stringify(t.raw, null, 2))));
+      const raw = h("details", {}, h("summary", {}, "Raw vendor response"), h("pre", {}, JSON.stringify(t.raw, null, 2)));
+      raw.open = rawOpen;
+      parts.push(raw);
     }
   }
   drawer.replaceChildren(...parts.filter(Boolean));
+  drawer.dataset.taskId = t.task_id;
   drawer.hidden = false;
   if (finished && !t.read_at && !markedRead.has(t.task_id)) {
     markedRead.add(t.task_id);
@@ -359,11 +368,13 @@ async function render() {
     await (r.view === "inbox" ? renderInbox(next) : renderTimeline(next));
     if (seq !== renderSeq) return;
     view.replaceChildren(...next.childNodes);
-    if (r.taskId) await renderDrawer(r.taskId);
+    if (r.taskId) await renderDrawer(r.taskId, seq);
     else document.getElementById("drawer").hidden = true;
+    if (seq !== renderSeq) return;
     await refreshHeader();
   } catch (err) {
     if (err instanceof SessionExpired) showExpired();
+    else if (seq !== renderSeq) return;
     else view.replaceChildren(h("p", { class: "muted" }, `Could not load: ${err.message}`));
   }
 }
@@ -372,6 +383,7 @@ async function render() {
 
 async function stream() {
   let delay = 1000;
+  let reconnect = false;
   const conn = document.getElementById("conn");
   while (!expired) {
     try {
@@ -390,7 +402,9 @@ async function stream() {
         while ((i = buf.indexOf("\n\n")) >= 0) {
           const msg = buf.slice(0, i);
           buf = buf.slice(i + 2);
-          if (/^event: tasks$/m.test(msg)) render();
+          // A reconnect's hello re-renders too: changes made while the stream
+          // was down produce no event of their own.
+          if (/^event: tasks$/m.test(msg) || (reconnect && /^event: hello$/m.test(msg))) render();
         }
       }
     } catch (err) {
@@ -400,6 +414,7 @@ async function stream() {
       }
     }
     conn.hidden = false;
+    reconnect = true;
     await new Promise((r) => setTimeout(r, delay));
     delay = Math.min(delay * 2, 30000);
   }
