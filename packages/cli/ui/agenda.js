@@ -84,7 +84,10 @@ function dayHeader(key, label, sub, count, region, now) {
   const attrs = { class: "day-head" };
   if (isDay) {
     attrs["data-drop-day"] = String(start);
-    attrs["data-drop-label"] = `${relDay(start, now)} · ${dayLabel(start)}`;
+    const rel = relDay(start, now);
+    // Weekday names already are the date ("Sat 17 Oct"); only Today and
+    // Tomorrow need it added.
+    attrs["data-drop-label"] = rel === dayLabel(start) ? rel : `${rel} · ${dayLabel(start)}`;
   }
   const head = h("div", attrs,
     h("h2", { class: "day-title" }, label, sub ? h("span", { class: "day-sub" }, ` · ${sub}`) : null),
