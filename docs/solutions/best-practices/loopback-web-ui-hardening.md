@@ -30,7 +30,7 @@ Binding to 127.0.0.1 is not enough. Any web page in the user's browser can reach
 - **Writes need a JSON content type and a size cap (ui v2).** Routes that read a body (cancel, reschedule, reply) accept only `Content-Type: application/json` (415 otherwise) and at most 64 KiB (413). A cross-site HTML form cannot send that type without a CORS preflight, and the server answers no preflight. Bodies are strict JSON objects; an unknown field is 400. Body-less routes (read, unread, run-now, dispatcher/start) refuse a non-empty body, which keeps the v1 page's bare mark-read POST working.
 - **Bearer header, never a cookie.** Every POST carries `Authorization: Bearer`. A cookie would ride along on cross-site requests; the header cannot.
 - **Write, never dispatch.** The server's `Scheduler` has no provider adapters, so an action can only change the ledger. A refused action returns 409 with the core's one-line rule. "Start dispatcher" spawns the same `ebb` binary as a separate detached process.
-- **Generic error bodies.** Never return exception text.
+- **Generic error bodies.** Never return exception text. Refusals are 409 with the core's rule; anything else is 500 with a fixed body (see `../logic-errors/compare-and-set-task-transitions.md`).
 
 ## Live updates (SSE)
 
