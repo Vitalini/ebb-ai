@@ -879,6 +879,15 @@ export class Scheduler {
     return this.cacheRow(stored);
   }
 
+  /** Stop and forget the in-process timer for `taskId`, if any. */
+  private clearPendingTimer(taskId: string): void {
+    const timer = this.pendingTimers.get(taskId);
+    if (timer) {
+      clearTimeout(timer);
+      this.pendingTimers.delete(taskId);
+    }
+  }
+
   /** Merge a stored row into the cache, keeping the cached object identity. */
   private cacheRow(row: TaskRecord<unknown>): TaskRecord<unknown> {
     const cached = this.tasks.get(row.taskId);
@@ -1011,11 +1020,7 @@ export class Scheduler {
         throw new Error(`cancelTask: task ${JSON.stringify(taskId)} not found`);
       }
       if (TERMINAL.has(record.status)) return record;
-      const timer = this.pendingTimers.get(taskId);
-      if (timer) {
-        clearTimeout(timer);
-        this.pendingTimers.delete(taskId);
-      }
+      this.clearPendingTimer(taskId);
       if (record.status === "submitted") {
         // The task is already in flight at the provider's Batch API. We
         // have no adapter handle here (cancelTask takes no adapters), so we
@@ -1065,11 +1070,7 @@ export class Scheduler {
         refusal("runNow", record, "only queued or scheduled provider-call tasks can run now"),
       );
     }
-    const timer = this.pendingTimers.get(taskId);
-    if (timer) {
-      clearTimeout(timer);
-      this.pendingTimers.delete(taskId);
-    }
+    this.clearPendingTimer(taskId);
     const next: TaskRecord<unknown> = {
       ...record,
       status: "scheduled",
@@ -1101,11 +1102,7 @@ export class Scheduler {
     const record = this.refreshTask(taskId);
     if (!record) throw new Error(`reschedule: task ${JSON.stringify(taskId)} not found`);
     if (!taskActions(record).reschedule) throw new Error(refusal("reschedule", record, why));
-    const timer = this.pendingTimers.get(taskId);
-    if (timer) {
-      clearTimeout(timer);
-      this.pendingTimers.delete(taskId);
-    }
+    this.clearPendingTimer(taskId);
     const absolute = {
       deadlineKind: "absolute" as const,
       // A quota_reset series keeps its label for the next occurrence.
@@ -1238,11 +1235,7 @@ export class Scheduler {
         `expediteTask: task ${taskId} is a closure-based task; only provider-call tasks can be expedited`,
       );
     }
-    const timer = this.pendingTimers.get(taskId);
-    if (timer) {
-      clearTimeout(timer);
-      this.pendingTimers.delete(taskId);
-    }
+    this.clearPendingTimer(taskId);
     const next: TaskRecord<unknown> = {
       ...record,
       scheduledFor: new Date().toISOString(),
@@ -1298,11 +1291,7 @@ export class Scheduler {
       record.deadlineKind = "absolute";
       record.quotaProvider = undefined;
     }
-    const existingTimer = this.pendingTimers.get(taskId);
-    if (existingTimer) {
-      clearTimeout(existingTimer);
-      this.pendingTimers.delete(taskId);
-    }
+    this.clearPendingTimer(taskId);
     if (record.bodyJson) {
       // A new deadline replaces any pinned earliest start.
       record.notBefore = undefined;
@@ -1338,11 +1327,7 @@ export class Scheduler {
     if (current) Object.assign(record, current);
     if (record.status !== "queued" && record.status !== "scheduled") return false;
     record.deadline = newDeadline.toISOString();
-    const existingTimer = this.pendingTimers.get(taskId);
-    if (existingTimer) {
-      clearTimeout(existingTimer);
-      this.pendingTimers.delete(taskId);
-    }
+    this.clearPendingTimer(taskId);
     return this.scheduleProviderCall(taskId, newDeadline);
   }
 
