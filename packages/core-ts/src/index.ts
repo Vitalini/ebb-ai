@@ -47,18 +47,27 @@ export {
   pickBestWindow,
   Scheduler,
 } from "./scheduler.js";
-export type { SchedulerOptions, TickAdapters } from "./scheduler.js";
+export type {
+  ReplyOptions,
+  RescheduleTarget,
+  SchedulerOptions,
+  TickAdapters,
+} from "./scheduler.js";
 export { recommendWindow } from "./recommend.js";
 // Task visibility (v0.17): titles, history, display helpers.
 export {
   TITLE_MAX_CHARS,
   deadlineKindLabel,
   deriveTitle,
+  displayTitle,
+  isRepeating,
+  taskActions,
   stripControlChars,
   taskHistory,
   taskPrompt,
   taskResultText,
 } from "./history.js";
+export type { TaskActions } from "./history.js";
 // Cross-provider routing (ROADMAP item 1).
 export {
   scoreCandidates,
@@ -144,6 +153,7 @@ export {
   nextQuotaReset,
   prepareTick,
   previousQuotaReset,
+  replanSweep,
   resolveQuotaDeadline,
   resolveQuotaProvider,
   sweepQuotaDeadlines,

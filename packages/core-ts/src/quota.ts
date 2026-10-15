@@ -327,10 +327,57 @@ export async function sweepQuotaDeadlines(
   return messages;
 }
 
+/** Forecast horizon the scheduler plans inside, in hours. */
+const REPLAN_HORIZON_H = 72;
+
+/**
+ * Give unplanned `scheduled` rows a carbon window once the forecast reaches
+ * them (ui v2). A row is unplanned when it has a `notBefore` (a day target
+ * or a series successor), no estimate yet, and is not pinned to an exact
+ * time (`scheduledFor === notBefore`). Each one inside the horizon goes
+ * through `Scheduler.rescheduleIfPending` (compare-and-set). Never throws;
+ * returns one message per re-planned row and per failure.
+ */
+export async function replanSweep(
+  scheduler: Scheduler,
+  now: Date = new Date(),
+): Promise<string[]> {
+  const messages: string[] = [];
+  let rows;
+  try {
+    rows = scheduler.listPersistedTasks().filter(
+      (t) =>
+        t.status === "scheduled" &&
+        t.bodyJson !== undefined &&
+        t.notBefore !== undefined &&
+        t.estimatedCarbonGCo2 === undefined &&
+        t.scheduledFor !== t.notBefore &&
+        t.deadline !== undefined,
+    );
+  } catch (err) {
+    return [`replan sweep: cannot read the ledger: ${errMessage(err)}`];
+  }
+  const horizonEnd = now.getTime() + REPLAN_HORIZON_H * 3_600_000;
+  for (const task of rows) {
+    if (Date.parse(task.notBefore!) >= horizonEnd) continue;
+    try {
+      if (!(await scheduler.rescheduleIfPending(task.taskId, new Date(task.deadline!)))) continue;
+      const fresh = scheduler.getTask(task.taskId);
+      if (fresh?.estimatedCarbonGCo2 !== undefined) {
+        messages.push(`planned ${task.taskId} for ${fresh.scheduledFor}`);
+      }
+    } catch (err) {
+      messages.push(`replan sweep: could not plan ${task.taskId}: ${errMessage(err)}`);
+    }
+  }
+  return messages;
+}
+
 /**
  * The shared pre-tick step every ticker runs before `Scheduler.tick`
  * (`ebb tick` and the OpenClaw interval loop): record `last_tick_at` in the
- * ledger, then sweep passed quota deadlines. Never throws.
+ * ledger, sweep passed quota deadlines, then re-plan unplanned rows the
+ * forecast now reaches (`replanSweep`). Never throws.
  */
 export async function prepareTick(
   scheduler: Scheduler,
@@ -344,6 +391,7 @@ export async function prepareTick(
     messages.push(`could not record last_tick_at: ${errMessage(err)}`);
   }
   messages.push(...(await sweepQuotaDeadlines(scheduler, opts.quotaConfig, now)));
+  messages.push(...(await replanSweep(scheduler, now)));
   return messages;
 }
 
