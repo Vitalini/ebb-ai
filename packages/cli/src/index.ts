@@ -10,7 +10,7 @@
  *   ebb receipts list  print carbon receipts for completed tasks
  *   ebb stats          local-only personal-impact summary
  *   ebb register-wake  schedule a macOS wake event 30s before a task
- *   ebb ui             local task page (timeline, inbox, detail) on 127.0.0.1
+ *   ebb ui             local task page (timeline, inbox, detail, actions) on 127.0.0.1
  */
 
 import { createRequire } from "node:module";
@@ -321,7 +321,7 @@ export function buildProgram(): Command {
 
   program
     .command("ui")
-    .description("Open the local task page: timeline, inbox, task detail (127.0.0.1 only, read-only)")
+    .description("Open the local task page: timeline, inbox, task detail, actions (127.0.0.1 only; never dispatches)")
     .option("--db <path>", "SQLite queue path", undefined)
     .option("--port <port>", "Port on 127.0.0.1 (default: a free port)", (v) => parseInt(v, 10), 0)
     .option("--region <code>", "Region for the forecast curve", undefined)
