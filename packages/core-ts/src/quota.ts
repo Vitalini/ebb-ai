@@ -301,7 +301,9 @@ export async function sweepQuotaDeadlines(
       continue;
     }
     const stored = task.deadline ? Date.parse(task.deadline) : Number.NaN;
-    if (Number.isFinite(stored) && previousQuotaReset(schedule, now).getTime() <= stored) {
+    // Strictly before: with margin 0 the stored deadline IS the reset, and
+    // once that reset has passed the task must be re-resolved.
+    if (Number.isFinite(stored) && previousQuotaReset(schedule, now).getTime() < stored) {
       continue;
     }
     const { deadline } = resolveQuotaDeadline(schedule, now);

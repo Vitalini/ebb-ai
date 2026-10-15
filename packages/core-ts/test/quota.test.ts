@@ -204,6 +204,26 @@ describe("sweepQuotaDeadlines", () => {
     store.close();
   });
 
+  it("re-resolves a margin-0 task once its reset (= its deadline) passed", async () => {
+    const { store, scheduler } = setup("2026-10-19T09:00:00Z");
+    store.upsert({
+      taskId: "q0",
+      status: "scheduled",
+      enqueuedAt: "2026-10-15T10:00:00.000Z",
+      scheduledFor: "2026-10-19T07:00:00.000Z",
+      region: "US-CAL-CISO",
+      bodyJson: SPEC,
+      deadline: "2026-10-19T08:00:00.000Z", // Mon 10:00 Berlin, margin 0
+      deadlineKind: "quota_reset",
+      quotaProvider: "claude",
+    });
+    const config = { claude: { ...BERLIN_MON_10, marginH: 0 } };
+    await sweepQuotaDeadlines(scheduler, config, new Date());
+    // Next reset Mon 2026-10-26 10:00 CET = 09:00Z.
+    expect(store.get("q0")!.deadline).toBe("2026-10-26T09:00:00.000Z");
+    store.close();
+  });
+
   it("leaves a task alone after its deadline but before the reset", async () => {
     // Monday 09:00 Berlin.
     const { store, scheduler } = setup("2026-10-19T07:00:00Z");
