@@ -9,6 +9,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Task actions from any process.** Core gains `Scheduler.runNow` (marks a
+  task due for the next tick, `intensitySource: "expedited"`, never
+  batch-routed), `Scheduler.rescheduleTask` (a new deadline, an exact time,
+  or a day given as two instants), `Scheduler.replyToTask` and
+  `cancelTask(id, { series })`. Every write re-reads the row and writes with
+  a status compare-and-set (`TaskStore.transitionIf`), and every dispatcher
+  terminal write is conditional on `running`, so a cancel from `ebb ui` or the
+  CLI is never overwritten by a ticker. `taskActions` and `displayTitle`
+  compute allowed actions and titles once for every surface.
+- **Repeating tasks.** `repeat: "none" | "daily" | "weekly" | "quota_reset"`
+  on a provider-call task starts a series (`series_id` = the first task id).
+  When an occurrence completes, fails, or is cancelled as a skip, core
+  inserts exactly one next occurrence (`<series_id>~<n>`, insert-once) with
+  the same prompt; `cancel` with `series: true` stops the series. A next
+  occurrence beyond the 72-hour forecast is held at a fallback hour until the
+  new `replanSweep` (run by `prepareTick`) gives it a carbon window. MCP
+  `schedule_task` takes `repeat`; `/ebb-ai:defer` takes `--repeat`.
+- **Reply.** `reply_task` (MCP and OpenClaw), `ebb queue reply` and the
+  `ebb ui` API create a child task that sends the parent's conversation plus
+  the new text to the same provider and model. All four adapters (Anthropic,
+  OpenAI, Gemini, Ollama) send prior turns on the sync path; Anthropic and
+  OpenAI also on the batch path.
+- **Return to the session.** `/ebb-ai:defer` passes `${CLAUDE_SESSION_ID}` as
+  `origin_session_id`; `ebb queue show`, `check_queue_status` and the
+  `ebb ui` API print `cd <cwd> && claude --resume <id>`.
+- **`ebb queue cancel | reschedule | run-now | reply`** and
+  `ebb queue list --series <id>`.
+- **`ebb ui` write API.** `POST /api/tasks/:id/{cancel,reschedule,run-now,reply}`,
+  `GET /api/series/:id`, and `POST /api/dispatcher/start`, which starts
+  `ebb tick --daemon --interval 60` detached (log in
+  `~/.ebb-ai/logs/ui-tick.log`) when no dispatcher runs. `/api/status`
+  reports the dispatcher as `running`, `stale` or `never`. The server writes
+  the ledger only; it never dispatches. The page itself is unchanged in this
+  release (v1 keeps working against the extended API).
+
 - **Task titles, origin and read state.** Every task now stores a title (given
   at enqueue, else the first line of the prompt cut to 80 characters, with
   API-key-looking strings redacted), the host that enqueued it (`mcp`,
@@ -65,6 +100,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `repeat` defaults to `none` for every task, `deadline_kind: "quota_reset"`
+  included: a quota task runs once unless `repeat` (or `--repeat weekly`) is
+  given.
+- `cancel_task` on a repeating task skips that occurrence and queues the next
+  one; pass `series: true` to end the series.
+
 - **`check_queue_status`** (MCP and OpenClaw) shows the title, origin,
   deadline kind and stored prompt of a task, and viewing a completed or
   failed task marks it read. The list view shows titles and quota markers.
@@ -83,6 +124,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it from environment variables (OpenClaw: from inert base64 literals).
 
 ### Upgrade note
+
+- The ledger gains `series_id`, `repeat`, `origin_session_id` and
+  `not_before` (added on open, by the TS and the Python core). The Python core
+  stores them but does not act on them: its ticker sends no reply history,
+  rolls no series and ignores `not_before`. Run `ebb tick` or the OpenClaw
+  loop on a ledger with reply children or repeating tasks.
 
 - The tick daemon runs the globally installed `@ebb-ai/cli`. After upgrading,
   reinstall it (`npm install -g @ebb-ai/cli`), or the quota-reset sweep and

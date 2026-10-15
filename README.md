@@ -303,7 +303,7 @@ macOS):
 }
 ```
 
-The MCP server exposes nine tools to the agent (measured, `toolsForHost("mcp")` in
+The MCP server exposes ten tools to the agent (measured, `toolsForHost("mcp")` in
 [`packages/core-ts/src/tool-surface.ts`](packages/core-ts/src/tool-surface.ts)):
 
 - `get_grid_forecast(region, hours?)` — returns the next N hours of
@@ -318,6 +318,7 @@ The MCP server exposes nine tools to the agent (measured, `toolsForHost("mcp")` 
   completed receipts; viewing one finished task marks it read.
 - `cancel_task`, `expedite_task`, `update_deadline`, `retry_task`,
   `cancel_all` — control a queued task (or the whole queue).
+- `reply_task(task_id, text)` — continue a completed task as a new task.
 
 ### As a library
 

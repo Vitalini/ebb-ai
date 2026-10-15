@@ -98,7 +98,7 @@ Restart the OpenClaw gateway. To update later:
 
 After installing and restarting the gateway:
 
-1. **Inspect** — all ten tools should be listed:
+1. **Inspect** — all eleven tools should be listed:
 
    ```bash
    openclaw plugins inspect ebb --runtime --json

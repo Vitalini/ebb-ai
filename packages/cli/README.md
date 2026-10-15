@@ -30,14 +30,25 @@ ebb install        — wire up launchd (macOS) or print systemd / schtasks templ
 ebb queue list     — print tasks (--unread, --kind absolute|quota_reset, --json, --hook)
 ebb queue show     — print one task's prompt, result and receipt; marks it read
 ebb queue unread   — mark a task unread again
+ebb queue cancel   — cancel a pending task (--series ends a repeating series)
+ebb queue reschedule — move a task: --by <2h|ISO>, --at <ISO>, or --day <yyyy-mm-dd>
+ebb queue run-now  — mark a task due; the next tick runs it
+ebb queue reply    — continue a completed task as a new task (--by, default 1h)
 ebb receipts list  — print carbon receipts for completed tasks
 ebb stats          — local-only personal-impact stats from the queue ledger
 ebb verify         — verify the Ed25519 signature on a carbon receipt
 ebb register-wake  — schedule a macOS wake event 30s before a task
-ebb ui             — local task page: timeline, inbox, task detail (127.0.0.1 only; writes only the read marker)
+ebb ui             — local task page: timeline, inbox, task detail, actions (127.0.0.1 only; never dispatches)
 ```
 
 Run `ebb <command> --help` for flags.
+
+The write commands and `ebb ui` change the ledger only; `ebb tick` (or the
+OpenClaw loop) runs the task, and each command prints when the last tick ran.
+`--day` and a repeating task's next occurrence can lie beyond the 72-hour
+forecast. Such a task waits at a fallback hour (its current time of day, in
+the new day) until a tick re-plans it once the forecast covers the day. If no
+tick runs in that time, it runs at the fallback hour without a carbon choice.
 
 ## Quickstart — keep tasks alive across laptop sleep
 
