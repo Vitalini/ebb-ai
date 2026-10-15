@@ -1,0 +1,205 @@
+{
+  "_comment": "Cross-language parity for carbon-window selection (selectWindow / select_window) with a pinned rng. 'intensity' maps to carbonIntensityGCo2PerKwh (TS) and carbon_intensity_g_co2_per_kwh (Python); expected null means no entry inside the deadline. The gb-24h vectors use the live NG ESO GB forecast captured 2026-10-15 (now 16:10Z, 24h deadline). Consumed by packages/core-ts/test/select-window.test.ts and packages/core-py/tests/test_select_window.py.",
+  "vectors": [
+    {
+      "id": "gb-24h-rng-0-strict-minimum",
+      "now": "2026-10-15T16:10:00.000Z",
+      "deadline": "2026-10-16T16:10:00.000Z",
+      "rng": 0,
+      "entries": [
+        { "datetime": "2026-10-15T16:00:00.000Z", "intensity": 158, "band": "clean" },
+        { "datetime": "2026-10-15T17:00:00.000Z", "intensity": 174, "band": "clean" },
+        { "datetime": "2026-10-15T18:00:00.000Z", "intensity": 176, "band": "clean" },
+        { "datetime": "2026-10-15T19:00:00.000Z", "intensity": 176, "band": "clean" },
+        { "datetime": "2026-10-15T20:00:00.000Z", "intensity": 174, "band": "clean" },
+        { "datetime": "2026-10-15T21:00:00.000Z", "intensity": 160, "band": "clean" },
+        { "datetime": "2026-10-15T22:00:00.000Z", "intensity": 147, "band": "clean" },
+        { "datetime": "2026-10-15T23:00:00.000Z", "intensity": 141, "band": "clean" },
+        { "datetime": "2026-10-16T00:00:00.000Z", "intensity": 136, "band": "clean" },
+        { "datetime": "2026-10-16T01:00:00.000Z", "intensity": 122, "band": "clean" },
+        { "datetime": "2026-10-16T02:00:00.000Z", "intensity": 113, "band": "clean" },
+        { "datetime": "2026-10-16T03:00:00.000Z", "intensity": 112, "band": "clean" },
+        { "datetime": "2026-10-16T04:00:00.000Z", "intensity": 114, "band": "clean" },
+        { "datetime": "2026-10-16T05:00:00.000Z", "intensity": 125, "band": "clean" },
+        { "datetime": "2026-10-16T06:00:00.000Z", "intensity": 148, "band": "clean" },
+        { "datetime": "2026-10-16T07:00:00.000Z", "intensity": 142, "band": "clean" },
+        { "datetime": "2026-10-16T08:00:00.000Z", "intensity": 122, "band": "clean" },
+        { "datetime": "2026-10-16T09:00:00.000Z", "intensity": 104, "band": "clean" },
+        { "datetime": "2026-10-16T10:00:00.000Z", "intensity": 74, "band": "very_clean" },
+        { "datetime": "2026-10-16T11:00:00.000Z", "intensity": 66, "band": "very_clean" },
+        { "datetime": "2026-10-16T12:00:00.000Z", "intensity": 66, "band": "very_clean" },
+        { "datetime": "2026-10-16T13:00:00.000Z", "intensity": 69, "band": "very_clean" },
+        { "datetime": "2026-10-16T14:00:00.000Z", "intensity": 88, "band": "very_clean" },
+        { "datetime": "2026-10-16T15:00:00.000Z", "intensity": 120, "band": "clean" },
+        { "datetime": "2026-10-16T16:00:00.000Z", "intensity": 139, "band": "clean" },
+        { "datetime": "2026-10-16T17:00:00.000Z", "intensity": 148, "band": "clean" }
+      ],
+      "expected": {
+        "chosen_datetime": "2026-10-16T11:00:00.000Z",
+        "chosen_intensity": 66,
+        "band_size": 5,
+        "tolerance": 30
+      }
+    },
+    {
+      "id": "gb-24h-rng-0.5",
+      "now": "2026-10-15T16:10:00.000Z",
+      "deadline": "2026-10-16T16:10:00.000Z",
+      "rng": 0.5,
+      "entries": [
+        { "datetime": "2026-10-15T16:00:00.000Z", "intensity": 158, "band": "clean" },
+        { "datetime": "2026-10-15T17:00:00.000Z", "intensity": 174, "band": "clean" },
+        { "datetime": "2026-10-15T18:00:00.000Z", "intensity": 176, "band": "clean" },
+        { "datetime": "2026-10-15T19:00:00.000Z", "intensity": 176, "band": "clean" },
+        { "datetime": "2026-10-15T20:00:00.000Z", "intensity": 174, "band": "clean" },
+        { "datetime": "2026-10-15T21:00:00.000Z", "intensity": 160, "band": "clean" },
+        { "datetime": "2026-10-15T22:00:00.000Z", "intensity": 147, "band": "clean" },
+        { "datetime": "2026-10-15T23:00:00.000Z", "intensity": 141, "band": "clean" },
+        { "datetime": "2026-10-16T00:00:00.000Z", "intensity": 136, "band": "clean" },
+        { "datetime": "2026-10-16T01:00:00.000Z", "intensity": 122, "band": "clean" },
+        { "datetime": "2026-10-16T02:00:00.000Z", "intensity": 113, "band": "clean" },
+        { "datetime": "2026-10-16T03:00:00.000Z", "intensity": 112, "band": "clean" },
+        { "datetime": "2026-10-16T04:00:00.000Z", "intensity": 114, "band": "clean" },
+        { "datetime": "2026-10-16T05:00:00.000Z", "intensity": 125, "band": "clean" },
+        { "datetime": "2026-10-16T06:00:00.000Z", "intensity": 148, "band": "clean" },
+        { "datetime": "2026-10-16T07:00:00.000Z", "intensity": 142, "band": "clean" },
+        { "datetime": "2026-10-16T08:00:00.000Z", "intensity": 122, "band": "clean" },
+        { "datetime": "2026-10-16T09:00:00.000Z", "intensity": 104, "band": "clean" },
+        { "datetime": "2026-10-16T10:00:00.000Z", "intensity": 74, "band": "very_clean" },
+        { "datetime": "2026-10-16T11:00:00.000Z", "intensity": 66, "band": "very_clean" },
+        { "datetime": "2026-10-16T12:00:00.000Z", "intensity": 66, "band": "very_clean" },
+        { "datetime": "2026-10-16T13:00:00.000Z", "intensity": 69, "band": "very_clean" },
+        { "datetime": "2026-10-16T14:00:00.000Z", "intensity": 88, "band": "very_clean" },
+        { "datetime": "2026-10-16T15:00:00.000Z", "intensity": 120, "band": "clean" },
+        { "datetime": "2026-10-16T16:00:00.000Z", "intensity": 139, "band": "clean" },
+        { "datetime": "2026-10-16T17:00:00.000Z", "intensity": 148, "band": "clean" }
+      ],
+      "expected": {
+        "chosen_datetime": "2026-10-16T13:00:00.000Z",
+        "chosen_intensity": 69,
+        "band_size": 5,
+        "tolerance": 30
+      }
+    },
+    {
+      "id": "gb-24h-rng-0.999-last-band-entry",
+      "now": "2026-10-15T16:10:00.000Z",
+      "deadline": "2026-10-16T16:10:00.000Z",
+      "rng": 0.999,
+      "entries": [
+        { "datetime": "2026-10-15T16:00:00.000Z", "intensity": 158, "band": "clean" },
+        { "datetime": "2026-10-15T17:00:00.000Z", "intensity": 174, "band": "clean" },
+        { "datetime": "2026-10-15T18:00:00.000Z", "intensity": 176, "band": "clean" },
+        { "datetime": "2026-10-15T19:00:00.000Z", "intensity": 176, "band": "clean" },
+        { "datetime": "2026-10-15T20:00:00.000Z", "intensity": 174, "band": "clean" },
+        { "datetime": "2026-10-15T21:00:00.000Z", "intensity": 160, "band": "clean" },
+        { "datetime": "2026-10-15T22:00:00.000Z", "intensity": 147, "band": "clean" },
+        { "datetime": "2026-10-15T23:00:00.000Z", "intensity": 141, "band": "clean" },
+        { "datetime": "2026-10-16T00:00:00.000Z", "intensity": 136, "band": "clean" },
+        { "datetime": "2026-10-16T01:00:00.000Z", "intensity": 122, "band": "clean" },
+        { "datetime": "2026-10-16T02:00:00.000Z", "intensity": 113, "band": "clean" },
+        { "datetime": "2026-10-16T03:00:00.000Z", "intensity": 112, "band": "clean" },
+        { "datetime": "2026-10-16T04:00:00.000Z", "intensity": 114, "band": "clean" },
+        { "datetime": "2026-10-16T05:00:00.000Z", "intensity": 125, "band": "clean" },
+        { "datetime": "2026-10-16T06:00:00.000Z", "intensity": 148, "band": "clean" },
+        { "datetime": "2026-10-16T07:00:00.000Z", "intensity": 142, "band": "clean" },
+        { "datetime": "2026-10-16T08:00:00.000Z", "intensity": 122, "band": "clean" },
+        { "datetime": "2026-10-16T09:00:00.000Z", "intensity": 104, "band": "clean" },
+        { "datetime": "2026-10-16T10:00:00.000Z", "intensity": 74, "band": "very_clean" },
+        { "datetime": "2026-10-16T11:00:00.000Z", "intensity": 66, "band": "very_clean" },
+        { "datetime": "2026-10-16T12:00:00.000Z", "intensity": 66, "band": "very_clean" },
+        { "datetime": "2026-10-16T13:00:00.000Z", "intensity": 69, "band": "very_clean" },
+        { "datetime": "2026-10-16T14:00:00.000Z", "intensity": 88, "band": "very_clean" },
+        { "datetime": "2026-10-16T15:00:00.000Z", "intensity": 120, "band": "clean" },
+        { "datetime": "2026-10-16T16:00:00.000Z", "intensity": 139, "band": "clean" },
+        { "datetime": "2026-10-16T17:00:00.000Z", "intensity": 148, "band": "clean" }
+      ],
+      "expected": {
+        "chosen_datetime": "2026-10-16T14:00:00.000Z",
+        "chosen_intensity": 88,
+        "band_size": 5,
+        "tolerance": 30
+      }
+    },
+    {
+      "id": "fraction-dominates-460-in-461-out",
+      "now": "2026-01-01T00:00:00.000Z",
+      "deadline": "2026-01-01T06:00:00.000Z",
+      "rng": 0.999,
+      "entries": [
+        { "datetime": "2026-01-01T01:00:00.000Z", "intensity": 400, "band": "dirty" },
+        { "datetime": "2026-01-01T02:00:00.000Z", "intensity": 461, "band": "dirty" },
+        { "datetime": "2026-01-01T03:00:00.000Z", "intensity": 460, "band": "dirty" }
+      ],
+      "expected": {
+        "chosen_datetime": "2026-01-01T03:00:00.000Z",
+        "chosen_intensity": 460,
+        "band_size": 2,
+        "tolerance": 60
+      }
+    },
+    {
+      "id": "equal-intensities-keep-input-order",
+      "now": "2026-01-01T00:00:00.000Z",
+      "deadline": "2026-01-01T06:00:00.000Z",
+      "rng": 0.5,
+      "entries": [
+        { "datetime": "2026-01-01T01:00:00.000Z", "intensity": 100, "band": "clean" },
+        { "datetime": "2026-01-01T04:00:00.000Z", "intensity": 50, "band": "very_clean" },
+        { "datetime": "2026-01-01T02:00:00.000Z", "intensity": 50, "band": "very_clean" },
+        { "datetime": "2026-01-01T03:00:00.000Z", "intensity": 50, "band": "very_clean" }
+      ],
+      "expected": {
+        "chosen_datetime": "2026-01-01T02:00:00.000Z",
+        "chosen_intensity": 50,
+        "band_size": 3,
+        "tolerance": 30
+      }
+    },
+    {
+      "id": "single-entry-band-ignores-rng",
+      "now": "2026-01-01T00:00:00.000Z",
+      "deadline": "2026-01-01T06:00:00.000Z",
+      "rng": 0.999,
+      "entries": [
+        { "datetime": "2026-01-01T03:00:00.000Z", "intensity": 300, "band": "average" },
+        { "datetime": "2026-01-01T02:00:00.000Z", "intensity": 200, "band": "clean" },
+        { "datetime": "2026-01-01T01:00:00.000Z", "intensity": 100, "band": "clean" }
+      ],
+      "expected": {
+        "chosen_datetime": "2026-01-01T01:00:00.000Z",
+        "chosen_intensity": 100,
+        "band_size": 1,
+        "tolerance": 30
+      }
+    },
+    {
+      "id": "current-hour-59-min-in-61-min-out",
+      "now": "2026-01-01T10:00:00.000Z",
+      "deadline": "2026-01-01T12:00:00.000Z",
+      "rng": 0,
+      "entries": [
+        { "datetime": "2026-01-01T08:59:00.000Z", "intensity": 10, "band": "very_clean" },
+        { "datetime": "2026-01-01T09:01:00.000Z", "intensity": 100, "band": "clean" },
+        { "datetime": "2026-01-01T11:00:00.000Z", "intensity": 300, "band": "average" }
+      ],
+      "expected": {
+        "chosen_datetime": "2026-01-01T09:01:00.000Z",
+        "chosen_intensity": 100,
+        "band_size": 1,
+        "tolerance": 30
+      }
+    },
+    {
+      "id": "no-entry-inside-deadline",
+      "now": "2026-01-01T00:00:00.000Z",
+      "deadline": "2026-01-01T02:00:00.000Z",
+      "rng": 0,
+      "entries": [
+        { "datetime": "2026-01-01T03:00:00.000Z", "intensity": 100, "band": "clean" },
+        { "datetime": "2026-01-01T04:00:00.000Z", "intensity": 50, "band": "very_clean" }
+      ],
+      "expected": null
+    }
+  ]
+}
