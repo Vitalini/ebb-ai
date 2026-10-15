@@ -158,4 +158,33 @@ describe("check_queue_status and read state", () => {
     expect(store.get("done-1")!.readAt).toBeDefined();
     store.close();
   });
+
+  it("marks read a task this session scheduled and another process completed", async () => {
+    const { dbPath, configPath } = tmp();
+    const { call } = await connect(dbPath, configPath);
+    const scheduled = text(
+      await call("schedule_task", {
+        prompt: "Nightly digest",
+        deadline: inSixHours(),
+        region: "US-CAL-CISO",
+      }),
+    );
+    const taskId = /task_id: (\S+)/.exec(scheduled)![1]!;
+    // `ebb tick` finishes the row in its own process; this server still
+    // holds the scheduled record in memory.
+    const other = new TaskStore({ dbPath });
+    const row = other.get(taskId)!;
+    other.upsert({
+      ...row,
+      status: "completed",
+      completedAt: new Date().toISOString(),
+      result: { text: "done" },
+    });
+
+    const one = text(await call("check_queue_status", { task_id: taskId }));
+    expect(one).toMatch(/^status: completed$/m);
+    expect(one).toMatch(/^read_at: /m);
+    expect(other.get(taskId)!.readAt).toBeDefined();
+    other.close();
+  });
 });

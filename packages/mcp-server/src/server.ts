@@ -684,9 +684,14 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
           task_id?: string;
         };
         if (parsed.task_id) {
-          // getTask consults the persisted store too, so a task scheduled
-          // by a previous MCP-host session is still addressable.
-          const task = scheduler.getTask(parsed.task_id);
+          // Persisted row first: a task this session scheduled is cached in
+          // memory, but `ebb tick` may have finished it in another process.
+          // The in-memory record is the fallback when no store backs the
+          // scheduler.
+          const fresh = (): TaskRecord<unknown> | undefined =>
+            scheduler.loadPersistedTask(parsed.task_id!) ??
+            scheduler.getTask(parsed.task_id!);
+          const task = fresh();
           if (!task) {
             return {
               content: [
@@ -704,7 +709,7 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
             content: [
               {
                 type: "text",
-                text: formatTask(scheduler.getTask(task.taskId) ?? task, loadQuota()),
+                text: formatTask(fresh() ?? task, loadQuota()),
               },
             ],
           };
