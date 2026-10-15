@@ -116,11 +116,11 @@ document is built." `[docs/impact-proposal.md]`.
   Grid ESO Carbon Intensity feed (keyless), 158 gCO2/kWh at dispatch,
   recorded in the signed receipt `[docs/examples/2026-09-30-GB-tick/;
   docs/claims.md #31]`.
-- 31 grid regions, 5 real-data grid feeds, a 72-hour forecast horizon, 9 MCP
+- 31 grid regions, 5 real-data grid feeds, a 72-hour forecast horizon, 10 MCP
   tools, 8 slash commands, 13 supported hosts — each backed by a count in
   code, not prose `[docs/claims.md #6, #10, #11, #16, #17, #18]`.
-- 1,115 tests passing (650 TypeScript across 4 packages + 465 Python),
-  rerun via `pnpm preflight` on 2026-09-30 `[docs/claims.md #13]`.
+- 1,355 tests passing (874 TypeScript across 4 packages + 481 Python),
+  rerun via `pnpm test` and `pytest -q` on 2026-10-15 `[docs/claims.md #13]`.
 
 **Could not measure** (simulated, projected, or dropped for lack of a
 source — see `docs/claims.md` for the full audit):

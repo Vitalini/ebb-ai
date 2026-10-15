@@ -104,7 +104,7 @@ can repeat, and a deadline can be "before my weekly quota resets".
   silent when nothing is unread or the CLI is not installed.
 - **Return to the session.** `/ebb-ai:defer` passes `${CLAUDE_SESSION_ID}` as
   `origin_session_id`; `ebb queue show`, `check_queue_status` and the
-  `ebb ui` API print `cd <cwd> && claude --resume <id>`.
+  `ebb ui` drawer show `cd <cwd> && claude --resume <id>`.
 - **New `ebb queue` commands.** `ebb queue cancel | reschedule | run-now |
   reply`, `ebb queue list --series <id>`, `ebb queue show <id>` (title,
   origin, deadline with the quota label, prompt, history, result, receipt
