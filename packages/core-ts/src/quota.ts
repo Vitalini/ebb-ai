@@ -7,7 +7,7 @@
  * ({@link resolveQuotaDeadline}); tickers call {@link prepareTick} before
  * `Scheduler.tick`, which re-resolves tasks whose reset has already passed
  * (machine asleep, daemon down) through the existing
- * `Scheduler.updateDeadline` path. The window picker itself is unchanged.
+ * `Scheduler.rescheduleIfPending` path. The window picker itself is unchanged.
  *
  * Config lives in `~/.ebb-ai/config` (KEY=VALUE, same file as the carbon
  * budget):
@@ -270,7 +270,8 @@ export function resolveQuotaProvider(
  * most recent reset for the task's label is later than its stored deadline.
  * The condition ignores the margin, so a margin edit after enqueue cannot
  * misfire. Each such task gets the next reset minus margin through
- * `Scheduler.updateDeadline`, which re-runs window selection. Tasks whose
+ * `Scheduler.rescheduleIfPending`, which re-runs window selection and writes
+ * only while the row is still queued/scheduled. Tasks whose
  * label is no longer configured are left as they are. Never throws; returns
  * one message per rescheduled task, per missing label and per failure.
  */
@@ -308,7 +309,9 @@ export async function sweepQuotaDeadlines(
     }
     const { deadline } = resolveQuotaDeadline(schedule, now);
     try {
-      await scheduler.updateDeadline(task.taskId, deadline);
+      // Conditional write: a concurrent ticker may have claimed the task
+      // since the read above; then nothing is written and it is skipped.
+      if (!(await scheduler.rescheduleIfPending(task.taskId, deadline))) continue;
       messages.push(
         `quota reset (${label}) passed for ${task.taskId}; new deadline ${deadline.toISOString()}`,
       );

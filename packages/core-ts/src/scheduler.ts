@@ -946,6 +946,35 @@ export class Scheduler {
   }
 
   /**
+   * The quota sweep's reschedule (`sweepQuotaDeadlines`). Same window
+   * selection as `updateDeadline`, but the ledger write is conditional on
+   * the row still being `queued` / `scheduled`: a concurrent ticker may claim,
+   * submit or finish the task between the sweep's read and this write.
+   * Returns false, writing nothing, when the task is no longer pending.
+   * Process-local closure tasks keep the `updateDeadline` path.
+   */
+  async rescheduleIfPending(taskId: string, newDeadline: Date): Promise<boolean> {
+    const record = this.resolveTask(taskId);
+    if (!record) return false;
+    if (!record.bodyJson) {
+      if (record.status !== "queued" && record.status !== "scheduled") return false;
+      await this.updateDeadline(taskId, newDeadline);
+      return true;
+    }
+    // Refresh a cached copy: this process may hold a stale status.
+    const current = this.store?.get(taskId);
+    if (current) Object.assign(record, current);
+    if (record.status !== "queued" && record.status !== "scheduled") return false;
+    record.deadline = newDeadline.toISOString();
+    const existingTimer = this.pendingTimers.get(taskId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+      this.pendingTimers.delete(taskId);
+    }
+    return this.scheduleProviderCall(taskId, newDeadline, true);
+  }
+
+  /**
    * Re-dispatch a failed task. Useful when the original failure was a
    * transient provider error (rate-limit, 5xx) and the underlying
    * spec is still valid. Only `failed` tasks are eligible; throws
@@ -1201,9 +1230,9 @@ export class Scheduler {
     });
   }
 
-  private failTask(taskId: string, err: Error): void {
+  private failTask(taskId: string, err: Error, onlyIfPending = false): boolean {
     const record = this.tasks.get(taskId);
-    if (!record) return;
+    if (!record) return false;
     // Never overwrite a terminal state (a completed = billed dispatch, or
     // an explicit cancellation) with "failed".
     if (
@@ -1211,16 +1240,17 @@ export class Scheduler {
       record.status === "failed" ||
       record.status === "cancelled"
     ) {
-      return;
+      return false;
     }
     record.status = "failed";
     record.completedAt = new Date().toISOString();
     record.error = err.message;
-    this.store?.upsert(record);
+    if (!this.persist(record, onlyIfPending)) return false;
     const resolver = this.resolvers.get(taskId);
     resolver?.reject(err);
     this.bodies.delete(taskId);
     this.resolvers.delete(taskId);
+    return true;
   }
 
   private async dispatch(
@@ -1354,9 +1384,13 @@ export class Scheduler {
     this.resolvers.delete(taskId);
   }
 
-  private async scheduleProviderCall(taskId: string, deadline: Date): Promise<void> {
+  private async scheduleProviderCall(
+    taskId: string,
+    deadline: Date,
+    onlyIfPending = false,
+  ): Promise<boolean> {
     const record = this.tasks.get(taskId);
-    if (!record) return;
+    if (!record) return false;
     // Parse the full spec out of the persisted body so the per-model energy
     // coefficients (v0.10) factor into the budget filter + estimated-carbon
     // receipt, and so cross-provider routing (ROADMAP item 1) can see the
@@ -1396,8 +1430,11 @@ export class Scheduler {
         );
         const cheapestG = intensityToGrams(cheapest.carbonIntensityGCo2PerKwh, specModel);
         if (cheapestG > budgetG) {
-          this.failTask(taskId, new CarbonBudgetExceededError(cheapestG, budgetG));
-          return;
+          return this.failTask(
+            taskId,
+            new CarbonBudgetExceededError(cheapestG, budgetG),
+            onlyIfPending,
+          );
         }
       }
       // No usable window — schedule for `now` so the very next `tick` runs
@@ -1414,8 +1451,7 @@ export class Scheduler {
         record.estimatedCarbonGCo2 =
           Math.round(intensityToGrams(nowIntensity, routedModelNow) * 10) / 10;
       }
-      this.store?.upsert(record);
-      return;
+      return this.persist(record, onlyIfPending);
     }
     record.status = "scheduled";
     // A candidate whose hour started in the past is the *current* hour —
@@ -1435,7 +1471,25 @@ export class Scheduler {
     );
     record.estimatedCarbonGCo2 =
       Math.round(intensityToGrams(candidate.carbonIntensityGCo2PerKwh, routedModel) * 10) / 10;
-    this.store?.upsert(record);
+    return this.persist(record, onlyIfPending);
+  }
+
+  /**
+   * Write a record to the ledger. With `onlyIfPending` the write is the
+   * store's conditional `updateIfPending`: when another process moved the
+   * row on meanwhile, nothing is written, the cached record is reloaded from
+   * the ledger, and false is returned.
+   */
+  private persist(record: TaskRecord<unknown>, onlyIfPending: boolean): boolean {
+    if (!this.store) return true;
+    if (!onlyIfPending) {
+      this.store.upsert(record);
+      return true;
+    }
+    if (this.store.updateIfPending(record)) return true;
+    const current = this.store.get(record.taskId);
+    if (current) Object.assign(record, current);
+    return false;
   }
 
   /**

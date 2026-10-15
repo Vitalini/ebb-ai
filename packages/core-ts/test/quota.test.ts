@@ -204,6 +204,27 @@ describe("sweepQuotaDeadlines", () => {
     store.close();
   });
 
+  it("skips a task a concurrent ticker claims after the sweep read", async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-19T09:00:00Z"), toFake: ["Date"] });
+    const store = new TaskStore({ dbPath: join(dir, "queue.db") });
+    const feed = mockGridFeed();
+    const fetchForecast = feed.fetchForecast.bind(feed);
+    // The other process claims the row while the sweep fetches the forecast:
+    // after the sweep's read and status check, before its write.
+    feed.fetchForecast = async (region: string, hours: number) => {
+      store.claimScheduled("q5");
+      return fetchForecast(region, hours);
+    };
+    const scheduler = new Scheduler({ store, feed, signing: false });
+    seedQuotaTask(store, "q5", "claude");
+    const messages = await sweepQuotaDeadlines(scheduler, { claude: BERLIN_MON_10 }, new Date());
+    const row = store.get("q5")!;
+    expect(row.status).toBe("running");
+    expect(row.deadline).toBe("2026-10-19T06:00:00.000Z");
+    expect(messages.join("\n")).not.toMatch(/q5/);
+    store.close();
+  });
+
   it("re-resolves a margin-0 task once its reset (= its deadline) passed", async () => {
     const { store, scheduler } = setup("2026-10-19T09:00:00Z");
     store.upsert({

@@ -429,6 +429,40 @@ export class TaskStore {
   }
 
   /**
+   * Conditional write for the quota sweep: store the columns a reschedule
+   * (or a budget failure) changes, but only while the row is still pending
+   * (`queued` / `scheduled`). Returns false when another process moved the
+   * row on (claimed, submitted, finished) in the meantime; nothing is written.
+   */
+  updateIfPending(record: TaskRecord<unknown>): boolean {
+    const res = this.db
+      .prepare(
+        `UPDATE tasks SET
+           status             = @status,
+           scheduled_for      = @scheduled_for,
+           completed_at       = @completed_at,
+           error              = @error,
+           body_json          = @body_json,
+           estimated_carbon_g = @estimated_carbon_g,
+           deadline           = @deadline,
+           routing_decision   = @routing_decision
+         WHERE task_id = @task_id AND status IN ('queued', 'scheduled')`,
+      )
+      .run({
+        task_id: record.taskId,
+        status: record.status,
+        scheduled_for: record.scheduledFor ?? null,
+        completed_at: record.completedAt ?? null,
+        error: record.error ?? null,
+        body_json: record.bodyJson ?? null,
+        estimated_carbon_g: record.estimatedCarbonGCo2 ?? null,
+        deadline: record.deadline ?? null,
+        routing_decision: safeStringify(record.routingDecision),
+      });
+    return Number(res.changes) === 1;
+  }
+
+  /**
    * Atomic row-level claim used by `Scheduler.tick` to prevent two
    * concurrent ticks from dispatching the same task. Returns true if
    * the row was claimed (status changed from "scheduled" to "running"

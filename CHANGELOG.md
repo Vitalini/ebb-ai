@@ -30,7 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   2 hours. The deadline is the next reset minus the margin. If that reset
   passes before the task runs (machine asleep, daemon down), `ebb tick` and
   the OpenClaw dispatch loop re-resolve it to the following reset and
-  reschedule the task through the normal window picker. A quota deadline
+  reschedule the task through the normal window picker, writing only while
+  the task is still queued or scheduled (the Python ticker does not run this
+  sweep in this release). A quota deadline
   is often days away, and any deadline more than 24 hours out lets an
   `anthropic` or `openai` task route through the provider Batch API, so
   its result can arrive up to the provider's 24-hour batch SLA after the
