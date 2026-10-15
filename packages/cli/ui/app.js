@@ -1,445 +1,586 @@
-// ebb ui front end. Dependency-free ES module.
-//
-// Every task string (title, prompt, result, error) is untrusted: it comes
-// from prompts and model output. It is rendered through textContent only;
-// this file never assigns HTML markup from data.
+// ebb ui front end: bootstrap, router, actions, dispatcher banner.
+// Dependency-free ES modules, no build step. Every task string is rendered
+// through text nodes (dom.js); nothing here writes HTML from data.
 
-const SVG_NS = "http://www.w3.org/2000/svg";
-const PENDING = "queued,scheduled,submitted";
+import { api, ApiError, hasToken, SessionExpired, setToken } from "./api.js";
+import { renderAgenda, ranNow, cleanest } from "./agenda.js";
+import {
+  actionMenu,
+  closeDialog,
+  confirmDialog,
+  dayName,
+  helpDialog,
+  initDialog,
+  moveDialog,
+  movedText,
+  rescheduleDialog,
+} from "./dialog.js";
+import { initDnd, isDragging } from "./dnd.js";
+import {
+  closeDetail,
+  copyResume,
+  detailId,
+  detailTask,
+  focusReply,
+  onDetailEvent,
+  openDetail,
+  renderDetail,
+  retryDetail,
+  sendReply,
+  trapFocus,
+} from "./detail.js";
+import { ago, h, isUnread, parse, relDay, swapChildren, taskHref, title } from "./dom.js";
+import { invalidateJournal, renderJournal, toggleExpand } from "./journal.js";
+import { initKeys } from "./keys.js";
+import {
+  cancelPending,
+  cancelWithUndo,
+  findTask,
+  finishedTasks,
+  flushDelayed,
+  notify,
+  onTaskEvent,
+  perform,
+  refresh,
+  refreshStatus,
+  state,
+  stream,
+  subscribe,
+} from "./state.js";
+import { renderTimeline, selectMarker } from "./timeline.js";
+import { errorToast, toast } from "./toast.js";
 
-let token = null;
-let lastView = "timeline";
-let status = null;
-let expired = false;
-let renderSeq = 0;
-const markedRead = new Set();
+const VIEWS = { agenda: renderAgenda, timeline: renderTimeline, journal: renderJournal };
+const HOUR = 3_600_000;
 
-// ── helpers ────────────────────────────────────────────────────────────────
+let currentView = "agenda";
+let viewHash = "#/agenda";
+let deferred = false;
+let bannerNote = null;
+let renderedOp = null;
 
-function h(tag, attrs = {}, ...children) {
-  const el = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (v === undefined || v === null || v === false) continue;
-    if (k === "class") el.className = v;
-    else el.setAttribute(k, v === true ? "" : String(v));
+// ── routing ─────────────────────────────────────────────────────────────
+
+function parseRoute() {
+  const task = /^#\/task\/([^?]+)$/.exec(location.hash);
+  if (task) {
+    try {
+      return { taskId: decodeURIComponent(task[1]) };
+    } catch {
+      return { taskId: task[1] };
+    }
   }
-  for (const c of children.flat()) {
-    if (c === undefined || c === null || c === false) continue;
-    el.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  const view = /^#\/(agenda|timeline|journal)(\?.*)?$/.exec(location.hash);
+  return { view: view ? view[1] : "agenda" };
+}
+
+function onRoute() {
+  if (/^#token=/.test(location.hash)) {
+    location.reload();
+    return;
   }
-  return el;
-}
-
-function s(tag, attrs = {}, text) {
-  const el = document.createElementNS(SVG_NS, tag);
-  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
-  if (text !== undefined) el.textContent = String(text);
-  return el;
-}
-
-function fmtTime(iso) {
-  if (!iso) return "-";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? iso
-    : d.toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-}
-
-function ago(iso) {
-  const ms = Date.now() - Date.parse(iso);
-  if (!Number.isFinite(ms)) return iso;
-  const min = Math.round(ms / 60000);
-  if (min < 1) return "just now";
-  if (min < 60) return `${min} min ago`;
-  const hr = Math.round(min / 60);
-  if (hr < 48) return `${hr} h ago`;
-  return `${Math.round(hr / 24)} days ago`;
-}
-
-function taskName(t) {
-  return t.title || t.task_id;
-}
-
-class SessionExpired extends Error {}
-
-async function api(path, init = {}) {
-  if (!token) throw new SessionExpired();
-  const res = await fetch(path, {
-    ...init,
-    headers: { authorization: `Bearer ${token}` },
-  });
-  if (res.status === 401) throw new SessionExpired();
-  return res;
-}
-
-async function apiJson(path) {
-  const res = await api(path);
-  if (!res.ok) {
-    const err = new Error(`HTTP ${res.status}`);
-    err.status = res.status;
-    throw err;
+  const r = parseRoute();
+  if (r.taskId) {
+    void openDetail(r.taskId);
+  } else {
+    currentView = r.view;
+    viewHash = location.hash.startsWith(`#/${r.view}`) ? location.hash : `#/${r.view}`;
+    closeDetail();
   }
-  return res.json();
+  render();
+}
+
+function go(view) {
+  location.hash = view === "journal" && viewHash.startsWith("#/journal") ? viewHash : `#/${view}`;
+}
+
+function closeDrawer() {
+  if (location.hash.startsWith("#/task/")) location.hash = viewHash;
+  else closeDetail();
+}
+
+// ── render ──────────────────────────────────────────────────────────────
+
+function render() {
+  if (state.expired) return showExpired();
+  if (isDragging()) {
+    deferred = true;
+    return;
+  }
+  const view = document.getElementById("view");
+  const focused = document.activeElement?.closest?.("#view .row[data-task-id]")?.dataset.taskId;
+  const focusedSelect = document.activeElement?.closest?.("#view select")?.name;
+  const wrap = h("div", { class: `view-inner view-${currentView}` });
+  VIEWS[currentView](wrap, { selectedId: detailId(), width: view.clientWidth - 2 * gutter() });
+  // Keep the live DOM when nothing changed, so a click or hover in flight
+  // is not lost to an identical redraw (the stream fires on every tick).
+  if (view.firstElementChild?.isEqualNode(wrap)) {
+    finishRender();
+    return;
+  }
+  view.replaceChildren(wrap);
+  if (focused) view.querySelector(`.row[data-task-id="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true });
+  if (focusedSelect) view.querySelector(`select[name="${focusedSelect}"]`)?.focus({ preventScroll: true });
+  finishRender();
+}
+
+function finishRender() {
+
+  for (const v of Object.keys(VIEWS)) {
+    const a = document.getElementById(`nav-${v}`);
+    if (v === currentView) a.setAttribute("aria-current", "page");
+    else a.removeAttribute("aria-current");
+  }
+  const unread = finishedTasks().filter(isUnread).length;
+  const count = document.getElementById("unread-count");
+  count.textContent = String(unread);
+  count.hidden = unread === 0;
+  count.setAttribute("aria-label", `${unread} unread`);
+  document.getElementById("conn").hidden = state.connected;
+  renderDispatcher();
+  syncDetail();
+}
+
+/** Re-draw the drawer when the optimistic state of its task changed. */
+function syncDetail() {
+  const id = detailId();
+  if (!id) return;
+  const op = findTask(id)?._op || null;
+  if (op !== renderedOp) {
+    renderedOp = op;
+    renderDetail();
+  }
+}
+
+function gutter() {
+  return window.innerWidth < 720 ? 16 : 32;
 }
 
 function showExpired() {
-  expired = true;
+  closeDialog();
   document.getElementById("drawer").hidden = true;
+  document.getElementById("scrim").hidden = true;
   document.getElementById("conn").hidden = true;
+  document.getElementById("banner").hidden = true;
   document.getElementById("view").replaceChildren(
-    h("div", { class: "full" },
-      h("h1", {}, "Session expired."),
-      h("p", {}, "Run ", h("code", {}, "ebb ui"), " again to get a new link.")),
+    h("div", { class: "empty empty-full" },
+      h("div", { class: "empty-glyph", "aria-hidden": "true" }, "⏻"),
+      h("p", { class: "empty-title" }, "This link expired."),
+      h("p", { class: "empty-body" }, "Run ", h("code", {}, "ebb ui"), " again to get a new link. Links work for one run of the server.")),
   );
 }
 
-// ── header: unread badge, last tick, daemon banner ─────────────────────────
+// ── dispatcher pill and banner ──────────────────────────────────────────
 
-async function refreshHeader() {
-  const [st, unread] = await Promise.all([apiJson("/api/status"), apiJson("/api/tasks?unread=1")]);
-  status = st;
-  const badge = document.getElementById("unread-badge");
-  badge.textContent = String(unread.tasks.length);
-  badge.hidden = unread.tasks.length === 0;
-  badge.setAttribute("aria-label", `${unread.tasks.length} unread`);
-  document.getElementById("last-tick").textContent = st.last_tick_at
-    ? `Dispatcher last ran ${ago(st.last_tick_at)}`
-    : "Dispatcher has not run yet";
+function dispatcherInfo() {
+  const st = state.status;
+  if (!st) return null;
+  const d = st.dispatcher || {
+    state: st.last_tick_at ? "stale" : "never",
+    last_tick_at: st.last_tick_at,
+    interval_s: 300,
+    ui_child: null,
+  };
+  return d;
+}
+
+function renderDispatcher() {
+  const d = dispatcherInfo();
+  const pill = document.getElementById("dispatcher-pill");
+  const text = document.getElementById("dispatcher-text");
   const banner = document.getElementById("banner");
-  if (st.daemon === "not_installed") {
-    banner.replaceChildren(
-      "No tick daemon is installed, so nothing will dispatch scheduled tasks. Run ",
-      h("code", {}, "ebb install --laptop"),
-      " (or ",
-      h("code", {}, "--server"),
-      ").",
-    );
-    banner.hidden = false;
-  } else {
+  if (!d) {
+    pill.dataset.state = "unknown";
+    text.textContent = "Dispatcher";
     banner.hidden = true;
-  }
-}
-
-// ── timeline ───────────────────────────────────────────────────────────────
-
-function pickRegion(tasks) {
-  const counts = new Map();
-  for (const t of tasks) counts.set(t.region, (counts.get(t.region) || 0) + 1);
-  let best = status ? status.default_region : undefined;
-  let n = 0;
-  for (const [r, c] of counts) if (c > n) [best, n] = [r, c];
-  return best;
-}
-
-function chart(points, tasks, region) {
-  const W = 960, H = 240, L = 44, R = 12, T = 12, B = 28;
-  const t0 = Date.parse(points[0].t);
-  const t1 = Date.parse(points[points.length - 1].t) + 3600000;
-  const gMax = Math.max(...points.map((p) => p.g)) * 1.1 || 1;
-  const x = (ms) => L + ((ms - t0) / (t1 - t0)) * (W - L - R);
-  const y = (g) => T + (1 - g / gMax) * (H - T - B);
-  const svg = s("svg", {
-    class: "chart",
-    viewBox: `0 0 ${W} ${H}`,
-    role: "img",
-    "aria-label": `Forecast carbon intensity for ${region}, with queued tasks at their scheduled hour. The same tasks are listed below.`,
-  });
-  svg.append(s("line", { class: "axis", x1: L, y1: H - B, x2: W - R, y2: H - B }));
-  svg.append(s("text", { x: 4, y: T + 10 }, `${Math.round(gMax)} g`));
-  svg.append(s("text", { x: 4, y: H - B }, "0"));
-  for (let ms = t0; ms <= t1; ms += 6 * 3600000) {
-    svg.append(s("text", { x: x(ms) - 14, y: H - 8 }, new Date(ms).toLocaleTimeString(undefined, { hour: "2-digit" })));
-  }
-  const d = points
-    .map((p, i) => `${i ? "L" : "M"}${x(Date.parse(p.t) + 1800000).toFixed(1)},${y(p.g).toFixed(1)}`)
-    .join(" ");
-  svg.append(s("path", { class: "curve", d }));
-  const slots = new Map();
-  for (const t of tasks) {
-    if (t.status === "submitted") continue;
-    const ms = Date.parse(t.scheduled_for);
-    if (!Number.isFinite(ms) || ms < t0 || ms > t1) continue;
-    const slot = Math.floor(ms / 3600000);
-    slots.set(slot, [...(slots.get(slot) || []), t]);
-    const dl = Date.parse(t.deadline);
-    if (Number.isFinite(dl) && dl >= t0 && dl <= t1) {
-      svg.append(s("line", { class: "deadline", x1: x(dl), y1: T, x2: x(dl), y2: H - B }));
-    }
-  }
-  for (const [slot, group] of slots) {
-    const ms = slot * 3600000 + 1800000;
-    const p = points.find((q) => Math.floor(Date.parse(q.t) / 3600000) === slot);
-    const cy = p ? y(p.g) : H - B;
-    const link = s("a", { href: `#/task/${encodeURIComponent(group[0].task_id)}` });
-    const title = s("title", {}, group.map(taskName).join("\n"));
-    link.append(title, s("circle", { class: "marker", cx: x(ms), cy, r: group.length > 1 ? 9 : 6 }));
-    if (group.length > 1) {
-      link.append(s("text", { class: "marker-count", x: x(ms) - 3, y: cy + 3.5 }, group.length));
-    }
-    svg.append(link);
-  }
-  return svg;
-}
-
-function taskRow(t, meta) {
-  return h("li", {},
-    h("a", { href: `#/task/${encodeURIComponent(t.task_id)}` },
-      h("span", { class: "t-title" }, taskName(t)),
-      h("span", { class: "t-meta" }, meta)));
-}
-
-function list(tasks, meta) {
-  return h("ul", { class: "tasks" }, tasks.map((t) => taskRow(t, meta(t))));
-}
-
-async function renderTimeline(view) {
-  const { tasks } = await apiJson(`/api/tasks?status=${PENDING}`);
-  view.replaceChildren(h("h1", {}, "Timeline"));
-  if (tasks.length === 0) {
-    view.append(h("p", { class: "muted" }, "No queued tasks."));
     return;
   }
-  const region = pickRegion(tasks);
-  const latest = Math.max(...tasks.map((t) => Date.parse(t.deadline || t.scheduled_for) || 0));
-  const hours = Math.min(72, Math.max(24, Math.ceil((latest - Date.now()) / 3600000) + 1));
+  const last = parse(d.last_tick_at);
+  const child = d.ui_child?.alive ? d.ui_child : null;
+  pill.dataset.state = d.state;
+  text.textContent =
+    d.state === "running"
+      ? child && !(Number.isFinite(last) && Date.now() - last <= 2 * d.interval_s * 1000)
+        ? `Dispatcher running · PID ${child.pid}`
+        : `Dispatcher ran ${ago(last)}`
+      : d.state === "stale"
+        ? `Dispatcher idle · ${ago(last)}`
+        : "No dispatcher";
+  pill.title = "Dispatcher status";
+
+  if (bannerNote) {
+    banner.dataset.tone = "info";
+    swapChildren(banner, [
+      h("span", { class: "banner-icon", "aria-hidden": "true" }, "●"),
+      h("span", { class: "banner-text" }, bannerNote),
+      h("button", { type: "button", class: "icon-btn banner-close", "aria-label": "Dismiss", "data-action": "banner-dismiss" }, "×"),
+    ]);
+    banner.hidden = false;
+    return;
+  }
+  if (d.state === "running") {
+    banner.hidden = true;
+    return;
+  }
+  const waiting = state.pending.length;
+  banner.dataset.tone = waiting ? "warn" : "quiet";
+  const msg =
+    d.state === "never"
+      ? "No dispatcher has run on this ledger yet."
+      : `No dispatcher has run for ${ago(last).replace(" ago", "")}.`;
+  swapChildren(banner, [
+    h("span", { class: "banner-icon", "aria-hidden": "true" }, waiting ? "!" : "i"),
+    h("span", { class: "banner-text" }, msg, " ", waiting ? `${waiting} pending task${waiting === 1 ? "" : "s"} will not run.` : "Nothing is pending."),
+    h("button", { type: "button", class: "btn btn-sm btn-primary", "data-action": "start-dispatcher" }, "Start dispatcher"),
+  ]);
+  banner.hidden = false;
+}
+
+async function startDispatcher(button) {
+  if (button) button.disabled = true;
   try {
-    const f = await apiJson(`/api/forecast?region=${encodeURIComponent(region)}&hours=${hours}`);
-    if (f.points.length > 1) {
-      view.append(chart(f.points, tasks, f.region));
-      view.append(h("p", { class: "muted" },
-        `${f.region}, gCO2e/kWh, source ${f.source}${f.source === "mock" ? " (synthetic, not a measurement)" : ""}. Dots are tasks at their scheduled hour; dashed lines are deadlines.`));
-    }
+    const meta = await api.startDispatcher();
+    bannerNote = `Dispatcher started · PID ${meta.pid} · log ${meta.log}`;
+    toast(`Dispatcher started · PID ${meta.pid}`);
   } catch (err) {
-    if (err instanceof SessionExpired) throw err;
-    view.append(h("p", { class: "muted" }, "Forecast unavailable."));
-  }
-  const byTime = (a, b) => (Date.parse(a.scheduled_for) || 0) - (Date.parse(b.scheduled_for) || 0);
-  const scheduled = tasks.filter((t) => t.status !== "submitted").sort(byTime);
-  const absolute = scheduled.filter((t) => t.deadline_kind !== "quota_reset");
-  const quota = scheduled.filter((t) => t.deadline_kind === "quota_reset");
-  const submitted = tasks.filter((t) => t.status === "submitted");
-  const runs = (t) => `${t.status} · runs ${fmtTime(t.scheduled_for)} · deadline ${fmtTime(t.deadline)}`;
-
-  if (absolute.length) {
-    view.append(h("h2", {}, "By deadline"), list(absolute, runs));
-  }
-  if (quota.length) {
-    view.append(h("h2", {}, "Before quota reset"));
-    const labels = [...new Set(quota.map((t) => t.quota_provider || "unknown"))];
-    for (const label of labels) {
-      const cfg = status && status.quota.find((q) => q.label === label);
-      view.append(h("p", { class: "muted" },
-        cfg
-          ? `quota reset (${label}): next reset ${fmtTime(cfg.next_reset)}, margin ${cfg.margin_h} h`
-          : `quota reset (${label}): not configured in ~/.ebb-ai/config`));
-      view.append(list(quota.filter((t) => (t.quota_provider || "unknown") === label), runs));
+    if (err instanceof SessionExpired) {
+      state.expired = true;
+    } else if (err instanceof ApiError && err.status === 409) {
+      toast("A dispatcher started from this page is already running.");
+    } else {
+      errorToast(`Could not start the dispatcher${err instanceof ApiError ? `: ${err.message}` : "."}`);
     }
+  } finally {
+    if (button) button.disabled = false;
   }
-  if (submitted.length) {
-    view.append(h("h2", {}, "Submitted to provider batch (runs within 24 h)"),
-      list(submitted, (t) => `submitted · deadline ${fmtTime(t.deadline)}`));
-  }
+  await refreshStatus();
 }
 
-// ── inbox ──────────────────────────────────────────────────────────────────
-
-async function renderInbox(view) {
-  const { tasks } = await apiJson("/api/tasks?unread=1");
-  tasks.sort((a, b) => (Date.parse(b.completed_at) || 0) - (Date.parse(a.completed_at) || 0));
-  view.replaceChildren(h("h1", {}, "Inbox"));
-  if (tasks.length === 0) {
-    view.append(h("p", { class: "muted" }, "Nothing unread."));
-    return;
-  }
-  view.append(list(tasks, (t) => `${t.status} · ${fmtTime(t.completed_at)}`));
-}
-
-// ── detail drawer ──────────────────────────────────────────────────────────
-
-function kv(pairs) {
+function dispatcherDialog() {
+  const d = dispatcherInfo();
+  if (!d) return;
+  const st = state.status;
+  const last = parse(d.last_tick_at);
+  const rows = [
+    ["state", d.state === "running" ? "running" : d.state === "stale" ? "idle (stale)" : "never ran"],
+    ["last tick", Number.isFinite(last) ? ago(last) : "never"],
+    ["interval", `${d.interval_s} s`],
+    ["daemon", st.daemon === "installed" ? "installed" : st.daemon === "not_installed" ? "not installed" : String(st.daemon)],
+    ["started here", d.ui_child ? `PID ${d.ui_child.pid}${d.ui_child.alive ? "" : " (exited)"}` : null],
+    ["log", d.ui_child?.log],
+    ["ledger", st.db_path],
+  ];
   const dl = h("dl", { class: "kv" });
-  for (const [k, v] of pairs) {
-    if (v === undefined || v === null || v === "") continue;
-    dl.append(h("dt", {}, k), h("dd", {}, String(v)));
-  }
-  return dl;
+  for (const [k, v] of rows) if (v) dl.append(h("dt", {}, k), h("dd", {}, v));
+  const dlg = document.getElementById("dialog");
+  if (dlg.open) dlg.close();
+  dlg.className = "dialog";
+  dlg.replaceChildren(
+    h("header", { class: "dialog-head" }, h("h2", { class: "dialog-title", id: "dialog-title" }, "Dispatcher"),
+      h("p", { class: "dialog-sub" }, "ebb ui never runs tasks itself. A dispatcher (", h("code", {}, "ebb tick"), " or the OpenClaw loop) does.")),
+    dl,
+    h("footer", { class: "dialog-foot" },
+      h("button", { type: "button", class: "btn btn-ghost", onclick: () => dlg.close() }, "Close"),
+      d.state !== "running" ? h("button", { type: "button", class: "btn btn-primary", onclick: () => { dlg.close(); void startDispatcher(); } }, "Start dispatcher") : null),
+  );
+  dlg.showModal();
 }
 
-function receiptBlock(r, taskId) {
-  return [
-    h("h2", {}, "Receipt"),
-    kv([
-      ["ran at", r.ranAt && fmtTime(r.ranAt)],
-      ["model", r.provider || r.model ? `${r.provider || "?"}:${r.model || "?"}` : undefined],
-      ["estimated", r.estimatedCarbonGCo2 !== undefined ? `${r.estimatedCarbonGCo2} gCO2e` : undefined],
-      ["actual", r.actualCarbonGCo2 !== undefined ? `${r.actualCarbonGCo2} gCO2e` : undefined],
-      ["intensity", r.intensityGCo2PerKwh !== undefined ? `${r.intensityGCo2PerKwh} gCO2/kWh` : undefined],
-      ["grid source", r.gridSource === "mock" ? "mock (synthetic, not a measurement)" : r.gridSource],
-      ["signature", r.signature ? "signed (Ed25519)" : "not signed"],
-    ]),
-    r.signature ? h("p", { class: "muted" }, "Check it: ", h("code", {}, `ebb verify ${taskId}`)) : null,
-  ];
+// ── actions ─────────────────────────────────────────────────────────────
+
+function taskFor(id) {
+  const fromList = findTask(id);
+  if (fromList) return fromList;
+  const d = detailTask();
+  return d && d.task_id === id ? d : null;
 }
 
-async function renderDrawer(taskId, seq) {
-  const drawer = document.getElementById("drawer");
-  const back = h("a", { href: `#/${lastView}` }, "← Back");
-  let t;
-  try {
-    t = await apiJson(`/api/tasks/${encodeURIComponent(taskId)}`);
-  } catch (err) {
-    if (err instanceof SessionExpired) throw err;
-    // A newer render owns the drawer now (the user navigated away).
-    if (seq !== renderSeq) return;
-    drawer.dataset.taskId = "";
-    drawer.replaceChildren(back, h("h1", {}, "Task not found"), h("a", { href: "#/timeline" }, "Go to the timeline"));
-    drawer.hidden = false;
+function nextTickHint() {
+  const d = dispatcherInfo();
+  if (!d || d.state === "running") return { text: "Runs on the next tick" };
+  return {
+    text: "Runs on the next tick. No dispatcher is running.",
+    action: { label: "Start dispatcher", run: () => void startDispatcher() },
+  };
+}
+
+function runNow(task) {
+  ranNow.add(task.task_id);
+  return perform({
+    id: task.task_id,
+    action: "run now",
+    label: "Queuing to run now…",
+    patch: { scheduled_for: new Date().toISOString(), not_before: null },
+    send: () => api.runNow(task.task_id),
+    confirm: () => {
+      const hint = nextTickHint();
+      return { text: `“${title(task)}” ${hint.text.charAt(0).toLowerCase()}${hint.text.slice(1)}`, action: hint.action };
+    },
+  });
+}
+
+/** Rough run time inside a day, for the optimistic row: the cleanest hour. */
+function guessInDay(task, start, bounds) {
+  const from = Date.parse(bounds.day_start);
+  const to = Date.parse(bounds.day_end);
+  const best = cleanest(task.region, from, to);
+  if (best) return Math.max(best.ms, from);
+  const at = parse(task.scheduled_for);
+  const offset = Number.isFinite(at) ? at - new Date(at).setHours(0, 0, 0, 0) : 12 * HOUR;
+  return Math.min(Math.max(start + offset, from), to - HOUR);
+}
+
+function moveToDay(task, start, bounds) {
+  if (!bounds) {
+    errorToast("That day is over. Pick a later day.");
     return;
   }
-  if (seq !== renderSeq) return;
-  const finished = t.status === "completed" || t.status === "failed";
-  // Keep the raw-response toggle open when a change event redraws the same task.
-  const rawOpen = drawer.dataset.taskId === t.task_id && !!drawer.querySelector("details")?.open;
-  const parts = [
-    back,
-    h("h1", {}, taskName(t)),
-    h("p", {}, h("span", { class: `status ${t.status}` }, t.status)),
-    kv([
-      ["task id", t.task_id],
-      ["origin", t.origin_host ? `${t.origin_host}${t.origin_cwd ? ` (${t.origin_cwd})` : ""}` : undefined],
-      ["parent", t.parent_task_id],
-      ["region", t.region],
-      ["enqueued", fmtTime(t.enqueued_at)],
-      ["scheduled for", t.scheduled_for && fmtTime(t.scheduled_for)],
-      ["deadline", t.deadline && `${fmtTime(t.deadline)} (${t.deadline_label})`],
-      ["completed", t.completed_at && fmtTime(t.completed_at)],
-    ]),
-  ];
-  if (t.status !== "running") {
-    if (t.prompt !== null) parts.push(h("h2", {}, "Prompt"), h("pre", {}, t.prompt));
-    const prior = t.history.slice(0, Math.max(0, t.history.length - 1 - (t.result_text !== null && t.status === "completed" ? 1 : 0)));
-    if (prior.length) {
-      parts.push(h("h2", {}, "Earlier turns"));
-      for (const m of prior) parts.push(h("p", { class: "muted" }, m.role), h("pre", {}, m.content));
-    }
-    if (t.result_text !== null) parts.push(h("h2", {}, "Result"), h("pre", {}, t.result_text));
-    else if (t.status === "completed" && t.result !== null) parts.push(h("h2", {}, "Result"), h("pre", {}, JSON.stringify(t.result, null, 2)));
-    if (t.error) parts.push(h("h2", {}, "Error"), h("pre", {}, t.error));
-    if (t.receipt) parts.push(...receiptBlock(t.receipt, t.task_id));
-    if (t.routing) parts.push(h("h2", {}, "Routing"), kv([["chosen", t.routing.chosen], ["reasoning", t.routing.reasoning]]));
-    if (t.raw !== null) {
-      const raw = h("details", {}, h("summary", {}, "Raw vendor response"), h("pre", {}, JSON.stringify(t.raw, null, 2)));
-      raw.open = rawOpen;
-      parts.push(raw);
-    }
-  }
-  drawer.replaceChildren(...parts.filter(Boolean));
-  drawer.dataset.taskId = t.task_id;
-  drawer.hidden = false;
-  if (finished && !t.read_at && !markedRead.has(t.task_id)) {
-    markedRead.add(t.task_id);
-    // A failed mark-read is ignored; the task just stays in the inbox.
-    api(`/api/tasks/${encodeURIComponent(t.task_id)}/read`, { method: "POST" }).catch(() => {});
-  }
-}
-
-// ── routing ────────────────────────────────────────────────────────────────
-
-function route() {
-  const m = /^#\/(timeline|inbox|task\/(.+))$/.exec(location.hash);
-  if (!m) return { view: "timeline" };
-  if (m[2]) return { view: lastView, taskId: decodeURIComponent(m[2]) };
-  return { view: m[1] };
-}
-
-async function render() {
-  if (expired) return;
-  const seq = ++renderSeq;
-  const r = route();
-  lastView = r.view;
-  for (const v of ["timeline", "inbox"]) {
-    const a = document.getElementById(`nav-${v}`);
-    if (v === r.view) a.setAttribute("aria-current", "page");
-    else a.removeAttribute("aria-current");
-  }
-  const view = document.getElementById("view");
-  try {
-    const next = h("div");
-    await (r.view === "inbox" ? renderInbox(next) : renderTimeline(next));
-    if (seq !== renderSeq) return;
-    view.replaceChildren(...next.childNodes);
-    if (r.taskId) await renderDrawer(r.taskId, seq);
-    else document.getElementById("drawer").hidden = true;
-    if (seq !== renderSeq) return;
-    await refreshHeader();
-  } catch (err) {
-    if (err instanceof SessionExpired) showExpired();
-    else if (seq !== renderSeq) return;
-    else view.replaceChildren(h("p", { class: "muted" }, `Could not load: ${err.message}`));
-  }
-}
-
-// ── change stream (SSE over fetch, so the bearer header applies) ───────────
-
-async function stream() {
-  let delay = 1000;
-  let reconnect = false;
-  const conn = document.getElementById("conn");
-  while (!expired) {
-    try {
-      const res = await api("/api/events");
-      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
-      conn.hidden = true;
-      delay = 1000;
-      const reader = res.body.getReader();
-      const dec = new TextDecoder();
-      let buf = "";
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buf += dec.decode(value, { stream: true });
-        let i;
-        while ((i = buf.indexOf("\n\n")) >= 0) {
-          const msg = buf.slice(0, i);
-          buf = buf.slice(i + 2);
-          // A reconnect's hello re-renders too: changes made while the stream
-          // was down produce no event of their own.
-          if (/^event: tasks$/m.test(msg) || (reconnect && /^event: hello$/m.test(msg))) render();
-        }
-      }
-    } catch (err) {
-      if (err instanceof SessionExpired) {
-        showExpired();
-        return;
-      }
-    }
-    conn.hidden = false;
-    reconnect = true;
-    await new Promise((r) => setTimeout(r, delay));
-    delay = Math.min(delay * 2, 30000);
-  }
-}
-
-// ── boot ───────────────────────────────────────────────────────────────────
-
-// A new link pasted into this tab only changes the fragment; reload to use it.
-window.addEventListener("hashchange", () => {
-  if (/^#token=/.test(location.hash)) location.reload();
-});
-
-const m = /^#token=([A-Za-z0-9_-]+)$/.exec(location.hash);
-if (m) {
-  token = m[1];
-  // Keep the token in memory only; drop it from the address bar and history.
-  history.replaceState(null, "", `${location.pathname}#/timeline`);
-}
-if (!token) {
-  showExpired();
-} else {
-  window.addEventListener("hashchange", render);
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !document.getElementById("drawer").hidden) location.hash = `#/${lastView}`;
+  const guess = guessInDay(task, start, bounds);
+  const label = dayName(start);
+  return perform({
+    id: task.task_id,
+    action: "move",
+    label: `Moving to ${relDay(start)}…`,
+    patch: { scheduled_for: new Date(guess).toISOString(), deadline: bounds.day_end, deadline_kind: "absolute" },
+    send: () => api.reschedule(task.task_id, bounds),
+    confirm: (fresh) => movedText(fresh, `Moved to ${label}`, true),
   });
-  render();
-  stream();
 }
+
+function reschedule(task) {
+  rescheduleDialog(task, (target, summary, ms) => {
+    if (target.day_start) return moveToDay(task, ms, target);
+    const patch = target.at
+      ? { scheduled_for: target.at, deadline: parse(task.deadline) >= ms ? task.deadline : target.at, deadline_kind: "absolute" }
+      : { deadline: target.deadline, deadline_kind: "absolute", scheduled_for: new Date(Math.min(parse(task.scheduled_for) || ms, ms)).toISOString() };
+    return perform({
+      id: task.task_id,
+      action: "reschedule",
+      label: "Rescheduling…",
+      patch,
+      send: () => api.reschedule(task.task_id, target),
+      confirm: (fresh) => movedText(fresh, summary),
+    });
+  });
+}
+
+function setRead(task, read) {
+  return perform({
+    id: task.task_id,
+    action: read ? "mark read" : "mark unread",
+    label: "Saving…",
+    patch: { read_at: read ? new Date().toISOString() : null },
+    send: () => (read ? api.read(task.task_id) : api.unread(task.task_id)),
+    confirm: () => (read ? "Marked read" : "Marked unread"),
+  });
+}
+
+async function stopSeries(task) {
+  const ok = await confirmDialog({
+    heading: "Stop this series?",
+    body: `“${title(task)}” is cancelled and no further occurrences are created. Earlier runs stay in the Journal.`,
+    confirm: "Stop series",
+    danger: true,
+  });
+  if (ok) cancelWithUndo(task, { series: true });
+}
+
+function act(name, id, source) {
+  if (name === "retry") return void refresh();
+  if (name === "start-dispatcher") return void startDispatcher(source);
+  if (name === "banner-dismiss") {
+    bannerNote = null;
+    return render();
+  }
+  if (name === "close") return closeDrawer();
+  if (name === "detail-retry") return retryDetail();
+  if (name === "reply-send") return void sendReply();
+  if (name === "copy-resume") return void copyResume(source);
+  if (!id) return;
+  if (name === "expand") return toggleExpand(id);
+  if (name === "open") return void (location.hash = taskHref(id));
+
+  const task = taskFor(id);
+  if (!task) return;
+  if (task._op || cancelPending(id)) {
+    toast("Still saving the last change to this task…");
+    return;
+  }
+  const a = task.actions || {};
+  const refuse = (what) => toast(`${what} is not available for a ${task.status} task.`);
+  switch (name) {
+    case "run-now":
+      return a.runNow ? void runNow(task) : refuse("Run now");
+    case "cancel":
+      if (!a.cancel) return refuse("Cancel");
+      keepFocusNear(id);
+      return cancelWithUndo(task);
+    case "stop-series":
+      return a.stopSeries ? void stopSeries(task) : refuse("Stop series");
+    case "reschedule":
+      return a.reschedule ? reschedule(task) : refuse("Reschedule");
+    case "move":
+      return a.reschedule
+        ? moveDialog(task, {
+            runNow: () => act("run-now", id),
+            moveTo: (start, bounds) => void moveToDay(task, start, bounds),
+            pick: () => reschedule(task),
+          })
+        : refuse("Move");
+    case "read":
+      return a.markRead ? void setRead(task, true) : undefined;
+    case "unread":
+      return a.markRead ? void setRead(task, false) : undefined;
+    case "toggle-read":
+      return a.markRead ? void setRead(task, !task.read_at) : refuse("Read marker");
+    case "reply-focus":
+      if (!a.reply) return refuse("Reply");
+      if (detailId() !== id) location.hash = taskHref(id);
+      return void waitFor(() => focusReply());
+    case "menu":
+      return actionMenu(task, {
+        open: () => (location.hash = taskHref(id)),
+        runNow: () => act("run-now", id),
+        move: () => act("move", id),
+        reschedule: () => act("reschedule", id),
+        cancel: () => act("cancel", id),
+        stopSeries: () => act("stop-series", id),
+        toggleRead: () => act("toggle-read", id),
+      });
+  }
+}
+
+/** When the focused row is about to leave the list, move focus to its neighbour. */
+function keepFocusNear(id) {
+  const rows = [...document.querySelectorAll("#view .row[data-task-id]")];
+  const i = rows.findIndex((r) => r.dataset.taskId === id);
+  if (i < 0 || document.activeElement !== rows[i]) return;
+  const next = (rows[i + 1] || rows[i - 1])?.dataset.taskId;
+  if (!next) return;
+  setTimeout(() => document.querySelector(`#view .row[data-task-id="${CSS.escape(next)}"]`)?.focus({ preventScroll: true }), 0);
+}
+
+/** Retry `fn` for a short while until it returns true (drawer still loading). */
+async function waitFor(fn, tries = 20) {
+  for (let i = 0; i < tries; i++) {
+    if (fn()) return;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+}
+
+function onClick(e) {
+  const target = e.target instanceof Element ? e.target : null;
+  if (!target) return;
+  const marker = target.closest("[data-select]");
+  if (marker) return selectMarker(marker.dataset.select);
+  const button = target.closest("[data-action]");
+  if (button && !button.disabled) {
+    if (button.tagName === "BUTTON" && button.type === "submit") return; // the form's submit handler runs
+    e.preventDefault();
+    const holder = button.closest("[data-task-id]");
+    return act(button.dataset.action, holder?.dataset.taskId, button);
+  }
+  const row = target.closest("#view .row[data-task-id]");
+  if (row && !target.closest("a, button, select, input")) location.hash = taskHref(row.dataset.taskId);
+}
+
+// ── boot ────────────────────────────────────────────────────────────────
+
+function boot() {
+  const m = /^#token=([A-Za-z0-9_-]+)$/.exec(location.hash);
+  if (m) {
+    setToken(m[1]);
+    // The token stays in memory only: drop it from the address bar and history.
+    history.replaceState(null, "", `${location.pathname}#/agenda`);
+  }
+  if (!hasToken()) {
+    state.expired = true;
+    showExpired();
+    return;
+  }
+
+  initDialog();
+  subscribe(render);
+  onTaskEvent((ids) => {
+    invalidateJournal(ids);
+    onDetailEvent(ids);
+  });
+  initDnd({
+    findTask: taskFor,
+    onMove: (task, start, bounds) => void moveToDay(task, start, bounds),
+    onRunNow: (task) => void runNow(task),
+    onEnd: () => {
+      if (deferred) {
+        deferred = false;
+        render();
+      }
+    },
+  });
+  initKeys({
+    current: () => detailId(),
+    open: (id, opts) => {
+      if (opts?.keepFocus) {
+        history.replaceState(null, "", taskHref(id));
+        void openDetail(id);
+        render();
+      } else location.hash = taskHref(id);
+    },
+    close: closeDrawer,
+    drawerOpen: () => !!detailId(),
+    act: (name, id) => act(name, id),
+    view: go,
+    filters: () => {
+      if (currentView !== "journal") go("journal");
+      void waitFor(() => {
+        const sel = document.getElementById("filter-status");
+        sel?.focus();
+        return !!sel;
+      });
+    },
+    help: helpDialog,
+  });
+
+  document.getElementById("view").addEventListener("click", onClick);
+  document.getElementById("drawer").addEventListener("click", onClick);
+  document.getElementById("banner").addEventListener("click", onClick);
+  document.getElementById("drawer").addEventListener("keydown", (e) => {
+    trapFocus(e);
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && e.target.classList?.contains("reply-input")) {
+      e.preventDefault();
+      void sendReply();
+    }
+  });
+  document.getElementById("drawer").addEventListener("submit", (e) => {
+    e.preventDefault();
+    void sendReply();
+  });
+  document.getElementById("scrim").addEventListener("click", closeDrawer);
+  document.getElementById("help-btn").addEventListener("click", helpDialog);
+  document.getElementById("dispatcher-pill").addEventListener("click", dispatcherDialog);
+  document.getElementById("view").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      const marker = e.target instanceof Element ? e.target.closest("[data-select]") : null;
+      if (marker) {
+        e.preventDefault();
+        selectMarker(marker.dataset.select);
+      }
+    }
+  });
+
+  window.addEventListener("hashchange", onRoute);
+  window.addEventListener("pagehide", flushDelayed);
+  let resizeTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => currentView === "timeline" && render(), 150);
+  });
+  // Relative times ("ran 2 min ago", overdue) and the dispatcher state age.
+  setInterval(() => void refreshStatus(), 30_000);
+  setInterval(() => notify(), 60_000);
+
+  onRoute();
+  void refresh();
+  void stream();
+}
+
+boot();
