@@ -72,6 +72,13 @@ Parse `$ARGUMENTS` into:
   `~/.ebb-ai/inbox/<task_id>.json` when the user is unsure where to
   put it.
 - **`--provider <anthropic|openai>`** — optional. Default `anthropic`.
+- **`--repeat <none|daily|weekly>`** — optional. Default `none`: the task
+  runs once, also with `--by quota-reset`. `daily` / `weekly` queue the next
+  occurrence each time one finishes (each occurrence is one provider call).
+  `--by quota-reset --repeat weekly` repeats before every weekly reset
+  (pass `repeat: "quota_reset"` for that case so it follows the reset
+  exactly). Stop a series with `/ebb-ai:cancel <task_id>` and say "stop the
+  series" (`cancel_task` with `series: true`).
 
 ## What to do
 
@@ -90,6 +97,11 @@ Parse `$ARGUMENTS` into:
    - `model` — the parsed model hint, omit if not given
    - `output_path` — the parsed `--output` value, omit if not given
    - `provider` — the parsed `--provider` value, omit if not given
+   - `repeat` — the parsed `--repeat` value (`"quota_reset"` when combined
+     with `--by quota-reset` and `weekly`), omit if not given or `none`
+   - `origin_session_id` — exactly `"${CLAUDE_SESSION_ID}"`. Claude Code
+     substitutes this session's id, so the task can later be resumed with
+     `claude --resume`. The server drops a value that is not a session id.
    - **Do not pass `dispatch`.** As of v0.7.1 the MCP server defaults
      to persistent provider_call mode, which is what the user wants
      99% of the time.
@@ -108,6 +120,8 @@ Parse `$ARGUMENTS` into:
      region         <region>
      grid source    <grid_source>
      persisted to   <persisted_to>
+     repeat         <repeat line, only when the response has one>
+     resume         <resume line, only when the response has one>
      check status   /ebb-ai:check <task_id>
      cancel         /ebb-ai:cancel <task_id>
    ```
@@ -135,7 +149,12 @@ Parse `$ARGUMENTS` into:
 /ebb-ai:defer regenerate the test fixtures --by 2026-05-15T08:00:00Z --model claude-haiku-4-5
 /ebb-ai:defer overnight log triage --by 8h --region US-MIDA-PJM --output ~/.ebb-ai/inbox/log-triage.json
 /ebb-ai:defer refactor the test helpers --by quota-reset:claude
+/ebb-ai:defer check my weekly limit list --by quota-reset --repeat weekly
 ```
+
+Only this command carries the session id. A model that calls the
+`schedule_task` MCP tool directly, without the command, does not know the
+session id, so that task has no resume line.
 
 ## Related commands
 

@@ -46,6 +46,12 @@ Use the **`/ebb-ai:defer`** slash command — that is its sole purpose. Pass:
 - `--budget` only when the user gave a numeric carbon ceiling.
 - `--output <path>` only when the user wants the result written to a
   file (so `tail -f` or a file-watcher surfaces it).
+- `--repeat daily|weekly` only when the user asks for a repeating task
+  ("every week", "each reset"). Default `none`: a one-off, also for
+  `--by quota-reset`.
+
+The command passes this session's id (`origin_session_id`), so `ebb ui`
+and `ebb queue show` print `cd <cwd> && claude --resume <id>` for the task.
 
 The command will return immediately with a `task_id`, the scheduled time, and
 the projected carbon. You do **not** need to dispatch the task yourself.
