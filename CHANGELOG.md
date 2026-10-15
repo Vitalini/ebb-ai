@@ -108,6 +108,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`ebb ui` v2 front end.** The page is now a task manager with three
+  views and a detail drawer. **Agenda** (the default) lists pending tasks by
+  day (Today, Tomorrow, weekday, Later) with the carbon band of each run
+  hour and each day's cleanest hour; overdue tasks and unread failures sit in
+  "Needs attention"; repeating series show their next projected runs.
+  **Journal** lists finished tasks newest first with status, provider and
+  kind filters and rows that expand to the result, receipt and gCO2e.
+  **Timeline** is the forecast curve coloured by band with tasks at their
+  scheduled hour. The drawer shows result, conversation with a reply box,
+  receipt, origin with a copyable `claude --resume` line, chain and series,
+  and the actions the task's state allows. Cancel (5 s Undo), reschedule,
+  move to a day (drag a row onto a day header or "Run now", or the move-to
+  list on touch and keyboard), run now, mark read or unread, stop series and
+  Start dispatcher all write optimistically and are confirmed by the change
+  stream. Keyboard: j/k, Enter, Esc, c, C, r, m, n, u, R, 1-3, /, ?. Light
+  and dark, 400 px wide screens, reduced motion. Still no dependency, no build
+  step, no remote resource; every module is in the server's fixed static map.
+- `scripts/ui-seed.mjs` writes a throwaway ledger with a realistic mix of
+  tasks for trying the page (`--serve` runs `ebb ui` on it with the mock
+  forecast and provider secrets removed from the environment). `--db` takes
+  only a new file outside `~/.ebb-ai`, so a seed never lands in a real ledger.
 - `repeat` defaults to `none` for every task, `deadline_kind: "quota_reset"`
   included: a quota task runs once unless `repeat` (or `--repeat weekly`) is
   given.

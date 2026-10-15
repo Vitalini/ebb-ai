@@ -386,13 +386,19 @@ ebb queue list --unread     # the same inbox in the terminal
 ebb queue show <id>         # one task: prompt, result, receipt
 ```
 
-`ebb ui` serves a page with a timeline (queued tasks on the forecast
-curve, with a "Before quota reset" group), an inbox of finished tasks you
-have not opened, and a task detail view with the prompt, result, receipt
-and the raw vendor response. Its only write is the read marker: it never
-dispatches or cancels, and it shows when the dispatcher (`ebb tick`) last ran.
-It listens on 127.0.0.1 only, and every API request needs a random token
-that is printed once with the link and changes on every start.
+`ebb ui` serves a local task manager. **Agenda** (the default) lists pending
+tasks by day with the carbon band of each run hour; overdue tasks and unread
+failures sit in "Needs attention". **Journal** lists finished tasks with
+status, provider and kind filters. **Timeline** shows the forecast curve with
+tasks at their scheduled hour. A task's drawer shows the result, the
+conversation with a reply box, the receipt and the `claude --resume` line of
+the session that queued it. From the page you can cancel (with a 5 s Undo),
+reschedule, move a task to another day (drag it onto a day, or use the
+move-to list), run it now, reply, mark it read or unread, stop a series, and
+start a dispatcher when none is running. Actions change the ledger; tasks
+still run on the dispatcher's next tick (`ebb tick`), and the page shows when
+that last ran. It listens on 127.0.0.1 only, and every API request needs
+a random token that is printed once with the link and changes on every start.
 
 `ebb tick` posts a desktop notification for each task that completes or
 fails (macOS, Linux with `notify-send`, Windows). Turn it off with

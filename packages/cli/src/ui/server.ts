@@ -51,10 +51,32 @@ const SECURITY_HEADERS: Record<string, string> = {
   "cache-control": "no-store",
 };
 
-const STATIC_FILES: Record<string, { file: string; type: string }> = {
+const JS = "text/javascript; charset=utf-8";
+const CSS = "text/css; charset=utf-8";
+
+/** ES modules of the page (ui v2). Each is listed: no path touches the disk. */
+export const UI_MODULES = [
+  "app.js",
+  "api.js",
+  "state.js",
+  "toast.js",
+  "dom.js",
+  "views.js",
+  "row.js",
+  "agenda.js",
+  "detail.js",
+  "journal.js",
+  "timeline.js",
+  "dnd.js",
+  "keys.js",
+  "dialog.js",
+] as const;
+
+export const STATIC_FILES: Readonly<Record<string, { file: string; type: string }>> = {
   "/": { file: "index.html", type: "text/html; charset=utf-8" },
-  "/app.js": { file: "app.js", type: "text/javascript; charset=utf-8" },
-  "/app.css": { file: "app.css", type: "text/css; charset=utf-8" },
+  "/tokens.css": { file: "tokens.css", type: CSS },
+  "/app.css": { file: "app.css", type: CSS },
+  ...Object.fromEntries(UI_MODULES.map((f) => [`/${f}`, { file: f, type: JS }])),
 };
 
 /** `packages/cli/ui`, from both `src/ui` (tests) and `dist/ui` (published). */
@@ -229,7 +251,7 @@ export async function startUiServer(opts: UiServerOptions): Promise<UiServer> {
         if (out.changedIds) events.emit(out.changedIds);
         return send(res, out.status, out.body);
       }
-      const asset = STATIC_FILES[url.pathname];
+      const asset = Object.hasOwn(STATIC_FILES, url.pathname) ? STATIC_FILES[url.pathname] : undefined;
       if (!asset) return send(res, 404, "not found", "text/plain; charset=utf-8");
       if (method !== "GET" && method !== "HEAD") return send(res, 405, "method not allowed", "text/plain; charset=utf-8");
       try {
