@@ -98,7 +98,14 @@ export function buildProgram(): Command {
     .option("--kind <kind>", "Filter by deadline kind: absolute | quota_reset", undefined)
     .option("--unread", "Only completed or failed tasks nobody has viewed yet")
     .option("--json", "Emit JSON instead of the table")
+    .option("--hook", "Claude Code SessionStart mode: one unread-count line or nothing; always exits 0")
     .action(async (opts) => {
+      if (opts.hook === true) {
+        const res = await runQueueList({ db: opts.db, hook: true });
+        // eslint-disable-next-line no-console
+        if (res.rendered) console.log(res.rendered);
+        return;
+      }
       try {
         const res = await runQueueList({
           db: opts.db,

@@ -26,6 +26,8 @@ import type {
   TaskRecord,
   TaskStatus,
 } from "@ebb-ai/core";
+import { existsSync } from "node:fs";
+
 import { defaultDbPath } from "./tick.js";
 
 export const VALID_STATUSES: ReadonlySet<TaskStatus> = new Set([
@@ -49,6 +51,11 @@ export interface QueueListOptions {
   /** `absolute` or `quota_reset`. */
   kind?: string;
   json?: boolean;
+  /**
+   * SessionStart-hook mode: one line naming the unread count, or nothing.
+   * Never throws; a missing or unreadable ledger prints nothing.
+   */
+  hook?: boolean;
 }
 
 export interface QueueListResult {
@@ -147,9 +154,41 @@ function buildFilter(opts: QueueListOptions): TaskListFilter {
   return filter;
 }
 
+/**
+ * The Claude Code SessionStart line: `N unread ebb task(s), run `ebb ui``,
+ * or "" when nothing is unread. It names no task text, so nothing from a
+ * prompt or a model reply reaches the session context.
+ */
+export function renderHookLine(unreadCount: number): string {
+  if (unreadCount <= 0) return "";
+  const noun = unreadCount === 1 ? "task" : "tasks";
+  return stripControlChars(`${unreadCount} unread ebb ${noun}, run \`ebb ui\` to read them.`);
+}
+
+function runQueueHook(opts: QueueListOptions): QueueListResult {
+  const dbPath = opts.db ?? defaultDbPath();
+  // Do not create a ledger just to report that it is empty.
+  if (dbPath !== ":memory:" && !existsSync(dbPath)) return { rows: [], rendered: "" };
+  let store: TaskStore | undefined;
+  try {
+    store = new TaskStore({ dbPath });
+    const rows = store.list({ unread: true });
+    return { rows, rendered: renderHookLine(rows.length) };
+  } catch {
+    return { rows: [], rendered: "" };
+  } finally {
+    try {
+      store?.close();
+    } catch {
+      // ignore
+    }
+  }
+}
+
 export async function runQueueList(
   opts: QueueListOptions = {},
 ): Promise<QueueListResult> {
+  if (opts.hook) return runQueueHook(opts);
   const filter = buildFilter(opts);
   const dbPath = opts.db ?? defaultDbPath();
   const store = new TaskStore({ dbPath });

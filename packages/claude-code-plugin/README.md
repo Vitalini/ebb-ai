@@ -86,6 +86,14 @@ manually with `ebb tick --once`. The plugin-install path does not
 auto-install the daemon (it would create system-level state without
 explicit opt-in).
 
+## Session start line
+
+The plugin registers a `SessionStart` hook (`hooks/hooks.json`). When
+finished tasks are waiting unread, a new session starts with one line
+such as ``2 unread ebb tasks, run `ebb ui` to read them.`` It prints
+nothing when nothing is unread or when the `ebb` CLI is not on `PATH`.
+The line holds only the count, never task text.
+
 ## Result delivery
 
 Three options to get the result back after a task completes:
@@ -146,6 +154,7 @@ slash-command shortcuts or the `ebb-ai` auto-invocation skill.
 - `.mcp.json` — MCP server wiring (runs `npx -y @ebb-ai/mcp`)
 - `commands/*.md` — the eight slash commands
 - `skills/ebb-ai/SKILL.md` — when-to-auto-invoke skill
+- `hooks/hooks.json` — SessionStart hook that prints the unread count
 
 ## Related packages
 

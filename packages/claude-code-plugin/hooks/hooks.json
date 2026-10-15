@@ -1,0 +1,16 @@
+{
+  "description": "ebb-ai: at session start, print one line when deferred tasks have finished and nobody has read them yet. Silent when nothing is unread or the ebb CLI is not installed.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v ebb >/dev/null 2>&1 && ebb queue list --unread --hook 2>/dev/null; exit 0",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
