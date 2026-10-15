@@ -15,7 +15,7 @@ function formatWh(model: string): string {
 export const metadata: Metadata = {
   title: "Docs · install, commands, MCP tools",
   description:
-    "Install ebb-ai in any MCP host (Claude Code, Cursor, Claude Desktop, Windsurf, Continue, Cline, Zed, Goose, OpenClaw). Full reference for the eight /ebb-ai:* slash commands and nine MCP tools.",
+    "Install ebb-ai in any MCP host (Claude Code, Cursor, Claude Desktop, Windsurf, Continue, Cline, Zed, Goose, OpenClaw). Full reference for the eight /ebb-ai:* slash commands and ten MCP tools.",
   alternates: { canonical: "https://www.ebb-ai.com/docs" },
 };
 
@@ -29,7 +29,7 @@ export default function DocsPage() {
         </h1>
         <p className="max-w-2xl text-base leading-relaxed text-fg-muted">
           Pick your AI host below, copy the command. Then call any of the eight
-          slash commands (Claude Code) or nine MCP tools (every other host).
+          slash commands (Claude Code) or ten MCP tools (every other host).
         </p>
       </header>
 
@@ -76,7 +76,7 @@ export default function DocsPage() {
             mcp tools
           </p>
           <h2 className="text-2xl font-semibold tracking-tight">
-            Nine MCP tools (every host)
+            Ten MCP tools (every host)
           </h2>
           <p className="text-sm text-fg-muted">
             The same surface that powers the slash commands. Any MCP host can
@@ -561,6 +561,11 @@ const TOOLS: Tool[] = [
     name: "retry_task",
     access: "write (dispatch)",
     desc: "Re-dispatch a failed task. Requires a provider API key. Backs /ebb-ai:retry.",
+  },
+  {
+    name: "reply_task",
+    access: "write (dispatch)",
+    desc: "Continue a completed task: queues a new task that sends the earlier prompt, the reply and your follow-up to the same model. Backs `ebb queue reply`.",
   },
   {
     name: "cancel_all",

@@ -2,15 +2,21 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { TaskStore } from "@ebb-ai/core";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mockGridFeed, TaskStore } from "@ebb-ai/core";
 import type { TaskRecord } from "@ebb-ai/core";
 import {
+  localDayBounds,
   renderQueue,
+  runQueueCancel,
   runQueueList,
+  runQueueReply,
+  runQueueReschedule,
+  runQueueRunNow,
   runQueueShow,
   runQueueUnread,
 } from "../src/commands/queue.js";
+import { buildProgram } from "../src/index.js";
 
 function rec(status: string): TaskRecord {
   return {
@@ -248,6 +254,153 @@ describe("ebb queue list --hook (Claude Code SessionStart)", () => {
       expect(runHook(`echo "2 unread ebb tasks, run \\\`ebb ui\\\` to read them."`).stdout).toBe(
         "2 unread ebb tasks, run `ebb ui` to read them.\n",
       );
+    });
+  });
+});
+
+describe("queue write commands (ui v2)", () => {
+  let dir: string;
+  let db: string;
+  const H = 3_600_000;
+  const spec = (prompt: string) =>
+    JSON.stringify({ type: "provider_call", provider: "anthropic", model: "claude-sonnet-4-6", prompt });
+
+  async function seedPending(taskId: string, extra: Partial<TaskRecord> = {}): Promise<void> {
+    const store = new TaskStore({ dbPath: db });
+    store.upsert({
+      taskId,
+      status: "scheduled",
+      enqueuedAt: new Date().toISOString(),
+      scheduledFor: new Date(Date.now() + 5 * H).toISOString(),
+      deadline: new Date(Date.now() + 6 * H).toISOString(),
+      region: "DE",
+      bodyJson: spec(`prompt of ${taskId}`),
+      ...extra,
+    } as TaskRecord);
+    store.close();
+  }
+  const row = (id: string) => {
+    const store = new TaskStore({ dbPath: db });
+    try {
+      return store.get(id);
+    } finally {
+      store.close();
+    }
+  };
+  const feed = mockGridFeed();
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "ebb-cli-write-"));
+    db = join(dir, "queue.db");
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("cancel cancels; --series also ends the series", async () => {
+    await seedPending("a");
+    await seedPending("s", { seriesId: "s", repeat: "weekly" });
+    expect(await runQueueCancel("a", { db, feed })).toMatch(/a: cancelled/);
+    expect(row("a")?.status).toBe("cancelled");
+    expect(await runQueueCancel("s", { db, feed, series: true })).toMatch(/series s ended/);
+    expect(row("s")?.repeat).toBe("none");
+    expect(row("s~2")).toBeUndefined();
+  });
+
+  it("run-now marks the row due and expedited and names the next tick", async () => {
+    await seedPending("r");
+    const out = await runQueueRunNow("r", { db, feed });
+    expect(out).toMatch(/runs on the next tick \(last tick: never recorded\)/);
+    expect(row("r")?.intensitySource).toBe("expedited");
+    expect(Date.parse(row("r")!.scheduledFor!)).toBeLessThanOrEqual(Date.now());
+  });
+
+  it("reschedule --by, --at and --day change the row as the core specifies", async () => {
+    await seedPending("x");
+    await runQueueReschedule("x", { db, feed, by: "30h" });
+    const by = row("x")!;
+    expect(Date.parse(by.deadline!)).toBeGreaterThan(Date.now() + 29 * H);
+    const at = new Date(Date.now() + 10 * H).toISOString();
+    await runQueueReschedule("x", { db, feed, at });
+    expect(row("x")?.scheduledFor).toBe(at);
+    const t = new Date(Date.now() + 2 * 24 * H);
+    const day = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+    await runQueueReschedule("x", { db, feed, day });
+    const { dayStart, dayEnd } = localDayBounds(day);
+    const s = Date.parse(row("x")!.scheduledFor!);
+    expect(s).toBeGreaterThanOrEqual(dayStart.getTime());
+    expect(s).toBeLessThanOrEqual(dayEnd.getTime());
+    await expect(runQueueReschedule("x", { db, feed })).rejects.toThrow(/exactly one/);
+  });
+
+  it("reply on a completed task queues a child; on a cancelled one refuses", async () => {
+    const store = new TaskStore({ dbPath: db });
+    store.upsert({
+      taskId: "done",
+      status: "completed",
+      enqueuedAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+      region: "DE",
+      bodyJson: spec("first"),
+      result: { text: "answer" },
+    } as TaskRecord);
+    store.close();
+    const out = await runQueueReply("done", "more please", { db, feed, by: "2h" });
+    const childId = /reply queued as (\S+)/.exec(out)![1]!;
+    expect(row(childId)?.parentTaskId).toBe("done");
+    await seedPending("c");
+    await runQueueCancel("c", { db, feed });
+    await expect(runQueueReply("c", "x", { db, feed })).rejects.toThrow(/is cancelled/);
+  });
+
+  it("a refused action exits 1 with the core message", async () => {
+    await seedPending("gone");
+    await runQueueCancel("gone", { db, feed });
+    const exit = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`exit ${code}`);
+    }) as never);
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        buildProgram().parseAsync(["node", "ebb", "queue", "run-now", "gone", "--db", db]),
+      ).rejects.toThrow("exit 1");
+      expect(err.mock.calls.flat().join(" ")).toMatch(/runNow: task gone is cancelled/);
+    } finally {
+      exit.mockRestore();
+      err.mockRestore();
+    }
+  });
+
+  it("show prints the resume line only with both cwd and session, cwd shell-quoted", async () => {
+    await seedPending("with", { originCwd: "/work/my dir", originSessionId: "sess-12345678" });
+    await seedPending("without", { originCwd: "/work" });
+    const a = await runQueueShow("with", { db, markRead: false });
+    expect(a.rendered).toContain("resume: cd '/work/my dir' && claude --resume sess-12345678");
+    const b = await runQueueShow("without", { db, markRead: false });
+    expect(b.rendered).not.toContain("resume:");
+  });
+
+  it("show prints series, repeat, parent and children", async () => {
+    await seedPending("p", { seriesId: "p", repeat: "daily" });
+    await seedPending("kid", { parentTaskId: "p" });
+    const out = (await runQueueShow("p", { db, markRead: false })).rendered;
+    expect(out).toContain("series: p");
+    expect(out).toContain("repeat: daily");
+    expect(out).toContain("children: kid");
+  });
+
+  it("list --series lists occurrences oldest first", async () => {
+    await seedPending("q~3", { seriesId: "q", repeat: "weekly" });
+    await seedPending("q", { seriesId: "q", repeat: "weekly" });
+    await seedPending("q~2", { seriesId: "q", repeat: "weekly" });
+    await seedPending("other");
+    const res = await runQueueList({ db, series: "q" });
+    expect(res.rows.map((r) => r.taskId)).toEqual(["q", "q~2", "q~3"]);
+    const json = JSON.parse((await runQueueList({ db, series: "q", json: true })).rendered);
+    expect(json.tasks[0]).toMatchObject({
+      display_title: "prompt of q",
+      series_id: "q",
+      repeat: "weekly",
+      provider: "anthropic",
+      model: "claude-sonnet-4-6",
     });
   });
 });

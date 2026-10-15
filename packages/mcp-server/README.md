@@ -4,7 +4,7 @@
 
 Add it to any MCP host. When a user says "do this tonight" or "by tomorrow", the agent calls `schedule_task`. ebb-ai then runs the task at the lowest-carbon grid hour before the deadline, and through the provider Batch API when the deadline allows.
 
-- 9 MCP tools (measured), among them `recommend_window`, `schedule_task`, `check_queue_status`, `get_grid_forecast`, `cancel_task`, `update_deadline`.
+- 10 MCP tools (measured), among them `recommend_window`, `schedule_task`, `check_queue_status`, `get_grid_forecast`, `cancel_task`, `update_deadline`.
 - Live 72-hour forecast. GB needs no key; other regions use free keys (EIA, ENTSO-E, WattTime, Electricity Maps).
 - One signed carbon receipt per task, stored in `~/.ebb-ai/queue.db`.
 
@@ -80,15 +80,16 @@ Add to `~/.openclaw/mcp.json`:
 }
 ```
 
-## Tools exposed (9, measured)
+## Tools exposed (10, measured)
 
 | Tool | Purpose |
 |---|---|
 | `get_grid_forecast(region, hours?)` | Hour-by-hour carbon intensity for a region; useful before deciding whether to defer. |
 | `recommend_window(deadline, region?, ...)` | Plan the cleanest window inside the deadline without queueing anything. |
-| `schedule_task(prompt, deadline, model?, region?, carbon_budget_g?)` | Queue a task to run in the cleanest window inside the deadline. Returns a task_id. |
+| `schedule_task(prompt, deadline, model?, region?, carbon_budget_g?, repeat?, origin_session_id?)` | Queue a task to run in the cleanest window inside the deadline. Returns a task_id. `repeat` defaults to `none`, also for `deadline_kind: "quota_reset"`. |
 | `check_queue_status(task_id?)` | Inspect the queue or one specific task; includes a carbon receipt once the task has completed. |
-| `cancel_task(task_id)` | Cancel a queued or scheduled task. |
+| `cancel_task(task_id, series?)` | Cancel a queued or scheduled task; on a repeating task, skip it, or end the series with `series: true`. |
+| `reply_task(task_id, text, deadline?)` | Continue a completed task: a new task with the conversation plus this text, same provider and model. |
 | `expedite_task(task_id)` | Dispatch a queued or scheduled task now, outside its carbon window. |
 | `update_deadline(task_id, deadline)` | Reschedule a task against a new deadline. |
 | `retry_task(task_id)` | Re-dispatch a failed task. |

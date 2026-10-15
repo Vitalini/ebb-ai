@@ -263,8 +263,13 @@ export async function runTickOnce(
     env: env.carbonBudget,
   });
   const firedAlerts: CarbonAlert[] = [];
+  const quotaConfig = loadQuotaResetConfig(
+    opts.budgetConfig !== undefined ? { path: opts.budgetConfig } : {},
+  );
   const scheduler = new Scheduler({
     dbPath,
+    // A quota_reset series rolls to the label's next reset (ui v2).
+    quotaConfig: () => quotaConfig,
     defaultRegion: resolveRegion(undefined, opts.region).region,
     // Same feed the MCP server uses, so the receipt's dispatch-time
     // intensity comes from the region's live feed (mock only as fallback).
@@ -282,11 +287,7 @@ export async function runTickOnce(
     // Shared pre-tick step (same as the OpenClaw loop): record last_tick_at
     // and re-resolve quota_reset tasks whose weekly reset already passed, so
     // they are rescheduled through the window picker, not dispatched late.
-    const preTick = await prepareTick(scheduler, {
-      quotaConfig: loadQuotaResetConfig(
-        opts.budgetConfig !== undefined ? { path: opts.budgetConfig } : {},
-      ),
-    });
+    const preTick = await prepareTick(scheduler, { quotaConfig });
     const result = await scheduler.tick(adapters);
     if (opts.notify !== false && !notifyDisabledInConfig(opts.budgetConfig)) {
       notifyFinished(dbPath, result.results, opts);

@@ -36,7 +36,8 @@ import {
   type RoutingDecision,
   type RoutingPreview,
 } from "./routing.js";
-import { deriveTitle } from "./history.js";
+import { capHistory, deriveTitle, displayTitle, isRepeating, taskActions, taskHistory } from "./history.js";
+import { resolveQuotaDeadline, type QuotaResetConfig } from "./quota.js";
 import { redactBodyJson, redactPrompt } from "./redact.js";
 import { selectWindow } from "./select-window.js";
 import {
@@ -54,10 +55,37 @@ import type {
   GridForecastEntry,
   ProviderCallSpec,
   ProviderName,
+  RepeatRule,
   TaskRecord,
+  TaskStatus,
   TickResult,
   TickResultEntry,
 } from "./types.js";
+
+/** Target of {@link Scheduler.rescheduleTask} (ui v2): exactly one shape. */
+export type RescheduleTarget =
+  /** A new deadline; the window picker chooses the hour. */
+  | { deadline: string | Date }
+  /** An exact time; no picker. The deadline rises to it if needed. */
+  | { at: string | Date }
+  /** A local day as two instants; the picker chooses an hour inside it. */
+  | { dayStart: string | Date; dayEnd: string | Date };
+
+/** Options of {@link Scheduler.replyToTask} (ui v2). */
+export interface ReplyOptions {
+  /** Default: one hour from now. */
+  deadline?: string | Date;
+  /** Default: "Re: <parent title>". */
+  title?: string;
+  /** Defaults to the parent's origin. */
+  originHost?: DeferOptions["originHost"];
+  originCwd?: string;
+  originSessionId?: string;
+}
+
+const PENDING_STATUSES: readonly TaskStatus[] = ["queued", "scheduled"];
+const UNFINISHED_STATUSES: readonly TaskStatus[] = ["queued", "scheduled", "submitted", "running"];
+const TERMINAL: ReadonlySet<TaskStatus> = new Set(["completed", "failed", "cancelled"]);
 
 const DEFAULT_REGION = "US-CAL-CISO";
 const MAX_HORIZON_HOURS = 72;
@@ -154,6 +182,14 @@ export interface SchedulerOptions {
    * `carbonBudget` is also set.
    */
   onCarbonAlert?: (alert: CarbonAlert) => void | Promise<void>;
+  /**
+   * Quota reset schedules (ui v2), read when a `repeat: "quota_reset"`
+   * series rolls over: the successor's deadline is the label's next reset
+   * minus the margin. Without it the successor falls back to +7 days and
+   * the quota sweep corrects the drift. A getter, so a long-lived scheduler
+   * sees config edits.
+   */
+  quotaConfig?: () => QuotaResetConfig;
 }
 
 export class Scheduler {
@@ -176,6 +212,7 @@ export class Scheduler {
   private readonly onCarbonAlert:
     | ((alert: CarbonAlert) => void | Promise<void>)
     | undefined;
+  private readonly quotaConfig: (() => QuotaResetConfig) | undefined;
 
   constructor(opts: SchedulerOptions = {}) {
     this.feed = opts.feed ?? mockGridFeed();
@@ -189,6 +226,7 @@ export class Scheduler {
     this.signingConfig = opts.signing ?? {};
     this.carbonBudget = opts.carbonBudget;
     this.onCarbonAlert = opts.onCarbonAlert;
+    this.quotaConfig = opts.quotaConfig;
   }
 
   /**
@@ -430,6 +468,11 @@ export class Scheduler {
       }
     }
     validateDeadlineKind(opts);
+    if (validateRepeat(opts.repeat) !== "none") {
+      throw new Error(
+        `repeat ${JSON.stringify(opts.repeat)} needs a provider-call task; closure tasks cannot repeat`,
+      );
+    }
     const taskId = opts.taskId ?? `t-${randomUUID()}`;
     const region = opts.region ?? this.defaultRegion;
     const record: TaskRecord<T> = {
@@ -439,7 +482,7 @@ export class Scheduler {
       region,
       carbonBudgetG: opts.carbonBudgetG,
       deadline: deadline.toISOString(),
-      ...identityFields(opts, opts.title !== undefined ? deriveTitle(opts.title) : undefined),
+      ...identityFields(taskId, opts, opts.title !== undefined ? deriveTitle(opts.title) : undefined),
     };
     this.tasks.set(taskId, record);
     this.bodies.set(taskId, task as DeferrableTask<unknown>);
@@ -497,6 +540,9 @@ export class Scheduler {
       }
     }
     validateDeadlineKind(opts);
+    if (validateRepeat(opts.repeat) === "quota_reset" && opts.deadlineKind !== "quota_reset") {
+      throw new Error(`repeat "quota_reset" needs deadlineKind "quota_reset" and a quotaProvider label`);
+    }
     const taskId = opts.taskId ?? `t-${randomUUID()}`;
     const region = opts.region ?? this.defaultRegion;
     // The title is never rewritten at terminal transitions, so it is stored
@@ -512,7 +558,7 @@ export class Scheduler {
       carbonBudgetG: opts.carbonBudgetG,
       bodyJson: JSON.stringify(spec),
       deadline: deadline.toISOString(),
-      ...identityFields(opts, title),
+      ...identityFields(taskId, opts, title),
     };
     this.tasks.set(taskId, record);
     this.store?.upsert(record);
@@ -572,6 +618,23 @@ export class Scheduler {
           continue;
         }
         if (!claimed) continue;
+        // The claim succeeded on the stored row; re-read it so a write from
+        // another process (run now, reschedule) since our list is honoured.
+        // If the fresh row no longer qualifies for the Batch API, it goes
+        // to the sync path when due, else back to `scheduled`.
+        this.reloadClaimed(record);
+        if (!this.isBatchCandidate(record, adapters, Date.now())) {
+          if (!this.isDue(record, Date.now())) {
+            this.releaseClaim(record);
+            continue;
+          }
+          inspected++;
+          const entry = await this.dispatchProviderCall(record, adapters);
+          results.push(entry);
+          if (entry.status === "completed") dispatched++;
+          else failed++;
+          continue;
+        }
       } else {
         // In-memory guard: flip to running so a re-entrant tick skips it.
         if (record.status !== "scheduled") continue;
@@ -593,25 +656,17 @@ export class Scheduler {
     // persisted records (e.g. when a v0.4 `ebb tick` opens the SQLite file).
     const seen = new Set<string>();
     const candidates: TaskRecord<unknown>[] = [];
+    if (this.store) {
+      // The ledger is the source of truth: refresh cached copies so a
+      // long-lived scheduler sees writes made by other processes.
+      for (const row of this.store.list({ status: "scheduled" })) this.cacheRow(row);
+    }
     for (const record of this.tasks.values()) {
       if (record.status !== "scheduled") continue;
       if (!record.bodyJson) continue;
-      if (!record.scheduledFor) continue;
-      if (new Date(record.scheduledFor).getTime() > now) continue;
+      if (!this.isDue(record, now)) continue;
       candidates.push(record);
       seen.add(record.taskId);
-    }
-    if (this.store) {
-      for (const record of this.store.list({ status: "scheduled" })) {
-        if (seen.has(record.taskId)) continue;
-        if (!record.bodyJson) continue;
-        if (!record.scheduledFor) continue;
-        if (new Date(record.scheduledFor).getTime() > now) continue;
-        // Hydrate into the in-memory map so subsequent state writes stay
-        // consistent with the rest of the scheduler.
-        this.tasks.set(record.taskId, record);
-        candidates.push(record);
-      }
     }
 
     for (const record of candidates) {
@@ -634,6 +689,13 @@ export class Scheduler {
           continue;
         }
         if (!claimed) continue;
+        // Re-read after the claim (KTD1): a reschedule written between our
+        // list and the claim must not be dispatched on the old time.
+        this.reloadClaimed(record);
+        if (!this.isDue(record, Date.now())) {
+          this.releaseClaim(record);
+          continue;
+        }
       }
       inspected++;
       const entry = await this.dispatchProviderCall(record, adapters);
@@ -701,38 +763,62 @@ export class Scheduler {
    */
   private collectBatchSubmitCandidates(adapters: TickAdapters): TaskRecord<unknown>[] {
     const now = Date.now();
-    const out: TaskRecord<unknown>[] = [];
-    const seen = new Set<string>();
-    const consider = (record: TaskRecord<unknown>): void => {
-      if (seen.has(record.taskId)) return;
-      if (record.status !== "scheduled") return;
-      if (!record.bodyJson) return;
-      if (!record.deadline) return; // legacy row → sync path
-      if (new Date(record.deadline).getTime() - now <= 24 * 60 * 60 * 1000) return;
-      let spec: Partial<ProviderCallSpec>;
-      try {
-        spec = JSON.parse(record.bodyJson) as Partial<ProviderCallSpec>;
-      } catch {
-        return; // corrupt body → sync due-sweep fails it with a clear error
-      }
-      if (spec.type !== "provider_call") return;
-      if (spec.preferBatch === false) return;
-      if (spec.provider !== "anthropic" && spec.provider !== "openai") return;
-      const adapter = adapters[spec.provider];
-      if (!adapter) return;
-      if (typeof adapter.dispatchBatch !== "function") return;
-      seen.add(record.taskId);
-      out.push(record);
-    };
-    for (const record of this.tasks.values()) consider(record);
     if (this.store) {
-      for (const record of this.store.list({ status: "scheduled" })) {
-        if (seen.has(record.taskId)) continue;
-        this.tasks.set(record.taskId, record);
-        consider(record);
-      }
+      for (const row of this.store.list({ status: "scheduled" })) this.cacheRow(row);
+    }
+    const out: TaskRecord<unknown>[] = [];
+    for (const record of this.tasks.values()) {
+      if (record.status !== "scheduled") continue;
+      if (this.isBatchCandidate(record, adapters, now)) out.push(record);
     }
     return out;
+  }
+
+  /**
+   * Batch API eligibility of one scheduled row: preferBatch !== false, a
+   * batch-capable adapter, a persisted deadline more than 24 h away, not
+   * run-now (`expedited`), not pinned to an exact time, and no future
+   * `notBefore`. A pinned row would otherwise be submitted on the next tick
+   * and run whenever the provider picks, ignoring the chosen time.
+   */
+  private isBatchCandidate(record: TaskRecord<unknown>, adapters: TickAdapters, now: number): boolean {
+    if (!record.bodyJson) return false;
+    if (!record.deadline) return false; // legacy row → sync path
+    if (new Date(record.deadline).getTime() - now <= 24 * 60 * 60 * 1000) return false;
+    if (record.intensitySource === "expedited") return false;
+    if (record.notBefore) {
+      if (Date.parse(record.notBefore) > now) return false;
+      if (record.notBefore === record.scheduledFor) return false;
+    }
+    let spec: Partial<ProviderCallSpec>;
+    try {
+      spec = JSON.parse(record.bodyJson) as Partial<ProviderCallSpec>;
+    } catch {
+      return false; // corrupt body → sync due-sweep fails it with a clear error
+    }
+    if (spec.type !== "provider_call") return false;
+    if (spec.preferBatch === false) return false;
+    if (spec.provider !== "anthropic" && spec.provider !== "openai") return false;
+    const adapter = adapters[spec.provider];
+    return adapter !== undefined && typeof adapter.dispatchBatch === "function";
+  }
+
+  /** A scheduled row whose time has come (and whose pin, if any, has passed). */
+  private isDue(record: TaskRecord<unknown>, now: number): boolean {
+    if (!record.scheduledFor) return false;
+    if (Date.parse(record.scheduledFor) > now) return false;
+    return !(record.notBefore && Date.parse(record.notBefore) > now);
+  }
+
+  /** Replace a just-claimed cached record with the stored row (status `running`). */
+  private reloadClaimed(record: TaskRecord<unknown>): void {
+    const fresh = this.store?.get(record.taskId);
+    if (fresh) Object.assign(record, fresh);
+  }
+
+  /** Undo a claim on a row that turned out not to be ready: back to `scheduled`. */
+  private releaseClaim(record: TaskRecord<unknown>): void {
+    this.writeIf(record, { ...record, status: "scheduled" }, ["running"]);
   }
 
   /**
@@ -782,6 +868,165 @@ export class Scheduler {
     return undefined;
   }
 
+  /**
+   * Fresh read for a write path (ui v2): the stored row, merged into the
+   * cached object so every holder sees it. Falls back to the cache for
+   * in-memory schedulers and process-local closure tasks.
+   */
+  private refreshTask(taskId: string): TaskRecord<unknown> | undefined {
+    const stored = this.store?.get(taskId);
+    if (!stored) return this.tasks.get(taskId);
+    return this.cacheRow(stored);
+  }
+
+  /** Stop and forget the in-process timer for `taskId`, if any. */
+  private clearPendingTimer(taskId: string): void {
+    const timer = this.pendingTimers.get(taskId);
+    if (timer) {
+      clearTimeout(timer);
+      this.pendingTimers.delete(taskId);
+    }
+  }
+
+  /** Merge a stored row into the cache, keeping the cached object identity. */
+  private cacheRow(row: TaskRecord<unknown>): TaskRecord<unknown> {
+    const cached = this.tasks.get(row.taskId);
+    if (!cached) {
+      this.tasks.set(row.taskId, row);
+      return row;
+    }
+    Object.assign(cached, row);
+    return cached;
+  }
+
+  /**
+   * Compare-and-set write: store `next` only while the row's status is in
+   * `expected`; on success copy it onto the cached record. On a miss the
+   * cache is reloaded from the ledger and false is returned. Without a
+   * store the write always succeeds.
+   */
+  private writeIf(
+    record: TaskRecord<unknown>,
+    next: TaskRecord<unknown>,
+    expected: readonly TaskStatus[],
+  ): boolean {
+    if (this.store && !this.store.transitionIf(next, expected)) {
+      const current = this.store.get(record.taskId);
+      if (current) Object.assign(record, current);
+      return false;
+    }
+    Object.assign(record, next);
+    return true;
+  }
+
+  /**
+   * Series rollover (ui v2, KTD6). Called when an occurrence with a repeat
+   * rule finishes (completed, failed, or cancelled as a skip), BEFORE its
+   * terminal write and before its body is redacted. Inserts the successor
+   * `<series_id>~<n+1>` with `insertIfAbsent`, so two dispatchers create one
+   * successor and a crash between the two writes leaves the series alive.
+   * The successor is `scheduled` and unplanned: `notBefore` = the previous
+   * deadline, `scheduledFor` = its deadline minus one hour, no estimate;
+   * `replanSweep` gives it a window once the forecast reaches it. No
+   * forecast is fetched here. A stop written by another process (stored
+   * `repeat = none`) wins. Failures are logged, never thrown.
+   */
+  private rollSeries(record: TaskRecord<unknown>): void {
+    if (!isRepeating(record) || !record.seriesId || !record.bodyJson) return;
+    try {
+      const stored = this.store?.get(record.taskId);
+      const rule = stored ? stored.repeat : record.repeat;
+      if (!rule || rule === "none") return;
+      const now = Date.now();
+      const prevMs = record.deadline ? Date.parse(record.deadline) : now;
+      let deadlineMs: number;
+      let deadlineKind = record.deadlineKind;
+      let quotaProvider = record.quotaProvider;
+      if (rule === "quota_reset") {
+        // Kind and label follow the series rule, so one moved (absolute)
+        // occurrence does not detach the series from the reset.
+        deadlineKind = "quota_reset";
+        quotaProvider = this.seriesQuotaLabel(record) ?? quotaProvider;
+        const schedule = quotaProvider ? this.quotaConfig?.()[quotaProvider] : undefined;
+        deadlineMs = schedule
+          ? resolveQuotaDeadline(schedule, new Date(Math.max(prevMs, now + HOUR_MS))).deadline.getTime()
+          : nextPeriod(prevMs, 7 * DAY_MS, now);
+      } else {
+        deadlineMs = nextPeriod(prevMs, rule === "daily" ? DAY_MS : 7 * DAY_MS, now);
+      }
+      const successor: TaskRecord<unknown> = {
+        taskId: `${record.seriesId}~${occurrenceNumber(record) + 1}`,
+        status: "scheduled",
+        enqueuedAt: new Date(now).toISOString(),
+        region: record.region,
+        carbonBudgetG: record.carbonBudgetG,
+        bodyJson: record.bodyJson,
+        deadline: new Date(deadlineMs).toISOString(),
+        notBefore: new Date(prevMs).toISOString(),
+        scheduledFor: new Date(Math.max(deadlineMs - HOUR_MS, prevMs)).toISOString(),
+        title: record.title,
+        originHost: record.originHost,
+        originCwd: record.originCwd,
+        originSessionId: record.originSessionId,
+        seriesId: record.seriesId,
+        repeat: rule,
+        deadlineKind,
+        quotaProvider: deadlineKind === "quota_reset" ? quotaProvider : undefined,
+      };
+      if (this.store) {
+        if (this.store.insertIfAbsent(successor)) {
+          this.cacheRow(successor);
+          // A stop written between the read above and the insert: end the
+          // successor too. `cancelTask(..., {series})` also cancels pending
+          // occurrences after its write, so one side always sees the other.
+          if (this.store.get(record.taskId)?.repeat === "none") this.endSeriesOccurrences(record);
+        }
+      } else if (!this.tasks.has(successor.taskId)) {
+        this.tasks.set(successor.taskId, successor);
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[ebb-ai/scheduler] series rollover after ${record.taskId} failed: ${describeErr(err)}`,
+      );
+    }
+  }
+
+  /**
+   * Cancel every pending occurrence of `record`'s series other than
+   * `record` itself, with `repeat = none` (stop series). Compare-and-set per
+   * row; a row another process claimed meanwhile is left to the dispatcher.
+   */
+  private endSeriesOccurrences(record: TaskRecord<unknown>): void {
+    if (!this.store || !record.seriesId) return;
+    for (const row of this.store.list({ seriesId: record.seriesId })) {
+      if (row.taskId === record.taskId) continue;
+      if (row.status !== "queued" && row.status !== "scheduled") continue;
+      const cached = this.tasks.get(row.taskId) ?? row;
+      this.clearPendingTimer(row.taskId);
+      this.writeIf(
+        cached,
+        {
+          ...row,
+          status: "cancelled",
+          completedAt: new Date().toISOString(),
+          bodyJson: redactBodyJson(row.bodyJson),
+          repeat: "none",
+        },
+        ["queued", "scheduled"],
+      );
+    }
+  }
+
+  /** The newest quota label stored on any occurrence of the record's series. */
+  private seriesQuotaLabel(record: TaskRecord<unknown>): string | undefined {
+    const rows = this.store?.list({ seriesId: record.seriesId! }) ?? [];
+    for (let i = rows.length - 1; i >= 0; i--) {
+      if (rows[i]!.quotaProvider) return rows[i]!.quotaProvider;
+    }
+    return undefined;
+  }
+
   /** Snapshot the current state of one task. */
   getTask<T>(taskId: string): TaskRecord<T> | undefined {
     return this.resolveTask(taskId) as TaskRecord<T> | undefined;
@@ -792,52 +1037,207 @@ export class Scheduler {
    * state, this is a no-op and returns the existing record. Throws
    * only if the task does not exist on this scheduler.
    *
-   * Calling cancel on a `running` task is best-effort: we set status
-   * to `cancelled` and clear the timer, but a provider call already
-   * in flight will still complete on the wire. The dispatcher re-checks
-   * the status before finalizing, so a cancelled task's late result is
-   * dropped locally and never written over the cancelled ledger row.
+   * The row is re-read from the ledger and written with a status
+   * compare-and-set, so a cancel from another process (the UI, the CLI)
+   * never overwrites a completion a ticker wrote meanwhile. When a ticker
+   * claimed the row first, the cancel lands on the `running` row; the
+   * dispatcher re-checks the status before finalizing and drops the late
+   * result. `opts.series` also ends the series (`repeat = none`) in the
+   * same write ("stop series").
    */
-  cancelTask(taskId: string): TaskRecord<unknown> {
-    const record = this.resolveTask(taskId);
-    if (!record) {
-      throw new Error(`cancelTask: task ${JSON.stringify(taskId)} not found`);
-    }
-    if (
-      record.status === "completed" ||
-      record.status === "failed" ||
-      record.status === "cancelled"
-    ) {
+  cancelTask(taskId: string, opts: { series?: boolean } = {}): TaskRecord<unknown> {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const record = this.refreshTask(taskId);
+      if (!record) {
+        throw new TaskActionError(`cancelTask: task ${JSON.stringify(taskId)} not found`);
+      }
+      if (TERMINAL.has(record.status)) return record;
+      this.clearPendingTimer(taskId);
+      if (record.status === "submitted") {
+        // The task is already in flight at the provider's Batch API. We
+        // have no adapter handle here (cancelTask takes no adapters), so we
+        // cannot issue a provider-side cancel — mark it cancelled locally
+        // and warn that the batch may still run and bill.
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[ebb-ai/scheduler] cancelTask: task ${taskId} was submitted to the provider's Batch API (batch id ${record.batchId ?? "unknown"}); marking cancelled locally, but the provider-side batch may still run and bill`,
+        );
+      }
+      const next: TaskRecord<unknown> = {
+        ...record,
+        status: "cancelled",
+        completedAt: new Date().toISOString(),
+        // Terminal transition: redact secrets out of the persisted body so
+        // the ledger does not retain raw prompts forever.
+        bodyJson: redactBodyJson(record.bodyJson),
+        repeat: opts.series ? "none" : record.repeat,
+      };
+      // Cancel as a skip keeps the series going; a stop ends it.
+      if (!opts.series) this.rollSeries(record);
+      // A miss means another process moved the row (claimed or finished it)
+      // between our read and this write: re-read and try once more.
+      if (!this.writeIf(record, next, [record.status])) continue;
+      if (opts.series) this.endSeriesOccurrences(record);
+      const resolver = this.resolvers.get(taskId);
+      resolver?.reject(new Error(`task ${taskId} cancelled`));
+      this.bodies.delete(taskId);
+      this.resolvers.delete(taskId);
       return record;
     }
-    const timer = this.pendingTimers.get(taskId);
-    if (timer) {
-      clearTimeout(timer);
-      this.pendingTimers.delete(taskId);
-    }
-    if (record.status === "submitted") {
-      // The task is already in flight at the provider's Batch API. We
-      // have no adapter handle here (cancelTask takes no adapters), so we
-      // cannot issue a provider-side cancel — mark it cancelled locally
-      // and warn that the batch may still run and bill. (Trivial
-      // provider cancel is deferred: the vendor batch-cancel endpoints
-      // are best-effort and racy against completion.)
-      // eslint-disable-next-line no-console
-      console.warn(
-        `[ebb-ai/scheduler] cancelTask: task ${taskId} was submitted to the provider's Batch API (batch id ${record.batchId ?? "unknown"}); marking cancelled locally, but the provider-side batch may still run and bill`,
+    return this.refreshTask(taskId)!;
+  }
+
+  /**
+   * Run a pending provider-call task at the next tick (ui v2). A write
+   * only: no dispatch happens here, so a process without adapters (the
+   * `ebb ui` server) can call it. The row becomes `scheduled` for now with
+   * `intensitySource: "expedited"`, which keeps it out of the Batch API and
+   * survives onto the completed row. Throws when the task's state does not
+   * allow it (see `taskActions`).
+   */
+  runNow(taskId: string): TaskRecord<unknown> {
+    const record = this.refreshTask(taskId);
+    if (!record) throw new TaskActionError(`runNow: task ${JSON.stringify(taskId)} not found`);
+    if (!taskActions(record).runNow) {
+      throw new TaskActionError(
+        refusal("runNow", record, "only queued or scheduled provider-call tasks can run now"),
       );
     }
-    record.status = "cancelled";
-    record.completedAt = new Date().toISOString();
-    // Terminal transition: redact secrets out of the persisted body so the
-    // ledger does not retain raw prompts forever (see redactBodyJson).
-    record.bodyJson = redactBodyJson(record.bodyJson);
-    this.store?.upsert(record);
-    const resolver = this.resolvers.get(taskId);
-    resolver?.reject(new Error(`task ${taskId} cancelled`));
-    this.bodies.delete(taskId);
-    this.resolvers.delete(taskId);
+    this.clearPendingTimer(taskId);
+    const next: TaskRecord<unknown> = {
+      ...record,
+      status: "scheduled",
+      scheduledFor: new Date().toISOString(),
+      intensitySource: "expedited",
+      notBefore: undefined,
+    };
+    if (!this.writeIf(record, next, PENDING_STATUSES)) {
+      throw new TaskActionError(
+        refusal("runNow", record, "only queued or scheduled provider-call tasks can run now"),
+      );
+    }
     return record;
+  }
+
+  /**
+   * Move a queued or scheduled provider-call task (ui v2). `{deadline}`
+   * re-runs the window picker up to the new deadline; `{at}` pins the exact
+   * time; `{dayStart, dayEnd}` picks an hour inside the day. A day beyond
+   * the forecast is written at the task's current hour of day, unplanned
+   * (no estimate), and `replanSweep` gives it a window once the forecast
+   * reaches it. A `quota_reset` task becomes `absolute`. Every write is a
+   * compare-and-set on the pending statuses; throws when the task is not
+   * movable.
+   */
+  async rescheduleTask(taskId: string, target: RescheduleTarget): Promise<TaskRecord<unknown>> {
+    const why = "only queued or scheduled provider-call tasks can be rescheduled";
+    const shape = rescheduleShape(target);
+    const record = this.refreshTask(taskId);
+    if (!record) throw new TaskActionError(`reschedule: task ${JSON.stringify(taskId)} not found`);
+    if (!taskActions(record).reschedule) throw new TaskActionError(refusal("reschedule", record, why));
+    this.clearPendingTimer(taskId);
+    const absolute = {
+      deadlineKind: "absolute" as const,
+      // A quota_reset series keeps its label for the next occurrence.
+      quotaProvider: record.repeat === "quota_reset" ? record.quotaProvider : undefined,
+      intensitySource: undefined,
+    };
+    if (shape.kind === "at") {
+      const at = parseFutureInstant(shape.at, "at");
+      const deadlineMs = Math.max(record.deadline ? Date.parse(record.deadline) : 0, at.getTime());
+      const next: TaskRecord<unknown> = {
+        ...record,
+        ...absolute,
+        status: "scheduled",
+        scheduledFor: at.toISOString(),
+        notBefore: at.toISOString(),
+        deadline: new Date(deadlineMs).toISOString(),
+        estimatedCarbonGCo2: undefined,
+      };
+      if (!this.writeIf(record, next, PENDING_STATUSES)) {
+        throw new TaskActionError(refusal("reschedule", record, why));
+      }
+      return record;
+    }
+    let deadline: Date;
+    if (shape.kind === "deadline") {
+      deadline = normalizeDeadline(shape.deadline);
+      Object.assign(record, absolute, { notBefore: undefined, deadline: deadline.toISOString() });
+    } else {
+      const dayStart = parseInstant(shape.dayStart, "dayStart");
+      deadline = parseFutureInstant(shape.dayEnd, "dayEnd");
+      const span = deadline.getTime() - dayStart.getTime();
+      if (span < HOUR_MS || span > 25 * HOUR_MS) {
+        throw new TaskActionError(`reschedule: a day must span 1 to 25 hours, got ${(span / HOUR_MS).toFixed(1)} h`);
+      }
+      // Fallback hour when the forecast does not reach the day yet: the
+      // task's current time of day, moved into the new day. Day bounds are
+      // instants from the client, so no time zone is needed here.
+      const current = Date.parse(record.scheduledFor ?? record.deadline ?? "");
+      const offset = Number.isFinite(current)
+        ? (((current - dayStart.getTime()) % DAY_MS) + DAY_MS) % DAY_MS
+        : 12 * HOUR_MS;
+      Object.assign(record, absolute, {
+        notBefore: dayStart.toISOString(),
+        deadline: deadline.toISOString(),
+        scheduledFor: new Date(dayStart.getTime() + offset).toISOString(),
+      });
+    }
+    if (!(await this.scheduleProviderCall(taskId, deadline))) {
+      throw new TaskActionError(refusal("reschedule", record, why));
+    }
+    // Planning can fail the task (no hour under its carbon budget): report
+    // it as refused instead of a successful move.
+    if (record.status === "failed") {
+      throw new TaskActionError(`reschedule: task ${taskId} failed: ${record.error ?? "no window"}`);
+    }
+    return record;
+  }
+
+  /**
+   * Reply to a completed provider-call task (ui v2, brainstorm R16/R17):
+   * enqueue a child with the parent's conversation as history, the reply as
+   * the new user turn, and the parent's provider, model and region. The
+   * child runs through the normal window picker (default deadline one hour
+   * ahead) and never repeats. Refuses failed and cancelled parents (AE4).
+   */
+  async replyToTask(
+    parentId: string,
+    text: string,
+    opts: ReplyOptions = {},
+  ): Promise<TaskRecord<unknown>> {
+    const parent = this.refreshTask(parentId);
+    if (!parent) throw new TaskActionError(`reply: task ${JSON.stringify(parentId)} not found`);
+    if (!taskActions(parent).reply) {
+      throw new TaskActionError(
+        refusal("reply", parent, "only completed provider-call tasks accept a reply"),
+      );
+    }
+    if (typeof text !== "string" || text.trim().length === 0) {
+      throw new TaskActionError("reply: text must be a non-empty string");
+    }
+    const spec = JSON.parse(parent.bodyJson!) as ProviderCallSpec;
+    const child: ProviderCallSpec = {
+      type: "provider_call",
+      provider: spec.provider,
+      model: spec.model,
+      prompt: text,
+      // Oldest turns dropped past HISTORY_MAX_CHARS (see capHistory).
+      messages: capHistory(taskHistory(parent)),
+      ...(spec.systemPrompt !== undefined ? { systemPrompt: spec.systemPrompt } : {}),
+      ...(spec.maxTokens !== undefined ? { maxTokens: spec.maxTokens } : {}),
+      ...(spec.temperature !== undefined ? { temperature: spec.temperature } : {}),
+      ...(spec.redactInReceipt !== undefined ? { redactInReceipt: spec.redactInReceipt } : {}),
+    };
+    return this.enqueueProviderCall(child, {
+      deadline: opts.deadline ?? new Date(Date.now() + HOUR_MS),
+      region: parent.region,
+      parentTaskId: parent.taskId,
+      title: opts.title ?? `Re: ${displayTitle(parent) ?? parent.taskId}`,
+      originHost: opts.originHost ?? parent.originHost,
+      originCwd: opts.originCwd ?? parent.originCwd,
+      originSessionId: opts.originSessionId ?? parent.originSessionId,
+    });
   }
 
   /**
@@ -850,7 +1250,7 @@ export class Scheduler {
     taskId: string,
     adapters: TickAdapters,
   ): Promise<TickResultEntry> {
-    const record = this.resolveTask(taskId);
+    const record = this.refreshTask(taskId);
     if (!record) {
       throw new Error(`expediteTask: task ${JSON.stringify(taskId)} not found`);
     }
@@ -874,28 +1274,26 @@ export class Scheduler {
         `expediteTask: task ${taskId} is a closure-based task; only provider-call tasks can be expedited`,
       );
     }
-    const timer = this.pendingTimers.get(taskId);
-    if (timer) {
-      clearTimeout(timer);
-      this.pendingTimers.delete(taskId);
-    }
-    record.scheduledFor = new Date().toISOString();
-    record.status = "scheduled";
-    this.store?.upsert(record);
+    this.clearPendingTimer(taskId);
+    const next: TaskRecord<unknown> = {
+      ...record,
+      scheduledFor: new Date().toISOString(),
+      status: "scheduled",
+      intensitySource: "expedited",
+      notBefore: undefined,
+    };
     // Same row-level claim `tick` uses: if a concurrent process (e.g. the
-    // cron tick) grabbed the row between our upsert and here, do NOT
+    // cron tick) grabbed the row between our read and here, do NOT
     // dispatch a second (double-billed) provider call.
-    if (this.store && !this.store.claimScheduled(taskId)) {
+    if (
+      !this.writeIf(record, next, PENDING_STATUSES) ||
+      (this.store && !this.store.claimScheduled(taskId))
+    ) {
       throw new Error(
         `task ${taskId} was just claimed by another process (racing tick?)`,
       );
     }
-    const entry = await this.dispatchProviderCall(record, adapters);
-    if (entry.status === "completed" && record.receipt) {
-      record.intensitySource = "expedited";
-      this.store?.upsert(record);
-    }
-    return entry;
+    return this.dispatchProviderCall(record, adapters);
   }
 
   /**
@@ -912,7 +1310,7 @@ export class Scheduler {
     newDeadline: string | Date,
     opts: { deadlineKind?: "absolute" } = {},
   ): Promise<TaskRecord<unknown>> {
-    const record = this.resolveTask(taskId);
+    const record = this.refreshTask(taskId);
     if (!record) {
       throw new Error(`updateDeadline: task ${JSON.stringify(taskId)} not found`);
     }
@@ -932,13 +1330,15 @@ export class Scheduler {
       record.deadlineKind = "absolute";
       record.quotaProvider = undefined;
     }
-    const existingTimer = this.pendingTimers.get(taskId);
-    if (existingTimer) {
-      clearTimeout(existingTimer);
-      this.pendingTimers.delete(taskId);
-    }
+    this.clearPendingTimer(taskId);
     if (record.bodyJson) {
-      await this.scheduleProviderCall(taskId, parsedDeadline);
+      // A new deadline replaces any pinned earliest start.
+      record.notBefore = undefined;
+      if (!(await this.scheduleProviderCall(taskId, parsedDeadline))) {
+        throw new Error(
+          `updateDeadline: task ${taskId} is ${record.status}; can only update queued/scheduled tasks`,
+        );
+      }
     } else if (this.bodies.has(taskId)) {
       await this.schedule(taskId, parsedDeadline);
     }
@@ -966,12 +1366,8 @@ export class Scheduler {
     if (current) Object.assign(record, current);
     if (record.status !== "queued" && record.status !== "scheduled") return false;
     record.deadline = newDeadline.toISOString();
-    const existingTimer = this.pendingTimers.get(taskId);
-    if (existingTimer) {
-      clearTimeout(existingTimer);
-      this.pendingTimers.delete(taskId);
-    }
-    return this.scheduleProviderCall(taskId, newDeadline, true);
+    this.clearPendingTimer(taskId);
+    return this.scheduleProviderCall(taskId, newDeadline);
   }
 
   /**
@@ -984,7 +1380,7 @@ export class Scheduler {
     taskId: string,
     adapters: TickAdapters,
   ): Promise<TickResultEntry> {
-    const record = this.resolveTask(taskId);
+    const record = this.refreshTask(taskId);
     if (!record) {
       throw new Error(`retryTask: task ${JSON.stringify(taskId)} not found`);
     }
@@ -998,18 +1394,23 @@ export class Scheduler {
         `retryTask: task ${taskId} is closure-based; only provider-call tasks can be retried`,
       );
     }
-    record.status = "scheduled";
-    record.scheduledFor = new Date().toISOString();
-    record.completedAt = undefined;
-    record.error = undefined;
-    // A retry re-dispatches synchronously via the due path below — clear
-    // any stale batchId from a prior batch attempt so the completed row
-    // no longer points at a dead/failed batch.
-    record.batchId = undefined;
-    this.store?.upsert(record);
+    const next: TaskRecord<unknown> = {
+      ...record,
+      status: "scheduled",
+      scheduledFor: new Date().toISOString(),
+      completedAt: undefined,
+      error: undefined,
+      // A retry re-dispatches synchronously via the due path below — clear
+      // any stale batchId from a prior batch attempt so the completed row
+      // no longer points at a dead/failed batch.
+      batchId: undefined,
+    };
     // Row-level claim: don't double-dispatch if a concurrent tick in
     // another process grabbed the freshly re-scheduled row first.
-    if (this.store && !this.store.claimScheduled(taskId)) {
+    if (
+      !this.writeIf(record, next, ["failed"]) ||
+      (this.store && !this.store.claimScheduled(taskId))
+    ) {
       throw new Error(
         `task ${taskId} was just claimed by another process (racing tick?)`,
       );
@@ -1195,9 +1596,15 @@ export class Scheduler {
       this.dispatchSafe(taskId, new Date(), candidate);
       return;
     }
-    record.status = "scheduled";
-    record.scheduledFor = candidate.datetime;
-    this.store?.upsert(record);
+    if (
+      !this.writeIf(
+        record,
+        { ...record, status: "scheduled", scheduledFor: candidate.datetime },
+        PENDING_STATUSES,
+      )
+    ) {
+      return; // cancelled from another process meanwhile
+    }
     const wait = Math.max(0, new Date(candidate.datetime).getTime() - Date.now());
     // Node's setTimeout overflows the signed-32-bit ms range (~24.85 days).
     // Cap each hop at 2_000_000_000 ms (~23.1 days) and re-schedule when
@@ -1242,10 +1649,17 @@ export class Scheduler {
     ) {
       return false;
     }
-    record.status = "failed";
-    record.completedAt = new Date().toISOString();
-    record.error = err.message;
-    if (!this.persist(record, onlyIfPending)) return false;
+    const next: TaskRecord<unknown> = {
+      ...record,
+      status: "failed",
+      completedAt: new Date().toISOString(),
+      error: err.message,
+    };
+    // Compare-and-set: never overwrite a row another process finished or
+    // cancelled meanwhile.
+    if (!this.writeIf(record, next, onlyIfPending ? PENDING_STATUSES : UNFINISHED_STATUSES)) {
+      return false;
+    }
     const resolver = this.resolvers.get(taskId);
     resolver?.reject(err);
     this.bodies.delete(taskId);
@@ -1262,8 +1676,13 @@ export class Scheduler {
     const body = this.bodies.get(taskId);
     const resolver = this.resolvers.get(taskId);
     if (!record || !body) return;
-    record.status = "running";
-    this.store?.upsert(record);
+    if (!this.writeIf(record, { ...record, status: "running" }, PENDING_STATUSES)) {
+      // Cancelled (possibly from another process) before the window came.
+      resolver?.reject(new Error(`task ${taskId} ${record.status}`));
+      this.bodies.delete(taskId);
+      this.resolvers.delete(taskId);
+      return;
+    }
     const start = Date.now();
     // The try/catch is deliberately narrow: it covers ONLY the user's task
     // body. Once the body has succeeded, every piece of bookkeeping below
@@ -1273,10 +1692,16 @@ export class Scheduler {
     try {
       result = await body();
     } catch (err) {
-      record.status = "failed";
-      record.completedAt = new Date().toISOString();
-      record.error = err instanceof Error ? err.message : String(err);
-      this.store?.upsert(record);
+      this.writeIf(
+        record,
+        {
+          ...record,
+          status: "failed",
+          completedAt: new Date().toISOString(),
+          error: err instanceof Error ? err.message : String(err),
+        },
+        ["running"],
+      );
       resolver?.reject(err);
       this.bodies.delete(taskId);
       this.resolvers.delete(taskId);
@@ -1366,13 +1791,19 @@ export class Scheduler {
         `[ebb-ai/scheduler] failed to build the carbon receipt for ${taskId}: ${describeErr(err)}; task stays completed without a receipt`,
       );
     }
-    record.status = "completed";
-    record.completedAt = new Date().toISOString();
-    record.result = result;
-    record.receipt = receipt;
-    record.intensitySource = source;
     try {
-      this.store?.upsert(record);
+      this.writeIf(
+        record,
+        {
+          ...record,
+          status: "completed",
+          completedAt: new Date().toISOString(),
+          result,
+          receipt,
+          intensitySource: source,
+        },
+        ["running"],
+      );
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn(
@@ -1384,13 +1815,23 @@ export class Scheduler {
     this.resolvers.delete(taskId);
   }
 
-  private async scheduleProviderCall(
-    taskId: string,
-    deadline: Date,
-    onlyIfPending = false,
-  ): Promise<boolean> {
+  /**
+   * Pick a carbon window for a provider-call task and write it with a
+   * compare-and-set on the pending statuses. Returns false when another
+   * process moved the row on meanwhile (nothing written, cache reloaded).
+   *
+   * A future `notBefore` (a pinned day or a series successor) drops forecast
+   * hours that end before it. When the forecast does not reach it yet, the
+   * row is written `scheduled` at its current `scheduledFor` clamped into
+   * [notBefore, deadline] with no estimate ("unplanned"); `replanSweep`
+   * re-scores it once the forecast covers it.
+   */
+  private async scheduleProviderCall(taskId: string, deadline: Date): Promise<boolean> {
     const record = this.tasks.get(taskId);
     if (!record) return false;
+    // The stored row before the forecast await: the final write misses when
+    // another process changed the row's timing meanwhile (run now, a pin).
+    const before = this.store?.get(taskId);
     // Parse the full spec out of the persisted body so the per-model energy
     // coefficients (v0.10) factor into the budget filter + estimated-carbon
     // receipt, and so cross-provider routing (ROADMAP item 1) can see the
@@ -1415,34 +1856,51 @@ export class Scheduler {
       ),
     );
     const forecast = await this.feed.fetchForecast(record.region, horizonH);
+    const notBeforeMs = record.notBefore ? Date.parse(record.notBefore) : Number.NaN;
+    const pinned = Number.isFinite(notBeforeMs) && notBeforeMs > Date.now();
+    let entries = forecast.entries;
+    if (pinned) {
+      entries = entries.filter((e) => Date.parse(e.datetime) + HOUR_MS > notBeforeMs);
+      // Unplanned until the forecast covers the window's first day (or the
+      // whole window when shorter); `replanSweep` plans it then. Planning on
+      // the first hours alone would fix the run time at the day's start.
+      const last = entries[entries.length - 1];
+      const coveredTo = last ? Date.parse(last.datetime) + HOUR_MS : Number.NEGATIVE_INFINITY;
+      // One hour of slack: forecast hours start on the hour, so a forecast
+      // fetched up to the deadline can end just short of it.
+      const needEnd = Math.min(deadline.getTime(), notBeforeMs + DAY_MS) - HOUR_MS;
+      if (entries.length === 0 || coveredTo < needEnd) {
+        record.status = "scheduled";
+        record.scheduledFor = clampIso(record.scheduledFor, notBeforeMs, deadline.getTime());
+        record.estimatedCarbonGCo2 = undefined;
+        return this.persist(record, before);
+      }
+    }
+    const earliest = pinned ? notBeforeMs : Date.now();
     const budgetG = record.carbonBudgetG;
     const survivors =
       budgetG !== undefined
-        ? forecast.entries.filter((e) => intensityToGrams(e.carbonIntensityGCo2PerKwh, specModel) <= budgetG)
-        : forecast.entries;
+        ? entries.filter((e) => intensityToGrams(e.carbonIntensityGCo2PerKwh, specModel) <= budgetG)
+        : entries;
     // Shared selection (§2.1): same cleanest-tolerance-band tie-break as
     // the recommend path, so committed provider-call tasks spread too.
     const candidate = selectWindow(survivors, deadline, { rng: this.rng })?.chosen;
     if (!candidate) {
-      if (budgetG !== undefined && forecast.entries.length > 0) {
-        const cheapest = forecast.entries.reduce((a, b) =>
+      if (budgetG !== undefined && entries.length > 0) {
+        const cheapest = entries.reduce((a, b) =>
           a.carbonIntensityGCo2PerKwh <= b.carbonIntensityGCo2PerKwh ? a : b,
         );
         const cheapestG = intensityToGrams(cheapest.carbonIntensityGCo2PerKwh, specModel);
         if (cheapestG > budgetG) {
-          return this.failTask(
-            taskId,
-            new CarbonBudgetExceededError(cheapestG, budgetG),
-            onlyIfPending,
-          );
+          return this.failTask(taskId, new CarbonBudgetExceededError(cheapestG, budgetG), true);
         }
       }
-      // No usable window — schedule for `now` so the very next `tick` runs
-      // the task immediately rather than miss the deadline. Route (if a
-      // candidate list was supplied) against the current-hour intensity.
-      const nowIntensity = forecast.entries[0]?.carbonIntensityGCo2PerKwh;
+      // No usable window — schedule for `now` (or the pinned start) so the
+      // next due `tick` runs the task rather than miss the deadline. Route
+      // (if a candidate list was supplied) against the current-hour intensity.
+      const nowIntensity = entries[0]?.carbonIntensityGCo2PerKwh;
       record.status = "scheduled";
-      record.scheduledFor = new Date().toISOString();
+      record.scheduledFor = new Date(Math.max(Date.now(), earliest)).toISOString();
       const routedModelNow =
         nowIntensity !== undefined
           ? this.applyRoutingIfNeeded(record, spec, nowIntensity)
@@ -1451,15 +1909,14 @@ export class Scheduler {
         record.estimatedCarbonGCo2 =
           Math.round(intensityToGrams(nowIntensity, routedModelNow) * 10) / 10;
       }
-      return this.persist(record, onlyIfPending);
+      return this.persist(record, before);
     }
     record.status = "scheduled";
     // A candidate whose hour started in the past is the *current* hour —
-    // schedule for "now" so the very next tick dispatches immediately.
-    record.scheduledFor =
-      new Date(candidate.datetime).getTime() <= Date.now()
-        ? new Date().toISOString()
-        : candidate.datetime;
+    // schedule for "now" so the very next tick dispatches immediately. A
+    // pinned start inside the chosen hour moves the time up to the pin.
+    const at = Math.max(Date.parse(candidate.datetime), earliest);
+    record.scheduledFor = at <= Date.now() ? new Date().toISOString() : new Date(at).toISOString();
     // Cross-provider routing (ROADMAP item 1): the window `candidate` was
     // chosen ONCE above; now score the caller's candidates at that window's
     // intensity, overwrite the spec's provider/model with the winner, and
@@ -1471,22 +1928,19 @@ export class Scheduler {
     );
     record.estimatedCarbonGCo2 =
       Math.round(intensityToGrams(candidate.carbonIntensityGCo2PerKwh, routedModel) * 10) / 10;
-    return this.persist(record, onlyIfPending);
+    return this.persist(record, before);
   }
 
   /**
-   * Write a record to the ledger. With `onlyIfPending` the write is the
-   * store's conditional `updateIfPending`: when another process moved the
-   * row on meanwhile, nothing is written, the cached record is reloaded from
-   * the ledger, and false is returned.
+   * Write a scheduling result with a compare-and-set on the pending
+   * statuses and, given `before`, on the timing columns read before the
+   * forecast fetch: when another process moved the row on meanwhile, nothing is
+   * written, the cached record is reloaded from the ledger, and false is
+   * returned.
    */
-  private persist(record: TaskRecord<unknown>, onlyIfPending: boolean): boolean {
+  private persist(record: TaskRecord<unknown>, before?: TaskRecord<unknown>): boolean {
     if (!this.store) return true;
-    if (!onlyIfPending) {
-      this.store.upsert(record);
-      return true;
-    }
-    if (this.store.updateIfPending(record)) return true;
+    if (this.store.transitionIf(record, PENDING_STATUSES, before)) return true;
     const current = this.store.get(record.taskId);
     if (current) Object.assign(record, current);
     return false;
@@ -1565,6 +2019,7 @@ export class Scheduler {
         const msg =
           `tick: no configured/ready adapter for any routing candidate ` +
           `(${routing.considered.map((c) => candidateId(c)).join(", ")})`;
+        this.rollSeries(record);
         this.failTask(record.taskId, new Error(msg));
         return { taskId: record.taskId, status: "failed", error: msg };
       }
@@ -1583,18 +2038,30 @@ export class Scheduler {
     }
     if (!adapter) {
       const msg = `tick: no adapter configured for provider ${spec.provider}`;
+      // No rollover: a missing adapter is a skip (OpenClaw restores the row
+      // to `scheduled`), and a successor would run beside the occurrence.
+      // A retry that completes rolls the series then.
       this.failTask(record.taskId, new Error(msg));
       return { taskId: record.taskId, status: "failed", error: msg };
     }
 
-    record.status = "running";
+    let stillOurs = true;
     try {
-      this.store?.upsert(record);
+      // The row was claimed (`running`) or, without a store, is ours. A
+      // cancel that landed after the claim wins: do not make the call.
+      stillOurs = this.writeIf(record, { ...record, status: "running" }, ["running", "scheduled"]);
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn(
         `[ebb-ai/scheduler] failed to persist running status for ${record.taskId}: ${describeErr(err)}`,
       );
+    }
+    if (!stillOurs) {
+      return {
+        taskId: record.taskId,
+        status: "failed",
+        error: `task was ${record.status} before dispatch; not sent`,
+      };
     }
     const start = Date.now();
     const ranAt = new Date();
@@ -1612,13 +2079,16 @@ export class Scheduler {
         temperature: spec.temperature,
         maxTokens: spec.maxTokens,
         system: spec.systemPrompt,
+        messages: spec.messages,
       }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      record.status = "failed";
-      record.completedAt = new Date().toISOString();
-      record.error = msg;
-      this.store?.upsert(record);
+      this.rollSeries(record);
+      this.writeIf(
+        record,
+        { ...record, status: "failed", completedAt: new Date().toISOString(), error: msg },
+        ["running"],
+      );
       return { taskId: record.taskId, status: "failed", error: msg };
     }
     const durationMs = Date.now() - start;
@@ -1660,7 +2130,9 @@ export class Scheduler {
         `[ebb-ai/scheduler] intensity fetch for the receipt failed (${describeErr(err)}); receipt falls back to the schedule-time estimate`,
       );
     }
-    const source: "scored" | "current" = "scored";
+    // A run-now row keeps its `expedited` marker on the completed record.
+    const source: "scored" | "expedited" =
+      record.intensitySource === "expedited" ? "expedited" : "scored";
     // `estimatedCarbonGCo2` was projected at schedule time from the
     // forecast entry the scheduler scored; `actual` is billed against
     // the intensity observed when the task actually ran. The delta is
@@ -1729,19 +2201,34 @@ export class Scheduler {
         `[ebb-ai/scheduler] failed to build the carbon receipt for ${record.taskId}: ${describeErr(err)}; task stays completed without a receipt`,
       );
     }
-    record.status = "completed";
-    record.completedAt = new Date().toISOString();
-    record.result = result;
-    record.receipt = receipt;
-    record.intensitySource = source;
     // Terminal transition: redact secrets out of the persisted body. The
     // original (unredacted) body was needed up to this point so the live
     // dispatch used the caller's exact prompt; the ledger keeps only the
     // redacted form. (Failed tasks intentionally keep the original body —
-    // retryTask must re-dispatch the exact prompt.)
-    record.bodyJson = redactBodyJson(record.bodyJson);
+    // retryTask must re-dispatch the exact prompt.) Compare-and-set on
+    // `running`: a cancel written meanwhile by another process wins.
+    const completed: TaskRecord<unknown> = {
+      ...record,
+      status: "completed",
+      completedAt: new Date().toISOString(),
+      result,
+      receipt,
+      intensitySource: source,
+      bodyJson: redactBodyJson(record.bodyJson),
+    };
+    this.rollSeries(record);
     try {
-      this.store?.upsert(record);
+      if (!this.writeIf(record, completed, ["running"])) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[ebb-ai/scheduler] task ${record.taskId} was ${record.status} while running; dropping its late result`,
+        );
+        return {
+          taskId: record.taskId,
+          status: "failed",
+          error: `task was ${record.status} while running; late result dropped`,
+        };
+      }
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn(
@@ -1790,12 +2277,15 @@ export class Scheduler {
           temperature: spec.temperature,
           maxTokens: spec.maxTokens,
           system: spec.systemPrompt,
+          messages: spec.messages,
         }),
       );
-      record.status = "submitted";
-      record.batchId = handle.batchId;
       try {
-        this.store?.upsert(record);
+        this.writeIf(
+          record,
+          { ...record, status: "submitted", batchId: handle.batchId },
+          ["running"],
+        );
       } catch (err) {
         // eslint-disable-next-line no-console
         console.warn(
@@ -1822,10 +2312,12 @@ export class Scheduler {
         record.error = undefined;
         return this.dispatchProviderCall(record, adapters);
       }
-      record.status = "failed";
-      record.completedAt = new Date().toISOString();
-      record.error = msg;
-      this.store?.upsert(record);
+      this.rollSeries(record);
+      this.writeIf(
+        record,
+        { ...record, status: "failed", completedAt: new Date().toISOString(), error: msg },
+        ["running"],
+      );
       return { taskId: record.taskId, status: "failed", error: msg };
     }
   }
@@ -1857,8 +2349,7 @@ export class Scheduler {
       // No poller available: return the row to "submitted" so a later
       // tick with a capable adapter can pick it up. Do not fail — the
       // batch is genuinely in flight at the provider.
-      record.status = "submitted";
-      this.store?.upsert(record);
+      this.writeIf(record, { ...record, status: "submitted" }, ["running"]);
       // eslint-disable-next-line no-console
       console.warn(
         `[ebb-ai/scheduler] tick: no retrieveBatch on adapter for ${spec.provider}; leaving ${record.taskId} submitted`,
@@ -1878,8 +2369,7 @@ export class Scheduler {
     } catch (err) {
       // A transient poll error must not fail a genuinely in-flight batch:
       // return it to "submitted" and let a later tick retry.
-      record.status = "submitted";
-      this.store?.upsert(record);
+      this.writeIf(record, { ...record, status: "submitted" }, ["running"]);
       // eslint-disable-next-line no-console
       console.warn(
         `[ebb-ai/scheduler] tick: retrieveBatch failed for ${record.taskId} (${describeErr(err)}); leaving submitted`,
@@ -1888,26 +2378,29 @@ export class Scheduler {
     }
 
     if (poll.status === "in_progress") {
-      record.status = "submitted";
-      this.store?.upsert(record);
+      this.writeIf(record, { ...record, status: "submitted" }, ["running"]);
       return { taskId: record.taskId, status: "submitted" };
     }
     if (poll.status === "failed" || poll.status === "expired") {
       const msg = poll.error ?? `batch ${poll.status}`;
-      record.status = "failed";
-      record.completedAt = new Date().toISOString();
-      record.error = msg;
-      this.store?.upsert(record);
+      this.rollSeries(record);
+      this.writeIf(
+        record,
+        { ...record, status: "failed", completedAt: new Date().toISOString(), error: msg },
+        ["running"],
+      );
       return { taskId: record.taskId, status: "failed", error: msg };
     }
     // completed — take the first (single-prompt) result.
     const first = poll.results?.[0];
     if (!first) {
       const msg = "batch completed with no results";
-      record.status = "failed";
-      record.completedAt = new Date().toISOString();
-      record.error = msg;
-      this.store?.upsert(record);
+      this.rollSeries(record);
+      this.writeIf(
+        record,
+        { ...record, status: "failed", completedAt: new Date().toISOString(), error: msg },
+        ["running"],
+      );
       return { taskId: record.taskId, status: "failed", error: msg };
     }
     // Shape a DispatchResult-like object so the receipt path is identical
@@ -1985,14 +2478,24 @@ export class Scheduler {
         `[ebb-ai/scheduler] failed to build the carbon receipt for ${record.taskId}: ${describeErr(err)}; task stays completed without a receipt`,
       );
     }
-    record.status = "completed";
-    record.completedAt = new Date().toISOString();
-    record.result = result;
-    record.receipt = receipt;
-    record.intensitySource = "scored";
-    record.bodyJson = redactBodyJson(record.bodyJson);
+    const completed: TaskRecord<unknown> = {
+      ...record,
+      status: "completed",
+      completedAt: new Date().toISOString(),
+      result,
+      receipt,
+      intensitySource: "scored",
+      bodyJson: redactBodyJson(record.bodyJson),
+    };
+    this.rollSeries(record);
     try {
-      this.store?.upsert(record);
+      if (!this.writeIf(record, completed, ["running"])) {
+        return {
+          taskId: record.taskId,
+          status: "failed",
+          error: `task was ${record.status} while its batch ran; result dropped`,
+        };
+      }
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn(
@@ -2078,14 +2581,46 @@ function validateDeadlineKind(opts: DeferOptions): void {
   }
 }
 
+const REPEAT_RULES: ReadonlySet<RepeatRule> = new Set([
+  "none",
+  "daily",
+  "weekly",
+  "quota_reset",
+]);
+
+/**
+ * Validate a repeat option (ui v2) and return the effective rule. Omitted
+ * means `none` for every task, `quota_reset` deadlines included: repeating
+ * is opt-in.
+ */
+function validateRepeat(repeat: unknown): RepeatRule {
+  if (repeat === undefined) return "none";
+  if (typeof repeat !== "string" || !REPEAT_RULES.has(repeat as RepeatRule)) {
+    throw new Error(
+      `Invalid repeat ${JSON.stringify(repeat)}: expected "none", "daily", "weekly" or "quota_reset"`,
+    );
+  }
+  return repeat as RepeatRule;
+}
+
 /** The insert-only identity fields of a new task record. */
 function identityFields(
+  taskId: string,
   opts: DeferOptions,
   title: string | undefined,
 ): Pick<
   TaskRecord<unknown>,
-  "title" | "originHost" | "originCwd" | "parentTaskId" | "deadlineKind" | "quotaProvider"
+  | "title"
+  | "originHost"
+  | "originCwd"
+  | "parentTaskId"
+  | "deadlineKind"
+  | "quotaProvider"
+  | "seriesId"
+  | "repeat"
+  | "originSessionId"
 > {
+  const repeat = validateRepeat(opts.repeat);
   return {
     title,
     originHost: opts.originHost,
@@ -2093,7 +2628,97 @@ function identityFields(
     parentTaskId: opts.parentTaskId,
     deadlineKind: opts.deadlineKind ?? "absolute",
     quotaProvider: opts.deadlineKind === "quota_reset" ? opts.quotaProvider : undefined,
+    // A repeating task starts its own series; a one-off belongs to none.
+    seriesId: repeat !== "none" ? taskId : undefined,
+    repeat: repeat !== "none" ? repeat : undefined,
+    originSessionId: opts.originSessionId,
   };
+}
+
+const HOUR_MS = 3_600_000;
+const DAY_MS = 24 * HOUR_MS;
+
+/**
+ * The next deadline of a period series: `prevMs` plus whole periods until
+ * it is at least one hour ahead of `now`.
+ */
+function nextPeriod(prevMs: number, periodMs: number, now: number): number {
+  let next = prevMs + periodMs;
+  if (next < now + HOUR_MS) {
+    next += Math.ceil((now + HOUR_MS - next) / periodMs) * periodMs;
+  }
+  return next;
+}
+
+/** Occurrence number of a series row: the series id itself is 1, `<id>~n` is n. */
+function occurrenceNumber(record: TaskRecord<unknown>): number {
+  const prefix = `${record.seriesId}~`;
+  if (!record.taskId.startsWith(prefix)) return 1;
+  const n = Number.parseInt(record.taskId.slice(prefix.length), 10);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+/** One-line refusal in the shared style: `<action>: task <id> is <status>; <allowed>`. */
+/**
+ * A task action refused by the task's state or by its input (ui v2): the
+ * message is a one-line rule safe to show a user. Any other error from an
+ * action is internal.
+ */
+export class TaskActionError extends Error {
+  override name = "TaskActionError";
+}
+
+function refusal(action: string, record: TaskRecord<unknown>, allowed: string): string {
+  const what = record.bodyJson ? record.status : `${record.status} (closure-based)`;
+  return `${action}: task ${record.taskId} is ${what}; ${allowed}`;
+}
+
+type RescheduleShape =
+  | { kind: "deadline"; deadline: string | Date }
+  | { kind: "at"; at: string | Date }
+  | { kind: "day"; dayStart: string | Date; dayEnd: string | Date };
+
+/** Classify a reschedule target; exactly one shape must be given. */
+function rescheduleShape(target: RescheduleTarget): RescheduleShape {
+  const t = (target ?? {}) as Record<string, unknown>;
+  const has = (k: string) => t[k] !== undefined && t[k] !== null;
+  const shapes = [has("deadline"), has("at"), has("dayStart") || has("dayEnd")].filter(Boolean);
+  if (shapes.length !== 1) {
+    throw new TaskActionError("reschedule: pass exactly one of {deadline}, {at} or {dayStart, dayEnd}");
+  }
+  if (has("deadline")) return { kind: "deadline", deadline: t.deadline as string | Date };
+  if (has("at")) return { kind: "at", at: t.at as string | Date };
+  if (!has("dayStart") || !has("dayEnd")) {
+    throw new TaskActionError("reschedule: a day target needs both dayStart and dayEnd");
+  }
+  return {
+    kind: "day",
+    dayStart: t.dayStart as string | Date,
+    dayEnd: t.dayEnd as string | Date,
+  };
+}
+
+function parseInstant(v: string | Date, name: string): Date {
+  const d = v instanceof Date ? v : new Date(v);
+  if (Number.isNaN(d.getTime())) {
+    throw new TaskActionError(`reschedule: ${name} is not an ISO-8601 instant: ${JSON.stringify(v)}`);
+  }
+  return d;
+}
+
+function parseFutureInstant(v: string | Date, name: string): Date {
+  const d = parseInstant(v, name);
+  if (d.getTime() < Date.now() - 5_000) {
+    throw new TaskActionError(`reschedule: ${name} is in the past: ${d.toISOString()}`);
+  }
+  return d;
+}
+
+/** `iso` clamped into [lo, hi − 1 min] (lo wins when the span is shorter). */
+function clampIso(iso: string | undefined, lo: number, hi: number): string {
+  const t = iso ? Date.parse(iso) : Number.NaN;
+  const base = Number.isFinite(t) ? t : lo;
+  return new Date(Math.max(lo, Math.min(base, hi - 60_000))).toISOString();
 }
 
 function normalizeDeadline(d: DeferOptions["deadline"]): Date {

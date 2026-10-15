@@ -5,16 +5,27 @@
  *   ebb tick           drain due tasks (one-shot or --daemon)
  *   ebb install        write launchd plist or print systemd/schtasks templates
  *   ebb queue list     print queued/scheduled/running/completed tasks
+ *   ebb queue cancel | reschedule | run-now | reply   change a task (the
+ *                      next tick runs it; these commands never dispatch)
  *   ebb receipts list  print carbon receipts for completed tasks
  *   ebb stats          local-only personal-impact summary
  *   ebb register-wake  schedule a macOS wake event 30s before a task
- *   ebb ui             local task page (timeline, inbox, detail) on 127.0.0.1
+ *   ebb ui             local task page (timeline, inbox, detail, actions) on 127.0.0.1
  */
 
 import { createRequire } from "node:module";
+import { stripControlChars } from "@ebb-ai/core";
 import { Command } from "commander";
 import { runInstall, type InstallMode } from "./commands/install.js";
-import { runQueueList, runQueueShow, runQueueUnread } from "./commands/queue.js";
+import {
+  runQueueCancel,
+  runQueueList,
+  runQueueReply,
+  runQueueReschedule,
+  runQueueRunNow,
+  runQueueShow,
+  runQueueUnread,
+} from "./commands/queue.js";
 import { runReceiptsList } from "./commands/receipts.js";
 import { runRegisterWake } from "./commands/register-wake.js";
 import { runStats } from "./commands/stats.js";
@@ -89,7 +100,7 @@ export function buildProgram(): Command {
 
   const queue = program
     .command("queue")
-    .description("Inspect the queue");
+    .description("Inspect and change the queue");
   queue
     .command("list")
     .description("List queued / scheduled / running / completed tasks")
@@ -99,6 +110,7 @@ export function buildProgram(): Command {
     .option("--unread", "Only completed or failed tasks nobody has viewed yet")
     .option("--json", "Emit JSON instead of the table")
     .option("--hook", "Claude Code SessionStart mode: one unread-count line or nothing; always exits 0")
+    .option("--series <id>", "Only the occurrences of this repeating series, oldest first")
     .action(async (opts) => {
       if (opts.hook === true) {
         const res = await runQueueList({ db: opts.db, hook: true });
@@ -113,6 +125,7 @@ export function buildProgram(): Command {
           kind: opts.kind,
           unread: opts.unread === true,
           json: opts.json === true,
+          series: opts.series,
         });
         // eslint-disable-next-line no-console
         console.log(res.rendered);
@@ -164,6 +177,51 @@ export function buildProgram(): Command {
         process.exit(1);
       }
     });
+
+  /** Run one write command: print its result, or the core's refusal and exit 1. */
+  const write = async (fn: () => Promise<string>): Promise<void> => {
+    try {
+      // eslint-disable-next-line no-console
+      console.log(await fn());
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(stripControlChars((err as Error).message));
+      process.exit(1);
+    }
+  };
+  queue
+    .command("cancel <task-id>")
+    .description("Cancel a pending task; a repeating task skips this occurrence")
+    .option("--db <path>", "SQLite queue path", undefined)
+    .option("--series", "Also end the task's repeating series")
+    .action((taskId: string, opts: { db?: string; series?: boolean }) =>
+      write(() => runQueueCancel(taskId, { db: opts.db, series: opts.series === true })),
+    );
+  queue
+    .command("reschedule <task-id>")
+    .description("Move a queued or scheduled task: a new deadline, an exact time, or a local day")
+    .option("--db <path>", "SQLite queue path", undefined)
+    .option("--by <when>", "New deadline: a duration (30m, 2h, 3d, 1w) or an ISO-8601 time")
+    .option("--at <when>", "Run at exactly this time (duration or ISO-8601)")
+    .option("--day <yyyy-mm-dd>", "Run on this local day, at its cleanest forecast hour")
+    .action((taskId: string, opts: { db?: string; by?: string; at?: string; day?: string }) =>
+      write(() => runQueueReschedule(taskId, opts)),
+    );
+  queue
+    .command("run-now <task-id>")
+    .description("Mark a queued or scheduled task due now; the next tick runs it")
+    .option("--db <path>", "SQLite queue path", undefined)
+    .action((taskId: string, opts: { db?: string }) =>
+      write(() => runQueueRunNow(taskId, { db: opts.db })),
+    );
+  queue
+    .command("reply <task-id> <text>")
+    .description("Continue a completed task: queue a new task with its conversation plus this text")
+    .option("--db <path>", "SQLite queue path", undefined)
+    .option("--by <when>", "Deadline for the reply (default 1h)")
+    .action((taskId: string, text: string, opts: { db?: string; by?: string }) =>
+      write(() => runQueueReply(taskId, text, { db: opts.db, by: opts.by })),
+    );
 
   const receipts = program
     .command("receipts")
@@ -263,7 +321,7 @@ export function buildProgram(): Command {
 
   program
     .command("ui")
-    .description("Open the local task page: timeline, inbox, task detail (127.0.0.1 only, read-only)")
+    .description("Open the local task page: timeline, inbox, task detail, actions (127.0.0.1 only; never dispatches)")
     .option("--db <path>", "SQLite queue path", undefined)
     .option("--port <port>", "Port on 127.0.0.1 (default: a free port)", (v) => parseInt(v, 10), 0)
     .option("--region <code>", "Region for the forecast curve", undefined)

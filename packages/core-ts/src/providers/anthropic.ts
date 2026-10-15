@@ -11,7 +11,7 @@
  */
 
 import { normalizeModelName } from "../energy.js";
-import { ProviderRefusalError } from "./base.js";
+import { conversation, ProviderRefusalError } from "./base.js";
 import type {
   BatchHandle,
   BatchRetrieveResult,
@@ -287,7 +287,7 @@ function requestParams(
     model,
     max_tokens: options.maxTokens ?? DEFAULT_MAX_TOKENS,
     system: options.system,
-    messages: [{ role: "user", content: prompt }],
+    messages: conversation(prompt, options),
   };
   if (options.temperature !== undefined && supportsSamplingParams(model)) {
     params.temperature = options.temperature;

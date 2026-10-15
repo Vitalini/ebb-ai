@@ -58,7 +58,22 @@ export interface DeferOptions {
   deadlineKind?: DeadlineKind;
   /** Quota label (e.g. `claude`) for a `quota_reset` deadline; required with that kind only. */
   quotaProvider?: string;
+  /**
+   * Repeat rule (ui v2). Default `none` for every task, including
+   * `quota_reset` ones; a repeating task needs a provider-call body. The
+   * first occurrence's id becomes the series id.
+   */
+  repeat?: RepeatRule;
+  /** Claude Code session that enqueued the task, for `claude --resume` (ui v2). Insert-only. */
+  originSessionId?: string;
 }
+
+/**
+ * How a task repeats (ui v2). `daily` / `weekly`: the next deadline is the
+ * previous one plus 24 h / 7 days. `quota_reset`: the next quota reset of
+ * the series label, minus the configured margin. `none`: a one-off.
+ */
+export type RepeatRule = "none" | "daily" | "weekly" | "quota_reset";
 
 /** Host that enqueued a task. */
 export type TaskOriginHost = "cli" | "mcp" | "openclaw";
@@ -290,6 +305,18 @@ export interface TaskRecord<T = unknown> {
   deadlineKind?: DeadlineKind;
   /** Quota label for a `quota_reset` deadline (v0.17). */
   quotaProvider?: string;
+  /** Series this occurrence belongs to: the first occurrence's id (ui v2). Insert-only. */
+  seriesId?: string;
+  /** Repeat rule (ui v2); absent reads as `none`. Changed only by `TaskStore.transitionIf`. */
+  repeat?: RepeatRule;
+  /** Claude Code session id of the enqueuing conversation (ui v2). Insert-only. */
+  originSessionId?: string;
+  /**
+   * Earliest dispatch time (ui v2): set by a pinned reschedule (exact time or
+   * a day) and by a series successor. The window picker ignores forecast
+   * hours before it, and the batch sweep leaves the row alone until it passes.
+   */
+  notBefore?: string;
 }
 
 /**

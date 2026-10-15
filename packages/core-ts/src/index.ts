@@ -46,19 +46,35 @@ export {
   LAST_TICK_META_KEY,
   pickBestWindow,
   Scheduler,
+  TaskActionError,
 } from "./scheduler.js";
-export type { SchedulerOptions, TickAdapters } from "./scheduler.js";
+export type {
+  ReplyOptions,
+  RescheduleTarget,
+  SchedulerOptions,
+  TickAdapters,
+} from "./scheduler.js";
 export { recommendWindow } from "./recommend.js";
 // Task visibility (v0.17): titles, history, display helpers.
 export {
   TITLE_MAX_CHARS,
   deadlineKindLabel,
   deriveTitle,
+  displayTitle,
+  isRepeating,
+  isValidSessionId,
+  resumeCommand,
+  SESSION_ID_PATTERN,
+  shellQuote,
+  taskActions,
   stripControlChars,
+  capHistory,
+  HISTORY_MAX_CHARS,
   taskHistory,
   taskPrompt,
   taskResultText,
 } from "./history.js";
+export type { TaskActions } from "./history.js";
 // Cross-provider routing (ROADMAP item 1).
 export {
   scoreCandidates,
@@ -144,6 +160,7 @@ export {
   nextQuotaReset,
   prepareTick,
   previousQuotaReset,
+  replanSweep,
   resolveQuotaDeadline,
   resolveQuotaProvider,
   sweepQuotaDeadlines,
@@ -178,6 +195,7 @@ export type {
   RecommendAlternative,
   RecommendOptions,
   RecommendResult,
+  RepeatRule,
   TaskRecord,
   TaskMessage,
   TaskOriginHost,

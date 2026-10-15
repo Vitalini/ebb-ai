@@ -214,3 +214,47 @@ describe("OllamaAdapter", () => {
     );
   });
 });
+
+describe("message history (ui v2 reply, KTD7)", () => {
+  const HISTORY = [
+    { role: "user" as const, content: "first question" },
+    { role: "assistant" as const, content: "first answer" },
+  ];
+
+  it("Gemini maps assistant turns to role model, before the prompt", async () => {
+    let body: { contents?: unknown } = {};
+    const adapter = new GeminiAdapter({
+      apiKey: "k",
+      fetchImpl: fetchStub(
+        { json: { candidates: [{ content: { parts: [{ text: "ok" }] } }] } },
+        (_u, init) => {
+          body = JSON.parse(init.body);
+        },
+      ),
+    });
+    await adapter.dispatch("gemini-2.0-flash", "follow-up", { messages: HISTORY });
+    expect(body.contents).toEqual([
+      { role: "user", parts: [{ text: "first question" }] },
+      { role: "model", parts: [{ text: "first answer" }] },
+      { role: "user", parts: [{ text: "follow-up" }] },
+    ]);
+    await adapter.dispatch("gemini-2.0-flash", "solo");
+    expect(body.contents).toEqual([{ role: "user", parts: [{ text: "solo" }] }]);
+  });
+
+  it("Ollama puts system first, then the turns, then the prompt", async () => {
+    let body: { messages?: unknown } = {};
+    const adapter = new OllamaAdapter({
+      host: "http://localhost:11434",
+      fetchImpl: fetchStub({ json: { message: { content: "ok" } } }, (_u, init) => {
+        body = JSON.parse(init.body);
+      }),
+    });
+    await adapter.dispatch("llama3.1", "follow-up", { system: "sys", messages: HISTORY });
+    expect(body.messages).toEqual([
+      { role: "system", content: "sys" },
+      ...HISTORY,
+      { role: "user", content: "follow-up" },
+    ]);
+  });
+});

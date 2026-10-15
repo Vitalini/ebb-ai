@@ -1,5 +1,8 @@
 /**
  * `ebb queue list | show | unread` — inspect the ledger.
+ * `ebb queue cancel | reschedule | run-now | reply` — change it (ui v2).
+ *   Writes go through a `Scheduler` without adapters: they never dispatch;
+ *   the dispatcher (`ebb tick` or the OpenClaw loop) runs the task.
  *
  * We deliberately avoid a table-printing dependency. Columns are
  * padded with String.prototype.padEnd to a fixed width.
@@ -10,9 +13,14 @@
  */
 
 import {
+  buildDefaultGridFeed,
   deadlineKindLabel,
+  displayTitle,
   LAST_TICK_META_KEY,
   loadQuotaResetConfig,
+  resolveRegion,
+  resumeCommand,
+  Scheduler,
   stripControlChars,
   taskHistory,
   taskPrompt,
@@ -21,13 +29,17 @@ import {
 } from "@ebb-ai/core";
 import type {
   DeadlineKind,
+  GridFeed,
   QuotaResetConfig,
+  RescheduleTarget,
   TaskListFilter,
   TaskRecord,
   TaskStatus,
 } from "@ebb-ai/core";
 import { existsSync } from "node:fs";
 
+import { readEnvCredentials } from "../env.js";
+import { loadEnvFileIntoProcess } from "./env-file.js";
 import { defaultDbPath } from "./tick.js";
 
 export const VALID_STATUSES: ReadonlySet<TaskStatus> = new Set([
@@ -56,6 +68,8 @@ export interface QueueListOptions {
    * Never throws; a missing or unreadable ledger prints nothing.
    */
   hook?: boolean;
+  /** Only the occurrences of this series, oldest first (ui v2). */
+  series?: string;
 }
 
 export interface QueueListResult {
@@ -117,9 +131,11 @@ export function renderQueue(
  * (no prompt, no result).
  */
 export function taskSummary(r: TaskRecord<unknown>): Record<string, unknown> {
+  const { provider, model } = taskProviderModel(r);
   return {
     task_id: r.taskId,
     title: r.title ?? null,
+    display_title: displayTitle(r) ?? r.taskId,
     status: r.status,
     origin_host: r.originHost ?? null,
     deadline: r.deadline ?? null,
@@ -129,7 +145,31 @@ export function taskSummary(r: TaskRecord<unknown>): Record<string, unknown> {
     completed_at: r.completedAt ?? null,
     read_at: r.readAt ?? null,
     region: r.region,
+    series_id: r.seriesId ?? null,
+    repeat: r.repeat ?? "none",
+    provider: provider ?? null,
+    model: model ?? null,
   };
+}
+
+/**
+ * Provider and model of a task: what ran (receipt) when it finished, else
+ * what the stored body asks for. Closure tasks have neither.
+ */
+export function taskProviderModel(r: TaskRecord<unknown>): { provider?: string; model?: string } {
+  if (r.receipt?.provider || r.receipt?.model) {
+    return { provider: r.receipt.provider, model: r.receipt.model };
+  }
+  if (!r.bodyJson) return {};
+  try {
+    const spec = JSON.parse(r.bodyJson) as { provider?: unknown; model?: unknown };
+    return {
+      provider: typeof spec.provider === "string" ? spec.provider : undefined,
+      model: typeof spec.model === "string" ? spec.model : undefined,
+    };
+  } catch {
+    return {};
+  }
 }
 
 function buildFilter(opts: QueueListOptions): TaskListFilter {
@@ -151,6 +191,7 @@ function buildFilter(opts: QueueListOptions): TaskListFilter {
     filter.deadlineKind = opts.kind as DeadlineKind;
   }
   if (opts.unread) filter.unread = true;
+  if (opts.series) filter.seriesId = opts.series;
   return filter;
 }
 
@@ -193,7 +234,8 @@ export async function runQueueList(
   const dbPath = opts.db ?? defaultDbPath();
   const store = new TaskStore({ dbPath });
   try {
-    const rows = store.list(filter);
+    // A series lists its occurrences oldest first (by occurrence number).
+    const rows = opts.series ? sortSeries(store.list(filter)) : store.list(filter);
     const lastTickAt = store.getMeta(LAST_TICK_META_KEY);
     const rendered = opts.json
       ? JSON.stringify({ last_tick_at: lastTickAt ?? null, tasks: rows.map(taskSummary) }, null, 2)
@@ -228,7 +270,7 @@ export function rawPayload(record: TaskRecord<unknown>): unknown {
 /** Render one task in text, the CLI twin of the `ebb ui` detail view. */
 export function renderTask(
   record: TaskRecord<unknown>,
-  opts: { raw?: boolean; quota?: QuotaResetConfig } = {},
+  opts: { raw?: boolean; quota?: QuotaResetConfig; children?: readonly string[] } = {},
 ): string {
   const lines: string[] = [];
   const kv = (key: string, value: string | number | undefined) => {
@@ -240,7 +282,14 @@ export function renderTask(
   if (record.originHost) {
     kv("origin", `${record.originHost}${record.originCwd ? ` (${record.originCwd})` : ""}`);
   }
+  kv("origin_session", record.originSessionId);
+  kv("resume", resumeCommand(record));
   kv("parent", record.parentTaskId);
+  if (opts.children && opts.children.length > 0) kv("children", opts.children.join(", "));
+  if (record.seriesId) {
+    kv("series", record.seriesId);
+    kv("repeat", record.repeat && record.repeat !== "none" ? record.repeat : "none (series ended)");
+  }
   kv("read_at", record.readAt);
   lines.push("");
   kv("enqueued_at", record.enqueuedAt);
@@ -332,7 +381,11 @@ export async function runQueueShow(
       };
       return { record, rendered: JSON.stringify(payload, null, 2) };
     }
-    return { record, rendered: renderTask(record, { raw: opts.raw, quota }) };
+    const children = store
+      .list()
+      .filter((t) => t.parentTaskId === record!.taskId)
+      .map((t) => t.taskId);
+    return { record, rendered: renderTask(record, { raw: opts.raw, quota, children }) };
   } finally {
     store.close();
   }
@@ -363,4 +416,183 @@ export async function runQueueUnread(
   } finally {
     store.close();
   }
+}
+
+// ── Write commands (ui v2) ──────────────────────────────────────────────────
+
+/** Occurrences of one series in order: the series id first, then `~2`, `~3`… */
+export function sortSeries(rows: TaskRecord<unknown>[]): TaskRecord<unknown>[] {
+  const n = (r: TaskRecord<unknown>) => {
+    const m = /~(\d+)$/.exec(r.taskId);
+    return m && r.seriesId && r.taskId.startsWith(`${r.seriesId}~`) ? Number(m[1]) : 1;
+  };
+  return [...rows].sort((a, b) => n(a) - n(b) || a.enqueuedAt.localeCompare(b.enqueuedAt));
+}
+
+export interface QueueWriteOptions {
+  db?: string;
+  region?: string;
+  /** Inject a grid feed (tests); default: the same feed `ebb tick` builds. */
+  feed?: GridFeed;
+  now?: () => Date;
+}
+
+/**
+ * The scheduler every write path uses (`ebb queue` writes and `ebb ui`): the
+ * ledger, the default grid feed and the quota config, and NO adapters, so a
+ * write can never dispatch a provider call. Signing is off for the same
+ * reason: no receipt is produced here.
+ */
+export function actionScheduler(opts: QueueWriteOptions & { dbPath: string }): Scheduler {
+  let feed = opts.feed;
+  if (!feed) {
+    loadEnvFileIntoProcess();
+    feed = buildDefaultGridFeed(readEnvCredentials().grid);
+  }
+  return new Scheduler({
+    dbPath: opts.dbPath,
+    feed,
+    defaultRegion: resolveRegion(undefined, opts.region).region,
+    signing: false,
+    eager: false,
+    quotaConfig: () => loadQuotaResetConfig(),
+  });
+}
+
+/** `30m`, `2h`, `3d`, `1w` from now, or an ISO-8601 instant. */
+export function parseWhen(value: string, now: Date = new Date()): Date {
+  const m = /^(\d+)\s*(m|min|h|d|w)$/i.exec(value.trim());
+  if (m) {
+    const unit = { m: 60_000, min: 60_000, h: 3_600_000, d: 86_400_000, w: 604_800_000 }[
+      m[2]!.toLowerCase() as "m" | "min" | "h" | "d" | "w"
+    ];
+    return new Date(now.getTime() + Number(m[1]) * unit);
+  }
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) {
+    throw new Error(`not a duration (30m, 2h, 3d, 1w) or an ISO-8601 time: ${JSON.stringify(value)}`);
+  }
+  return d;
+}
+
+/** Bounds of a local calendar day `yyyy-mm-dd`, as instants (23 to 25 h with DST). */
+export function localDayBounds(day: string): { dayStart: Date; dayEnd: Date } {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day.trim());
+  if (!m) throw new Error(`--day must be yyyy-mm-dd, got ${JSON.stringify(day)}`);
+  const [y, mo, d] = [Number(m[1]), Number(m[2]) - 1, Number(m[3])];
+  const dayStart = new Date(y, mo, d, 0, 0, 0, 0);
+  const dayEnd = new Date(y, mo, d + 1, 0, 0, 0, 0);
+  if (dayStart.getMonth() !== mo || dayStart.getDate() !== d) {
+    throw new Error(`--day is not a calendar date: ${JSON.stringify(day)}`);
+  }
+  return { dayStart, dayEnd };
+}
+
+/** The one line after every write: when it runs and whether a ticker is alive. */
+function nextTickLine(store: TaskStore): string {
+  const last = store.getMeta(LAST_TICK_META_KEY);
+  return `runs on the next tick (last tick: ${last ?? "never recorded"})`;
+}
+
+function writeResult(scheduler: Scheduler, dbPath: string, record: TaskRecord<unknown>, head: string): string {
+  const store = new TaskStore({ dbPath });
+  try {
+    const fresh = store.get(record.taskId) ?? record;
+    const lines = [
+      safe(head),
+      `status: ${safe(fresh.status)}`,
+      ...(fresh.scheduledFor ? [`scheduled_for: ${safe(fresh.scheduledFor)}`] : []),
+      ...(fresh.deadline ? [`deadline: ${safe(fresh.deadline)}`] : []),
+    ];
+    if (fresh.status === "scheduled" || fresh.status === "queued") lines.push(nextTickLine(store));
+    return lines.join("\n");
+  } finally {
+    store.close();
+    scheduler.shutdown();
+  }
+}
+
+/** `ebb queue cancel <id> [--series]`. Throws (exit 1) on an unknown id. */
+export async function runQueueCancel(
+  taskId: string,
+  opts: QueueWriteOptions & { series?: boolean } = {},
+): Promise<string> {
+  const dbPath = opts.db ?? defaultDbPath();
+  const scheduler = actionScheduler({ ...opts, dbPath });
+  let rec: TaskRecord<unknown>;
+  try {
+    rec = scheduler.cancelTask(taskId, { series: opts.series === true });
+  } catch (err) {
+    scheduler.shutdown();
+    throw err;
+  }
+  const ended = opts.series && rec.seriesId ? ` (series ${rec.seriesId} ended)` : "";
+  return writeResult(scheduler, dbPath, rec, `${taskId}: ${rec.status}${ended}`);
+}
+
+/** `ebb queue run-now <id>`. Throws (exit 1) when the task cannot run now. */
+export async function runQueueRunNow(taskId: string, opts: QueueWriteOptions = {}): Promise<string> {
+  const dbPath = opts.db ?? defaultDbPath();
+  const scheduler = actionScheduler({ ...opts, dbPath });
+  let rec: TaskRecord<unknown>;
+  try {
+    rec = scheduler.runNow(taskId);
+  } catch (err) {
+    scheduler.shutdown();
+    throw err;
+  }
+  return writeResult(scheduler, dbPath, rec, `${taskId}: marked to run now`);
+}
+
+/**
+ * `ebb queue reschedule <id> (--by <when> | --at <iso> | --day <yyyy-mm-dd>)`.
+ * Exactly one target. `--day` uses this machine's time zone for the bounds.
+ */
+export async function runQueueReschedule(
+  taskId: string,
+  opts: QueueWriteOptions & { by?: string; at?: string; day?: string } = {},
+): Promise<string> {
+  const given = [opts.by, opts.at, opts.day].filter((v) => v !== undefined);
+  if (given.length !== 1) {
+    throw new Error("queue reschedule: pass exactly one of --by, --at or --day");
+  }
+  const now = opts.now?.() ?? new Date();
+  let target: RescheduleTarget;
+  if (opts.by !== undefined) target = { deadline: parseWhen(opts.by, now) };
+  else if (opts.at !== undefined) target = { at: parseWhen(opts.at, now) };
+  else target = localDayBounds(opts.day!);
+  const dbPath = opts.db ?? defaultDbPath();
+  const scheduler = actionScheduler({ ...opts, dbPath });
+  let rec: TaskRecord<unknown>;
+  try {
+    rec = await scheduler.rescheduleTask(taskId, target);
+  } catch (err) {
+    scheduler.shutdown();
+    throw err;
+  }
+  return writeResult(scheduler, dbPath, rec, `${taskId}: rescheduled`);
+}
+
+/** `ebb queue reply <id> <text> [--by <when>]`: a child task with the history. */
+export async function runQueueReply(
+  taskId: string,
+  text: string,
+  opts: QueueWriteOptions & { by?: string } = {},
+): Promise<string> {
+  if (text.length === 0 || text.length > 32_000) {
+    throw new Error("queue reply: text must be 1 to 32000 characters");
+  }
+  const now = opts.now?.() ?? new Date();
+  const dbPath = opts.db ?? defaultDbPath();
+  const scheduler = actionScheduler({ ...opts, dbPath });
+  let child: TaskRecord<unknown>;
+  try {
+    child = await scheduler.replyToTask(taskId, text, {
+      ...(opts.by !== undefined ? { deadline: parseWhen(opts.by, now) } : {}),
+    });
+  } catch (err) {
+    scheduler.shutdown();
+    throw err;
+  }
+  return writeResult(scheduler, dbPath, child, `reply queued as ${child.taskId} (parent ${taskId})`);
 }

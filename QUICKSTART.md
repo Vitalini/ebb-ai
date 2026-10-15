@@ -109,7 +109,7 @@ stack still works end-to-end (useful for demos and CI).
 ## Where to go next
 
 - **Live carbon map + planner:** <https://www.ebb-ai.com/>
-- **Full docs (all 8 commands + 9 MCP tools + install matrix):** <https://www.ebb-ai.com/docs>
+- **Full docs (all 8 commands + 10 MCP tools + install matrix):** <https://www.ebb-ai.com/docs>
 - **Why it exists:** <https://www.ebb-ai.com/about>
 - **Architecture:** <https://www.ebb-ai.com/architecture>
 - **Source / issues / CHANGELOG:** <https://github.com/Vitalini/ebb-ai>

@@ -204,7 +204,7 @@ result     <the LLM response>`}
             <Link href="/docs#tools" className="text-accent hover:underline">
               /docs · MCP tools
             </Link>{" "}
-            — nine MCP tools (every host).
+            — ten MCP tools (every host).
           </li>
         </ul>
       </footer>

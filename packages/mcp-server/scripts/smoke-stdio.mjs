@@ -4,7 +4,7 @@
  *
  * Spawns the built server (dist/server.js) as a child process, runs the MCP
  * `initialize` handshake and `tools/list` over stdio, and checks that all
- * nine tools are advertised. Uses an ephemeral in-memory ledger so it never
+ * ten tools are advertised. Uses an ephemeral in-memory ledger so it never
  * touches ~/.ebb. Run after a build with: `pnpm --filter @ebb-ai/mcp smoke`.
  */
 
@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
-const EXPECTED_TOOLS = 9;
+const EXPECTED_TOOLS = 10;
 const serverPath = join(dirname(fileURLToPath(import.meta.url)), "..", "dist", "server.js");
 
 const transport = new StdioClientTransport({

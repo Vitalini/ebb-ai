@@ -180,3 +180,45 @@ async def test_mark_read_sets_marker_once_and_only_on_finished_tasks(tmp_path: P
         assert later is not None and later.read_at is None
     finally:
         await store.close()
+
+
+async def test_python_ledger_has_ui_v2_columns_and_series_index(tmp_path: Path) -> None:
+    path = tmp_path / "queue.db"
+    store = _TaskStore(str(path))
+    await store.connect()
+    await store.close()
+    assert {"series_id", "repeat", "origin_session_id", "not_before"} <= _columns(path)
+    with sqlite3.connect(path) as conn:
+        indexes = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='index'")}
+    assert "tasks_series_idx" in indexes
+
+
+async def test_ts_series_fields_survive_python_transition_and_upsert(tmp_path: Path) -> None:
+    path = tmp_path / "queue.db"
+    store = _TaskStore(str(path))
+    await store.connect()
+    await store.close()
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "INSERT INTO tasks (task_id, status, enqueued_at, scheduled_for, region, "
+            "series_id, repeat, origin_session_id, not_before) VALUES "
+            "('s~2', 'scheduled', '2026-10-10T00:00:00Z', '2026-10-16T22:00:00Z', 'DE', "
+            "'s', 'weekly', 'sess-12345678', '2026-10-10T23:00:00Z')"
+        )
+    store = _TaskStore(str(path))
+    await store.connect()
+    try:
+        assert await store.claim_scheduled("s~2")
+        record = await store.load("s~2")
+        assert record is not None
+        record.status = "failed"
+        record.error = "python ticker"
+        await store.upsert(record)
+    finally:
+        await store.close()
+    with sqlite3.connect(path) as conn:
+        row = conn.execute(
+            "SELECT status, series_id, repeat, origin_session_id, not_before "
+            "FROM tasks WHERE task_id = 's~2'"
+        ).fetchone()
+    assert row == ("failed", "s", "weekly", "sess-12345678", "2026-10-10T23:00:00Z")

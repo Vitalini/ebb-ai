@@ -11,7 +11,11 @@ without error.
 `$ARGUMENTS`
 
 Expected: a single `task_id` (the alphanumeric identifier `schedule_task`
-returned).
+returned), optionally followed by `--series`.
+
+Cancelling one occurrence of a repeating task skips it; the next
+occurrence is queued. `--series` (or "stop the series") also ends the
+series.
 
 If `$ARGUMENTS` is empty, ask the user which task they want to cancel
 (suggest running `/ebb-ai:check` first to list candidates).
@@ -24,6 +28,7 @@ the user before reporting success.
 
 1. Call the `ebb-ai` MCP server's **`cancel_task`** tool with:
    - `task_id` — the parsed id.
+   - `series` — `true` when `--series` was given, otherwise omit.
 2. Show the resulting status and (if present) `terminated_at`. One short
    line.
 
@@ -31,5 +36,6 @@ the user before reporting success.
 
 ```
 /ebb-ai:cancel 7f3a2b9e
+/ebb-ai:cancel 7f3a2b9e --series
 /ebb-ai:cancel --all
 ```

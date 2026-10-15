@@ -95,6 +95,9 @@ import {
 import { openclawToolParameters } from "./tool-schemas.js";
 
 /** The canonical description for a tool, from the shared surface (audit §2.2). */
+/** Longest reply text accepted by reply_task (same cap as MCP and `ebb ui`). */
+const REPLY_MAX_CHARS = 32_000;
+
 function toolDescription(name: string): string {
   return getToolDefOrThrow(name).description;
 }
@@ -207,7 +210,7 @@ type ToolFactory = (def: ToolDefinition) => unknown;
  * Wrap the SDK's tool factory so every `execute` receives the RESOLVED plugin
  * config instead of the raw one.
  *
- * One seam for all ten tools: the raw `config` OpenClaw passes is merged over
+ * One seam for all eleven tools: the raw `config` OpenClaw passes is merged over
  * this plugin's block in the captured gateway config, and the delivery-store
  * path is published to the delivery module. Doing it here means no tool body
  * has to remember to resolve config — and, critically, no tool body has any
@@ -334,6 +337,9 @@ function getQueueRuntime(config: PluginConfig): QueueRuntime {
     store,
     defaultRegion: resolveRegion(undefined, config.defaultRegion).region,
     eager: false,
+    // A quota_reset series rolls to the label's next reset (ui v2). A
+    // getter: the long-lived gateway sees config edits.
+    quotaConfig: () => loadQuotaResetConfig(),
     ...(carbonBudget
       ? {
           carbonBudget,
@@ -936,17 +942,55 @@ export default defineToolPlugin({
       description: toolDescription("cancel_task"),
       parameters: openclawToolParameters("cancel_task"),
       async execute(
-        params: { task_id: string },
+        params: { task_id: string; series?: boolean },
         config: PluginConfig,
         context?: unknown,
       ) {
         captureOpenClawRuntime(context);
         const { scheduler } = getQueueRuntime(config);
-        const result = scheduler.cancelTask(params.task_id);
+        const series = params.series === true;
+        const result = scheduler.cancelTask(params.task_id, { series });
         return {
           task_id: params.task_id,
           status: result.status,
           completed_at: result.completedAt ?? null,
+          ...(result.seriesId ? { series_id: result.seriesId, series_ended: series } : {}),
+        };
+      },
+    }),
+
+    // ── reply_task ────────────────────────────────────────────────────────
+    tool({
+      name: "reply_task",
+      label: "Reply to a completed task",
+      description: toolDescription("reply_task"),
+      parameters: openclawToolParameters("reply_task"),
+      async execute(
+        params: { task_id: string; text: string; deadline?: string },
+        config: PluginConfig,
+        context?: unknown,
+      ) {
+        captureOpenClawRuntime(context);
+        if (typeof params.text !== "string" || params.text.length > REPLY_MAX_CHARS) {
+          throw new Error(`reply_task: text must be 1 to ${REPLY_MAX_CHARS} characters`);
+        }
+        const { scheduler } = getQueueRuntime(config);
+        let child;
+        try {
+          child = await scheduler.replyToTask(params.task_id, params.text, {
+            ...(params.deadline !== undefined ? { deadline: params.deadline } : {}),
+          });
+        } catch (err) {
+          // The core's refusal names the rule (e.g. "is failed; only
+          // completed provider-call tasks accept a reply").
+          throw new Error(err instanceof Error ? err.message : String(err));
+        }
+        return {
+          task_id: child.taskId,
+          parent_task_id: params.task_id,
+          status: child.status,
+          scheduled_for: child.scheduledFor ?? null,
+          deadline: child.deadline ?? null,
         };
       },
     }),

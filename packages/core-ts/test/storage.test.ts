@@ -427,3 +427,140 @@ describe("TaskStore task-visibility fields (v0.17)", () => {
     store.close();
   });
 });
+
+describe("TaskStore series, repeat, session and CAS writes (ui v2)", () => {
+  let dir: string;
+  let dbPath: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "ebb-series-"));
+    dbPath = join(dir, "queue.db");
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  const V017_SCHEMA = `
+    CREATE TABLE tasks (
+      task_id TEXT PRIMARY KEY, status TEXT NOT NULL, enqueued_at TEXT NOT NULL,
+      scheduled_for TEXT, completed_at TEXT, region TEXT NOT NULL,
+      carbon_budget_g REAL, result_json TEXT, error TEXT, receipt_json TEXT,
+      intensity_source TEXT, body_json TEXT, estimated_carbon_g REAL,
+      deadline TEXT, batch_id TEXT, routing_decision TEXT, title TEXT,
+      origin_host TEXT, origin_cwd TEXT, read_at TEXT, parent_task_id TEXT,
+      deadline_kind TEXT, quota_provider TEXT
+    );
+    INSERT INTO tasks (task_id, status, enqueued_at, region)
+      VALUES ('old', 'scheduled', '2026-10-01T00:00:00.000Z', 'DE');`;
+
+  function introspect(store: TaskStore, sql: string): string[] {
+    const db = (store as unknown as {
+      db: { prepare: (s: string) => { all(): Array<{ name: string }> } };
+    }).db;
+    return db.prepare(sql).all().map((r) => r.name);
+  }
+
+  const pending = (taskId: string, extra: Record<string, unknown> = {}) => ({
+    taskId,
+    status: "scheduled" as const,
+    enqueuedAt: "2026-10-10T00:00:00.000Z",
+    region: "DE",
+    ...extra,
+  });
+
+  it("migrates a v0.17 ledger: four new columns and the series index; reopen is a no-op", () => {
+    const raw = openRawDb(dbPath);
+    raw.exec(V017_SCHEMA);
+    raw.close();
+    const store = new TaskStore({ dbPath });
+    const cols = introspect(store, `SELECT name FROM pragma_table_info('tasks')`);
+    expect(cols).toEqual(
+      expect.arrayContaining(["series_id", "repeat", "origin_session_id", "not_before"]),
+    );
+    expect(
+      introspect(store, `SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'tasks'`),
+    ).toContain("tasks_series_idx");
+    expect(store.get("old")?.repeat).toBeUndefined();
+    store.close();
+    const again = new TaskStore({ dbPath });
+    expect(introspect(again, `SELECT name FROM pragma_table_info('tasks')`)).toEqual(cols);
+    again.close();
+  });
+
+  it("upsert never overwrites series_id, origin_session_id or repeat; writes not_before", () => {
+    const store = new TaskStore({ dbPath });
+    store.upsert(
+      pending("s", { seriesId: "s", repeat: "weekly", originSessionId: "sess-0001" }),
+    );
+    store.upsert(
+      pending("s", {
+        seriesId: "other",
+        repeat: "none",
+        originSessionId: "sess-9999",
+        notBefore: "2026-10-12T00:00:00.000Z",
+      }),
+    );
+    const got = store.get("s");
+    expect(got?.seriesId).toBe("s");
+    expect(got?.repeat).toBe("weekly");
+    expect(got?.originSessionId).toBe("sess-0001");
+    expect(got?.notBefore).toBe("2026-10-12T00:00:00.000Z");
+    store.close();
+  });
+
+  it("transitionIf writes when the status is listed, including repeat", () => {
+    const store = new TaskStore({ dbPath });
+    store.upsert(pending("t", { seriesId: "t", repeat: "weekly" }));
+    const rec = store.get("t")!;
+    const ok = store.transitionIf(
+      {
+        ...rec,
+        status: "cancelled",
+        completedAt: "2026-10-10T01:00:00.000Z",
+        repeat: "none",
+        intensitySource: "expedited",
+      },
+      ["queued", "scheduled"],
+    );
+    expect(ok).toBe(true);
+    const got = store.get("t")!;
+    expect(got.status).toBe("cancelled");
+    expect(got.completedAt).toBe("2026-10-10T01:00:00.000Z");
+    expect(got.repeat).toBe("none");
+    expect(got.intensitySource).toBe("expedited");
+    expect(got.seriesId).toBe("t");
+    store.close();
+  });
+
+  it("transitionIf returns false and writes nothing when the status is outside the list", () => {
+    const store = new TaskStore({ dbPath });
+    store.upsert(pending("r", { status: "running" }));
+    const rec = store.get("r")!;
+    expect(store.transitionIf({ ...rec, status: "cancelled" }, ["queued", "scheduled"])).toBe(
+      false,
+    );
+    expect(store.get("r")?.status).toBe("running");
+    store.close();
+  });
+
+  it("insertIfAbsent inserts once and leaves the first row unchanged", () => {
+    const store = new TaskStore({ dbPath });
+    expect(store.insertIfAbsent(pending("s~2", { title: "first", seriesId: "s" }))).toBe(true);
+    expect(store.insertIfAbsent(pending("s~2", { title: "second", status: "queued" }))).toBe(
+      false,
+    );
+    expect(store.get("s~2")?.title).toBe("first");
+    expect(store.get("s~2")?.status).toBe("scheduled");
+    store.close();
+  });
+
+  it("list filters by series id", () => {
+    const store = new TaskStore({ dbPath });
+    store.upsert(pending("a", { seriesId: "a", repeat: "daily" }));
+    store.upsert(pending("a~2", { seriesId: "a", repeat: "daily" }));
+    store.upsert(pending("b"));
+    expect(store.list({ seriesId: "a" }).map((r) => r.taskId)).toEqual(["a", "a~2"]);
+    store.close();
+  });
+});

@@ -734,15 +734,24 @@ _VISIBILITY_COLUMNS: Final[tuple[str, ...]] = (
     "parent_task_id",
     "deadline_kind",
     "quota_provider",
+    # ui v2: series membership, repeat rule, Claude Code session, pinned
+    # earliest start. Stored only: this port neither rolls a series nor
+    # sends reply history, and its upsert never writes these columns, so
+    # values a TS host wrote survive a Python status change.
+    "series_id",
+    "repeat",
+    "origin_session_id",
+    "not_before",
 )
 
 
 async def _ensure_task_visibility_columns(conn: aiosqlite.Connection) -> None:
-    """Idempotent migration: add the v0.17 task-visibility columns.
+    """Idempotent migration: add the v0.17 task-visibility and ui v2 columns.
 
     Adds ``title``, ``origin_host``, ``origin_cwd``, ``parent_task_id``,
-    ``deadline_kind``, ``quota_provider`` and ``read_at``, then the
-    ``tasks_parent_idx`` index. When THIS call adds ``read_at`` it also
+    ``deadline_kind``, ``quota_provider``, the ui v2 ``series_id``,
+    ``repeat``, ``origin_session_id`` and ``not_before``, and ``read_at``,
+    then the ``tasks_parent_idx`` and ``tasks_series_idx`` indexes. When THIS call adds ``read_at`` it also
     backfills ``read_at = completed_at`` on finished rows, so tasks that
     finished before read markers existed do not flood the inbox. Mirrors
     the TS ``ensureColumns``; whichever process migrates first backfills.
@@ -772,6 +781,7 @@ async def _ensure_task_visibility_columns(conn: aiosqlite.Connection) -> None:
     await conn.execute(
         "CREATE INDEX IF NOT EXISTS tasks_parent_idx ON tasks(parent_task_id)"
     )
+    await conn.execute("CREATE INDEX IF NOT EXISTS tasks_series_idx ON tasks(series_id)")
     await conn.commit()
 
 
@@ -1662,6 +1672,12 @@ class Scheduler:
         dispatch the task once), then dispatches via the matching
         provider adapter. Closure-based tasks (:meth:`enqueue` /
         :meth:`defer`) are **not** touched.
+
+        Reply history and series rollover (ui v2) are TS-only: this port
+        does not send ``body_json.messages`` to the provider, does not
+        insert a series successor when an occurrence finishes, and ignores
+        ``not_before``. Run the TS dispatcher (``ebb tick`` or the OpenClaw
+        loop) on a ledger that holds reply children or repeating tasks.
 
         Parameters
         ----------

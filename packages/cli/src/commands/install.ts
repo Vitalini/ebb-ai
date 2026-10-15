@@ -92,7 +92,7 @@ export interface InstallArtifacts {
  * Pushes a loud warning onto `warnings` if a resolved path does not
  * exist on disk.
  */
-function resolveLauncher(
+export function resolveLauncher(
   override: string[] | undefined,
   warnings: string[],
 ): string[] {

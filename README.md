@@ -41,7 +41,7 @@ Without `rng`, ebb-ai picks at random among the cleanest band of near-equal hour
 
 **Proof:** one real run (GB, 2026-09-30, live National Grid ESO forecast). Forecast peak 183 gCO2/kWh, recommended window 88 gCO2/kWh: about 52 % lower, for this run only (forecast, projected). The test task had a 5-minute deadline, so it ran at once; its signed receipt records 158 gCO2/kWh (measured). [Raw output and reproducer](docs/examples/2026-09-30-GB-tick/) · [every number and its source](docs/claims.md)
 
-**In an agent:** in Claude Code, `/ebb-ai:defer "Summarize today's notifications" --by 4h`. In any other MCP host, the agent calls `recommend_window` and `schedule_task` (9 MCP tools, 13 hosts — [host configs](https://www.ebb-ai.com/docs#install)).
+**In an agent:** in Claude Code, `/ebb-ai:defer "Summarize today's notifications" --by 4h`. In any other MCP host, the agent calls `recommend_window` and `schedule_task` (10 MCP tools, 13 hosts — [host configs](https://www.ebb-ai.com/docs#install)).
 
 ## Why defer non-urgent AI work?
 
@@ -160,7 +160,7 @@ Windsurf, OpenClaw, OpenAI Codex CLI, Pi). The agent asks
 > across 5 packages and 2 languages. See [QUICKSTART.md](./QUICKSTART.md).
 
 [![Tests](https://img.shields.io/badge/tests-1115%20passing-22c55e)](#tests)
-[![MCP tools](https://img.shields.io/badge/MCP-9%20tools-5eead4)](https://www.ebb-ai.com/docs)
+[![MCP tools](https://img.shields.io/badge/MCP-10%20tools-5eead4)](https://www.ebb-ai.com/docs)
 [![Hosts](https://img.shields.io/badge/MCP%20hosts-13-5eead4)](https://www.ebb-ai.com/docs#install)
 [![Website](https://img.shields.io/badge/website-ebb--ai.com-5eead4)](https://www.ebb-ai.com)
 
@@ -303,7 +303,7 @@ macOS):
 }
 ```
 
-The MCP server exposes nine tools to the agent (measured, `toolsForHost("mcp")` in
+The MCP server exposes ten tools to the agent (measured, `toolsForHost("mcp")` in
 [`packages/core-ts/src/tool-surface.ts`](packages/core-ts/src/tool-surface.ts)):
 
 - `get_grid_forecast(region, hours?)` — returns the next N hours of
@@ -318,6 +318,7 @@ The MCP server exposes nine tools to the agent (measured, `toolsForHost("mcp")` 
   completed receipts; viewing one finished task marks it read.
 - `cancel_task`, `expedite_task`, `update_deadline`, `retry_task`,
   `cancel_all` — control a queued task (or the whole queue).
+- `reply_task(task_id, text)` — continue a completed task as a new task.
 
 ### As a library
 

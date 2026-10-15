@@ -2,7 +2,7 @@
 /**
  * ebb-mcp — Model Context Protocol server for carbon-aware AI task scheduling.
  *
- * Exposes nine tools to any MCP-compatible agent (Claude Desktop,
+ * Exposes ten tools to any MCP-compatible agent (Claude Desktop,
  * Claude Code, OpenClaw, Cursor, custom MCP clients):
  *
  *   - get_grid_forecast(region, hours?) → forecasted carbon intensity
@@ -10,6 +10,7 @@
  *   - schedule_task(prompt, deadline, ...) → enqueue (or dry-run preview)
  *   - check_queue_status(task_id?) → status / receipts
  *   - cancel_task / cancel_all / expedite_task / update_deadline / retry_task
+ *   - reply_task(task_id, text, deadline?) → continue a completed task
  *
  * The server reads `EBB_ELECTRICITY_MAPS_API_KEY` from the environment; if
  * absent, it transparently falls back to a deterministic mock grid feed so
@@ -38,6 +39,7 @@ import {
   deadlineKindLabel,
   DEFAULT_MODEL_BY_PROVIDER,
   GeminiAdapter,
+  isValidSessionId,
   loadQuotaResetConfig,
   OllamaAdapter,
   OpenAIAdapter,
@@ -48,6 +50,7 @@ import {
   resolveQuotaDeadline,
   resolveQuotaProvider,
   resolveRegion,
+  resumeCommand,
   Scheduler,
   stripControlChars,
   taskPrompt,
@@ -59,6 +62,7 @@ import {
   type ProviderCallSpec,
   type ProviderName,
   type QuotaResetConfig,
+  type RepeatRule,
   type TaskRecord,
   type TickAdapters,
   type ToolParam,
@@ -395,20 +399,23 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
   // tickers (ebb tick / the OpenClaw plugin). Display-only.
   const carbonBudget: CarbonBudgetConfig | undefined =
     deps.carbonBudget ?? loadCarbonBudgetConfig({ env: env.carbonBudget });
+  const loadQuota = (): QuotaResetConfig =>
+    loadQuotaResetConfig(
+      deps.quotaConfigPath !== undefined ? { path: deps.quotaConfigPath } : {},
+    );
   const scheduler =
     deps.scheduler ??
     new Scheduler({
       feed,
       defaultRegion,
+      // cancel_task skips a series occurrence, which rolls a quota_reset
+      // series to the label's next reset (ui v2).
+      quotaConfig: loadQuota,
       ...(dbPath !== undefined ? { dbPath } : {}),
       ...(carbonBudget ? { carbonBudget } : {}),
     });
   const persistedAt =
     dbPath === undefined || dbPath === ":memory:" ? "(in-memory)" : dbPath;
-  const loadQuota = (): QuotaResetConfig =>
-    loadQuotaResetConfig(
-      deps.quotaConfigPath !== undefined ? { path: deps.quotaConfigPath } : {},
-    );
 
   const server = new Server(
     { name: "ebb-mcp", version: SERVER_VERSION },
@@ -495,6 +502,8 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
           redact_in_receipt?: string[];
           candidates?: string[];
           route_weights?: { carbon?: number; cost?: number; latency?: number };
+          repeat?: RepeatRule;
+          origin_session_id?: string;
         };
         try {
           // Resolve the deadline. A quota_reset task gets the next reset
@@ -529,6 +538,12 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
             title: parsed.title,
             originHost: "mcp" as const,
             originCwd: originCwd(),
+            // Stored only when it looks like a real session id: an
+            // unsubstituted "${CLAUDE_SESSION_ID}" is dropped (KTD10).
+            originSessionId: isValidSessionId(parsed.origin_session_id)
+              ? parsed.origin_session_id
+              : undefined,
+            ...(parsed.repeat !== undefined ? { repeat: parsed.repeat } : {}),
             ...kindOpts,
           };
           // dry_run: return the planned dispatch without persisting.
@@ -599,6 +614,7 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
               ...identity,
             });
             const gridSource = await fetchGridSource(feed, record.region);
+            const resume = resumeCommand(record);
             return {
               content: [
                 {
@@ -607,6 +623,10 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
                     `Task persisted (provider_call, dispatchable by \`ebb tick\`).\n` +
                     `task_id: ${record.taskId}\n` +
                     (record.title ? `title: ${record.title}\n` : "") +
+                    (record.repeat && record.repeat !== "none"
+                      ? `repeat: ${record.repeat} (series ${record.seriesId})\n`
+                      : "") +
+                    (resume ? `resume: ${resume}\n` : "") +
                     `provider: ${spec.provider}\n` +
                     `model: ${spec.model}\n` +
                     `region: ${record.region}\n` +
@@ -709,7 +729,11 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
             content: [
               {
                 type: "text",
-                text: formatTask(fresh() ?? task, loadQuota()),
+                text: formatTask(fresh() ?? task, loadQuota(), {
+                  children: listKnownTasks(scheduler)
+                    .filter((t) => t.parentTaskId === task.taskId)
+                    .map((t) => t.taskId),
+                }),
               },
             ],
           };
@@ -736,16 +760,20 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
       }
 
       if (name === "cancel_task") {
-        const parsed = schemaOf("cancel_task").parse(args) as { task_id: string };
+        const parsed = schemaOf("cancel_task").parse(args) as {
+          task_id: string;
+          series?: boolean;
+        };
         try {
-          const rec = scheduler.cancelTask(parsed.task_id);
+          const rec = scheduler.cancelTask(parsed.task_id, { series: parsed.series === true });
           return {
             content: [
               {
                 type: "text",
                 text:
                   `Task ${parsed.task_id} status: ${rec.status}\n` +
-                  (rec.completedAt ? `terminated_at: ${rec.completedAt}\n` : ``),
+                  (rec.completedAt ? `terminated_at: ${rec.completedAt}\n` : ``) +
+                  (rec.seriesId && parsed.series ? `series ${rec.seriesId}: ended\n` : ``),
               },
             ],
           };
@@ -787,6 +815,40 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           return { content: [{ type: "text", text: `expedite_task rejected: ${msg}` }], isError: true };
+        }
+      }
+
+      if (name === "reply_task") {
+        const parsed = schemaOf("reply_task").parse(args) as {
+          task_id: string;
+          text: string;
+          deadline?: string;
+        };
+        try {
+          if (parsed.text.length > REPLY_MAX_CHARS) {
+            throw new Error(`text is longer than ${REPLY_MAX_CHARS} characters`);
+          }
+          const child = await scheduler.replyToTask(parsed.task_id, parsed.text, {
+            ...(parsed.deadline !== undefined ? { deadline: parsed.deadline } : {}),
+          });
+          return {
+            content: [
+              {
+                type: "text",
+                text:
+                  `Reply queued as a new task.\n` +
+                  `task_id: ${child.taskId}\n` +
+                  `parent_task_id: ${parsed.task_id}\n` +
+                  `status: ${child.status}\n` +
+                  `scheduled_for: ${child.scheduledFor ?? "(immediate)"}\n` +
+                  `deadline: ${child.deadline}\n` +
+                  `Runs on the next \`ebb tick\` after its window (one provider call).`,
+              },
+            ],
+          };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return { content: [{ type: "text", text: `reply_task rejected: ${msg}` }], isError: true };
         }
       }
 
@@ -1001,9 +1063,13 @@ export function routingBlockPayload(
   };
 }
 
+/** Longest reply text accepted by reply_task (same cap as the `ebb ui` API). */
+const REPLY_MAX_CHARS = 32_000;
+
 export function formatTask(
   task: TaskRecord<unknown> | undefined,
   quota: QuotaResetConfig = {},
+  related: { children?: readonly string[] } = {},
 ): string {
   if (!task) return "";
   const lines = [`task_id: ${task.taskId}`];
@@ -1015,7 +1081,15 @@ export function formatTask(
   );
   if (task.originHost)
     lines.push(`origin: ${task.originHost}${task.originCwd ? ` (${task.originCwd})` : ""}`);
+  if (task.originSessionId) lines.push(`origin_session_id: ${task.originSessionId}`);
+  const resume = resumeCommand(task);
+  if (resume) lines.push(`resume: ${resume}`);
   if (task.parentTaskId) lines.push(`parent_task_id: ${task.parentTaskId}`);
+  if (related.children && related.children.length > 0)
+    lines.push(`children: ${related.children.join(", ")}`);
+  if (task.seriesId) lines.push(`series_id: ${task.seriesId}`);
+  if (task.repeat && task.repeat !== "none") lines.push(`repeat: ${task.repeat}`);
+  else if (task.seriesId) lines.push(`repeat: none (series ended)`);
   if (task.scheduledFor) lines.push(`scheduled_for: ${task.scheduledFor}`);
   if (task.deadline) lines.push(`deadline: ${task.deadline}`);
   lines.push(`deadline_kind: ${deadlineKindLabel(task, quota)}`);

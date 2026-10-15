@@ -188,3 +188,101 @@ describe("check_queue_status and read state", () => {
     other.close();
   });
 });
+
+describe("ui v2: reply_task, cancel series, repeat and session id", () => {
+  async function completedTask(dbPath: string, configPath: string) {
+    const built = await connect(dbPath, configPath);
+    const r = await built.call("schedule_task", {
+      prompt: "Summarize the PRs",
+      deadline: inSixHours(),
+      region: "DE",
+    });
+    const id = /task_id: (\S+)/.exec(text(r))![1]!;
+    built.scheduler.runNow(id);
+    await built.scheduler.tick({
+      anthropic: {
+        provider: "anthropic",
+        ready: true,
+        async dispatch(model: string) {
+          return { text: "three PRs", model, provider: "anthropic", raw: null };
+        },
+      },
+    });
+    return { ...built, id };
+  }
+
+  it("reply_task on a completed task returns a child id with the parent link", async () => {
+    const { dbPath, configPath } = tmp();
+    const { call, id } = await completedTask(dbPath, configPath);
+    const r = await call("reply_task", { task_id: id, text: "and the issues?" });
+    expect(r.isError).toBeFalsy();
+    const childId = /task_id: (\S+)/.exec(text(r))![1]!;
+    expect(text(r)).toContain(`parent_task_id: ${id}`);
+    const store = new TaskStore({ dbPath });
+    const child = store.get(childId)!;
+    expect(child.parentTaskId).toBe(id);
+    expect(JSON.parse(child.bodyJson!).messages).toHaveLength(2);
+    store.close();
+    const detail = await call("check_queue_status", { task_id: id });
+    expect(text(detail)).toContain(`children: ${childId}`);
+  });
+
+  it("reply_task on a failed task returns an error naming the rule", async () => {
+    const { dbPath, configPath } = tmp();
+    const { call, scheduler } = await connect(dbPath, configPath);
+    const r = await call("schedule_task", { prompt: "x", deadline: inSixHours(), region: "DE" });
+    const id = /task_id: (\S+)/.exec(text(r))![1]!;
+    scheduler.runNow(id);
+    await scheduler.tick({});
+    const reply = await call("reply_task", { task_id: id, text: "again" });
+    expect(reply.isError).toBe(true);
+    expect(text(reply)).toMatch(/is failed; only completed provider-call tasks accept a reply/);
+  });
+
+  it("stores a real session id and drops an unsubstituted placeholder", async () => {
+    const { dbPath, configPath } = tmp();
+    const { call } = await connect(dbPath, configPath);
+    const ok = await call("schedule_task", {
+      prompt: "a",
+      deadline: inSixHours(),
+      region: "DE",
+      origin_session_id: "3f2a0c1e-1234-4abc-9def-0123456789ab",
+    });
+    expect(text(ok)).toMatch(/resume: cd .* && claude --resume 3f2a0c1e-1234-4abc-9def-0123456789ab/);
+    await call("schedule_task", {
+      prompt: "b",
+      deadline: inSixHours(),
+      region: "DE",
+      origin_session_id: "${CLAUDE_SESSION_ID}",
+    });
+    const store = new TaskStore({ dbPath });
+    const rows = store.list();
+    expect(rows.find((r) => r.title === "a")?.originSessionId).toBe(
+      "3f2a0c1e-1234-4abc-9def-0123456789ab",
+    );
+    expect(rows.find((r) => r.title === "b")?.originSessionId).toBeUndefined();
+    store.close();
+  });
+
+  it("a quota_reset task is a one-off by default; repeat weekly opts in; cancel series ends it", async () => {
+    const { dbPath, configPath } = tmp();
+    writeFileSync(configPath, "EBB_QUOTA_RESET_CLAUDE=mon 10:00 UTC\n");
+    const { call } = await connect(dbPath, configPath);
+    await call("schedule_task", { prompt: "one-off", deadline_kind: "quota_reset", region: "DE" });
+    const weekly = await call("schedule_task", {
+      prompt: "limits",
+      deadline_kind: "quota_reset",
+      repeat: "weekly",
+      region: "DE",
+    });
+    expect(text(weekly)).toMatch(/repeat: weekly \(series /);
+    const id = /task_id: (\S+)/.exec(text(weekly))![1]!;
+    const store = new TaskStore({ dbPath });
+    expect(store.list().find((r) => r.title === "one-off")?.repeat ?? "none").toBe("none");
+    const cancelled = await call("cancel_task", { task_id: id, series: true });
+    expect(text(cancelled)).toContain("ended");
+    expect(store.get(id)?.repeat).toBe("none");
+    expect(store.get(`${id}~2`)).toBeUndefined();
+    store.close();
+  });
+});

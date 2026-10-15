@@ -142,9 +142,9 @@ directly into your MCP host. From Claude Code:
 claude mcp add ebb-ai npx -- -y @ebb-ai/mcp
 ```
 
-You get the nine MCP tools (`schedule_task`, `recommend_window`,
+You get the ten MCP tools (`schedule_task`, `recommend_window`,
 `check_queue_status`, `cancel_task`, `cancel_all`, `update_deadline`,
-`expedite_task`, `retry_task`, `get_grid_forecast`) but not the
+`expedite_task`, `retry_task`, `reply_task`, `get_grid_forecast`) but not the
 slash-command shortcuts or the `ebb-ai` auto-invocation skill.
 
 ## Files
@@ -155,6 +155,11 @@ slash-command shortcuts or the `ebb-ai` auto-invocation skill.
 - `commands/*.md` — the eight slash commands
 - `skills/ebb-ai/SKILL.md` — when-to-auto-invoke skill
 - `hooks/hooks.json` — SessionStart hook that prints the unread count
+
+`/ebb-ai:defer` passes `origin_session_id: "${CLAUDE_SESSION_ID}"`, so a
+deferred task remembers the conversation it came from; `ebb ui` and
+`ebb queue show` print the `claude --resume` command for it. `--repeat
+daily|weekly` makes a repeating task (default: a one-off).
 
 ## Related packages
 
