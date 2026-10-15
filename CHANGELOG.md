@@ -22,15 +22,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   on a provider-call task starts a series (`series_id` = the first task id).
   When an occurrence completes, fails, or is cancelled as a skip, core
   inserts exactly one next occurrence (`<series_id>~<n>`, insert-once) with
-  the same prompt; `cancel` with `series: true` stops the series. A next
-  occurrence beyond the 72-hour forecast is held at a fallback hour until the
-  new `replanSweep` (run by `prepareTick`) gives it a carbon window. MCP
+  the same prompt; `cancel` with `series: true` stops the series and cancels
+  any pending occurrence. A next occurrence that fails at planning (no hour
+  under its carbon budget) ends the series, and a "no adapter configured"
+  failure does not roll (a retry that completes rolls it). A next occurrence,
+  or a day target, is held at a fallback hour until the forecast covers its
+  first 24 hours; the new `replanSweep` (run by `prepareTick`) then gives it a
+  carbon window. MCP
   `schedule_task` takes `repeat`; `/ebb-ai:defer` takes `--repeat`.
 - **Reply.** `reply_task` (MCP and OpenClaw), `ebb queue reply` and the
   `ebb ui` API create a child task that sends the parent's conversation plus
   the new text to the same provider and model. All four adapters (Anthropic,
   OpenAI, Gemini, Ollama) send prior turns on the sync path; Anthropic and
-  OpenAI also on the batch path.
+  OpenAI also on the batch path. The history is capped at 200,000
+  characters; the oldest turns are dropped first.
 - **Return to the session.** `/ebb-ai:defer` passes `${CLAUDE_SESSION_ID}` as
   `origin_session_id`; `ebb queue show`, `check_queue_status` and the
   `ebb ui` API print `cd <cwd> && claude --resume <id>`.
@@ -39,7 +44,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`ebb ui` write API.** `POST /api/tasks/:id/{cancel,reschedule,run-now,reply}`,
   `GET /api/series/:id`, and `POST /api/dispatcher/start`, which starts
   `ebb tick --daemon --interval 60` detached (log in
-  `~/.ebb-ai/logs/ui-tick.log`) when no dispatcher runs. `/api/status`
+  `~/.ebb-ai/logs/ui-tick.log`) when no dispatcher runs; it returns 409 while
+  the child it started is alive or while any ticker ticked recently. A
+  refused action returns 409 with the rule; any other error returns 500 with a
+  generic body. `/api/status`
   reports the dispatcher as `running`, `stale` or `never`. The server writes
   the ledger only; it never dispatches. The page itself is unchanged in this
   release (v1 keeps working against the extended API).

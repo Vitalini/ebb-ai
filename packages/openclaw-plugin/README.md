@@ -20,13 +20,14 @@ Tool names match the `@ebb-ai/mcp` MCP-server surface (no `ebb_` prefix).
 | `schedule_task`       | Queue a task at the cleanest hour. The deferral trigger.      |
 | `recommend_window`    | Preview the cleanest hour without queueing. Read-only.        |
 | `check_queue_status`  | List all tasks / detail one (with carbon receipt). Read-only. |
-| `cancel_task`         | Cancel a queued task. Idempotent.                             |
+| `cancel_task`         | Cancel a pending task. In a series it skips one occurrence; `series: true` ends the series. Idempotent. |
 | `get_grid_forecast`   | Hourly grid carbon-intensity forecast. Read-only.             |
 | `update_deadline`     | Move a queued/scheduled task's deadline.                      |
 | `cancel_all`          | Cancel every queued/scheduled task at once.                   |
 | `set_delivery`        | Choose how a task's result is delivered when it completes.    |
 | `expedite_task`       | Dispatch a queued/scheduled task now, skipping the window.    |
 | `retry_task`          | Re-dispatch a failed task.                                    |
+| `reply_task`          | Continue a completed task: a new task sends the earlier prompt, the reply and your text to the same model. |
 
 ## Result delivery
 
@@ -107,7 +108,7 @@ After installing and restarting the gateway:
    The `tools` array contains `schedule_task`, `recommend_window`,
    `check_queue_status`, `cancel_task`, `get_grid_forecast`,
    `update_deadline`, `cancel_all`, `set_delivery`, `expedite_task`,
-   `retry_task`. (`Shape: non-capability` in the plain
+   `retry_task`, `reply_task`. (`Shape: non-capability` in the plain
    `inspect` output is the normal label OpenClaw gives tool plugins — it
    is not an error.)
 
