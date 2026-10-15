@@ -30,7 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   2 hours. The deadline is the next reset minus the margin. If that reset
   passes before the task runs (machine asleep, daemon down), `ebb tick` and
   the OpenClaw dispatch loop re-resolve it to the following reset and
-  reschedule the task through the normal window picker.
+  reschedule the task through the normal window picker. A quota deadline
+  is often days away, and any deadline more than 24 hours out lets an
+  `anthropic` or `openai` task route through the provider Batch API, so
+  its result can arrive up to the provider's 24-hour batch SLA after the
+  chosen window.
 - **`ebb queue show <id>`** prints a task's title, origin, deadline (with the
   quota label), prompt, history, result, receipt and routing; `--raw` adds
   the vendor payload, `--json` prints the record and its history,

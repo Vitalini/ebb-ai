@@ -363,7 +363,7 @@ export const TOOL_SURFACE: readonly CanonicalToolDef[] = [
         optional: true,
         hosts: ["mcp"],
         description:
-          "How the deadline is chosen. 'absolute' (default): use 'deadline'. 'quota_reset': run before the next weekly subscription-quota reset, minus a safety margin, as configured in ~/.ebb-ai/config (EBB_QUOTA_RESET_<LABEL>=<weekday> <HH:MM> [<IANA zone>], optional EBB_QUOTA_MARGIN_H_<LABEL>=<hours>, default 2). Use it when the user says 'before my weekly limit resets' or similar.",
+          "How the deadline is chosen. 'absolute' (default): use 'deadline'. 'quota_reset': run before the next weekly subscription-quota reset, minus a safety margin, as configured in ~/.ebb-ai/config (EBB_QUOTA_RESET_<LABEL>=<weekday> <HH:MM> [<IANA zone>], optional EBB_QUOTA_MARGIN_H_<LABEL>=<hours>, default 2). Use it when the user says 'before my weekly limit resets' or similar. A deadline more than 24 hours away can route the task through the provider Batch API.",
       },
       {
         name: "quota_provider",
