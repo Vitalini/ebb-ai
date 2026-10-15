@@ -17,6 +17,7 @@ import {
   mockGridFeed,
   prepareTick,
   Scheduler,
+  TaskActionError,
   taskActions,
   TaskStore,
 } from "../src/index.js";
@@ -321,6 +322,67 @@ describe("task actions (ui v2)", () => {
       sched().cancelTask(done.taskId);
       await expect(sched().rescheduleTask(done.taskId, target)).rejects.toThrow(/cancelled/);
       store.close();
+    });
+  });
+
+  describe("review fixes", () => {
+    it("a day whose first hours just entered the forecast stays unplanned until its first 24 h are covered", async () => {
+      const s = sched();
+      const rec = await enqueue(s, 6);
+      const dayStart = new Date(Date.now() + 60 * H);
+      const dayEnd = new Date(dayStart.getTime() + 24 * H);
+      const out = await sched().rescheduleTask(rec.taskId, {
+        dayStart: dayStart.toISOString(),
+        dayEnd: dayEnd.toISOString(),
+      });
+      expect(out.estimatedCarbonGCo2).toBeUndefined();
+      await prepareTick(sched(), { quotaConfig: {} });
+      expect(raw().get(rec.taskId)?.estimatedCarbonGCo2).toBeUndefined();
+      // 13 h later the whole day is inside the 72 h horizon.
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(Date.now() + 13 * H));
+      await prepareTick(sched(), { quotaConfig: {} });
+      const row = raw().get(rec.taskId)!;
+      expect(row.estimatedCarbonGCo2).toBeDefined();
+      expect(Date.parse(row.scheduledFor!)).toBeGreaterThanOrEqual(dayStart.getTime());
+    });
+
+    it("a sweep that awaited the forecast does not overwrite a run-now written meanwhile", async () => {
+      const rec = await enqueue(sched(), 6);
+      const inner = mockGridFeed();
+      let hook: (() => void) | undefined;
+      const sweeper = new Scheduler({
+        dbPath,
+        signing: false,
+        rng: () => 0,
+        feed: {
+          source: "mock",
+          fetchForecast: async (r, h) => {
+            const f = await inner.fetchForecast(r, h);
+            const run = hook;
+            hook = undefined;
+            run?.();
+            return f;
+          },
+        },
+      });
+      open.push(sweeper);
+      hook = () => sched().runNow(rec.taskId);
+      expect(await sweeper.rescheduleIfPending(rec.taskId, new Date(Date.now() + 10 * H))).toBe(false);
+      const row = raw().get(rec.taskId)!;
+      expect(row.intensitySource).toBe("expedited");
+      expect(row.deadline).toBe(rec.deadline);
+    });
+
+    it("a reschedule that fails the task on its carbon budget is refused, not reported as moved", async () => {
+      const rec = await enqueue(sched(), 6, { carbonBudgetG: 1e9 });
+      const store = raw();
+      store.upsert({ ...store.get(rec.taskId)!, carbonBudgetG: 0 });
+      store.close();
+      await expect(
+        sched().rescheduleTask(rec.taskId, { deadline: new Date(Date.now() + 10 * H).toISOString() }),
+      ).rejects.toThrow(TaskActionError);
+      expect(raw().get(rec.taskId)?.status).toBe("failed");
     });
   });
 

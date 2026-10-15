@@ -204,6 +204,34 @@ describe("series rollover", () => {
     }
   });
 
+  it("stop series on one pending occurrence also cancels a pending successor", async () => {
+    const s = sched();
+    const occ = await occurrence(s, "daily");
+    s.cancelTask(occ.taskId);
+    const db = store();
+    const succ = `${occ.taskId}~2`;
+    expect(db.get(succ)?.status).toBe("scheduled");
+    // OpenClaw's restoreToScheduled can leave an occurrence pending beside
+    // its successor; stopping the series from it must end both.
+    db.upsert({ ...db.get(occ.taskId)!, status: "scheduled", completedAt: undefined });
+    sched().cancelTask(occ.taskId, { series: true });
+    expect(db.get(succ)?.status).toBe("cancelled");
+    expect(db.get(succ)?.repeat).toBe("none");
+    expect(db.get(`${occ.taskId}~3`)).toBeUndefined();
+    db.close();
+  });
+
+  it("a no-adapter failure does not roll the series", async () => {
+    const s = sched();
+    const occ = await occurrence(s, "daily");
+    s.runNow(occ.taskId);
+    const res = await sched().tick({});
+    expect(res.results.find((r) => r.taskId === occ.taskId)?.status).toBe("failed");
+    const db = store();
+    expect(db.get(`${occ.taskId}~2`)).toBeUndefined();
+    db.close();
+  });
+
   it("budget failure of a successor at re-plan time fails it and rolls no further", async () => {
     const s = sched();
     const occ = await occurrence(s, "daily", 6, { carbonBudgetG: 1e9 });

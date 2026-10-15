@@ -104,6 +104,35 @@ export function taskHistory(record: TaskRecord<unknown>): TaskMessage[] {
 }
 
 /**
+ * Character budget of the history a reply sends (about 50k tokens), so a
+ * long reply chain cannot grow a request past the provider's context.
+ */
+export const HISTORY_MAX_CHARS = 200_000;
+
+/**
+ * Drop the oldest turns, a user/assistant pair at a time, until the history
+ * fits `maxChars`. The newest pair is always kept, and the result still
+ * starts with a user turn, as every provider requires.
+ */
+export function capHistory(
+  messages: TaskMessage[],
+  maxChars: number = HISTORY_MAX_CHARS,
+): TaskMessage[] {
+  let start = 0;
+  let total = messages.reduce((n, m) => n + m.content.length, 0);
+  while (total > maxChars && messages.length - start > 2) {
+    total -= messages[start]!.content.length;
+    start++;
+    // Keep the first kept turn a user turn.
+    while (start < messages.length - 2 && messages[start]!.role !== "user") {
+      total -= messages[start]!.content.length;
+      start++;
+    }
+  }
+  return start === 0 ? messages : messages.slice(start);
+}
+
+/**
  * Display label for a task's deadline kind (R21). `absolute` for a plain
  * deadline; `quota reset (claude)` for a quota deadline, extended with
  * `, reset_at <iso>, margin_h <n>` when `quota` has the label (the reset is

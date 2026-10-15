@@ -8,6 +8,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  capHistory,
   isValidSessionId,
   resumeCommand,
   deadlineKindLabel,
@@ -69,6 +70,29 @@ describe("deriveTitle", () => {
 
   it("removes terminal control characters", () => {
     expect(deriveTitle("\u001b[31mred\u001b[0m title\u0007")).toBe("[31mred[0m title");
+  });
+});
+
+describe("capHistory", () => {
+  const turns = (n: number, size: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      role: (i % 2 === 0 ? "user" : "assistant") as "user" | "assistant",
+      content: `${i}`.padEnd(size, "x"),
+    }));
+
+  it("keeps a history under the budget unchanged", () => {
+    const h = turns(4, 10);
+    expect(capHistory(h, 100)).toBe(h);
+  });
+
+  it("drops the oldest pairs first and starts with a user turn", () => {
+    const out = capHistory(turns(6, 100), 250);
+    expect(out.map((m) => m.content[0])).toEqual(["4", "5"]);
+    expect(out[0]!.role).toBe("user");
+  });
+
+  it("always keeps the newest pair", () => {
+    expect(capHistory(turns(4, 1000), 10)).toHaveLength(2);
   });
 });
 

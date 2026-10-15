@@ -220,6 +220,9 @@ const INSERT_COLUMNS = [
 const INSERT_SQL = `INSERT INTO tasks (${INSERT_COLUMNS.join(", ")})
   VALUES (${INSERT_COLUMNS.map((c) => `@${c}`).join(", ")})`;
 
+/** Timing columns `transitionIf(..., unchangedSince)` compares with an earlier read. */
+const TIMING_GUARD_COLUMNS = ["scheduled_for", "not_before", "deadline", "intensity_source"] as const;
+
 /** Columns `transitionIf` binds: the mutable ones plus the key. */
 const TRANSITION_COLUMNS = [
   "task_id", "status", "scheduled_for", "completed_at", "result_json", "error",
@@ -407,10 +410,17 @@ export class TaskStore {
    * writing nothing, when another process moved the row on meanwhile. Every
    * cross-process write path (cancel, run now, reschedule, the dispatcher's
    * terminal writes) goes through this instead of an unconditional upsert.
+   *
+   * `unchangedSince`, when given, also requires the row's timing columns
+   * (`scheduled_for`, `not_before`, `deadline`, `intensity_source`) to equal
+   * that earlier read: a write computed from a stale read (a forecast fetch
+   * that awaited while the UI ran a task now or pinned it) then misses
+   * instead of overwriting the newer timing.
    */
   transitionIf(
     record: TaskRecord<unknown>,
     expectedStatuses: readonly TaskStatus[],
+    unchangedSince?: TaskRecord<unknown>,
   ): boolean {
     if (expectedStatuses.length === 0) return false;
     const placeholders = expectedStatuses.map((_, i) => `@expected_${i}`).join(", ");
@@ -424,6 +434,12 @@ export class TaskStore {
     });
     if (record.repeat !== undefined && !REPEAT_RULES.has(record.repeat)) {
       throw new Error(`transitionIf: invalid repeat ${JSON.stringify(record.repeat)}`);
+    }
+    let guard = "";
+    if (unchangedSince) {
+      const prev = recordParams(unchangedSince);
+      for (const col of TIMING_GUARD_COLUMNS) params[`was_${col}`] = prev[col];
+      guard = TIMING_GUARD_COLUMNS.map((col) => ` AND ${col} IS @was_${col}`).join("");
     }
     const res = this.db
       .prepare(
@@ -450,7 +466,7 @@ export class TaskStore {
                THEN NULL
              ELSE COALESCE(@quota_provider, quota_provider)
            END
-         WHERE task_id = @task_id AND status IN (${placeholders})`,
+         WHERE task_id = @task_id AND status IN (${placeholders})${guard}`,
       )
       .run(params);
     return Number(res.changes) === 1;

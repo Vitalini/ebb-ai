@@ -46,6 +46,7 @@ export {
   LAST_TICK_META_KEY,
   pickBestWindow,
   Scheduler,
+  TaskActionError,
 } from "./scheduler.js";
 export type {
   ReplyOptions,
@@ -67,6 +68,8 @@ export {
   shellQuote,
   taskActions,
   stripControlChars,
+  capHistory,
+  HISTORY_MAX_CHARS,
   taskHistory,
   taskPrompt,
   taskResultText,

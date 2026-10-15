@@ -329,6 +329,8 @@ export async function sweepQuotaDeadlines(
 
 /** Forecast horizon the scheduler plans inside, in hours. */
 const REPLAN_HORIZON_H = 72;
+/** Forecast span a pinned window needs before it is planned (24 h). */
+const PLAN_COVER_MS = 24 * 3_600_000;
 
 /**
  * Give unplanned `scheduled` rows a carbon window once the forecast reaches
@@ -359,7 +361,12 @@ export async function replanSweep(
   }
   const horizonEnd = now.getTime() + REPLAN_HORIZON_H * 3_600_000;
   for (const task of rows) {
-    if (Date.parse(task.notBefore!) >= horizonEnd) continue;
+    // Plan only once the forecast covers the window's first day (or the
+    // whole window when it is shorter): a day target whose first hour just
+    // entered the horizon would otherwise be planned on that hour alone.
+    const start = Math.max(Date.parse(task.notBefore!), now.getTime());
+    const needEnd = Math.min(Date.parse(task.deadline!), start + PLAN_COVER_MS);
+    if (needEnd > horizonEnd) continue;
     try {
       if (!(await scheduler.rescheduleIfPending(task.taskId, new Date(task.deadline!)))) continue;
       const fresh = scheduler.getTask(task.taskId);

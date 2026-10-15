@@ -36,7 +36,7 @@ import {
   type RoutingDecision,
   type RoutingPreview,
 } from "./routing.js";
-import { deriveTitle, displayTitle, isRepeating, taskActions, taskHistory } from "./history.js";
+import { capHistory, deriveTitle, displayTitle, isRepeating, taskActions, taskHistory } from "./history.js";
 import { resolveQuotaDeadline, type QuotaResetConfig } from "./quota.js";
 import { redactBodyJson, redactPrompt } from "./redact.js";
 import { selectWindow } from "./select-window.js";
@@ -974,7 +974,13 @@ export class Scheduler {
         quotaProvider: deadlineKind === "quota_reset" ? quotaProvider : undefined,
       };
       if (this.store) {
-        if (this.store.insertIfAbsent(successor)) this.cacheRow(successor);
+        if (this.store.insertIfAbsent(successor)) {
+          this.cacheRow(successor);
+          // A stop written between the read above and the insert: end the
+          // successor too. `cancelTask(..., {series})` also cancels pending
+          // occurrences after its write, so one side always sees the other.
+          if (this.store.get(record.taskId)?.repeat === "none") this.endSeriesOccurrences(record);
+        }
       } else if (!this.tasks.has(successor.taskId)) {
         this.tasks.set(successor.taskId, successor);
       }
@@ -982,6 +988,32 @@ export class Scheduler {
       // eslint-disable-next-line no-console
       console.warn(
         `[ebb-ai/scheduler] series rollover after ${record.taskId} failed: ${describeErr(err)}`,
+      );
+    }
+  }
+
+  /**
+   * Cancel every pending occurrence of `record`'s series other than
+   * `record` itself, with `repeat = none` (stop series). Compare-and-set per
+   * row; a row another process claimed meanwhile is left to the dispatcher.
+   */
+  private endSeriesOccurrences(record: TaskRecord<unknown>): void {
+    if (!this.store || !record.seriesId) return;
+    for (const row of this.store.list({ seriesId: record.seriesId })) {
+      if (row.taskId === record.taskId) continue;
+      if (row.status !== "queued" && row.status !== "scheduled") continue;
+      const cached = this.tasks.get(row.taskId) ?? row;
+      this.clearPendingTimer(row.taskId);
+      this.writeIf(
+        cached,
+        {
+          ...row,
+          status: "cancelled",
+          completedAt: new Date().toISOString(),
+          bodyJson: redactBodyJson(row.bodyJson),
+          repeat: "none",
+        },
+        ["queued", "scheduled"],
       );
     }
   }
@@ -1017,7 +1049,7 @@ export class Scheduler {
     for (let attempt = 0; attempt < 2; attempt++) {
       const record = this.refreshTask(taskId);
       if (!record) {
-        throw new Error(`cancelTask: task ${JSON.stringify(taskId)} not found`);
+        throw new TaskActionError(`cancelTask: task ${JSON.stringify(taskId)} not found`);
       }
       if (TERMINAL.has(record.status)) return record;
       this.clearPendingTimer(taskId);
@@ -1045,6 +1077,7 @@ export class Scheduler {
       // A miss means another process moved the row (claimed or finished it)
       // between our read and this write: re-read and try once more.
       if (!this.writeIf(record, next, [record.status])) continue;
+      if (opts.series) this.endSeriesOccurrences(record);
       const resolver = this.resolvers.get(taskId);
       resolver?.reject(new Error(`task ${taskId} cancelled`));
       this.bodies.delete(taskId);
@@ -1064,9 +1097,9 @@ export class Scheduler {
    */
   runNow(taskId: string): TaskRecord<unknown> {
     const record = this.refreshTask(taskId);
-    if (!record) throw new Error(`runNow: task ${JSON.stringify(taskId)} not found`);
+    if (!record) throw new TaskActionError(`runNow: task ${JSON.stringify(taskId)} not found`);
     if (!taskActions(record).runNow) {
-      throw new Error(
+      throw new TaskActionError(
         refusal("runNow", record, "only queued or scheduled provider-call tasks can run now"),
       );
     }
@@ -1079,7 +1112,7 @@ export class Scheduler {
       notBefore: undefined,
     };
     if (!this.writeIf(record, next, PENDING_STATUSES)) {
-      throw new Error(
+      throw new TaskActionError(
         refusal("runNow", record, "only queued or scheduled provider-call tasks can run now"),
       );
     }
@@ -1100,8 +1133,8 @@ export class Scheduler {
     const why = "only queued or scheduled provider-call tasks can be rescheduled";
     const shape = rescheduleShape(target);
     const record = this.refreshTask(taskId);
-    if (!record) throw new Error(`reschedule: task ${JSON.stringify(taskId)} not found`);
-    if (!taskActions(record).reschedule) throw new Error(refusal("reschedule", record, why));
+    if (!record) throw new TaskActionError(`reschedule: task ${JSON.stringify(taskId)} not found`);
+    if (!taskActions(record).reschedule) throw new TaskActionError(refusal("reschedule", record, why));
     this.clearPendingTimer(taskId);
     const absolute = {
       deadlineKind: "absolute" as const,
@@ -1122,7 +1155,7 @@ export class Scheduler {
         estimatedCarbonGCo2: undefined,
       };
       if (!this.writeIf(record, next, PENDING_STATUSES)) {
-        throw new Error(refusal("reschedule", record, why));
+        throw new TaskActionError(refusal("reschedule", record, why));
       }
       return record;
     }
@@ -1135,7 +1168,7 @@ export class Scheduler {
       deadline = parseFutureInstant(shape.dayEnd, "dayEnd");
       const span = deadline.getTime() - dayStart.getTime();
       if (span < HOUR_MS || span > 25 * HOUR_MS) {
-        throw new Error(`reschedule: a day must span 1 to 25 hours, got ${(span / HOUR_MS).toFixed(1)} h`);
+        throw new TaskActionError(`reschedule: a day must span 1 to 25 hours, got ${(span / HOUR_MS).toFixed(1)} h`);
       }
       // Fallback hour when the forecast does not reach the day yet: the
       // task's current time of day, moved into the new day. Day bounds are
@@ -1151,7 +1184,12 @@ export class Scheduler {
       });
     }
     if (!(await this.scheduleProviderCall(taskId, deadline))) {
-      throw new Error(refusal("reschedule", record, why));
+      throw new TaskActionError(refusal("reschedule", record, why));
+    }
+    // Planning can fail the task (no hour under its carbon budget): report
+    // it as refused instead of a successful move.
+    if (record.status === "failed") {
+      throw new TaskActionError(`reschedule: task ${taskId} failed: ${record.error ?? "no window"}`);
     }
     return record;
   }
@@ -1169,14 +1207,14 @@ export class Scheduler {
     opts: ReplyOptions = {},
   ): Promise<TaskRecord<unknown>> {
     const parent = this.refreshTask(parentId);
-    if (!parent) throw new Error(`reply: task ${JSON.stringify(parentId)} not found`);
+    if (!parent) throw new TaskActionError(`reply: task ${JSON.stringify(parentId)} not found`);
     if (!taskActions(parent).reply) {
-      throw new Error(
+      throw new TaskActionError(
         refusal("reply", parent, "only completed provider-call tasks accept a reply"),
       );
     }
     if (typeof text !== "string" || text.trim().length === 0) {
-      throw new Error("reply: text must be a non-empty string");
+      throw new TaskActionError("reply: text must be a non-empty string");
     }
     const spec = JSON.parse(parent.bodyJson!) as ProviderCallSpec;
     const child: ProviderCallSpec = {
@@ -1184,7 +1222,8 @@ export class Scheduler {
       provider: spec.provider,
       model: spec.model,
       prompt: text,
-      messages: taskHistory(parent),
+      // Oldest turns dropped past HISTORY_MAX_CHARS (see capHistory).
+      messages: capHistory(taskHistory(parent)),
       ...(spec.systemPrompt !== undefined ? { systemPrompt: spec.systemPrompt } : {}),
       ...(spec.maxTokens !== undefined ? { maxTokens: spec.maxTokens } : {}),
       ...(spec.temperature !== undefined ? { temperature: spec.temperature } : {}),
@@ -1790,6 +1829,9 @@ export class Scheduler {
   private async scheduleProviderCall(taskId: string, deadline: Date): Promise<boolean> {
     const record = this.tasks.get(taskId);
     if (!record) return false;
+    // The stored row before the forecast await: the final write misses when
+    // another process changed the row's timing meanwhile (run now, a pin).
+    const before = this.store?.get(taskId);
     // Parse the full spec out of the persisted body so the per-model energy
     // coefficients (v0.10) factor into the budget filter + estimated-carbon
     // receipt, and so cross-provider routing (ROADMAP item 1) can see the
@@ -1819,11 +1861,19 @@ export class Scheduler {
     let entries = forecast.entries;
     if (pinned) {
       entries = entries.filter((e) => Date.parse(e.datetime) + HOUR_MS > notBeforeMs);
-      if (entries.length === 0) {
+      // Unplanned until the forecast covers the window's first day (or the
+      // whole window when shorter); `replanSweep` plans it then. Planning on
+      // the first hours alone would fix the run time at the day's start.
+      const last = entries[entries.length - 1];
+      const coveredTo = last ? Date.parse(last.datetime) + HOUR_MS : Number.NEGATIVE_INFINITY;
+      // One hour of slack: forecast hours start on the hour, so a forecast
+      // fetched up to the deadline can end just short of it.
+      const needEnd = Math.min(deadline.getTime(), notBeforeMs + DAY_MS) - HOUR_MS;
+      if (entries.length === 0 || coveredTo < needEnd) {
         record.status = "scheduled";
         record.scheduledFor = clampIso(record.scheduledFor, notBeforeMs, deadline.getTime());
         record.estimatedCarbonGCo2 = undefined;
-        return this.persist(record);
+        return this.persist(record, before);
       }
     }
     const earliest = pinned ? notBeforeMs : Date.now();
@@ -1859,7 +1909,7 @@ export class Scheduler {
         record.estimatedCarbonGCo2 =
           Math.round(intensityToGrams(nowIntensity, routedModelNow) * 10) / 10;
       }
-      return this.persist(record);
+      return this.persist(record, before);
     }
     record.status = "scheduled";
     // A candidate whose hour started in the past is the *current* hour —
@@ -1878,18 +1928,19 @@ export class Scheduler {
     );
     record.estimatedCarbonGCo2 =
       Math.round(intensityToGrams(candidate.carbonIntensityGCo2PerKwh, routedModel) * 10) / 10;
-    return this.persist(record);
+    return this.persist(record, before);
   }
 
   /**
    * Write a scheduling result with a compare-and-set on the pending
-   * statuses: when another process moved the row on meanwhile, nothing is
+   * statuses and, given `before`, on the timing columns read before the
+   * forecast fetch: when another process moved the row on meanwhile, nothing is
    * written, the cached record is reloaded from the ledger, and false is
    * returned.
    */
-  private persist(record: TaskRecord<unknown>): boolean {
+  private persist(record: TaskRecord<unknown>, before?: TaskRecord<unknown>): boolean {
     if (!this.store) return true;
-    if (this.store.transitionIf(record, PENDING_STATUSES)) return true;
+    if (this.store.transitionIf(record, PENDING_STATUSES, before)) return true;
     const current = this.store.get(record.taskId);
     if (current) Object.assign(record, current);
     return false;
@@ -1987,7 +2038,9 @@ export class Scheduler {
     }
     if (!adapter) {
       const msg = `tick: no adapter configured for provider ${spec.provider}`;
-      this.rollSeries(record);
+      // No rollover: a missing adapter is a skip (OpenClaw restores the row
+      // to `scheduled`), and a successor would run beside the occurrence.
+      // A retry that completes rolls the series then.
       this.failTask(record.taskId, new Error(msg));
       return { taskId: record.taskId, status: "failed", error: msg };
     }
@@ -2606,6 +2659,15 @@ function occurrenceNumber(record: TaskRecord<unknown>): number {
 }
 
 /** One-line refusal in the shared style: `<action>: task <id> is <status>; <allowed>`. */
+/**
+ * A task action refused by the task's state or by its input (ui v2): the
+ * message is a one-line rule safe to show a user. Any other error from an
+ * action is internal.
+ */
+export class TaskActionError extends Error {
+  override name = "TaskActionError";
+}
+
 function refusal(action: string, record: TaskRecord<unknown>, allowed: string): string {
   const what = record.bodyJson ? record.status : `${record.status} (closure-based)`;
   return `${action}: task ${record.taskId} is ${what}; ${allowed}`;
@@ -2622,12 +2684,12 @@ function rescheduleShape(target: RescheduleTarget): RescheduleShape {
   const has = (k: string) => t[k] !== undefined && t[k] !== null;
   const shapes = [has("deadline"), has("at"), has("dayStart") || has("dayEnd")].filter(Boolean);
   if (shapes.length !== 1) {
-    throw new Error("reschedule: pass exactly one of {deadline}, {at} or {dayStart, dayEnd}");
+    throw new TaskActionError("reschedule: pass exactly one of {deadline}, {at} or {dayStart, dayEnd}");
   }
   if (has("deadline")) return { kind: "deadline", deadline: t.deadline as string | Date };
   if (has("at")) return { kind: "at", at: t.at as string | Date };
   if (!has("dayStart") || !has("dayEnd")) {
-    throw new Error("reschedule: a day target needs both dayStart and dayEnd");
+    throw new TaskActionError("reschedule: a day target needs both dayStart and dayEnd");
   }
   return {
     kind: "day",
@@ -2639,7 +2701,7 @@ function rescheduleShape(target: RescheduleTarget): RescheduleShape {
 function parseInstant(v: string | Date, name: string): Date {
   const d = v instanceof Date ? v : new Date(v);
   if (Number.isNaN(d.getTime())) {
-    throw new Error(`reschedule: ${name} is not an ISO-8601 instant: ${JSON.stringify(v)}`);
+    throw new TaskActionError(`reschedule: ${name} is not an ISO-8601 instant: ${JSON.stringify(v)}`);
   }
   return d;
 }
@@ -2647,7 +2709,7 @@ function parseInstant(v: string | Date, name: string): Date {
 function parseFutureInstant(v: string | Date, name: string): Date {
   const d = parseInstant(v, name);
   if (d.getTime() < Date.now() - 5_000) {
-    throw new Error(`reschedule: ${name} is in the past: ${d.toISOString()}`);
+    throw new TaskActionError(`reschedule: ${name} is in the past: ${d.toISOString()}`);
   }
   return d;
 }
