@@ -44,10 +44,10 @@ export const metadata: Metadata = {
     type: "website",
     images: [
       {
-        url: "/og.png",
+        url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "ebb-ai — Carbon-aware scheduling for agentic AI workflows",
+        alt: "Run non-urgent LLM tasks at the cleanest grid hour before your deadline.",
       },
     ],
   },
@@ -56,7 +56,7 @@ export const metadata: Metadata = {
     title: "ebb-ai — Carbon-aware scheduling for agentic AI workflows",
     description:
       "MCP server that defers non-urgent AI tasks to the cleanest grid window. 1,115 tests, 9 MCP tools, persistent SQLite queue. Apache-2.0.",
-    images: ["/og.png"],
+    images: ["/og-image.png"],
   },
   robots: {
     index: true,

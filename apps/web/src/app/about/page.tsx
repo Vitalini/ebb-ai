@@ -13,6 +13,14 @@ export const metadata: Metadata = {
       "Why a carbon-aware scheduler for LLM workflows exists, who it's for, and how it actually moves the needle.",
     url: "https://www.ebb-ai.com/about",
     type: "article",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Run non-urgent LLM tasks at the cleanest grid hour before your deadline.",
+      },
+    ],
   },
 };
 

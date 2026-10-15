@@ -82,7 +82,7 @@ export const config = {
   //                   /copy-buttons.js via <script src>; 'strict-dynamic' would
   //                   ignore 'self' and block it. It keeps the next.config
   //                   baseline headers, just not the nonce CSP.
-  //   *.<ext>       — any file with an extension (og.png, llms.txt, site.css,
+  //   *.<ext>       — any file with an extension (og-image.png, llms.txt, site.css,
   //                   copy-buttons.js, manifest, favicon, …).
   matcher: [
     {
