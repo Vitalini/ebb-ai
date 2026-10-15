@@ -1,0 +1,28 @@
+{
+  "inputsSha256": "572427350933f46115d2dd919cfebdce93fbf001fb1d935a56d6171041be9294",
+  "renderer": {
+    "playwrightCore": "1.63.0",
+    "chrome": "155.0.8059.41",
+    "platform": "darwin"
+  },
+  "outputs": {
+    "assets/social-preview.png": {
+      "width": 1280,
+      "height": 640,
+      "bytes": 65602,
+      "sha256": "edb5959f2e695e0e3267d9b7e79d2d0b452b9e4c1995207e384c9e3bed7a403e"
+    },
+    "assets/readme-hero.png": {
+      "width": 1600,
+      "height": 500,
+      "bytes": 39906,
+      "sha256": "2f2b5f30857f7cbbbefd9a854d868ca7777d39531ed7d11374a80b960d996a9f"
+    },
+    "apps/web/public/og-image.png": {
+      "width": 1200,
+      "height": 630,
+      "bytes": 61704,
+      "sha256": "6f37af1b253fad84673e47c2de2eaf8f2d79f31682bf79666527aa6577d6ea18"
+    }
+  }
+}

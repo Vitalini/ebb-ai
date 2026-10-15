@@ -21,7 +21,7 @@ export function Nav() {
           >
             ~
           </span>
-          <span className="text-fg">ebb-ai</span>
+          <span className="text-fg">Ebb AI</span>
         </Link>
 
         <nav className="flex items-center gap-0.5 whitespace-nowrap text-xs sm:gap-1 sm:text-sm">
