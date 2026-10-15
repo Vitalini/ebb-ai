@@ -7,6 +7,29 @@ import { Scheduler, TaskStore } from "../src/index.js";
 
 const requireFn = createRequire(import.meta.url);
 
+interface RawDb {
+  exec(sql: string): void;
+  prepare(sql: string): never;
+  close(): void;
+}
+
+/**
+ * Open a raw SQLite handle with the same backend order as TaskStore:
+ * node:sqlite (Node >= 22.5), else the better-sqlite3 fallback. CI's
+ * Node 20 leg has no node:sqlite.
+ */
+function openRawDb(path: string): RawDb {
+  try {
+    const { DatabaseSync } = requireFn("node:sqlite") as {
+      DatabaseSync: new (p: string) => RawDb;
+    };
+    return new DatabaseSync(path);
+  } catch {
+    const Database = requireFn("better-sqlite3") as new (p: string) => RawDb;
+    return new Database(path);
+  }
+}
+
 describe("TaskStore (SQLite-backed)", () => {
   let dir: string;
   let dbPath: string;
@@ -169,13 +192,7 @@ describe("TaskStore task-visibility fields (v0.17)", () => {
     );`;
 
   function seedV016(path: string): void {
-    const { DatabaseSync } = requireFn("node:sqlite") as {
-      DatabaseSync: new (p: string) => {
-        exec(sql: string): void;
-        close(): void;
-      };
-    };
-    const raw = new DatabaseSync(path);
+    const raw = openRawDb(path);
     raw.exec(V016_SCHEMA);
     raw.exec(`
       INSERT INTO tasks (task_id, status, enqueued_at, completed_at, region)
@@ -263,14 +280,7 @@ describe("TaskStore task-visibility fields (v0.17)", () => {
 
   it("a store that loses the read_at migration race skips the backfill", () => {
     seedV016(dbPath);
-    const { DatabaseSync } = requireFn("node:sqlite") as {
-      DatabaseSync: new (p: string) => {
-        exec(sql: string): void;
-        prepare(sql: string): never;
-        close(): void;
-      };
-    };
-    const inner = new DatabaseSync(dbPath);
+    const inner = openRawDb(dbPath);
     let raced = false;
     // Between this store's pragma check and its ALTER, another process
     // migrates the ledger (with the backfill) and the user marks a task
