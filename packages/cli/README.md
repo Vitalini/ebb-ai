@@ -27,7 +27,9 @@ Proof: one real GB run, 2026-09-30 (`ebb tick` + `ebb verify`). Forecast peak 18
 ```text
 ebb tick           — drain due tasks via provider adapters
 ebb install        — wire up launchd (macOS) or print systemd / schtasks templates
-ebb queue list     — print queued / scheduled / running / completed tasks
+ebb queue list     — print tasks (--unread, --kind absolute|quota_reset, --json)
+ebb queue show     — print one task's prompt, result and receipt; marks it read
+ebb queue unread   — mark a task unread again
 ebb receipts list  — print carbon receipts for completed tasks
 ebb stats          — local-only personal-impact stats from the queue ledger
 ebb verify         — verify the Ed25519 signature on a carbon receipt
