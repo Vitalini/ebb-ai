@@ -251,7 +251,7 @@ describe("TaskStore task-visibility fields (v0.17)", () => {
     reopened.close();
   });
 
-  it("two stores opening a v0.16 ledger at once both succeed", () => {
+  it("two stores opening a v0.16 ledger one after the other both succeed", () => {
     seedV016(dbPath);
     const a = new TaskStore({ dbPath });
     const b = new TaskStore({ dbPath });
@@ -259,6 +259,40 @@ describe("TaskStore task-visibility fields (v0.17)", () => {
     expect(b.get("done")?.readAt).toBeDefined();
     a.close();
     b.close();
+  });
+
+  it("a store that loses the read_at migration race skips the backfill", () => {
+    seedV016(dbPath);
+    const { DatabaseSync } = requireFn("node:sqlite") as {
+      DatabaseSync: new (p: string) => {
+        exec(sql: string): void;
+        prepare(sql: string): never;
+        close(): void;
+      };
+    };
+    const inner = new DatabaseSync(dbPath);
+    let raced = false;
+    // Between this store's pragma check and its ALTER, another process
+    // migrates the ledger (with the backfill) and the user marks a task
+    // unread. This store's ALTER then fails with "duplicate column name".
+    const db = {
+      exec(sql: string): void {
+        if (!raced && /ADD COLUMN read_at/.test(sql)) {
+          raced = true;
+          const other = new TaskStore({ dbPath });
+          expect(other.markUnread("done")).toBe(true);
+          other.close();
+        }
+        inner.exec(sql);
+      },
+      prepare: (sql: string) => inner.prepare(sql),
+      close: () => inner.close(),
+    };
+    const store = new TaskStore({ dbPath, db });
+    expect(raced).toBe(true);
+    expect(store.get("done")?.readAt).toBeUndefined();
+    expect(store.get("bad")?.readAt).toBeDefined();
+    store.close();
   });
 
   it("upsert never clears read_at and never rewrites identity columns", () => {
