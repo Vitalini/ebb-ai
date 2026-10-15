@@ -33,6 +33,17 @@
  *                        task (v0.17); written only by markRead/markUnread
  *   - deadline_kind      "absolute" | "quota_reset" (nullable = absolute, v0.17)
  *   - quota_provider     quota label for a quota_reset deadline (v0.17)
+ *   - series_id, origin_session_id
+ *                        series membership and the Claude Code session,
+ *                        written once at insert (ui v2)
+ *   - repeat             "none" | "daily" | "weekly" | "quota_reset"
+ *                        (nullable = none, ui v2); written at insert and
+ *                        afterwards only by transitionIf ("stop series")
+ *   - not_before         ISO-8601 earliest dispatch time (nullable, ui v2)
+ *
+ * Writes from separate processes (the UI server, the CLI, a ticker) use
+ * compare-and-set: `transitionIf` updates a row only while its status is in
+ * an expected list, and `insertIfAbsent` creates a row at most once.
  *
  * `result_json` is serialized via JSON.stringify; values that are not
  * JSON-serializable are stored as `{ "_repr": "<toString>" }` so audit
@@ -45,6 +56,7 @@ import { dirname } from "node:path";
 import type {
   CarbonReceipt,
   DeadlineKind,
+  RepeatRule,
   TaskOriginHost,
   TaskRecord,
   TaskStatus,
@@ -91,7 +103,11 @@ CREATE TABLE IF NOT EXISTS tasks (
   read_at           TEXT,
   parent_task_id    TEXT,
   deadline_kind     TEXT,
-  quota_provider    TEXT
+  quota_provider    TEXT,
+  series_id         TEXT,
+  repeat            TEXT,
+  origin_session_id TEXT,
+  not_before        TEXT
 );
 CREATE INDEX IF NOT EXISTS tasks_status_idx ON tasks(status);
 CREATE INDEX IF NOT EXISTS tasks_enqueued_idx ON tasks(enqueued_at);
@@ -182,6 +198,64 @@ function ensureColumns(db: SqliteDatabase): void {
   db.exec(
     `CREATE INDEX IF NOT EXISTS tasks_parent_idx ON tasks(parent_task_id)`,
   );
+  // ui v2: repeating series, Claude Code session, pinned earliest start.
+  addColumn("series_id", "TEXT");
+  addColumn("repeat", "TEXT");
+  addColumn("origin_session_id", "TEXT");
+  addColumn("not_before", "TEXT");
+  db.exec(`CREATE INDEX IF NOT EXISTS tasks_series_idx ON tasks(series_id)`);
+}
+
+const REPEAT_RULES: ReadonlySet<string> = new Set(["none", "daily", "weekly", "quota_reset"]);
+
+/** Every column of the tasks table, in INSERT order. */
+const INSERT_COLUMNS = [
+  "task_id", "status", "enqueued_at", "scheduled_for", "completed_at",
+  "region", "carbon_budget_g", "result_json", "error", "receipt_json", "intensity_source",
+  "body_json", "estimated_carbon_g", "deadline", "batch_id", "routing_decision",
+  "title", "origin_host", "origin_cwd", "parent_task_id", "deadline_kind", "quota_provider",
+  "series_id", "repeat", "origin_session_id", "not_before",
+] as const;
+
+const INSERT_SQL = `INSERT INTO tasks (${INSERT_COLUMNS.join(", ")})
+  VALUES (${INSERT_COLUMNS.map((c) => `@${c}`).join(", ")})`;
+
+/** Columns `transitionIf` binds: the mutable ones plus the key. */
+const TRANSITION_COLUMNS = [
+  "task_id", "status", "scheduled_for", "completed_at", "result_json", "error",
+  "receipt_json", "intensity_source", "body_json", "estimated_carbon_g", "deadline",
+  "batch_id", "routing_decision", "not_before", "repeat", "deadline_kind", "quota_provider",
+] as const;
+
+function recordParams(record: TaskRecord<unknown>): Record<string, unknown> {
+  return {
+    task_id: record.taskId,
+    status: record.status,
+    enqueued_at: record.enqueuedAt,
+    scheduled_for: record.scheduledFor ?? null,
+    completed_at: record.completedAt ?? null,
+    region: record.region,
+    carbon_budget_g: record.carbonBudgetG ?? null,
+    result_json: safeStringify(record.result),
+    error: record.error ?? null,
+    receipt_json: safeStringify(record.receipt),
+    intensity_source: record.intensitySource ?? null,
+    body_json: record.bodyJson ?? null,
+    estimated_carbon_g: record.estimatedCarbonGCo2 ?? null,
+    deadline: record.deadline ?? null,
+    batch_id: record.batchId ?? null,
+    routing_decision: safeStringify(record.routingDecision),
+    title: record.title ?? null,
+    origin_host: record.originHost ?? null,
+    origin_cwd: record.originCwd ?? null,
+    parent_task_id: record.parentTaskId ?? null,
+    deadline_kind: record.deadlineKind ?? null,
+    quota_provider: record.quotaProvider ?? null,
+    series_id: record.seriesId ?? null,
+    repeat: record.repeat ?? null,
+    origin_session_id: record.originSessionId ?? null,
+    not_before: record.notBefore ?? null,
+  };
 }
 
 function safeStringify(value: unknown): string | null {
@@ -209,6 +283,8 @@ export interface TaskListFilter {
   unread?: boolean;
   /** `absolute` also matches legacy rows with no stored kind. */
   deadlineKind?: DeadlineKind;
+  /** Only occurrences of this series (ui v2). */
+  seriesId?: string;
 }
 
 export interface TaskStoreOptions {
@@ -279,17 +355,7 @@ export class TaskStore {
 
   upsert(record: TaskRecord<unknown>): void {
     const stmt = this.db.prepare(`
-      INSERT INTO tasks (
-        task_id, status, enqueued_at, scheduled_for, completed_at,
-        region, carbon_budget_g, result_json, error, receipt_json, intensity_source,
-        body_json, estimated_carbon_g, deadline, batch_id, routing_decision,
-        title, origin_host, origin_cwd, parent_task_id, deadline_kind, quota_provider
-      ) VALUES (
-        @task_id, @status, @enqueued_at, @scheduled_for, @completed_at,
-        @region, @carbon_budget_g, @result_json, @error, @receipt_json, @intensity_source,
-        @body_json, @estimated_carbon_g, @deadline, @batch_id, @routing_decision,
-        @title, @origin_host, @origin_cwd, @parent_task_id, @deadline_kind, @quota_provider
-      )
+      ${INSERT_SQL}
       ON CONFLICT(task_id) DO UPDATE SET
         status             = excluded.status,
         scheduled_for      = excluded.scheduled_for,
@@ -305,41 +371,86 @@ export class TaskStore {
         deadline           = excluded.deadline,
         batch_id           = excluded.batch_id,
         routing_decision   = excluded.routing_decision,
+        not_before         = excluded.not_before,
         deadline_kind      = COALESCE(excluded.deadline_kind, tasks.deadline_kind),
         quota_provider     = CASE
           WHEN excluded.deadline_kind = 'absolute' THEN NULL
           ELSE COALESCE(excluded.quota_provider, tasks.quota_provider)
         END
     `);
-    // Identity columns (title, origin_*, parent_task_id) are written on
-    // insert only and are deliberately absent from DO UPDATE. read_at is
-    // never written here: the tick and the UI are separate processes, and
-    // an in-memory record without readAt must not clear a mark another
-    // process set. Use markRead / markUnread.
-    stmt.run({
-      task_id: record.taskId,
-      status: record.status,
-      enqueued_at: record.enqueuedAt,
-      scheduled_for: record.scheduledFor ?? null,
-      completed_at: record.completedAt ?? null,
-      region: record.region,
-      carbon_budget_g: record.carbonBudgetG ?? null,
-      result_json: safeStringify(record.result),
-      error: record.error ?? null,
-      receipt_json: safeStringify(record.receipt),
-      intensity_source: record.intensitySource ?? null,
-      body_json: record.bodyJson ?? null,
-      estimated_carbon_g: record.estimatedCarbonGCo2 ?? null,
-      deadline: record.deadline ?? null,
-      batch_id: record.batchId ?? null,
-      routing_decision: safeStringify(record.routingDecision),
-      title: record.title ?? null,
-      origin_host: record.originHost ?? null,
-      origin_cwd: record.originCwd ?? null,
-      parent_task_id: record.parentTaskId ?? null,
-      deadline_kind: record.deadlineKind ?? null,
-      quota_provider: record.quotaProvider ?? null,
+    // Identity columns (title, origin_*, parent_task_id, series_id,
+    // origin_session_id) and repeat are written on insert only and are
+    // deliberately absent from DO UPDATE: a stale in-memory copy must not
+    // undo a "stop series" another process wrote (transitionIf owns repeat).
+    // read_at is never written here: the tick and the UI are separate
+    // processes, and an in-memory record without readAt must not clear a
+    // mark another process set. Use markRead / markUnread.
+    stmt.run(recordParams(record));
+  }
+
+  /**
+   * Insert a row only if no row with this id exists (ui v2). Returns true iff
+   * this call inserted it. Series rollover uses it with a deterministic
+   * successor id, so two dispatchers finishing the same occurrence create
+   * exactly one successor.
+   */
+  insertIfAbsent(record: TaskRecord<unknown>): boolean {
+    const res = this.db
+      .prepare(`${INSERT_SQL} ON CONFLICT(task_id) DO NOTHING`)
+      .run(recordParams(record));
+    return Number(res.changes) === 1;
+  }
+
+  /**
+   * Compare-and-set write (ui v2): store the mutable columns of `record`, but
+   * only while the row's status is one of `expectedStatuses`. Returns false,
+   * writing nothing, when another process moved the row on meanwhile. Every
+   * cross-process write path (cancel, run now, reschedule, the dispatcher's
+   * terminal writes) goes through this instead of an unconditional upsert.
+   */
+  transitionIf(
+    record: TaskRecord<unknown>,
+    expectedStatuses: readonly TaskStatus[],
+  ): boolean {
+    if (expectedStatuses.length === 0) return false;
+    const placeholders = expectedStatuses.map((_, i) => `@expected_${i}`).join(", ");
+    // Bind only the columns this UPDATE names: node:sqlite rejects unknown
+    // named parameters. Identity columns stay out (insert-only).
+    const all = recordParams(record);
+    const params: Record<string, unknown> = {};
+    for (const key of TRANSITION_COLUMNS) params[key] = all[key];
+    expectedStatuses.forEach((status, i) => {
+      params[`expected_${i}`] = status;
     });
+    if (record.repeat !== undefined && !REPEAT_RULES.has(record.repeat)) {
+      throw new Error(`transitionIf: invalid repeat ${JSON.stringify(record.repeat)}`);
+    }
+    const res = this.db
+      .prepare(
+        `UPDATE tasks SET
+           status             = @status,
+           scheduled_for      = @scheduled_for,
+           completed_at       = @completed_at,
+           result_json        = @result_json,
+           error              = @error,
+           receipt_json       = @receipt_json,
+           intensity_source   = @intensity_source,
+           body_json          = @body_json,
+           estimated_carbon_g = @estimated_carbon_g,
+           deadline           = @deadline,
+           batch_id           = @batch_id,
+           routing_decision   = @routing_decision,
+           not_before         = @not_before,
+           repeat             = @repeat,
+           deadline_kind      = COALESCE(@deadline_kind, deadline_kind),
+           quota_provider     = CASE
+             WHEN @deadline_kind = 'absolute' THEN NULL
+             ELSE COALESCE(@quota_provider, quota_provider)
+           END
+         WHERE task_id = @task_id AND status IN (${placeholders})`,
+      )
+      .run(params);
+    return Number(res.changes) === 1;
   }
 
   get(taskId: string): TaskRecord<unknown> | undefined {
@@ -364,6 +475,10 @@ export class TaskStore {
     } else if (filter?.deadlineKind) {
       where.push(`deadline_kind = ?`);
       params.push(filter.deadlineKind);
+    }
+    if (filter?.seriesId) {
+      where.push(`series_id = ?`);
+      params.push(filter.seriesId);
     }
     const clause = where.length > 0 ? ` WHERE ${where.join(" AND ")}` : "";
     return this.db
@@ -445,7 +560,8 @@ export class TaskStore {
            body_json          = @body_json,
            estimated_carbon_g = @estimated_carbon_g,
            deadline           = @deadline,
-           routing_decision   = @routing_decision
+           routing_decision   = @routing_decision,
+           not_before         = @not_before
          WHERE task_id = @task_id AND status IN ('queued', 'scheduled')`,
       )
       .run({
@@ -458,6 +574,7 @@ export class TaskStore {
         estimated_carbon_g: record.estimatedCarbonGCo2 ?? null,
         deadline: record.deadline ?? null,
         routing_decision: safeStringify(record.routingDecision),
+        not_before: record.notBefore ?? null,
       });
     return Number(res.changes) === 1;
   }
@@ -593,6 +710,12 @@ function rowToRecord(row: Record<string, unknown>): TaskRecord<unknown> {
         ? "quota_reset"
         : "absolute",
     quotaProvider: (row.quota_provider as string | null | undefined) ?? undefined,
+    seriesId: (row.series_id as string | null | undefined) ?? undefined,
+    repeat: REPEAT_RULES.has(row.repeat as string)
+      ? (row.repeat as RepeatRule)
+      : undefined,
+    originSessionId: (row.origin_session_id as string | null | undefined) ?? undefined,
+    notBefore: (row.not_before as string | null | undefined) ?? undefined,
   };
 }
 

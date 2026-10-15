@@ -54,6 +54,7 @@ import type {
   GridForecastEntry,
   ProviderCallSpec,
   ProviderName,
+  RepeatRule,
   TaskRecord,
   TickResult,
   TickResultEntry,
@@ -430,6 +431,11 @@ export class Scheduler {
       }
     }
     validateDeadlineKind(opts);
+    if (validateRepeat(opts.repeat) !== "none") {
+      throw new Error(
+        `repeat ${JSON.stringify(opts.repeat)} needs a provider-call task; closure tasks cannot repeat`,
+      );
+    }
     const taskId = opts.taskId ?? `t-${randomUUID()}`;
     const region = opts.region ?? this.defaultRegion;
     const record: TaskRecord<T> = {
@@ -439,7 +445,7 @@ export class Scheduler {
       region,
       carbonBudgetG: opts.carbonBudgetG,
       deadline: deadline.toISOString(),
-      ...identityFields(opts, opts.title !== undefined ? deriveTitle(opts.title) : undefined),
+      ...identityFields(taskId, opts, opts.title !== undefined ? deriveTitle(opts.title) : undefined),
     };
     this.tasks.set(taskId, record);
     this.bodies.set(taskId, task as DeferrableTask<unknown>);
@@ -497,6 +503,9 @@ export class Scheduler {
       }
     }
     validateDeadlineKind(opts);
+    if (validateRepeat(opts.repeat) === "quota_reset" && opts.deadlineKind !== "quota_reset") {
+      throw new Error(`repeat "quota_reset" needs deadlineKind "quota_reset" and a quotaProvider label`);
+    }
     const taskId = opts.taskId ?? `t-${randomUUID()}`;
     const region = opts.region ?? this.defaultRegion;
     // The title is never rewritten at terminal transitions, so it is stored
@@ -512,7 +521,7 @@ export class Scheduler {
       carbonBudgetG: opts.carbonBudgetG,
       bodyJson: JSON.stringify(spec),
       deadline: deadline.toISOString(),
-      ...identityFields(opts, title),
+      ...identityFields(taskId, opts, title),
     };
     this.tasks.set(taskId, record);
     this.store?.upsert(record);
@@ -2078,14 +2087,46 @@ function validateDeadlineKind(opts: DeferOptions): void {
   }
 }
 
+const REPEAT_RULES: ReadonlySet<RepeatRule> = new Set([
+  "none",
+  "daily",
+  "weekly",
+  "quota_reset",
+]);
+
+/**
+ * Validate a repeat option (ui v2) and return the effective rule. Omitted
+ * means `none` for every task, `quota_reset` deadlines included: repeating
+ * is opt-in.
+ */
+function validateRepeat(repeat: unknown): RepeatRule {
+  if (repeat === undefined) return "none";
+  if (typeof repeat !== "string" || !REPEAT_RULES.has(repeat as RepeatRule)) {
+    throw new Error(
+      `Invalid repeat ${JSON.stringify(repeat)}: expected "none", "daily", "weekly" or "quota_reset"`,
+    );
+  }
+  return repeat as RepeatRule;
+}
+
 /** The insert-only identity fields of a new task record. */
 function identityFields(
+  taskId: string,
   opts: DeferOptions,
   title: string | undefined,
 ): Pick<
   TaskRecord<unknown>,
-  "title" | "originHost" | "originCwd" | "parentTaskId" | "deadlineKind" | "quotaProvider"
+  | "title"
+  | "originHost"
+  | "originCwd"
+  | "parentTaskId"
+  | "deadlineKind"
+  | "quotaProvider"
+  | "seriesId"
+  | "repeat"
+  | "originSessionId"
 > {
+  const repeat = validateRepeat(opts.repeat);
   return {
     title,
     originHost: opts.originHost,
@@ -2093,6 +2134,10 @@ function identityFields(
     parentTaskId: opts.parentTaskId,
     deadlineKind: opts.deadlineKind ?? "absolute",
     quotaProvider: opts.deadlineKind === "quota_reset" ? opts.quotaProvider : undefined,
+    // A repeating task starts its own series; a one-off belongs to none.
+    seriesId: repeat !== "none" ? taskId : undefined,
+    repeat: repeat !== "none" ? repeat : undefined,
+    originSessionId: opts.originSessionId,
   };
 }
 

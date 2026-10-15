@@ -190,3 +190,75 @@ describe("Scheduler.defer (end-to-end with immediate deadline)", () => {
     s.shutdown();
   });
 });
+
+describe("Scheduler repeat and session fields (ui v2)", () => {
+  const spec = {
+    type: "provider_call" as const,
+    provider: "anthropic" as const,
+    model: "claude-sonnet-4-6",
+    prompt: "check my weekly limits",
+  };
+  const deadline = () => new Date(Date.now() + 6 * 3_600_000);
+
+  it("a quota_reset task does not repeat by default", async () => {
+    const s = new Scheduler({ feed: mockGridFeed(), signing: false });
+    const rec = await s.enqueueProviderCall(spec, {
+      deadline: deadline(),
+      deadlineKind: "quota_reset",
+      quotaProvider: "claude",
+    });
+    expect(rec.repeat ?? "none").toBe("none");
+    expect(rec.seriesId).toBeUndefined();
+    s.shutdown();
+  });
+
+  it("repeat weekly is opt-in and the series id defaults to the task id", async () => {
+    const s = new Scheduler({ feed: mockGridFeed(), signing: false });
+    const rec = await s.enqueueProviderCall(spec, {
+      deadline: deadline(),
+      deadlineKind: "quota_reset",
+      quotaProvider: "claude",
+      repeat: "weekly",
+      originSessionId: "3f2a0c1e-session",
+    });
+    expect(rec.repeat).toBe("weekly");
+    expect(rec.seriesId).toBe(rec.taskId);
+    expect(rec.originSessionId).toBe("3f2a0c1e-session");
+    s.shutdown();
+  });
+
+  it("repeat none stores no series", async () => {
+    const s = new Scheduler({ feed: mockGridFeed(), signing: false });
+    const rec = await s.enqueueProviderCall(spec, { deadline: deadline(), repeat: "none" });
+    expect(rec.repeat ?? "none").toBe("none");
+    expect(rec.seriesId).toBeUndefined();
+    s.shutdown();
+  });
+
+  it("repeat on a closure task throws", () => {
+    const s = new Scheduler({ feed: mockGridFeed(), signing: false, eager: false });
+    expect(() => s.enqueue(async () => 1, { deadline: deadline(), repeat: "daily" })).toThrow(
+      /repeat/,
+    );
+    s.shutdown();
+  });
+
+  it("repeat quota_reset needs a quota_reset deadline", async () => {
+    const s = new Scheduler({ feed: mockGridFeed(), signing: false });
+    await expect(
+      s.enqueueProviderCall(spec, { deadline: deadline(), repeat: "quota_reset" }),
+    ).rejects.toThrow(/quota_reset/);
+    s.shutdown();
+  });
+
+  it("an unknown repeat value throws", async () => {
+    const s = new Scheduler({ feed: mockGridFeed(), signing: false });
+    await expect(
+      s.enqueueProviderCall(spec, {
+        deadline: deadline(),
+        repeat: "hourly" as unknown as "daily",
+      }),
+    ).rejects.toThrow(/repeat/);
+    s.shutdown();
+  });
+});

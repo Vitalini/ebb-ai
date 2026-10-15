@@ -178,6 +178,7 @@ export type {
   RecommendAlternative,
   RecommendOptions,
   RecommendResult,
+  RepeatRule,
   TaskRecord,
   TaskMessage,
   TaskOriginHost,
