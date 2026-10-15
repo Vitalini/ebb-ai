@@ -22,6 +22,8 @@ const expected = json(SOURCE).version;
 const found = {
   "packages/cli/package.json": json("packages/cli/package.json").version,
   "packages/mcp-server/package.json": json("packages/mcp-server/package.json").version,
+  "packages/mcp-server/server.json": json("packages/mcp-server/server.json").version,
+  "packages/mcp-server/server.json (packages[0])": json("packages/mcp-server/server.json").packages?.[0]?.version ?? "(not found)",
   "packages/openclaw-plugin/package.json": json("packages/openclaw-plugin/package.json").version,
   "packages/openclaw-plugin/openclaw.plugin.json": json("packages/openclaw-plugin/openclaw.plugin.json").version,
   "packages/claude-code-plugin/.claude-plugin/plugin.json": json("packages/claude-code-plugin/.claude-plugin/plugin.json").version,

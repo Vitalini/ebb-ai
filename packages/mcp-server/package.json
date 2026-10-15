@@ -2,6 +2,7 @@
   "name": "@ebb-ai/mcp",
   "version": "0.16.0",
   "description": "MCP server: run non-urgent LLM tasks at the cleanest grid hour before a deadline, via Batch APIs when allowed.",
+  "mcpName": "io.github.Vitalini/ebb-ai",
   "license": "Apache-2.0",
   "author": "Vitalii Borovyk",
   "type": "module",
