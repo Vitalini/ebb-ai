@@ -1,20 +1,29 @@
 # @ebb-ai/mcp
 
-Model Context Protocol (MCP) server for **ebb-ai** — exposes carbon-aware
-task scheduling as MCP tools that any MCP-compatible agent can call.
+**MCP server that lets your agent run non-urgent LLM tasks at the cleanest grid hour before a deadline.**
 
-## Install (development, monorepo)
+Add it to any MCP host. When a user says "do this tonight" or "by tomorrow", the agent calls `schedule_task`. ebb-ai then runs the task at the lowest-carbon grid hour before the deadline, and through the provider Batch API when the deadline allows.
+
+- 9 MCP tools (measured), among them `recommend_window`, `schedule_task`, `check_queue_status`, `get_grid_forecast`, `cancel_task`, `update_deadline`.
+- Live 72-hour forecast. GB needs no key; other regions use free keys (EIA, ENTSO-E, WattTime, Electricity Maps).
+- One signed carbon receipt per task, stored in `~/.ebb-ai/queue.db`.
 
 ```bash
-# from the repo root
-pnpm install
-pnpm --filter @ebb-ai/mcp build
+npx -y @ebb-ai/mcp
 ```
+
+```json
+{ "mcpServers": {
+    "ebb-ai": { "command": "npx", "args": ["-y", "@ebb-ai/mcp"] }
+} }
+```
+
+Proof: one real GB run, 2026-09-30. Forecast peak 183 gCO2/kWh vs recommended window 88 gCO2/kWh, about 52 % lower for this run only (forecast, projected). Receipt at dispatch: 158 gCO2/kWh (measured). Host-specific configs: https://www.ebb-ai.com/docs#install
 
 ## Run
 
 ```bash
-node packages/mcp-server/dist/server.js
+npx -y @ebb-ai/mcp
 ```
 
 The server speaks MCP over stdio. To wire it into an agent client:
@@ -28,10 +37,8 @@ on macOS (Linux/Windows have similar paths):
 {
   "mcpServers": {
     "ebb-ai": {
-      "command": "node",
-      "args": [
-        "/ABSOLUTE/PATH/TO/ebb-ai/packages/mcp-server/dist/server.js"
-      ],
+      "command": "npx",
+      "args": ["-y", "@ebb-ai/mcp"],
       "env": {
         "EBB_ELECTRICITY_MAPS_API_KEY": "optional - mock data without it",
         "EBB_DEFAULT_REGION": "US-CAL-CISO"
@@ -51,8 +58,8 @@ Add `ebb-ai` to your `~/.claude/mcp.json` (or workspace `.claude/mcp.json`):
 {
   "mcpServers": {
     "ebb-ai": {
-      "command": "node",
-      "args": ["/ABSOLUTE/PATH/TO/ebb-ai/packages/mcp-server/dist/server.js"]
+      "command": "npx",
+      "args": ["-y", "@ebb-ai/mcp"]
     }
   }
 }
@@ -66,20 +73,26 @@ Add to `~/.openclaw/mcp.json`:
 {
   "mcpServers": {
     "ebb-ai": {
-      "command": "node",
-      "args": ["/ABSOLUTE/PATH/TO/ebb-ai/packages/mcp-server/dist/server.js"]
+      "command": "npx",
+      "args": ["-y", "@ebb-ai/mcp"]
     }
   }
 }
 ```
 
-## Tools exposed
+## Tools exposed (9, measured)
 
 | Tool | Purpose |
 |---|---|
 | `get_grid_forecast(region, hours?)` | Hour-by-hour carbon intensity for a region; useful before deciding whether to defer. |
+| `recommend_window(deadline, region?, ...)` | Plan the cleanest window inside the deadline without queueing anything. |
 | `schedule_task(prompt, deadline, model?, region?, carbon_budget_g?)` | Queue a task to run in the cleanest window inside the deadline. Returns a task_id. |
 | `check_queue_status(task_id?)` | Inspect the queue or one specific task; includes a carbon receipt once the task has completed. |
+| `cancel_task(task_id)` | Cancel a queued or scheduled task. |
+| `expedite_task(task_id)` | Dispatch a queued or scheduled task now, outside its carbon window. |
+| `update_deadline(task_id, deadline)` | Reschedule a task against a new deadline. |
+| `retry_task(task_id)` | Re-dispatch a failed task. |
+| `cancel_all(status?)` | Cancel every task that is still queued or scheduled. |
 
 ## Environment variables
 
@@ -106,14 +119,12 @@ the same set). They are read at the server's own entry point and injected into
 | `GEMINI_API_KEY` / `GOOGLE_API_KEY` | `geminiApiKey` / `googleApiKey` | Enables the `gemini` provider (Generative Language API, sync-only). `GEMINI_API_KEY` is preferred; `GOOGLE_API_KEY` is the fallback. |
 | `OLLAMA_HOST` | `ollamaHost` | Enables the local `ollama` provider (sync-only). Default `http://localhost:11434`; keyless — set this var to opt the provider in. |
 
-## v0.1 limitations
+## Develop
 
-- The server schedules dispatch *time*, but does not yet call the
-  underlying LLM (the agent is expected to execute the prompt itself once
-  the window arrives). Provider adapters and Batch API integration land
-  in v0.2.
-- Queue is in-memory; restarts lose state. SQLite persistence lands in
-  v0.2.
-- Single-region grid feed. Multi-region routing lands in v0.3.
+From the root of a clone of https://github.com/Vitalini/ebb-ai:
 
-See `../../ROADMAP.md` for the full roadmap.
+```bash
+pnpm install
+pnpm --filter @ebb-ai/mcp build
+node packages/mcp-server/dist/server.js
+```

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "ebb-ai"
 version = "0.16.0"
-description = "Carbon-aware scheduling for agentic AI workflows."
+description = "Run non-urgent LLM tasks at the cleanest grid hour before a deadline, via Batch APIs when allowed."
 readme = "README.md"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Vitalii Borovyk" }]

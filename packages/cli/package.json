@@ -1,7 +1,7 @@
 {
   "name": "@ebb-ai/cli",
   "version": "0.16.0",
-  "description": "CLI for ebb-ai \u2014 cron-tick drain, launchd install, and sleep-prevention for the carbon-aware scheduler.",
+  "description": "The ebb command: runs queued ebb-ai LLM tasks at the cleanest grid hour before their deadline.",
   "license": "Apache-2.0",
   "author": "Vitalii Borovyk",
   "type": "module",

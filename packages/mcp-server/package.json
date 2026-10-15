@@ -1,7 +1,7 @@
 {
   "name": "@ebb-ai/mcp",
   "version": "0.16.0",
-  "description": "Model Context Protocol server for ebb-ai \u2014 carbon-aware scheduling tools for any MCP-compatible agent.",
+  "description": "MCP server: run non-urgent LLM tasks at the cleanest grid hour before a deadline, via Batch APIs when allowed.",
   "license": "Apache-2.0",
   "author": "Vitalii Borovyk",
   "type": "module",
