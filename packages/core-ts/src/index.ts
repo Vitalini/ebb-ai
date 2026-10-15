@@ -48,6 +48,16 @@ export {
 } from "./scheduler.js";
 export type { SchedulerOptions, TickAdapters } from "./scheduler.js";
 export { recommendWindow } from "./recommend.js";
+// Task visibility (v0.17): titles, history, display helpers.
+export {
+  TITLE_MAX_CHARS,
+  deadlineKindLabel,
+  deriveTitle,
+  stripControlChars,
+  taskHistory,
+  taskPrompt,
+  taskResultText,
+} from "./history.js";
 // Cross-provider routing (ROADMAP item 1).
 export {
   scoreCandidates,

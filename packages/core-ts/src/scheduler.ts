@@ -36,6 +36,8 @@ import {
   type RoutingDecision,
   type RoutingPreview,
 } from "./routing.js";
+import { deriveTitle } from "./history.js";
+import { redactBodyJson, redactPrompt } from "./redact.js";
 import { selectWindow } from "./select-window.js";
 import {
   loadOrCreateSigningKey,
@@ -394,6 +396,7 @@ export class Scheduler {
         throw new Error(`Task id "${opts.taskId}" is already in the queue`);
       }
     }
+    validateDeadlineKind(opts);
     const taskId = opts.taskId ?? `t-${randomUUID()}`;
     const region = opts.region ?? this.defaultRegion;
     const record: TaskRecord<T> = {
@@ -403,6 +406,7 @@ export class Scheduler {
       region,
       carbonBudgetG: opts.carbonBudgetG,
       deadline: deadline.toISOString(),
+      ...identityFields(opts, opts.title !== undefined ? deriveTitle(opts.title) : undefined),
     };
     this.tasks.set(taskId, record);
     this.bodies.set(taskId, task as DeferrableTask<unknown>);
@@ -459,8 +463,14 @@ export class Scheduler {
         throw new Error(`Task id "${opts.taskId}" is already in the queue`);
       }
     }
+    validateDeadlineKind(opts);
     const taskId = opts.taskId ?? `t-${randomUUID()}`;
     const region = opts.region ?? this.defaultRegion;
+    // The title is never rewritten at terminal transitions, so it is stored
+    // redacted from the start (same patterns as the receipt prompt).
+    const title =
+      deriveTitle(opts.title ?? spec.prompt, spec.redactInReceipt) ??
+      (opts.title !== undefined ? deriveTitle(spec.prompt, spec.redactInReceipt) : undefined);
     const record: TaskRecord<unknown> = {
       taskId,
       status: "queued",
@@ -469,6 +479,7 @@ export class Scheduler {
       carbonBudgetG: opts.carbonBudgetG,
       bodyJson: JSON.stringify(spec),
       deadline: deadline.toISOString(),
+      ...identityFields(opts, title),
     };
     this.tasks.set(taskId, record);
     this.store?.upsert(record);
@@ -1954,6 +1965,41 @@ export async function defer<T>(
   return getDefault().defer(task, opts);
 }
 
+/** Validate the v0.17 deadline-kind options; throws on a bad combination. */
+function validateDeadlineKind(opts: DeferOptions): void {
+  const kind = opts.deadlineKind;
+  if (kind !== undefined && kind !== "absolute" && kind !== "quota_reset") {
+    throw new Error(
+      `Invalid deadlineKind ${JSON.stringify(kind)}: expected "absolute" or "quota_reset"`,
+    );
+  }
+  if (kind === "quota_reset") {
+    if (typeof opts.quotaProvider !== "string" || opts.quotaProvider.length === 0) {
+      throw new Error(`deadlineKind "quota_reset" requires a quotaProvider label`);
+    }
+  } else if (opts.quotaProvider !== undefined) {
+    throw new Error(`quotaProvider is only valid with deadlineKind "quota_reset"`);
+  }
+}
+
+/** The insert-only identity fields of a new task record. */
+function identityFields(
+  opts: DeferOptions,
+  title: string | undefined,
+): Pick<
+  TaskRecord<unknown>,
+  "title" | "originHost" | "originCwd" | "parentTaskId" | "deadlineKind" | "quotaProvider"
+> {
+  return {
+    title,
+    originHost: opts.originHost,
+    originCwd: opts.originCwd,
+    parentTaskId: opts.parentTaskId,
+    deadlineKind: opts.deadlineKind ?? "absolute",
+    quotaProvider: opts.deadlineKind === "quota_reset" ? opts.quotaProvider : undefined,
+  };
+}
+
 function normalizeDeadline(d: DeferOptions["deadline"]): Date {
   if (d === undefined || d === null) {
     return new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -2064,76 +2110,6 @@ function describeErr(err: unknown): string {
     return parts.join(" · ") || JSON.stringify(err);
   }
   return String(err);
-}
-
-/**
- * Default redaction patterns — applied unless the spec passes its
- * own `redactInReceipt` array. Vendor-shaped credential patterns only:
- * a previous generic `[A-Z]{2,3}_[A-Z0-9]{6,}` catch-all mangled
- * legitimate prose (DB_PASSWORD, US-MIDA-PJM-style codes, ISO_8601)
- * while missing every real vendor key shape below.
- */
-const DEFAULT_REDACTION_PATTERNS: ReadonlyArray<RegExp> = [
-  /sk-(?:ant-)?[A-Za-z0-9_\-]{20,}/g,               // Anthropic / OpenAI legacy
-  /sk-proj-[A-Za-z0-9_\-]{20,}/g,                   // OpenAI project keys
-  /\bBearer\s+[A-Za-z0-9_\-.]{20,}/gi,              // OAuth bearer tokens
-  /\bAKIA[0-9A-Z]{16}\b/g,                          // AWS access key id
-  /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36}\b/g,   // GitHub tokens
-  /\bgithub_pat_[A-Za-z0-9_]{22,}\b/g,              // GitHub fine-grained PAT
-  /\bAIza[0-9A-Za-z_\-]{35}\b/g,                    // Google API key
-  /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/g,              // Slack tokens
-  /\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g, // JWT
-];
-
-/**
- * Apply the spec's redaction patterns (or the default set) to the
- * prompt before storing it on the receipt. Original prompt is left
- * untouched on the live dispatch.
- */
-function redactPrompt(prompt: string, patterns: string[] | undefined): string {
-  let out = prompt;
-  const apply = (p: RegExp) => {
-    out = out.replace(p, "[REDACTED]");
-  };
-  if (patterns === undefined) {
-    for (const p of DEFAULT_REDACTION_PATTERNS) apply(p);
-  } else if (patterns.length > 0) {
-    for (const raw of patterns) {
-      try {
-        apply(new RegExp(raw, "g"));
-      } catch {
-        // ignore malformed user regexes
-      }
-    }
-  }
-  return out;
-}
-
-/**
- * Redact secrets out of a persisted provider-call body. Applied when a
- * task reaches "completed" or "cancelled" — the live dispatch always
- * uses the original body, and only the final ledger write is rewritten.
- *
- * Deliberately NOT applied on "failed": `retryTask` re-dispatches the
- * persisted body, so a failed task must retain the caller's original
- * prompt until it either succeeds (redacted then) or is cancelled.
- */
-function redactBodyJson(bodyJson: string | undefined): string | undefined {
-  if (!bodyJson) return bodyJson;
-  try {
-    const spec = JSON.parse(bodyJson) as Partial<ProviderCallSpec>;
-    if (!spec || spec.type !== "provider_call") return bodyJson;
-    if (typeof spec.prompt === "string") {
-      spec.prompt = redactPrompt(spec.prompt, spec.redactInReceipt);
-    }
-    if (typeof spec.systemPrompt === "string") {
-      spec.systemPrompt = redactPrompt(spec.systemPrompt, spec.redactInReceipt);
-    }
-    return JSON.stringify(spec);
-  } catch {
-    // Corrupt body — leave it untouched rather than destroy evidence.
-    return bodyJson;
-  }
 }
 
 /**
