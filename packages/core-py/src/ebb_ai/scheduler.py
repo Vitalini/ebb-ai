@@ -853,6 +853,26 @@ class _TaskStore:
             raise RuntimeError("TaskStore is not connected; call connect() first")
         return self._conn
 
+    async def mark_read(self, task_id: str, at: datetime | None = None) -> bool:
+        """Mark a finished task read. Mirrors the TS ``TaskStore.markRead``.
+
+        Returns ``True`` iff this call set the marker. Unfinished tasks and
+        tasks that are already read are left alone.
+        """
+        conn = self._require()
+        iso = _iso_utc(at or datetime.now(UTC))
+        async with self._lock:
+            cur = await conn.execute(
+                "UPDATE tasks SET read_at = ? "
+                "WHERE task_id = ? AND read_at IS NULL "
+                "AND status IN ('completed', 'failed')",
+                (iso, task_id),
+            )
+            rowcount = cur.rowcount
+            await cur.close()
+            await conn.commit()
+        return rowcount == 1
+
     async def upsert(self, record: TaskRecord) -> None:
         conn = self._require()
         async with self._lock:

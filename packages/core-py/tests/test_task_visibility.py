@@ -153,3 +153,30 @@ def test_redact_body_json_covers_messages() -> None:
     assert redacted is not None
     assert SECRET not in redacted
     assert json.loads(redacted)["messages"][0]["content"] == "earlier [REDACTED]"
+
+
+async def test_mark_read_sets_marker_once_and_only_on_finished_tasks(tmp_path: Path) -> None:
+    path = tmp_path / "queue.db"
+    store = _TaskStore(str(path))
+    await store.connect()
+    try:
+        with sqlite3.connect(path) as conn:
+            conn.executescript(
+                """
+                INSERT INTO tasks (task_id, status, enqueued_at, completed_at, region)
+                  VALUES ('done', 'completed', '2026-10-01T00:00:00Z', '2026-10-01T01:00:00Z', 'DE');
+                INSERT INTO tasks (task_id, status, enqueued_at, region)
+                  VALUES ('later', 'scheduled', '2026-10-01T00:00:00Z', 'DE');
+                """
+            )
+        at = datetime(2026, 10, 2, 3, 0, tzinfo=UTC)
+        assert await store.mark_read("done", at) is True
+        assert await store.mark_read("done") is False
+        assert await store.mark_read("later") is False
+        assert await store.mark_read("missing") is False
+        done = await store.load("done")
+        later = await store.load("later")
+        assert done is not None and done.read_at == "2026-10-02T03:00:00.000Z"
+        assert later is not None and later.read_at is None
+    finally:
+        await store.close()
