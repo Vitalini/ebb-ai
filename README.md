@@ -259,7 +259,7 @@ claude plugin install ebb-ai
 That ships eight slash commands (`/ebb-ai:defer`, `/ebb-ai:plan`,
 `/ebb-ai:check`, `/ebb-ai:cancel`, `/ebb-ai:expedite`, `/ebb-ai:reschedule`,
 `/ebb-ai:retry`, `/ebb-ai:grid`), an `ebb-ai` skill, and auto-wires the
-`@ebb-ai/mcp` MCP server. Full plugin reference: **[`PLUGIN.md`](./PLUGIN.md)**.
+`@ebb-ai/mcp` MCP server. Full plugin reference: **[`packages/claude-code-plugin/README.md`](./packages/claude-code-plugin/README.md)**.
 
 ```
 > /ebb-ai:defer "Summarize today's GitHub notifications" --by 4h
@@ -441,8 +441,6 @@ package.
 
 ## Documentation
 
-- [`ROADMAP.md`](./ROADMAP.md) — 24-week execution plan, architecture,
-  roadmap, success metrics.
 - [`docs/`](./docs/) — design docs, MCP spec proposals (forthcoming).
 - [`examples/`](./examples/) — OpenClaw demo skill, Claude Code config.
 
@@ -457,7 +455,7 @@ package.
 ## Contributing
 
 This project is in active early development. Issues and PRs welcome;
-see the `ROADMAP.md` roadmap for current scope. Major new features should
+see [`CHANGELOG.md`](./CHANGELOG.md) for what has shipped. Major new features should
 be discussed in an issue first to avoid duplicate effort.
 
 ---
