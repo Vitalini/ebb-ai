@@ -175,3 +175,34 @@ export function displayTitle(record: TaskRecord<unknown>): string | undefined {
   if (typeof spec?.prompt !== "string") return undefined;
   return deriveTitle(spec.prompt, spec.redactInReceipt);
 }
+
+/**
+ * A Claude Code session id we store (ui v2, KTD10): 8 to 128 letters,
+ * digits, `-` or `_`. An unsubstituted `${CLAUDE_SESSION_ID}` literal fails.
+ */
+export const SESSION_ID_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
+
+/** True when `value` is a session id we accept (see {@link SESSION_ID_PATTERN}). */
+export function isValidSessionId(value: unknown): value is string {
+  return typeof value === "string" && SESSION_ID_PATTERN.test(value);
+}
+
+/** Quote one word for a POSIX shell; plain path characters stay as they are. */
+export function shellQuote(word: string): string {
+  if (/^[A-Za-z0-9_./+:@%-]+$/.test(word)) return word;
+  return `'${word.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * The command that returns to the Claude Code session a task came from:
+ * `cd <cwd> && claude --resume <session>`, with the cwd shell-quoted and
+ * control characters removed. Undefined unless both values exist and the
+ * session id is valid.
+ */
+export function resumeCommand(
+  record: Pick<TaskRecord<unknown>, "originCwd" | "originSessionId">,
+): string | undefined {
+  if (!record.originCwd || !isValidSessionId(record.originSessionId)) return undefined;
+  const cwd = stripControlChars(record.originCwd);
+  return `cd ${shellQuote(cwd)} && claude --resume ${record.originSessionId}`;
+}

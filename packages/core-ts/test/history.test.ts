@@ -8,6 +8,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  isValidSessionId,
+  resumeCommand,
   deadlineKindLabel,
   deriveTitle,
   mockGridFeed,
@@ -255,5 +257,32 @@ describe("Scheduler.enqueueProviderCall task-visibility fields", () => {
     expect(failedRow.status).toBe("failed");
     expect(failedRow.bodyJson).toContain(SECRET);
     store.close();
+  });
+});
+
+describe("session resume helpers (ui v2)", () => {
+  it("accepts 8-128 safe characters and rejects an unsubstituted placeholder", () => {
+    expect(isValidSessionId("3f2a0c1e-1234-4abc-9def-0123456789ab")).toBe(true);
+    expect(isValidSessionId("${CLAUDE_SESSION_ID}")).toBe(false);
+    expect(isValidSessionId("short")).toBe(false);
+    expect(isValidSessionId("x".repeat(129))).toBe(false);
+  });
+
+  it("builds the resume command only when cwd and a valid session exist, quoting the cwd", () => {
+    expect(resumeCommand({ originCwd: "/work/ebb", originSessionId: "sess-12345678" })).toBe(
+      "cd /work/ebb && claude --resume sess-12345678",
+    );
+    expect(
+      resumeCommand({ originCwd: "/work/my project's", originSessionId: "sess-12345678" }),
+    ).toBe("cd '/work/my project'\\''s' && claude --resume sess-12345678");
+    expect(resumeCommand({ originCwd: "/work", originSessionId: undefined })).toBeUndefined();
+    expect(resumeCommand({ originCwd: undefined, originSessionId: "sess-12345678" })).toBeUndefined();
+    expect(resumeCommand({ originCwd: "/w", originSessionId: "${CLAUDE_SESSION_ID}" })).toBeUndefined();
+  });
+
+  it("strips control characters from the cwd", () => {
+    expect(resumeCommand({ originCwd: "/w\u001b[2Jx", originSessionId: "sess-12345678" })).toBe(
+      "cd '/w[2Jx' && claude --resume sess-12345678",
+    );
   });
 });

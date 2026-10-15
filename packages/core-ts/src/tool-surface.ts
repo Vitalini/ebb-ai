@@ -373,6 +373,23 @@ export const TOOL_SURFACE: readonly CanonicalToolDef[] = [
         description:
           "Quota label for deadline_kind 'quota_reset' (e.g. 'claude', 'codex'). Optional when exactly one label is configured.",
       },
+      {
+        name: "repeat",
+        kind: "enum",
+        values: ["none", "daily", "weekly", "quota_reset"],
+        optional: true,
+        hosts: ["mcp"],
+        description:
+          "Repeat rule. Defaults to 'none' (a one-off), also for deadline_kind 'quota_reset'; pass 'weekly' (or 'daily') to repeat. 'quota_reset' follows the weekly quota reset and needs deadline_kind 'quota_reset'. When an occurrence finishes (or is cancelled as a skip), the next one is queued automatically with the same prompt; each occurrence costs one provider call. Stop the series with cancel_task series=true.",
+      },
+      {
+        name: "origin_session_id",
+        kind: "string",
+        optional: true,
+        hosts: ["mcp"],
+        description:
+          "Claude Code session id of the conversation that queued the task, so the task detail can show `claude --resume <id>`. Pass it only when the host substitutes it (e.g. ${CLAUDE_SESSION_ID} in a slash command); values that are not 8-128 letters, digits, '-' or '_' are ignored.",
+      },
       // ── OpenClaw-only parameters (result delivery) ──
       deliverParam(true),
       webhookUrlParam,
@@ -399,8 +416,17 @@ export const TOOL_SURFACE: readonly CanonicalToolDef[] = [
     name: "cancel_task",
     hosts: ["mcp", "openclaw"],
     description:
-      "Cancel a queued or scheduled task. Idempotent — if the task is already completed/failed/cancelled this returns the existing status without error. Throws only if task_id is unknown.",
-    params: [{ ...taskIdRequired, description: "The id of the task to cancel." }],
+      "Cancel a queued or scheduled task. Idempotent — if the task is already completed/failed/cancelled this returns the existing status without error. Throws only if task_id is unknown. Cancelling one occurrence of a repeating task skips it and queues the next one; pass series=true to end the series.",
+    params: [
+      { ...taskIdRequired, description: "The id of the task to cancel." },
+      {
+        name: "series",
+        kind: "boolean",
+        optional: true,
+        description:
+          "If true and the task repeats, also end its series: no further occurrence is queued. Default false (skip only this occurrence).",
+      },
+    ],
   },
   {
     name: "expedite_task",
@@ -417,6 +443,26 @@ export const TOOL_SURFACE: readonly CanonicalToolDef[] = [
     params: [
       { ...taskIdRequired, description: "The id of the task to reschedule." },
       { ...deadlineParam, description: "New ISO-8601 deadline. Must be in the future." },
+    ],
+  },
+  {
+    name: "reply_task",
+    hosts: ["mcp", "openclaw"],
+    description:
+      "Continue a completed task's conversation: creates a NEW task that sends the earlier prompt, the model's reply and this text to the same provider and model, and runs at the next clean window before its deadline (default one hour). Costs one provider call. Only completed tasks accept a reply; failed or cancelled tasks are rejected. Returns the new task id and its scheduled time.",
+    params: [
+      { ...taskIdRequired, description: "The id of the completed task to reply to." },
+      {
+        name: "text",
+        kind: "string",
+        minLength: 1,
+        description: "The follow-up message (1 to 32000 characters).",
+      },
+      {
+        ...deadlineParam,
+        optional: true,
+        description: "Optional ISO-8601 deadline for the reply. Defaults to one hour from now.",
+      },
     ],
   },
   {

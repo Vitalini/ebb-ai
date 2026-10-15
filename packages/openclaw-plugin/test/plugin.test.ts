@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { TaskStore } from "@ebb-ai/core";
+import { mockGridFeed, Scheduler, TaskStore } from "@ebb-ai/core";
 
 import ebbPlugin, {
   bootstrapDispatcherOnStartup,
@@ -45,6 +45,7 @@ const TOOL_NAMES = [
   "set_delivery",
   "expedite_task",
   "retry_task",
+  "reply_task",
 ];
 
 function tool(name: string): StubResolvedTool {
@@ -64,7 +65,7 @@ describe("ebb OpenClaw plugin — registration", () => {
     expect(ebbPlugin.name).toMatch(/ebb-ai/);
   });
 
-  it("registers the ten tools, MCP-style names with no ebb_ prefix", () => {
+  it("registers the eleven tools, MCP-style names with no ebb_ prefix", () => {
     const names = ebbPlugin.tools.map((t) => t.name).sort();
     expect(names).toEqual([...TOOL_NAMES].sort());
     for (const t of ebbPlugin.tools) {
@@ -365,6 +366,77 @@ describe("ebb OpenClaw plugin — tool execution", () => {
     } finally {
       setLlmBridgeForTest(undefined);
     }
+  });
+});
+
+describe("ebb OpenClaw plugin — reply_task and series (ui v2)", () => {
+  let tmp: string;
+  let dbPath: string;
+
+  beforeAll(() => {
+    tmp = mkdtempSync(join(tmpdir(), "ebb-plugin-v2-"));
+    dbPath = join(tmp, "queue.db");
+  });
+
+  afterAll(() => {
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it("reply_task on a completed task creates a child with the parent link", async () => {
+    const sched = (await tool("schedule_task").execute(
+      { prompt: "summarize my inbox", deadline: deadlineISO(), region: "GB" },
+      { dbPath },
+    )) as { task_id: string };
+    setLlmBridgeForTest(async () => ({
+      text: "five mails",
+      provider: "anthropic",
+      model: "gateway-agent-model",
+    }));
+    try {
+      await tool("expedite_task").execute({ task_id: sched.task_id }, { dbPath });
+    } finally {
+      setLlmBridgeForTest(undefined);
+    }
+    const res = (await tool("reply_task").execute(
+      { task_id: sched.task_id, text: "which are urgent?" },
+      { dbPath },
+    )) as { task_id: string; parent_task_id: string };
+    expect(res.parent_task_id).toBe(sched.task_id);
+    const store = new TaskStore({ dbPath });
+    const child = store.get(res.task_id)!;
+    expect(child.parentTaskId).toBe(sched.task_id);
+    expect(JSON.parse(child.bodyJson!).messages).toHaveLength(2);
+    store.close();
+  });
+
+  it("reply_task on a cancelled task is refused", async () => {
+    const sched = (await tool("schedule_task").execute(
+      { prompt: "x", deadline: deadlineISO(), region: "GB" },
+      { dbPath },
+    )) as { task_id: string };
+    await tool("cancel_task").execute({ task_id: sched.task_id }, { dbPath });
+    await expect(
+      tool("reply_task").execute({ task_id: sched.task_id, text: "y" }, { dbPath }),
+    ).rejects.toThrow(/is cancelled; only completed provider-call tasks accept a reply/);
+  });
+
+  it("cancel_task with series: true ends a repeating task's series", async () => {
+    const s = new Scheduler({ dbPath, feed: mockGridFeed(), signing: false });
+    const rec = await s.enqueueProviderCall(
+      { type: "provider_call", provider: "anthropic", model: "m", prompt: "weekly" },
+      { deadline: deadlineISO(6), region: "GB", repeat: "weekly" },
+    );
+    s.shutdown();
+    const res = (await tool("cancel_task").execute(
+      { task_id: rec.taskId, series: true },
+      { dbPath },
+    )) as { status: string; series_ended: boolean };
+    expect(res.status).toBe("cancelled");
+    expect(res.series_ended).toBe(true);
+    const store = new TaskStore({ dbPath });
+    expect(store.get(rec.taskId)?.repeat).toBe("none");
+    expect(store.get(`${rec.taskId}~2`)).toBeUndefined();
+    store.close();
   });
 });
 

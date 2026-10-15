@@ -225,6 +225,24 @@ exports[`tool surface — divergence canary > per-host neutral schema snapshot (
           "name": "quota_provider",
           "required": false,
         },
+        {
+          "description": "Repeat rule. Defaults to 'none' (a one-off), also for deadline_kind 'quota_reset'; pass 'weekly' (or 'daily') to repeat. 'quota_reset' follows the weekly quota reset and needs deadline_kind 'quota_reset'. When an occurrence finishes (or is cancelled as a skip), the next one is queued automatically with the same prompt; each occurrence costs one provider call. Stop the series with cancel_task series=true.",
+          "kind": "enum",
+          "name": "repeat",
+          "required": false,
+          "values": [
+            "none",
+            "daily",
+            "weekly",
+            "quota_reset",
+          ],
+        },
+        {
+          "description": "Claude Code session id of the conversation that queued the task, so the task detail can show \`claude --resume <id>\`. Pass it only when the host substitutes it (e.g. \${CLAUDE_SESSION_ID} in a slash command); values that are not 8-128 letters, digits, '-' or '_' are ignored.",
+          "kind": "string",
+          "name": "origin_session_id",
+          "required": false,
+        },
       ],
     },
     {
@@ -240,7 +258,7 @@ exports[`tool surface — divergence canary > per-host neutral schema snapshot (
       ],
     },
     {
-      "description": "Cancel a queued or scheduled task. Idempotent — if the task is already completed/failed/cancelled this returns the existing status without error. Throws only if task_id is unknown.",
+      "description": "Cancel a queued or scheduled task. Idempotent — if the task is already completed/failed/cancelled this returns the existing status without error. Throws only if task_id is unknown. Cancelling one occurrence of a repeating task skips it and queues the next one; pass series=true to end the series.",
       "name": "cancel_task",
       "params": [
         {
@@ -249,6 +267,12 @@ exports[`tool surface — divergence canary > per-host neutral schema snapshot (
           "minLength": 1,
           "name": "task_id",
           "required": true,
+        },
+        {
+          "description": "If true and the task repeats, also end its series: no further occurrence is queued. Default false (skip only this occurrence).",
+          "kind": "boolean",
+          "name": "series",
+          "required": false,
         },
       ],
     },
@@ -282,6 +306,33 @@ exports[`tool surface — divergence canary > per-host neutral schema snapshot (
           "kind": "string",
           "name": "deadline",
           "required": true,
+        },
+      ],
+    },
+    {
+      "description": "Continue a completed task's conversation: creates a NEW task that sends the earlier prompt, the model's reply and this text to the same provider and model, and runs at the next clean window before its deadline (default one hour). Costs one provider call. Only completed tasks accept a reply; failed or cancelled tasks are rejected. Returns the new task id and its scheduled time.",
+      "name": "reply_task",
+      "params": [
+        {
+          "description": "The id of the completed task to reply to.",
+          "kind": "string",
+          "minLength": 1,
+          "name": "task_id",
+          "required": true,
+        },
+        {
+          "description": "The follow-up message (1 to 32000 characters).",
+          "kind": "string",
+          "minLength": 1,
+          "name": "text",
+          "required": true,
+        },
+        {
+          "description": "Optional ISO-8601 deadline for the reply. Defaults to one hour from now.",
+          "format": "date-time",
+          "kind": "string",
+          "name": "deadline",
+          "required": false,
         },
       ],
     },
@@ -540,7 +591,7 @@ exports[`tool surface — divergence canary > per-host neutral schema snapshot (
       ],
     },
     {
-      "description": "Cancel a queued or scheduled task. Idempotent — if the task is already completed/failed/cancelled this returns the existing status without error. Throws only if task_id is unknown.",
+      "description": "Cancel a queued or scheduled task. Idempotent — if the task is already completed/failed/cancelled this returns the existing status without error. Throws only if task_id is unknown. Cancelling one occurrence of a repeating task skips it and queues the next one; pass series=true to end the series.",
       "name": "cancel_task",
       "params": [
         {
@@ -549,6 +600,12 @@ exports[`tool surface — divergence canary > per-host neutral schema snapshot (
           "minLength": 1,
           "name": "task_id",
           "required": true,
+        },
+        {
+          "description": "If true and the task repeats, also end its series: no further occurrence is queued. Default false (skip only this occurrence).",
+          "kind": "boolean",
+          "name": "series",
+          "required": false,
         },
       ],
     },
@@ -582,6 +639,33 @@ exports[`tool surface — divergence canary > per-host neutral schema snapshot (
           "kind": "string",
           "name": "deadline",
           "required": true,
+        },
+      ],
+    },
+    {
+      "description": "Continue a completed task's conversation: creates a NEW task that sends the earlier prompt, the model's reply and this text to the same provider and model, and runs at the next clean window before its deadline (default one hour). Costs one provider call. Only completed tasks accept a reply; failed or cancelled tasks are rejected. Returns the new task id and its scheduled time.",
+      "name": "reply_task",
+      "params": [
+        {
+          "description": "The id of the completed task to reply to.",
+          "kind": "string",
+          "minLength": 1,
+          "name": "task_id",
+          "required": true,
+        },
+        {
+          "description": "The follow-up message (1 to 32000 characters).",
+          "kind": "string",
+          "minLength": 1,
+          "name": "text",
+          "required": true,
+        },
+        {
+          "description": "Optional ISO-8601 deadline for the reply. Defaults to one hour from now.",
+          "format": "date-time",
+          "kind": "string",
+          "name": "deadline",
+          "required": false,
         },
       ],
     },
