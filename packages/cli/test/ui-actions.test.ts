@@ -347,6 +347,33 @@ describe("ebb ui write API", () => {
       expect((await post("/api/dispatcher/start")).status).toBe(201);
     });
 
+    it("another ticker ticked recently: start is refused (409) and nothing is spawned", async () => {
+      const store = new TaskStore({ dbPath });
+      store.setMeta("last_tick_at", new Date(Date.now() - 30_000).toISOString());
+      store.close();
+      const res = await post("/api/dispatcher/start");
+      expect(res.status).toBe(409);
+      expect(((await res.json()) as { error: string }).error).toMatch(/already ticking/);
+      expect(spawned).toHaveLength(0);
+    });
+
+    it("a recycled pid (alive, but no recent start or tick) does not block start", async () => {
+      const store = new TaskStore({ dbPath });
+      store.setMeta(
+        "ui_dispatcher",
+        JSON.stringify({ pid: 777, log: "/x.log", started_at: new Date(Date.now() - 3 * H).toISOString() }),
+      );
+      store.setMeta("last_tick_at", new Date(Date.now() - 3 * H).toISOString());
+      store.close();
+      alive.add(777);
+      const status = (await (await get("/api/status")).json()) as {
+        dispatcher: { state: string; ui_child: { alive: boolean } };
+      };
+      expect(status.dispatcher.ui_child.alive).toBe(false);
+      expect(status.dispatcher.state).toBe("stale");
+      expect((await post("/api/dispatcher/start")).status).toBe(201);
+    });
+
     it("a stale last tick and no child gives stale", async () => {
       const store = new TaskStore({ dbPath });
       store.setMeta("last_tick_at", new Date(Date.now() - 3 * H).toISOString());

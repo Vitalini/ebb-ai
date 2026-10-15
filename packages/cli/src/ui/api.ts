@@ -12,10 +12,12 @@
 
 import {
   deadlineKindLabel,
+  InvalidDeadlineError,
   LAST_TICK_META_KEY,
   nextQuotaReset,
   resolveQuotaDeadline,
   resumeCommand,
+  TaskActionError,
   taskActions,
   taskHistory,
   taskPrompt,
@@ -276,7 +278,8 @@ function instant(value: unknown, name: string): Date | string {
 
 /**
  * Run one write through the action scheduler: 404 for an unknown task,
- * 409 with the core's rule when the task's state refuses it.
+ * 409 with the core's rule when the task's state or input refuses it, 500
+ * with a generic body for any other error.
  */
 async function act(
   ctx: ApiContext,
@@ -290,7 +293,12 @@ async function act(
   try {
     out = await run(ctx.scheduler);
   } catch (err) {
-    return error(409, oneLine(err));
+    // Only a refusal carries a rule safe to show; anything else is internal
+    // and gets a generic body (no exception text, no path).
+    if (err instanceof TaskActionError || err instanceof InvalidDeadlineError) {
+      return error(409, oneLine(err));
+    }
+    return error(500, "action failed");
   }
   const fresh = ctx.store.get(out.taskId) ?? out;
   const changed = out.taskId === taskId ? [taskId] : [taskId, out.taskId];
@@ -314,7 +322,7 @@ function cancelAction(ctx: ApiContext, taskId: string, body: Body): Promise<ApiR
     // refused action (409), so a second click says what happened.
     const current = ctx.store.get(taskId)!;
     if (!taskActions(current).cancel) {
-      throw new Error(`cancel: task ${taskId} is ${current.status}; only pending tasks can be cancelled`);
+      throw new TaskActionError(`cancel: task ${taskId} is ${current.status}; only pending tasks can be cancelled`);
     }
     return s.cancelTask(taskId, { series: body.series === true });
   });
@@ -374,7 +382,15 @@ function startDispatcher(ctx: ApiContext): ApiResponse {
   if (!ctx.dispatcher) return error(404, "not found");
   try {
     const res = ctx.dispatcher.start();
-    if (!res.ok) return { status: 409, body: { error: "a dispatcher started from this page is running", ...res.meta } };
+    if (!res.ok && res.reason === "ui_child") {
+      return { status: 409, body: { error: "a dispatcher started from this page is running", ...res.meta } };
+    }
+    if (!res.ok) {
+      return {
+        status: 409,
+        body: { error: "a dispatcher is already ticking this ledger", last_tick_at: res.last_tick_at },
+      };
+    }
     return { status: 201, body: res.meta };
   } catch {
     // The spawn error can name paths; the page needs only the fact.

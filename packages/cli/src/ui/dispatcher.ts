@@ -6,17 +6,18 @@
  * install step resolves, spawned detached as `ebb tick --daemon --interval
  * 60 --db <ledger>`, with stdout and stderr appended to
  * `~/.ebb-ai/logs/ui-tick.log` (directory 0700, file 0600). The child's
- * pid, log path and start time are kept in ledger meta `ui_dispatcher`, so
- * a second start while that pid is alive is refused (409). The user stops
- * it with `kill <pid>`.
+ * pid, log path and start time are kept in ledger meta `ui_dispatcher`. A
+ * start is refused (409) while that child is alive or while any other
+ * ticker ticked within two intervals. The user stops it with `kill <pid>`.
  *
- * State: `running` when the UI-started child is alive or a tick ran within
+ * State: `running` when the UI-started child is alive (its pid exists and it
+ * started or ticked recently, so a recycled pid is not trusted) or a tick ran within
  * two intervals (300 s when the daemon is installed, else 60 s); `stale`
  * when a tick ran before that; `never` when no tick was ever recorded.
  */
 
 import { spawn } from "node:child_process";
-import { chmodSync, closeSync, mkdirSync, openSync } from "node:fs";
+import { chmodSync, closeSync, fchmodSync, mkdirSync, openSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -75,6 +76,8 @@ export function pidAlive(pid: number): boolean {
 export const defaultSpawner: Spawner = (argv, logPath) => {
   const fd = openSync(logPath, "a", 0o600);
   try {
+    // The mode above applies only when the file is created.
+    fchmodSync(fd, 0o600);
     const child = spawn(argv[0]!, argv.slice(1), {
       detached: true,
       stdio: ["ignore", fd, fd],
@@ -116,20 +119,46 @@ export class DispatcherControl {
 
   state(): DispatcherState {
     const meta = this.meta();
-    const child = meta ? { ...meta, alive: this.alive(meta.pid) } : null;
     const lastTick = this.store.getMeta(LAST_TICK_META_KEY) ?? null;
     const interval =
       this.opts.daemonStatus() === "installed" ? DAEMON_INTERVAL_S : UI_DISPATCHER_INTERVAL_S;
     const now = (this.opts.now?.() ?? new Date()).getTime();
-    const recent = lastTick !== null && now - Date.parse(lastTick) <= 2 * interval * 1000;
+    const window = 2 * interval * 1000;
+    const recent = lastTick !== null && now - Date.parse(lastTick) <= window;
+    // A live pid alone is not proof: after a crash or reboot the OS can give
+    // the pid to another process. The child counts as alive while its pid
+    // exists AND it either started recently or a tick ran recently.
+    const child = meta
+      ? {
+          ...meta,
+          alive:
+            this.alive(meta.pid) &&
+            (recent ||
+              now - Date.parse(meta.started_at) <= 2 * UI_DISPATCHER_INTERVAL_S * 1000),
+        }
+      : null;
     const state = child?.alive || recent ? "running" : lastTick !== null ? "stale" : "never";
     return { state, last_tick_at: lastTick, interval_s: interval, ui_child: child };
   }
 
-  /** Spawn the dispatcher; `conflict` when the one started earlier is alive. */
-  start(): { ok: true; meta: DispatcherMeta } | { ok: false; meta: DispatcherMeta } {
-    const existing = this.meta();
-    if (existing && this.alive(existing.pid)) return { ok: false, meta: existing };
+  /**
+   * Spawn the dispatcher. Refused (`ok: false`) when the child started from
+   * the page is alive (`ui_child`), or when another ticker (the installed
+   * daemon, an `ebb tick` loop, OpenClaw) ticked recently (`ticking`): a
+   * second ticker would only race the first.
+   */
+  start():
+    | { ok: true; meta: DispatcherMeta }
+    | { ok: false; reason: "ui_child"; meta: DispatcherMeta }
+    | { ok: false; reason: "ticking"; last_tick_at: string | null } {
+    const current = this.state();
+    if (current.ui_child?.alive) {
+      const { alive: _alive, ...meta } = current.ui_child;
+      return { ok: false, reason: "ui_child", meta };
+    }
+    if (current.state === "running") {
+      return { ok: false, reason: "ticking", last_tick_at: current.last_tick_at };
+    }
     const logDir = this.opts.logDir ?? defaultLogDir();
     mkdirSync(logDir, { recursive: true, mode: 0o700 });
     try {
