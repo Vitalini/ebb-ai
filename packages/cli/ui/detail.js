@@ -365,7 +365,10 @@ function chainSection(t) {
 
 // ── actions owned by the drawer ─────────────────────────────────────────
 
+let replying = false;
+
 export async function sendReply() {
+  if (replying) return;
   const id = drawerState.id;
   const box = el().querySelector("textarea.reply-input");
   const text = box?.value.trim();
@@ -375,6 +378,7 @@ export async function sendReply() {
   }
   const send = el().querySelector('[data-action="reply-send"]');
   if (send) send.disabled = true;
+  replying = true;
   try {
     const child = await api.reply(id, text);
     drawerState.draft = "";
@@ -388,6 +392,8 @@ export async function sendReply() {
     }
     errorToast(`Reply failed: ${err.message}`);
     if (send) send.disabled = false;
+  } finally {
+    replying = false;
   }
 }
 

@@ -84,6 +84,9 @@ export function initKeys(handlers) {
     const id = row?.dataset.taskId || handlers.current();
     if (!id) return;
     e.preventDefault();
+    // A held key repeats; an action runs once per press (holding c must not
+    // cancel row after row as focus moves).
+    if (e.repeat) return;
     handlers.act(name, id);
   });
 }

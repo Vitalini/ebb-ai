@@ -19,6 +19,7 @@ import {
 
 const HOUR = 3_600_000;
 let returnTo = null;
+let returnId = null;
 let onClose = null;
 
 function dlg() {
@@ -33,7 +34,11 @@ function open(content, { label, wide = false, close } = {}) {
   const d = dlg();
   if (d.open) d.close();
   // A menu item that opens the next dialog keeps the original focus target.
-  if (!returnTo?.isConnected) returnTo = document.activeElement;
+  if (!returnTo?.isConnected) {
+    returnTo = document.activeElement;
+    // Inside the drawer the drawer itself is the fallback; on a row, the row.
+    returnId = returnTo?.closest?.("#drawer") ? null : returnTo?.closest?.("[data-task-id]")?.dataset.taskId || null;
+  }
   onClose?.();
   onClose = close || null;
   d.className = `dialog${wide ? " dialog-wide" : ""}`;
@@ -59,7 +64,17 @@ export function initDialog() {
     onClose = null;
     d.replaceChildren();
     if (returnTo?.isConnected) returnTo.focus();
+    else if (returnId) {
+      // The row was rebuilt while the dialog was open (an action, a stream
+      // event): focus its replacement, else the view.
+      const row = [...document.querySelectorAll("#view .row[data-task-id]")].find((r) => r.dataset.taskId === returnId);
+      (row || document.getElementById("view"))?.focus();
+    } else {
+      const drawer = document.getElementById("drawer");
+      if (drawer && !drawer.hidden) drawer.querySelector(".drawer-close, button")?.focus();
+    }
     returnTo = null;
+    returnId = null;
     fn?.();
   });
   // A click on the backdrop (the dialog box itself, outside its content) closes.

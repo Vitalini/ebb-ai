@@ -306,9 +306,9 @@ function nextTickHint() {
   };
 }
 
-function runNow(task) {
+async function runNow(task) {
   ranNow.add(task.task_id);
-  return perform({
+  const out = await perform({
     id: task.task_id,
     action: "run now",
     label: "Queuing to run now…",
@@ -319,6 +319,12 @@ function runNow(task) {
       return { text: `“${title(task)}” ${hint.text.charAt(0).toLowerCase()}${hint.text.slice(1)}`, action: hint.action };
     },
   });
+  // A refused or failed run-now leaves the task where it was.
+  if (out === undefined) {
+    ranNow.delete(task.task_id);
+    notify();
+  }
+  return out;
 }
 
 /** Rough run time inside a day, for the optimistic row: the cleanest hour. */
@@ -549,7 +555,7 @@ function boot() {
     trapFocus(e);
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && e.target.classList?.contains("reply-input")) {
       e.preventDefault();
-      void sendReply();
+      if (!e.repeat) void sendReply();
     }
   });
   document.getElementById("drawer").addEventListener("submit", (e) => {
