@@ -35,6 +35,16 @@ when it runs.
 | - | Green-Software-Foundation/awesome-green-software | One-line PR renaming the entry and link | https://github.com/Green-Software-Foundation/awesome-green-software | not started | PR #215 merged to `dev` |
 | - | Glama | Re-check the server page after the transfer; claim `tidegap/tidegap` if a new entry appears | https://glama.ai/mcp/servers/tidegap/tidegap | not started | |
 | - | ComposioHQ/awesome-claude-skills | Update PR #877 with the renamed entry, alphabetical position near "T" | https://github.com/ComposioHQ/awesome-claude-skills/pull/877 | not started | |
+| 2026-10-16 | npm | Published `@tidegap/{core,cli,mcp}` 0.18.0 | https://www.npmjs.com/org/tidegap | done | |
+| 2026-10-16 | PyPI | Published `tidegap` 0.18.0 | https://pypi.org/project/tidegap/ | done | |
+| 2026-10-16 | ClawHub | Published `@vitalini/tidegap` 0.18.0 | https://clawhub.ai/plugins/@vitalini/tidegap | done | |
+| 2026-10-16 | MCP Registry | Publish `io.github.tidegap/tidegap` | https://registry.modelcontextprotocol.io | pending | 403 org permission at time of writing |
+| 2026-10-16 | npm, PyPI | Old packages deprecated: `@ebb-ai/core` 0.17.1, `@ebb-ai/mcp` 0.17.1, `@ebb-ai/cli` 0.17.2; PyPI `ebb-ai` 0.17.1 set Inactive | https://www.npmjs.com/org/ebb-ai | done | |
+| 2026-10-16 | GitHub | Repo transferred to `tidegap/tidegap`; description and homepage updated | https://github.com/tidegap/tidegap | done | |
+| 2026-10-16 | GitHub | Re-upload social preview | https://github.com/tidegap/tidegap/settings | not done; Vitalii's step | `assets/social-preview.png` now says Tidegap (last changed in commit `72cd825`) |
+| 2026-10-16 | mcp.so | Update listing to Tidegap | https://mcp.so/server/ebb-ai | to do | |
+| 2026-10-16 | awesome-mcp-servers, awesome-green-software (GSF), awesome-claude-skills (Composio) | Rename updates for PR #16076, the GSF list entry and PR #877 | see rows above | in flight | |
+| 2026-10-16 | Domain | `tidegap.com` registered on Spaceship; Vercel 301 from `ebb-ai.com` | https://www.tidegap.com | done | |
 
 ## Search engines
 
