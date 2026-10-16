@@ -6,7 +6,7 @@ let token = null;
 
 export class SessionExpired extends Error {
   constructor() {
-    super("This link expired. Run ebb ui again.");
+    super("This link expired. Run tidegap ui again.");
   }
 }
 

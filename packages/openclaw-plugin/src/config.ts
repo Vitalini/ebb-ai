@@ -12,7 +12,7 @@
  * as OpenClaw plugin config: the object declared by `openclaw.plugin.json`'s
  * `configSchema`, stored at `plugins.entries.ebb.config` in the gateway config,
  * and handed to every tool as the second argument of `execute(params, config,
- * context)`. `@ebb-ai/core` is likewise environment-pure, so nothing downstream
+ * context)`. `@tidegap/core` is likewise environment-pure, so nothing downstream
  * reaches for the environment either.
  *
  * ── Migrating from the old environment variables ────────────────────────────
@@ -28,14 +28,14 @@
  *
  * The gateway reads the environment; the plugin never does.
  *
- * Environment variables still configure the `ebb` CLI and the `@ebb-ai/mcp`
+ * Environment variables still configure the `ebb` CLI and the `@tidegap/mcp`
  * server — those are separate hosts with their own entry points, and their
  * behaviour is unchanged.
  */
 
 import { Type } from "typebox";
 
-import type { CarbonBudgetEnv, GridFeedCredentials } from "@ebb-ai/core";
+import type { CarbonBudgetEnv, GridFeedCredentials } from "@tidegap/core";
 
 /** The plugin id — also the key under `plugins.entries` in the gateway config. */
 export const PLUGIN_ID = "ebb";
@@ -102,13 +102,13 @@ export const pluginConfigSchema = Type.Object(
     dbPath: Type.Optional(
       Type.String({
         description:
-          "Override the SQLite queue path. Defaults to ~/.ebb-ai/queue.db (shared with the @ebb-ai/mcp server and @ebb-ai/cli).",
+          "Override the SQLite queue path. Defaults to ~/.ebb-ai/queue.db (shared with the @tidegap/mcp server and @tidegap/cli).",
       }),
     ),
     defaultRegion: Type.Optional(
       Type.String({
         description:
-          "Default electricity-grid region when a tool call omits one. Examples: GB, US-CAL-CISO, US-TEX-ERCO, US-NE-ISNE, US-MIDA-PJM, FR, DE. When unset, ebb-ai guesses from the host machine's timezone (London→GB, Paris→FR, Berlin→DE, US Pacific→US-CAL-CISO, US Eastern→US-MIDA-PJM) and otherwise falls back to GB. Set this explicitly for precise control. (Replaces the EBB_DEFAULT_REGION environment variable, which still configures the ebb CLI and @ebb-ai/mcp server.)",
+          "Default electricity-grid region when a tool call omits one. Examples: GB, US-CAL-CISO, US-TEX-ERCO, US-NE-ISNE, US-MIDA-PJM, FR, DE. When unset, ebb-ai guesses from the host machine's timezone (London→GB, Paris→FR, Berlin→DE, US Pacific→US-CAL-CISO, US Eastern→US-MIDA-PJM) and otherwise falls back to GB. Set this explicitly for precise control. (Replaces the EBB_DEFAULT_REGION environment variable, which still configures the ebb CLI and @tidegap/mcp server.)",
       }),
     ),
 
@@ -257,7 +257,7 @@ export function pluginConfigFromGatewayConfig(
   return config as PluginConfig;
 }
 
-/** Grid-feed credentials for `@ebb-ai/core`'s `buildDefaultGridFeed`. */
+/** Grid-feed credentials for `@tidegap/core`'s `buildDefaultGridFeed`. */
 export function gridCredentials(config: PluginConfig): GridFeedCredentials {
   return {
     electricityMapsApiKey: trimmed(config.electricityMapsApiKey),
@@ -269,7 +269,7 @@ export function gridCredentials(config: PluginConfig): GridFeedCredentials {
 }
 
 /**
- * Carbon-budget overrides for `@ebb-ai/core`'s `loadCarbonBudgetConfig`, whose
+ * Carbon-budget overrides for `@tidegap/core`'s `loadCarbonBudgetConfig`, whose
  * option shape is still keyed by the historical variable NAMES (the CLI and
  * MCP server pass the real environment values there). Passing `{}` — the
  * "nothing configured" case — leaves `~/.ebb-ai/config` in sole charge, which

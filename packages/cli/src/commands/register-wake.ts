@@ -1,10 +1,10 @@
 /**
- * `ebb register-wake <task-id>` — schedule an RTC/pmset wake event 30s
+ * `tidegap register-wake <task-id>` — schedule an RTC/pmset wake event 30s
  * before the task's `scheduledFor`. macOS uses `pmset schedule wake`;
  * Linux uses `rtcwake -m no -t <epoch>`.
  */
 
-import { TaskStore } from "@ebb-ai/core";
+import { TaskStore } from "@tidegap/core";
 import {
   currentPlatform,
   type PlatformName,
@@ -41,7 +41,7 @@ export async function runRegisterWake(
       ok: false,
       stderr: "non-posix",
       message:
-        `[ebb-ai/cli] register-wake is not supported on Windows — there is no ` +
+        `[tidegap/cli] register-wake is not supported on Windows — there is no ` +
         `pmset/rtcwake equivalent wired. Use Task Scheduler's "Wake the ` +
         `computer to run this task" option on your ebb-tick job instead.`,
     };

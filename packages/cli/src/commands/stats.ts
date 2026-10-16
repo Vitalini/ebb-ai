@@ -1,5 +1,5 @@
 /**
- * `ebb stats` — local-only personal-impact aggregator.
+ * `tidegap stats` — local-only personal-impact aggregator.
  *
  * Reads the SQLite ledger at ~/.ebb-ai/queue.db (or --db) and renders the
  * cumulative carbon stats + per-region breakdown + achievement-badge list.
@@ -26,7 +26,7 @@ import {
   type BandHistogram,
   type Achievement,
   type CarbonBudgetStatus,
-} from "@ebb-ai/core";
+} from "@tidegap/core";
 import { readEnvCredentials } from "../env.js";
 import { defaultDbPath } from "./tick.js";
 
@@ -71,7 +71,7 @@ function relativeTime(iso: string | null): string {
 export function renderStats(r: StatsResult): string {
   const { stats, perRegion, bands, badges, budget } = r;
   const lines: string[] = [];
-  lines.push("ebb-ai · personal impact");
+  lines.push("Tidegap · personal impact");
   lines.push("=".repeat(48));
   lines.push("");
 
@@ -135,7 +135,7 @@ export function renderStats(r: StatsResult): string {
     lines.push(
       "Queue is empty. Run `/ebb-ai:defer …` from a Claude Code session,",
     );
-    lines.push("or `npx -y @ebb-ai/mcp` from your MCP host, to start.");
+    lines.push("or `npx -y @tidegap/mcp` from your MCP host, to start.");
   }
 
   return lines.join("\n");
@@ -144,7 +144,7 @@ export function renderStats(r: StatsResult): string {
 export async function runStats(opts: StatsCommandOptions = {}): Promise<StatsResult> {
   const dbPath = opts.db ?? defaultDbPath();
   // Ensure the parent directory exists before better-sqlite3 opens the
-  // file. Matches the MCP server's behaviour, so a first-time `ebb
+  // file. Matches the MCP server's behaviour, so a first-time `tidegap
   // stats` invocation before the MCP server has ever written to the
   // ledger returns an empty result rather than throwing ENOENT.
   if (dbPath !== ":memory:") {

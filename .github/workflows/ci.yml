@@ -28,26 +28,26 @@ jobs:
       # serves a better-sqlite3 prebuild that doesn't match the runtime, causing
       # ERR_DLOPEN_FAILED on `import`. Rebuilding from source takes ~30s and
       # makes the tests deterministic across runner image rolls.
-      - run: pnpm --filter "@ebb-ai/core" rebuild better-sqlite3
-      - run: pnpm --filter "@ebb-ai/core" build
-      - run: pnpm --filter "@ebb-ai/mcp" build
-      - run: pnpm --filter "@ebb-ai/cli" build
+      - run: pnpm --filter "@tidegap/core" rebuild better-sqlite3
+      - run: pnpm --filter "@tidegap/core" build
+      - run: pnpm --filter "@tidegap/mcp" build
+      - run: pnpm --filter "@tidegap/cli" build
       # The OpenClaw plugin targets Node 22+ — its delivery store uses the
       # node:sqlite builtin (22.5+) with no better-sqlite3 fallback — so its
       # build + tests run only on the 22 and 24 matrix legs.
       - if: matrix.node != '20'
-        run: pnpm --filter "@vitalini/ebb" build
+        run: pnpm --filter "@vitalini/tidegap" build
       # Typecheck every workspace package (tsc --noEmit). CI previously
       # gated build + tests only, so type regressions the emit-less build
       # tolerated could land; this closes that gap.
       - run: pnpm typecheck
-      - run: pnpm --filter "@ebb-ai/core" test
-      - run: pnpm --filter "@ebb-ai/mcp" test
-      - run: pnpm --filter "@ebb-ai/cli" test
+      - run: pnpm --filter "@tidegap/core" test
+      - run: pnpm --filter "@tidegap/mcp" test
+      - run: pnpm --filter "@tidegap/cli" test
       # The OpenClaw plugin's 24 tests previously ran only via the local
       # root `pnpm test`, never in CI — gate them here (Node 22 and 24).
       - if: matrix.node != '20'
-        run: pnpm --filter "@vitalini/ebb" test
+        run: pnpm --filter "@vitalini/tidegap" test
 
   data-ssot:
     name: data SSOT drift check
@@ -63,7 +63,7 @@ jobs:
       - name: regenerate data modules from JSON SSOT
         run: node scripts/gen-data.mjs
       - name: fail if generated tables are stale
-        run: git diff --exit-code -- packages/core-ts/src/data/tables.generated.ts packages/core-py/src/ebb_ai/_data.py
+        run: git diff --exit-code -- packages/core-ts/src/data/tables.generated.ts packages/core-py/src/tidegap/_data.py
       # Dependency-free: inputs hash, PNG sha256 and dimensions against
       # assets/images.lock.json. CI does not render the images.
       - name: fail if generated images are stale
@@ -80,7 +80,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
-      - name: install ebb_ai
+      - name: install tidegap
         working-directory: packages/core-py
         run: |
           python -m pip install --upgrade pip

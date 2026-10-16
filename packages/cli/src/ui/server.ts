@@ -1,7 +1,7 @@
 /**
- * `ebb ui` HTTP server (KTD8, KTD9). Loopback only. Writes by POST, never
+ * `tidegap ui` HTTP server (KTD8, KTD9). Loopback only. Writes by POST, never
  * dispatches: actions go through a Scheduler with no adapters, and the
- * dispatcher (`ebb tick` or the OpenClaw loop) runs the task.
+ * dispatcher (`tidegap tick` or the OpenClaw loop) runs the task.
  *
  * Security model:
  *   - binds 127.0.0.1 only; there is no host option;
@@ -30,7 +30,7 @@ import type { AddressInfo } from "node:net";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { TaskStore } from "@ebb-ai/core";
+import { TaskStore } from "@tidegap/core";
 
 import { resolveLauncher } from "../commands/install.js";
 import { actionScheduler } from "../commands/queue.js";
@@ -87,7 +87,7 @@ export function defaultAssetDir(): string {
 export interface UiServerOptions
   extends Omit<ApiContext, "store" | "dispatcher"> {
   token: string;
-  /** `ebb` launcher for Start dispatcher; default: the install step's. */
+  /** `tidegap` launcher for Start dispatcher; default: the install step's. */
   launcher?: string[];
   /** Inject the dispatcher spawner, liveness probe and log dir (tests). */
   spawn?: Spawner;

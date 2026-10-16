@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { estimateEnergyKwh } from "@ebb-ai/core/energy";
+import { estimateEnergyKwh } from "@tidegap/core/energy";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { RegionCard, RegionCardSkeleton } from "@/components/region-card";
 import { getGridForecast } from "@/lib/grid";

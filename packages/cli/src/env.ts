@@ -1,7 +1,7 @@
 /**
- * The `ebb` CLI's environment boundary.
+ * The `tidegap` CLI's environment boundary.
  *
- * `@ebb-ai/core` is an environment-pure library: it reads no environment
+ * `@tidegap/core` is an environment-pure library: it reads no environment
  * variables and takes every credential as an explicit argument. The CLI is a
  * HOST, so reading the environment is its job — and this module is the single
  * place it happens. Every variable is read BY NAME into a closed shape; the
@@ -17,9 +17,9 @@
  * published bundle contains zero environment reads.
  */
 
-import type { CarbonBudgetEnv, GridFeedCredentials } from "@ebb-ai/core";
+import type { CarbonBudgetEnv, GridFeedCredentials } from "@tidegap/core";
 
-/** Provider credentials the CLI forwards to `@ebb-ai/core`'s adapters. */
+/** Provider credentials the CLI forwards to `@tidegap/core`'s adapters. */
 export interface ProviderCredentials {
   /** `ANTHROPIC_API_KEY` */
   anthropicApiKey?: string;

@@ -1,4 +1,4 @@
-"""Provider adapters for ebb-ai.
+"""Provider adapters for Tidegap.
 
 Each adapter is importable even without its vendor SDK installed —
 construction is what fails. This lets the scheduler depend on the
@@ -6,8 +6,8 @@ adapter type without forcing every user to pull in every SDK.
 
 Import paths:
 
->>> from ebb_ai.providers import AnthropicAdapter, OpenAIAdapter
->>> from ebb_ai.providers.base import ProviderAdapter, DispatchOptions
+>>> from tidegap.providers import AnthropicAdapter, OpenAIAdapter
+>>> from tidegap.providers.base import ProviderAdapter, DispatchOptions
 """
 
 from __future__ import annotations

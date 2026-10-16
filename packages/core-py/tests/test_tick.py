@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from ebb_ai import (
+from tidegap import (
     DeferOptions,
     InvalidDeadlineError,
     ProviderCallSpec,
@@ -21,14 +21,14 @@ from ebb_ai import (
     TickResult,
     mock_grid_feed,
 )
-from ebb_ai.grid import GridFeed
-from ebb_ai.providers.base import (
+from tidegap.grid import GridFeed
+from tidegap.providers.base import (
     BatchHandle,
     DispatchOptions,
     DispatchResult,
     ProviderAdapter,
 )
-from ebb_ai.types import GridForecast, GridForecastEntry
+from tidegap.types import GridForecast, GridForecastEntry
 
 # --------------------------------------------------------------------- #
 # Fake adapters

@@ -75,7 +75,7 @@ describe("TaskStore (SQLite-backed)", () => {
     const a = new TaskStore({ dbPath });
     const b = new TaskStore({ dbPath });
     // Interleave writes — without WAL this used to throw SQLITE_BUSY
-    // intermittently when the `ebb tick` daemon and the MCP server held
+    // intermittently when the `tidegap tick` daemon and the MCP server held
     // separate connections.
     for (let i = 0; i < 20; i++) {
       const writer = i % 2 === 0 ? a : b;

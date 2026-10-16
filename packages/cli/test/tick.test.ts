@@ -2,14 +2,14 @@ import type { SpawnOptions } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TaskStore } from "@ebb-ai/core";
+import { TaskStore } from "@tidegap/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   missingProviderKeysForPending,
   runTickOnce,
 } from "../src/commands/tick.js";
 
-describe("ebb tick", () => {
+describe("tidegap tick", () => {
   const saved = {
     a: process.env.ANTHROPIC_API_KEY,
     o: process.env.OPENAI_API_KEY,
@@ -190,7 +190,7 @@ describe("tick receipts use the region's grid feed", () => {
   });
 });
 
-describe("ebb tick pre-tick step (quota sweep, last_tick_at)", () => {
+describe("tidegap tick pre-tick step (quota sweep, last_tick_at)", () => {
   let dir: string;
   let db: string;
   const savedOllama = process.env.OLLAMA_HOST;
@@ -249,7 +249,7 @@ describe("ebb tick pre-tick step (quota sweep, last_tick_at)", () => {
   });
 });
 
-describe("ebb tick notifications", () => {
+describe("tidegap tick notifications", () => {
   let dir: string;
   let dbPath: string;
   const savedHost = process.env.OLLAMA_HOST;
@@ -321,9 +321,9 @@ describe("ebb tick notifications", () => {
     expect(calls.every((c) => c.cmd === "notify-send" && c.args[0] === "--")).toBe(true);
     const titles = calls.map((c) => c.args[1]).sort();
     expect(titles).toEqual([
-      "ebb-ai: done: title ok-1",
-      "ebb-ai: done: title ok-2",
-      "ebb-ai: failed: title bad-1",
+      "Tidegap: done: title ok-1",
+      "Tidegap: done: title ok-2",
+      "Tidegap: failed: title bad-1",
     ]);
   });
 
@@ -348,7 +348,7 @@ describe("ebb tick notifications", () => {
     for (const c of calls) {
       expect(c.cmd).toBe("powershell");
       expect(c.opts.timeout).toBeGreaterThan(0);
-      expect(c.opts.env?.EBB_NOTIFY_TITLE).toMatch(/^ebb-ai: (done|failed): title /);
+      expect(c.opts.env?.EBB_NOTIFY_TITLE).toMatch(/^Tidegap: (done|failed): title /);
       expect(c.opts.env?.PATH).toBe(process.env.PATH);
       expect(c.args.join(" ")).not.toContain("title ok-1");
     }

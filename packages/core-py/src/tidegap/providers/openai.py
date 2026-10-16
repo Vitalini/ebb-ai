@@ -41,7 +41,7 @@ def _load_sdk() -> Any:
     except ImportError as err:  # pragma: no cover - exercised in real env
         raise RuntimeError(
             "The `openai` package is required to use OpenAIAdapter. "
-            "Install it with `pip install ebb-ai[openai]` or "
+            "Install it with `pip install tidegap[openai]` or "
             "`pip install openai`."
         ) from err
     return openai
@@ -102,7 +102,7 @@ class OpenAIAdapter(ProviderAdapter):
             self._client = client
         else:
             sdk = _load_sdk()
-            # max_retries=0 — ebb-ai's scheduler owns the retry policy
+            # max_retries=0 — Tidegap's scheduler owns the retry policy
             # (_retry_with_backoff); letting the SDK retry too multiplies
             # attempts and can double-bill ambiguous network errors.
             self._client = (
@@ -184,7 +184,7 @@ class OpenAIAdapter(ProviderAdapter):
         buf.seek(0)
 
         upload = await self._client.files.create(
-            file=("ebb-ai-batch.jsonl", buf, "application/jsonl"),
+            file=("tidegap-batch.jsonl", buf, "application/jsonl"),
             purpose="batch",
         )
         batch = await self._client.batches.create(

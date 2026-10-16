@@ -6,7 +6,7 @@ import {
   loadOrCreateSigningKey,
   signReceipt,
   type CarbonReceipt,
-} from "@ebb-ai/core";
+} from "@tidegap/core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { runVerify } from "../src/commands/verify.js";

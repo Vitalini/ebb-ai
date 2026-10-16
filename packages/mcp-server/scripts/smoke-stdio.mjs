@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * Stdio smoke test for @ebb-ai/mcp.
+ * Stdio smoke test for @tidegap/mcp.
  *
  * Spawns the built server (dist/server.js) as a child process, runs the MCP
  * `initialize` handshake and `tools/list` over stdio, and checks that all
  * ten tools are advertised. Uses an ephemeral in-memory ledger so it never
- * touches ~/.ebb. Run after a build with: `pnpm --filter @ebb-ai/mcp smoke`.
+ * touches ~/.ebb. Run after a build with: `pnpm --filter @tidegap/mcp smoke`.
  */
 
 import { dirname, join } from "node:path";
@@ -23,7 +23,7 @@ const transport = new StdioClientTransport({
   env: { ...process.env, EBB_DB_PATH: ":memory:" },
   stderr: "ignore",
 });
-const client = new Client({ name: "ebb-mcp-smoke", version: "0.0.0" });
+const client = new Client({ name: "tidegap-mcp-smoke", version: "0.0.0" });
 
 try {
   await client.connect(transport);

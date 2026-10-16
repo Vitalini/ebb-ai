@@ -1,8 +1,8 @@
 /**
- * Grid-region resolution shared by every ebb-ai integration — the CLI,
+ * Grid-region resolution shared by every Tidegap integration — the CLI,
  * the MCP server and the OpenClaw plugin.
  *
- * When no region is given explicitly, ebb-ai guesses one from the host
+ * When no region is given explicitly, Tidegap guesses one from the host
  * machine's IANA timezone, so a user gets carbon data for their own grid
  * instead of a hard-coded default. An explicit region (a tool argument or
  * a configured default) always takes precedence.

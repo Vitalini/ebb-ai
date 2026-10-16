@@ -1,4 +1,4 @@
-"""Scheduler — the in-process orchestrator for ebb-ai.
+"""Scheduler — the in-process orchestrator for Tidegap.
 
 Responsibilities
 ----------------
@@ -11,7 +11,7 @@ Responsibilities
 - Optionally write every state transition through to a SQLite audit
   ledger (``db_path``), shared safely across processes via WAL plus a
   row-level dispatch claim. Both ports persist to the same schema, so a
-  ``queue.db`` written by ``@ebb-ai/core`` is readable here and vice
+  ``queue.db`` written by ``@tidegap/core`` is readable here and vice
   versa.
 
 This module ports the design from
@@ -92,7 +92,7 @@ MAX_HORIZON_HOURS: Final[int] = 72
 #: Legacy flat energy estimate per task (kWh). Retained as the
 #: backwards-compatible fallback and for API stability (it is exported).
 #: Since v0.10 the real per-model coefficients live in
-#: :mod:`ebb_ai.energy`; with no model and no token counts the estimator
+#: :mod:`tidegap.energy`; with no model and no token counts the estimator
 #: returns exactly this value, so closure-based ``defer`` tasks keep
 #: their pre-v0.10 numbers.
 ENERGY_KWH_PER_TASK: Final[float] = 0.0015
@@ -139,7 +139,7 @@ def _intensity_to_grams(
     """Grams CO2 for one task at a given grid intensity.
 
     Delegates to the per-model energy coefficients
-    (:func:`ebb_ai.energy.grams_for_intensity`, v0.10). With no model and
+    (:func:`tidegap.energy.grams_for_intensity`, v0.10). With no model and
     no token counts the estimator falls back to the legacy flat
     0.0015 kWh, so closure-based ``defer`` tasks are unchanged;
     provider-call tasks pass ``model`` (and, at dispatch, the real token
@@ -301,7 +301,7 @@ async def _retry_with_backoff(
 
     Up to ``len(waits) + 1`` attempts (default 4: 1 initial + retries at
     1s, 4s, 16s). Only errors :func:`_is_retryable` approves are retried.
-    This is the single retry policy for ebb-ai: provider adapters
+    This is the single retry policy for Tidegap: provider adapters
     construct their SDK clients with ``max_retries=0`` so vendor-side
     retries cannot multiply with this one.
     """
@@ -317,7 +317,7 @@ async def _retry_with_backoff(
             if not _is_retryable(err) or attempt == len(effective_waits):
                 raise
             _log.warning(
-                "[ebb-ai/scheduler] dispatch attempt %d failed (%s); retrying in %gs",
+                "[tidegap/scheduler] dispatch attempt %d failed (%s); retrying in %gs",
                 attempt + 1,
                 err,
                 effective_waits[attempt],
@@ -349,7 +349,7 @@ async def _write_output_file(
         target.write_text(json.dumps(payload, indent=2, default=repr))
     except Exception as err:
         _log.warning(
-            "[ebb-ai/scheduler] failed to write output_path=%s: %s; "
+            "[tidegap/scheduler] failed to write output_path=%s: %s; "
             "result is still in the SQLite ledger",
             path,
             err,
@@ -795,7 +795,7 @@ class _TaskStore:
     Concurrency: writes are serialized through an :class:`asyncio.Lock`
     so a single connection is enough; for cross-process concurrency the
     store enables SQLite's WAL journal on first connect (v0.11) so a
-    second TaskStore (e.g. ``ebb tick`` daemon + interactive ``ebb-mcp``)
+    second TaskStore (e.g. ``tidegap tick`` daemon + interactive ``tidegap-mcp``)
     can hold a separate handle, and sets ``busy_timeout = 5000`` so a
     colliding writer queues for up to 5s instead of throwing
     ``SQLITE_BUSY`` immediately.
@@ -820,7 +820,7 @@ class _TaskStore:
                 await conn.execute("PRAGMA journal_mode = WAL")
                 # busy_timeout makes a colliding writer queue for up to
                 # 5s instead of raising SQLITE_BUSY immediately —
-                # essential when a cron `ebb tick` and an interactive
+                # essential when a cron `tidegap tick` and an interactive
                 # process write the same file. Per-connection, so it is
                 # set on every open (v0.12, mirrors the TS store).
                 await conn.execute("PRAGMA busy_timeout = 5000")
@@ -1295,7 +1295,7 @@ class Scheduler:
         # carry ``{"key_path": "..."}``. If the ``cryptography`` extra is
         # absent (or the key can't be loaded), signing self-disables on
         # the first attempt and receipts ship unsigned — the default
-        # ``pip install ebb-ai`` path stays v0.10-compatible.
+        # ``pip install tidegap`` path stays v0.10-compatible.
         self._signing_config: bool | dict[str, Any] = (
             False if signing is False else (signing or {})
         )
@@ -1391,7 +1391,7 @@ class Scheduler:
             return self._signing_key
         except Exception as err:  # SigningNotInstalled, FS errors, …
             _log.warning(
-                "[ebb-ai/scheduler] failed to load signing key, "
+                "[tidegap/scheduler] failed to load signing key, "
                 "receipts will go out unsigned: %s",
                 err,
             )
@@ -1413,7 +1413,7 @@ class Scheduler:
             signed = sign_receipt(receipt.to_dict(), key)
         except Exception as err:
             _log.warning(
-                "[ebb-ai/scheduler] receipt signing failed, shipping unsigned: %s",
+                "[tidegap/scheduler] receipt signing failed, shipping unsigned: %s",
                 err,
             )
             return receipt
@@ -1529,7 +1529,7 @@ class Scheduler:
         """
         sched_task = loop.create_task(
             self._schedule_safe(task_id, deadline),
-            name=f"ebb-ai:schedule:{task_id}",
+            name=f"tidegap:schedule:{task_id}",
         )
         self._schedules[task_id] = sched_task
 
@@ -1676,7 +1676,7 @@ class Scheduler:
         Reply history and series rollover (ui v2) are TS-only: this port
         does not send ``body_json.messages`` to the provider, does not
         insert a series successor when an occurrence finishes, and ignores
-        ``not_before``. Run the TS dispatcher (``ebb tick`` or the OpenClaw
+        ``not_before``. Run the TS dispatcher (``tidegap tick`` or the OpenClaw
         loop) on a ledger that holds reply children or repeating tasks.
 
         Parameters
@@ -1710,7 +1710,7 @@ class Scheduler:
                     raise
                 except Exception as err:
                     _log.warning(
-                        "[ebb-ai/scheduler] tick: could not claim task %s for "
+                        "[tidegap/scheduler] tick: could not claim task %s for "
                         "batch submit: %s; skipping this round",
                         record.task_id,
                         err,
@@ -1783,7 +1783,7 @@ class Scheduler:
                 raise
             except Exception as err:
                 _log.warning(
-                    "[ebb-ai/scheduler] tick: could not claim task %s: %s; "
+                    "[tidegap/scheduler] tick: could not claim task %s: %s; "
                     "skipping this round",
                     record.task_id,
                     err,
@@ -1808,7 +1808,7 @@ class Scheduler:
                     raise
                 except Exception as err:
                     _log.warning(
-                        "[ebb-ai/scheduler] tick: could not claim submitted "
+                        "[tidegap/scheduler] tick: could not claim submitted "
                         "task %s: %s; skipping this round",
                         record.task_id,
                         err,
@@ -1947,7 +1947,7 @@ class Scheduler:
             )
         except Exception as err:
             _log.warning(
-                "[ebb-ai/scheduler] failed to record carbon-budget alert "
+                "[tidegap/scheduler] failed to record carbon-budget alert "
                 "marker: %s",
                 err,
             )
@@ -1969,7 +1969,7 @@ class Scheduler:
                     await res
         except Exception as err:
             _log.warning(
-                "[ebb-ai/scheduler] on_carbon_alert hook raised (%s); ignoring",
+                "[tidegap/scheduler] on_carbon_alert hook raised (%s); ignoring",
                 err,
             )
 
@@ -2093,7 +2093,7 @@ class Scheduler:
             # cancel is deferred: the vendor batch-cancel endpoints are
             # best-effort and racy against completion.)
             _log.warning(
-                "[ebb-ai/scheduler] cancel_task: task %s was submitted to the "
+                "[tidegap/scheduler] cancel_task: task %s was submitted to the "
                 "provider's Batch API (batch id %s); marking cancelled locally, "
                 "but the provider-side batch may still run and bill",
                 task_id,
@@ -2308,7 +2308,7 @@ class Scheduler:
         except asyncio.CancelledError:
             raise
         except Exception as err:
-            _log.warning("[ebb-ai/scheduler] forecast fetch failed: %s", err)
+            _log.warning("[tidegap/scheduler] forecast fetch failed: %s", err)
             # V20: distinguish first-schedule from hourly re-entry via the
             # committed window. On re-entry a transient feed failure must
             # NOT abandon the already-chosen clean window and dispatch
@@ -2465,7 +2465,7 @@ class Scheduler:
         # late result (§1.2).
         if record.status == "cancelled":
             _log.warning(
-                "[ebb-ai/scheduler] task %s was cancelled while running; "
+                "[tidegap/scheduler] task %s was cancelled while running; "
                 "dropping its late result",
                 task_id,
             )
@@ -2500,7 +2500,7 @@ class Scheduler:
             raise
         except Exception as err:
             _log.warning(
-                "[ebb-ai/scheduler] intensity fetch for the receipt failed (%s); "
+                "[tidegap/scheduler] intensity fetch for the receipt failed (%s); "
                 "receipt falls back to the schedule-time estimate",
                 err,
             )
@@ -2551,7 +2551,7 @@ class Scheduler:
             )
         except Exception as err:
             _log.warning(
-                "[ebb-ai/scheduler] failed to build the carbon receipt for %s: %s; "
+                "[tidegap/scheduler] failed to build the carbon receipt for %s: %s; "
                 "task stays completed without a receipt",
                 task_id,
                 err,
@@ -2566,7 +2566,7 @@ class Scheduler:
                 await self._store.upsert(record)
             except Exception as err:
                 _log.warning(
-                    "[ebb-ai/scheduler] failed to persist completed task %s: %s",
+                    "[tidegap/scheduler] failed to persist completed task %s: %s",
                     task_id,
                     err,
                 )
@@ -2682,7 +2682,7 @@ class Scheduler:
             raise
         except Exception as err:
             _log.warning(
-                "[ebb-ai/scheduler] forecast fetch failed for %s: %s", task_id, err
+                "[tidegap/scheduler] forecast fetch failed for %s: %s", task_id, err
             )
             # Schedule for "now" so the next tick picks it up.
             record.status = "scheduled"
@@ -2982,7 +2982,7 @@ class Scheduler:
         if record.status == "cancelled" or cancelled_elsewhere:
             record.status = "cancelled"
             _log.warning(
-                "[ebb-ai/scheduler] task %s was cancelled while running; "
+                "[tidegap/scheduler] task %s was cancelled while running; "
                 "dropping its late result",
                 task_id,
             )
@@ -3005,7 +3005,7 @@ class Scheduler:
             raise
         except Exception as err:
             _log.warning(
-                "[ebb-ai/scheduler] intensity fetch for the receipt failed (%s); "
+                "[tidegap/scheduler] intensity fetch for the receipt failed (%s); "
                 "receipt falls back to the schedule-time estimate",
                 err,
             )
@@ -3094,7 +3094,7 @@ class Scheduler:
             )
         except Exception as err:
             _log.warning(
-                "[ebb-ai/scheduler] failed to build the carbon receipt for %s: %s; "
+                "[tidegap/scheduler] failed to build the carbon receipt for %s: %s; "
                 "task stays completed without a receipt",
                 task_id,
                 err,
@@ -3117,7 +3117,7 @@ class Scheduler:
                 await self._store.upsert(record)
             except Exception as err:
                 _log.warning(
-                    "[ebb-ai/scheduler] failed to persist completed task %s: %s",
+                    "[tidegap/scheduler] failed to persist completed task %s: %s",
                     task_id,
                     err,
                 )
@@ -3193,7 +3193,7 @@ class Scheduler:
             # let retry_task re-dispatch sync.
             if record.routing_decision:
                 _log.warning(
-                    "[ebb-ai/scheduler] batch submit failed for %s (%s); falling "
+                    "[tidegap/scheduler] batch submit failed for %s (%s); falling "
                     "back to the synchronous dispatch path for the routed candidate",
                     task_id,
                     msg,
@@ -3218,7 +3218,7 @@ class Scheduler:
                 await self._store.upsert(record)
             except Exception as err:
                 _log.warning(
-                    "[ebb-ai/scheduler] failed to persist submitted task %s: %s",
+                    "[tidegap/scheduler] failed to persist submitted task %s: %s",
                     task_id,
                     err,
                 )
@@ -3262,7 +3262,7 @@ class Scheduler:
             if self._store is not None and self._connected:
                 await self._store.upsert(record)
             _log.warning(
-                "[ebb-ai/scheduler] tick: no retrieve_batch on adapter for "
+                "[tidegap/scheduler] tick: no retrieve_batch on adapter for "
                 "%r; leaving %s submitted",
                 spec.provider,
                 task_id,
@@ -3290,7 +3290,7 @@ class Scheduler:
             if self._store is not None and self._connected:
                 await self._store.upsert(record)
             _log.warning(
-                "[ebb-ai/scheduler] tick: retrieve_batch failed for %s (%s); "
+                "[tidegap/scheduler] tick: retrieve_batch failed for %s (%s); "
                 "leaving submitted",
                 task_id,
                 err,
@@ -3351,7 +3351,7 @@ class Scheduler:
             raise
         except Exception as err:
             _log.warning(
-                "[ebb-ai/scheduler] intensity fetch for the receipt failed (%s); "
+                "[tidegap/scheduler] intensity fetch for the receipt failed (%s); "
                 "receipt falls back to the schedule-time estimate",
                 err,
             )
@@ -3417,7 +3417,7 @@ class Scheduler:
             )
         except Exception as err:
             _log.warning(
-                "[ebb-ai/scheduler] failed to build the carbon receipt for %s: %s; "
+                "[tidegap/scheduler] failed to build the carbon receipt for %s: %s; "
                 "task stays completed without a receipt",
                 task_id,
                 err,
@@ -3434,7 +3434,7 @@ class Scheduler:
                 await self._store.upsert(record)
             except Exception as err:
                 _log.warning(
-                    "[ebb-ai/scheduler] failed to persist completed task %s: %s",
+                    "[tidegap/scheduler] failed to persist completed task %s: %s",
                     task_id,
                     err,
                 )
@@ -3529,7 +3529,7 @@ async def defer(
 
     Example
     -------
-    >>> from ebb_ai import defer
+    >>> from tidegap import defer
     >>> async def main():
     ...     return await defer(
     ...         lambda: 42,

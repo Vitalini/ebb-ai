@@ -1,5 +1,5 @@
 {
-  "name": "@ebb-ai/mcp",
+  "name": "@tidegap/mcp",
   "version": "0.17.0",
   "description": "MCP server: run non-urgent LLM tasks at the cleanest grid hour before a deadline, via Batch APIs when allowed.",
   "mcpName": "io.github.Vitalini/ebb-ai",
@@ -8,6 +8,7 @@
   "type": "module",
   "main": "./dist/server.js",
   "bin": {
+    "tidegap-mcp": "./dist/server.js",
     "ebb-mcp": "./dist/server.js"
   },
   "files": [
@@ -25,7 +26,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@ebb-ai/core": "workspace:*",
+    "@tidegap/core": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.30.1",
     "zod": "^3.23.8",
     "zod-to-json-schema": "^3.24.6"
@@ -38,7 +39,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Vitalini/ebb-ai.git",
+    "url": "https://github.com/tidegap/tidegap.git",
     "directory": "packages/mcp-server"
   },
   "publishConfig": {

@@ -35,7 +35,7 @@
  * ## Power Usage Effectiveness (PUE)
  *
  * The published coefficients reflect chip-level draw. To get
- * grid-level energy you multiply by data-centre PUE. ebb-ai uses
+ * grid-level energy you multiply by data-centre PUE. Tidegap uses
  * `DEFAULT_PUE = 1.15` (industry average for hyperscalers; Google
  * reports 1.10, AWS ~1.15, Azure ~1.18). Callers can override.
  */

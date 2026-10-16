@@ -14,8 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from ebb_ai import Scheduler, mock_grid_feed
-from ebb_ai.providers.base import (
+from tidegap import Scheduler, mock_grid_feed
+from tidegap.providers.base import (
     BatchHandle,
     BatchResultItem,
     BatchRetrieveResult,
@@ -23,7 +23,7 @@ from ebb_ai.providers.base import (
     DispatchResult,
     ProviderAdapter,
 )
-from ebb_ai.types import DeferOptions, ProviderCallSpec
+from tidegap.types import DeferOptions, ProviderCallSpec
 
 pytestmark = pytest.mark.asyncio
 
@@ -330,7 +330,7 @@ async def test_cross_language_ts_submitted_row_completed_by_py(
 
     We reproduce the exact TS column layout (packages/core-ts/src/storage/
     sqlite.ts) with a raw sqlite3 write — a verified equivalent of what
-    ``@ebb-ai/core`` writes to a shared ``queue.db`` — then read + poll it
+    ``@tidegap/core`` writes to a shared ``queue.db`` — then read + poll it
     with the Python scheduler.
     """
     db = str(tmp_path / "queue.db")

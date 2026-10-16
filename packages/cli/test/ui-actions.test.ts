@@ -1,5 +1,5 @@
 /**
- * `ebb ui` write API (ui v2, U8): POST hardening, every action against a
+ * `tidegap ui` write API (ui v2, U8): POST hardening, every action against a
  * real ledger, the change stream, the series route and Start dispatcher.
  */
 
@@ -8,7 +8,7 @@ import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { mockGridFeed, TaskStore, type GridFeed, type TaskRecord } from "@ebb-ai/core";
+import { mockGridFeed, TaskStore, type GridFeed, type TaskRecord } from "@tidegap/core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { startUiServer, type UiServer } from "../src/ui/server.js";
@@ -48,7 +48,7 @@ function seed(dbPath: string): void {
   store.close();
 }
 
-describe("ebb ui write API", () => {
+describe("tidegap ui write API", () => {
   let dir: string;
   let dbPath: string;
   let ui: UiServer;
@@ -61,7 +61,7 @@ describe("ebb ui write API", () => {
     dbPath = join(dir, "queue.db");
     const assetDir = join(dir, "ui");
     mkdirSync(assetDir);
-    writeFileSync(join(assetDir, "index.html"), "<!doctype html><title>ebb</title>");
+    writeFileSync(join(assetDir, "index.html"), "<!doctype html><title>tidegap</title>");
     seed(dbPath);
     spawned = [];
     alive = new Set();
@@ -83,7 +83,7 @@ describe("ebb ui write API", () => {
       quota: () => ({}),
       daemonStatus: () => "not_installed",
       pollMs: 50,
-      launcher: ["/usr/bin/node", "/opt/ebb/dist/index.js"],
+      launcher: ["/usr/bin/node", "/opt/tidegap/dist/index.js"],
       logDir: join(dir, "logs"),
       spawn: (argv, log) => {
         spawned.push({ argv, log });
@@ -330,7 +330,7 @@ describe("ebb ui write API", () => {
       expect(meta.log).toBe(join(dir, "logs", "ui-tick.log"));
       expect(spawned[0]!.argv).toEqual([
         "/usr/bin/node",
-        "/opt/ebb/dist/index.js",
+        "/opt/tidegap/dist/index.js",
         "tick",
         "--daemon",
         "--interval",

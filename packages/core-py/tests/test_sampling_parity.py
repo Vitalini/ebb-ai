@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from ebb_ai.providers.anthropic import _supports_sampling_params
+from tidegap.providers.anthropic import _supports_sampling_params
 
 FIXTURE_PATH = (
     Path(__file__).resolve().parents[2]

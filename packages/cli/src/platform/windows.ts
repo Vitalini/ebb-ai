@@ -1,18 +1,18 @@
 /**
  * Windows platform helpers.
  *
- * There is no automated daemon install on Windows: `ebb install` does
+ * There is no automated daemon install on Windows: `tidegap install` does
  * not register a Task Scheduler job or an nssm service for you. Instead
  * it prints a ready-to-paste `schtasks` command, built from the real
- * node interpreter + the resolved `ebb` entry, that you run yourself
+ * node interpreter + the resolved `tidegap` entry, that you run yourself
  * from an elevated prompt. `caffeinate`/wake-event equivalents
  * (SetThreadExecutionState, waitable timers) are not wired.
  */
 
 export const TODO_NOTE =
-  "[ebb-ai/cli] Windows daemon install is not supported. " +
-  "Run `ebb tick` under Task Scheduler or nssm manually — " +
-  "`ebb install` prints a ready-to-paste schtasks command.";
+  "[tidegap/cli] Windows daemon install is not supported. " +
+  "Run `tidegap tick` under Task Scheduler or nssm manually — " +
+  "`tidegap install` prints a ready-to-paste schtasks command.";
 
 export async function caffeinateWhilePending(
   _durationSec: number,
@@ -39,7 +39,7 @@ export async function pmsetScheduleWake(
 }
 
 /**
- * Build a ready-to-paste `schtasks` command for running `ebb tick`
+ * Build a ready-to-paste `schtasks` command for running `tidegap tick`
  * periodically. `launcher` is the resolved invocation
  * (`[process.execPath, realpath(argv[1])]` for a pinned-node install),
  * so the task runs the exact interpreter + entry rather than relying on
@@ -60,13 +60,13 @@ export function schtasksTemplate(opts: {
     .map(quote)
     .join(" ");
   const everyMin = Math.max(1, Math.floor(opts.tickIntervalSec / 60));
-  return `Windows daemon install is not supported. Run \`ebb tick\` yourself under
+  return `Windows daemon install is not supported. Run \`tidegap tick\` yourself under
 Task Scheduler or nssm. From an elevated PowerShell / CMD:
 
   schtasks /create /TN "ebb-tick" /TR "${run}" /SC MINUTE /MO ${everyMin} /F
 
-Provide provider keys via %USERPROFILE%\\.config\\ebb\\env (KEY=VALUE lines);
-\`ebb tick\` loads that file on startup. Wake-from-sleep events are not
+Provide provider keys via %USERPROFILE%\\.config\\tidegap\\env (KEY=VALUE lines);
+\`tidegap tick\` loads that file on startup. Wake-from-sleep events are not
 supported on Windows.
 `;
 }

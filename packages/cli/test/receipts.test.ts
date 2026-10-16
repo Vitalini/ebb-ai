@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { TaskRecord } from "@ebb-ai/core";
+import type { TaskRecord } from "@tidegap/core";
 import { renderReceipts } from "../src/commands/receipts.js";
 
 function row(overrides: Partial<NonNullable<TaskRecord["receipt"]>>): TaskRecord {

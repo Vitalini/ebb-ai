@@ -20,13 +20,13 @@
  * credentials, provider credentials, the carbon-budget threshold, the
  * delivery-store path, the startup opt-out — comes from OpenClaw plugin
  * config (`plugins.entries.ebb.config`), declared in `./config.ts` and
- * mirrored into `openclaw.plugin.json`. `@ebb-ai/core` is environment-pure for
+ * mirrored into `openclaw.plugin.json`. `@tidegap/core` is environment-pure for
  * the same reason. Each config field's description names the environment
  * variable it replaces, and the credential fields accept OpenClaw's
  * `${ENV_VAR}` secret shorthand, so a user who exports the old variables can
  * keep doing so — the GATEWAY reads them, not this plugin.
  *
- * (The `ebb` CLI and the `@ebb-ai/mcp` server are separate hosts and still
+ * (The `ebb` CLI and the `@tidegap/mcp` server are separate hosts and still
  * read those environment variables directly; their behaviour is unchanged.)
  *
  * Startup / restart behaviour (important — read before relying on the
@@ -48,8 +48,8 @@
  * such tasks: a restart alone cannot recover bridge-only or chat-delivery
  * tasks; the first tool call in the new process does.
  *
- * Shares the SQLite ledger at ~/.ebb-ai/queue.db with the @ebb-ai/mcp MCP
- * server and the @ebb-ai/cli CLI — a task deferred in OpenClaw shows up in
+ * Shares the SQLite ledger at ~/.ebb-ai/queue.db with the @tidegap/mcp MCP
+ * server and the @tidegap/cli CLI — a task deferred in OpenClaw shows up in
  * `ebb stats` and vice versa. Tool names match the MCP server surface.
  *
  * Tools:
@@ -90,7 +90,7 @@ import {
   type TaskRecord,
   type TickAdapters,
   type TickResult,
-} from "@ebb-ai/core";
+} from "@tidegap/core";
 
 import { openclawToolParameters } from "./tool-schemas.js";
 
@@ -142,7 +142,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { mkdirSync } from "node:fs";
 
-// Loud SYNTHETIC-data disclosure, mirroring the @ebb-ai/mcp server so the two
+// Loud SYNTHETIC-data disclosure, mirroring the @tidegap/mcp server so the two
 // surfaces read identically. "mock" grid source ⇒ the carbon numbers are
 // illustrative, not measured.
 const SYNTHETIC_GRID_WARNING =
@@ -174,7 +174,7 @@ const PROVIDER_CONFIG_FIELD: Record<
  * confidence tier. Returns undefined when there is no receipt yet.
  */
 function receiptProvenance(
-  receipt: import("@ebb-ai/core").CarbonReceipt | undefined,
+  receipt: import("@tidegap/core").CarbonReceipt | undefined,
 ): Record<string, unknown> | undefined {
   if (!receipt) return undefined;
   const out: Record<string, unknown> = {};
@@ -412,7 +412,7 @@ export async function runDispatchTick(
   });
   for (const message of preTickMessages) {
     // eslint-disable-next-line no-console
-    console.warn(`[ebb-ai] dispatcher: ${message}`);
+    console.warn(`[tidegap] dispatcher: ${message}`);
   }
   const adapters = adaptersOverride ?? buildAdapters(cfg);
   const covered = new Set<string>(
@@ -437,7 +437,7 @@ export async function runDispatchTick(
         PROVIDER_CONFIG_FIELD[provider as keyof typeof PROVIDER_CONFIG_FIELD] ??
         "its provider credential";
       console.warn(
-        `[ebb-ai] dispatcher: no adapter for provider "${provider}" yet ` +
+        `[tidegap] dispatcher: no adapter for provider "${provider}" yet ` +
           `(runtime bridge is captured on the first tool call; plugin config ` +
           `"${keyHint}" is not set). ` +
           `Leaving those tasks scheduled; they dispatch once an adapter is available.`,
@@ -541,7 +541,7 @@ async function deliverCompletedTask(
  */
 async function onCarbonAlert(alert: CarbonAlert): Promise<void> {
   // eslint-disable-next-line no-console
-  console.warn(`[ebb-ai] ${formatCarbonAlertMessage(alert).replace(/\n/g, " · ")}`);
+  console.warn(`[tidegap] ${formatCarbonAlertMessage(alert).replace(/\n/g, " · ")}`);
   try {
     await deliverCarbonAlert(alert, getCapturedOpenClawConfig());
   } catch {

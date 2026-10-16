@@ -1,4 +1,4 @@
-"""Shared pytest fixtures for the ebb-ai test suite."""
+"""Shared pytest fixtures for the Tidegap test suite."""
 
 from __future__ import annotations
 

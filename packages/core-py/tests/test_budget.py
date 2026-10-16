@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from ebb_ai import (
+from tidegap import (
     CarbonAlert,
     CarbonBudgetConfig,
     CarbonReceipt,
@@ -29,8 +29,8 @@ from ebb_ai import (
     receipt_carbon_g,
     window_bounds,
 )
-from ebb_ai.providers.base import BatchHandle, DispatchOptions, DispatchResult, ProviderAdapter
-from ebb_ai.scheduler import _TaskStore
+from tidegap.providers.base import BatchHandle, DispatchOptions, DispatchResult, ProviderAdapter
+from tidegap.scheduler import _TaskStore
 
 
 class FakeAdapter(ProviderAdapter):

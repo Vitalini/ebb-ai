@@ -233,7 +233,7 @@ export function parseKeyValues(contents: string): Record<string, string> {
 
 /**
  * The two environment-variable-shaped overrides this loader accepts. The
- * names match the variables the `ebb` CLI and `@ebb-ai/mcp` server read, but
+ * names match the variables the `tidegap` CLI and `@tidegap/mcp` server read, but
  * THIS LIBRARY NEVER READS THE AMBIENT ENVIRONMENT — the host reads them and passes
  * them in via `LoadCarbonBudgetOptions.env`. The OpenClaw plugin passes the
  * same shape built from its plugin config (`carbonBudgetG` /

@@ -12,8 +12,8 @@ import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from ebb_ai import DeferOptions, ProviderCallSpec, Scheduler, mock_grid_feed
-from ebb_ai.scheduler import _derive_title, _redact_body_json, _TaskStore
+from tidegap import DeferOptions, ProviderCallSpec, Scheduler, mock_grid_feed
+from tidegap.scheduler import _derive_title, _redact_body_json, _TaskStore
 
 SECRET = "sk-ant-abc123DEF456ghi789JKL012mno"
 

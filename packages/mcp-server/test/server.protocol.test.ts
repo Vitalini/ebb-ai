@@ -20,7 +20,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { mockGridFeed, recommendWindow, Scheduler } from "@ebb-ai/core";
+import { mockGridFeed, recommendWindow, Scheduler } from "@tidegap/core";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
@@ -29,7 +29,7 @@ function buildServer() {
   const scheduler = new Scheduler({ feed, defaultRegion: "US-CAL-CISO" });
 
   const server = new Server(
-    { name: "ebb-mcp-test", version: "0.1.0" },
+    { name: "tidegap-mcp-test", version: "0.1.0" },
     { capabilities: { tools: {} } },
   );
 
@@ -159,10 +159,10 @@ function buildServer() {
 }
 
 async function buildClient() {
-  return new Client({ name: "ebb-mcp-test-client", version: "0.0.0" });
+  return new Client({ name: "tidegap-mcp-test-client", version: "0.0.0" });
 }
 
-describe("ebb-mcp protocol", () => {
+describe("tidegap-mcp protocol", () => {
   it("connects and lists four tools", async () => {
     const { server, scheduler } = buildServer();
     const client = await buildClient();

@@ -1,8 +1,8 @@
 /**
- * `ebb queue list | show | unread` — inspect the ledger.
- * `ebb queue cancel | reschedule | run-now | reply` — change it (ui v2).
+ * `tidegap queue list | show | unread` — inspect the ledger.
+ * `tidegap queue cancel | reschedule | run-now | reply` — change it (ui v2).
  *   Writes go through a `Scheduler` without adapters: they never dispatch;
- *   the dispatcher (`ebb tick` or the OpenClaw loop) runs the task.
+ *   the dispatcher (`tidegap tick` or the OpenClaw loop) runs the task.
  *
  * We deliberately avoid a table-printing dependency. Columns are
  * padded with String.prototype.padEnd to a fixed width.
@@ -26,7 +26,7 @@ import {
   taskPrompt,
   taskResultText,
   TaskStore,
-} from "@ebb-ai/core";
+} from "@tidegap/core";
 import type {
   DeadlineKind,
   GridFeed,
@@ -35,7 +35,7 @@ import type {
   TaskListFilter,
   TaskRecord,
   TaskStatus,
-} from "@ebb-ai/core";
+} from "@tidegap/core";
 import { existsSync } from "node:fs";
 
 import { readEnvCredentials } from "../env.js";
@@ -120,14 +120,14 @@ export function renderQueue(
       fmtCol(r.scheduledFor, 26) +
       fmtCol(r.region, 16),
   );
-  // When a ticker (`ebb tick` or the OpenClaw loop) last ran: tells the user
+  // When a ticker (`tidegap tick` or the OpenClaw loop) last ran: tells the user
   // whether scheduled tasks are actually being dispatched.
   const tick = `last tick: ${opts.lastTickAt ?? "never recorded"}`;
   return [header, sep, ...lines, "", tick].join("\n");
 }
 
 /**
- * The fields `queue list --json` and the `ebb ui` list API print per task
+ * The fields `queue list --json` and the `tidegap ui` list API print per task
  * (no prompt, no result).
  */
 export function taskSummary(r: TaskRecord<unknown>): Record<string, unknown> {
@@ -196,14 +196,14 @@ function buildFilter(opts: QueueListOptions): TaskListFilter {
 }
 
 /**
- * The Claude Code SessionStart line: `N unread ebb task(s), run `ebb ui``,
+ * The Claude Code SessionStart line: `N unread Tidegap task(s), run `tidegap ui``,
  * or "" when nothing is unread. It names no task text, so nothing from a
  * prompt or a model reply reaches the session context.
  */
 export function renderHookLine(unreadCount: number): string {
   if (unreadCount <= 0) return "";
   const noun = unreadCount === 1 ? "task" : "tasks";
-  return stripControlChars(`${unreadCount} unread ebb ${noun}, run \`ebb ui\` to read them.`);
+  return stripControlChars(`${unreadCount} unread Tidegap ${noun}, run \`tidegap ui\` to read them.`);
 }
 
 function runQueueHook(opts: QueueListOptions): QueueListResult {
@@ -267,7 +267,7 @@ export function rawPayload(record: TaskRecord<unknown>): unknown {
   return r && typeof r === "object" ? r.raw : undefined;
 }
 
-/** Render one task in text, the CLI twin of the `ebb ui` detail view. */
+/** Render one task in text, the CLI twin of the `tidegap ui` detail view. */
 export function renderTask(
   record: TaskRecord<unknown>,
   opts: { raw?: boolean; quota?: QuotaResetConfig; children?: readonly string[] } = {},
@@ -355,7 +355,7 @@ export function renderTask(
 }
 
 /**
- * `ebb queue show <id>`: print one task. A completed or failed task is
+ * `tidegap queue show <id>`: print one task. A completed or failed task is
  * marked read unless `markRead` is false. Throws on an unknown id.
  */
 export async function runQueueShow(
@@ -398,7 +398,7 @@ export function withoutRaw(result: unknown): unknown {
 }
 
 /**
- * `ebb queue unread <id>`: clear a task's read marker so it shows in the
+ * `tidegap queue unread <id>`: clear a task's read marker so it shows in the
  * inbox again. Throws on an unknown id.
  */
 export async function runQueueUnread(
@@ -432,13 +432,13 @@ export function sortSeries(rows: TaskRecord<unknown>[]): TaskRecord<unknown>[] {
 export interface QueueWriteOptions {
   db?: string;
   region?: string;
-  /** Inject a grid feed (tests); default: the same feed `ebb tick` builds. */
+  /** Inject a grid feed (tests); default: the same feed `tidegap tick` builds. */
   feed?: GridFeed;
   now?: () => Date;
 }
 
 /**
- * The scheduler every write path uses (`ebb queue` writes and `ebb ui`): the
+ * The scheduler every write path uses (`tidegap queue` writes and `tidegap ui`): the
  * ledger, the default grid feed and the quota config, and NO adapters, so a
  * write can never dispatch a provider call. Signing is off for the same
  * reason: no receipt is produced here.
@@ -512,7 +512,7 @@ function writeResult(scheduler: Scheduler, dbPath: string, record: TaskRecord<un
   }
 }
 
-/** `ebb queue cancel <id> [--series]`. Throws (exit 1) on an unknown id. */
+/** `tidegap queue cancel <id> [--series]`. Throws (exit 1) on an unknown id. */
 export async function runQueueCancel(
   taskId: string,
   opts: QueueWriteOptions & { series?: boolean } = {},
@@ -530,7 +530,7 @@ export async function runQueueCancel(
   return writeResult(scheduler, dbPath, rec, `${taskId}: ${rec.status}${ended}`);
 }
 
-/** `ebb queue run-now <id>`. Throws (exit 1) when the task cannot run now. */
+/** `tidegap queue run-now <id>`. Throws (exit 1) when the task cannot run now. */
 export async function runQueueRunNow(taskId: string, opts: QueueWriteOptions = {}): Promise<string> {
   const dbPath = opts.db ?? defaultDbPath();
   const scheduler = actionScheduler({ ...opts, dbPath });
@@ -545,7 +545,7 @@ export async function runQueueRunNow(taskId: string, opts: QueueWriteOptions = {
 }
 
 /**
- * `ebb queue reschedule <id> (--by <when> | --at <iso> | --day <yyyy-mm-dd>)`.
+ * `tidegap queue reschedule <id> (--by <when> | --at <iso> | --day <yyyy-mm-dd>)`.
  * Exactly one target. `--day` uses this machine's time zone for the bounds.
  */
 export async function runQueueReschedule(
@@ -573,7 +573,7 @@ export async function runQueueReschedule(
   return writeResult(scheduler, dbPath, rec, `${taskId}: rescheduled`);
 }
 
-/** `ebb queue reply <id> <text> [--by <when>]`: a child task with the history. */
+/** `tidegap queue reply <id> <text> [--by <when>]`: a child task with the history. */
 export async function runQueueReply(
   taskId: string,
   text: string,

@@ -314,7 +314,7 @@ describe("Batch API routing (§0.1)", () => {
 
   it.skipIf(!nodeSqliteAvailable)("cross-language: a PY-submitted row is completed by a TS tick", async () => {
     // Reproduce the exact PY port's column layout (packages/core-py/src/
-    // ebb_ai/scheduler.py _SCHEMA) — identical to the TS schema — with a
+    // tidegap/scheduler.py _SCHEMA) — identical to the TS schema — with a
     // raw node:sqlite write, then read + poll it with the TS scheduler.
     // (createRequire dodges vitest's ESM resolver, which can't map the
     // "node:sqlite" builtin.)

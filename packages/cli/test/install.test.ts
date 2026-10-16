@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { runInstall } from "../src/commands/install.js";
 
 // A test launcher that stands in for `[process.execPath, realpath(argv1)]`.
-const LAUNCHER = ["/usr/bin/node", "/opt/ebb/dist/index.js"];
+const LAUNCHER = ["/usr/bin/node", "/opt/tidegap/dist/index.js"];
 
-describe("ebb install (macOS, dry-run)", () => {
+describe("tidegap install (macOS, dry-run)", () => {
   it("produces a plist + helper script for --laptop", async () => {
     const r = await runInstall({
       mode: "laptop",
@@ -32,7 +32,7 @@ describe("ebb install (macOS, dry-run)", () => {
     });
     // Both launcher elements appear as separate <string> tokens, before `tick`.
     expect(r.plistContent).toContain("<string>/usr/bin/node</string>");
-    expect(r.plistContent).toContain("<string>/opt/ebb/dist/index.js</string>");
+    expect(r.plistContent).toContain("<string>/opt/tidegap/dist/index.js</string>");
     expect(r.plistContent).toContain("<string>tick</string>");
     expect(r.plistContent).toContain("<string>--once</string>");
     // The old hardcoded fallback must be gone.
@@ -80,13 +80,13 @@ describe("ebb install (macOS, dry-run)", () => {
   });
 });
 
-describe("ebb install (linux, dry-run)", () => {
+describe("tidegap install (linux, dry-run)", () => {
   it("produces a service + timer + helper for --laptop", async () => {
     const r = await runInstall({
       mode: "laptop",
       platform: "linux",
       launcher: LAUNCHER,
-      dbPath: "/var/lib/ebb/queue.sqlite",
+      dbPath: "/var/lib/tidegap/queue.sqlite",
       tickIntervalSec: 300,
       dryRun: true,
     });
@@ -95,7 +95,7 @@ describe("ebb install (linux, dry-run)", () => {
     expect(r.servicePath).toContain(".config/systemd/user/ebb-tick.service");
     expect(r.timerPath).toContain(".config/systemd/user/ebb-tick.timer");
     expect(r.serviceContent).toContain(
-      "ExecStart=/usr/bin/node /opt/ebb/dist/index.js tick --db /var/lib/ebb/queue.sqlite --once",
+      "ExecStart=/usr/bin/node /opt/tidegap/dist/index.js tick --db /var/lib/tidegap/queue.sqlite --once",
     );
     expect(r.serviceContent).not.toContain("/usr/local/bin/ebb");
     expect(r.serviceContent).toContain("EnvironmentFile=-%h/.config/ebb/env");
@@ -122,13 +122,13 @@ describe("ebb install (linux, dry-run)", () => {
   });
 });
 
-describe("ebb install (windows = template only)", () => {
+describe("tidegap install (windows = template only)", () => {
   it("returns an honest schtasks template built from the launcher", async () => {
     const r = await runInstall({
       mode: "server",
       platform: "windows",
-      launcher: ["C:\\Program Files\\nodejs\\node.exe", "C:\\ebb\\index.js"],
-      dbPath: "C:\\ProgramData\\ebb\\queue.sqlite",
+      launcher: ["C:\\Program Files\\nodejs\\node.exe", "C:\\tidegap\\index.js"],
+      dbPath: "C:\\ProgramData\\tidegap\\queue.sqlite",
       dryRun: true,
     });
     expect(r.plistContent).toBe("");
@@ -141,7 +141,7 @@ describe("ebb install (windows = template only)", () => {
   });
 });
 
-describe("ebb install laptop helper script", () => {
+describe("tidegap install laptop helper script", () => {
   it("skips the header AND the separator row (tail -n +3, not +2)", async () => {
     const r = await runInstall({
       mode: "laptop",
@@ -178,7 +178,7 @@ describe("ebb install laptop helper script", () => {
       dbPath: "/Users/test/.ebb/queue.sqlite",
       dryRun: true,
     });
-    expect(r.helperContent).toContain(`EBB=('/usr/bin/node' '/opt/ebb/dist/index.js')`);
+    expect(r.helperContent).toContain(`EBB=('/usr/bin/node' '/opt/tidegap/dist/index.js')`);
     expect(r.helperContent).toContain(`"\${EBB[@]}"`);
   });
 });

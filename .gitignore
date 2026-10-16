@@ -46,6 +46,7 @@ Thumbs.db
 *.sqlite
 *.sqlite3
 ebb-queue.db
+tidegap-queue.db
 
 # Coverage
 coverage/

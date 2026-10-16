@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from ebb_ai import (
+from tidegap import (
     CarbonReceipt,
     DeferOptions,
     ProviderCallSpec,
@@ -22,14 +22,14 @@ from ebb_ai import (
     mock_grid_feed,
     verify_receipt,
 )
-from ebb_ai.grid import GridFeed
-from ebb_ai.providers.base import (
+from tidegap.grid import GridFeed
+from tidegap.providers.base import (
     BatchHandle,
     DispatchOptions,
     DispatchResult,
     ProviderAdapter,
 )
-from ebb_ai.types import Band, GridForecast, GridForecastEntry
+from tidegap.types import Band, GridForecast, GridForecastEntry
 
 # --------------------------------------------------------------------- #
 # Helpers
@@ -280,8 +280,8 @@ def test_round_half_up_matches_js_math_round() -> None:
     builtin — otherwise the two ports disagree by 0.1 at exact .5
     boundaries (e.g. the reviewer's estimated=1.6/actual=0.1 case).
     """
-    from ebb_ai.recommend import _round_half_up as rec_round
-    from ebb_ai.scheduler import _round_half_up as sched_round
+    from tidegap.recommend import _round_half_up as rec_round
+    from tidegap.scheduler import _round_half_up as sched_round
 
     cases = [
         (0.5, 1),

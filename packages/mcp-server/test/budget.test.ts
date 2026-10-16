@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { mockGridFeed, TaskStore, type TaskRecord } from "@ebb-ai/core";
+import { mockGridFeed, TaskStore, type TaskRecord } from "@tidegap/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { createEbbServer } from "../src/server.js";
 

@@ -27,7 +27,7 @@ import {
   type DispatchOptions,
   type DispatchResult,
   type ProviderAdapter,
-} from "@ebb-ai/core";
+} from "@tidegap/core";
 
 import type { PluginConfig } from "./config.js";
 

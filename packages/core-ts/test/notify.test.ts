@@ -8,7 +8,7 @@ import {
 } from "../src/index.js";
 
 describe("osNotifyCommand", () => {
-  const title = "ebb-ai: done: summarize";
+  const title = "Tidegap: done: summarize";
   const body = 'line "one"\n42 gCO2e';
 
   it("darwin passes the text to a fixed AppleScript as argv after --", () => {
@@ -74,12 +74,12 @@ describe("taskNotificationContent", () => {
       result: { text: `key sk-ant-${"a".repeat(30)}\n${"x".repeat(300)}` },
       receipt: { actualCarbonGCo2: 1.5 } as never,
     });
-    expect(title).toBe("ebb-ai: done: Summarize[31m report");
+    expect(title).toBe("Tidegap: done: Summarize[31m report");
     expect(body).not.toContain("sk-ant-");
     expect(body).toContain("[REDACTED]");
     expect(body).toContain("…");
     expect(body).toContain("1.5 gCO2e");
-    expect(body).toContain("ebb queue show t-1");
+    expect(body).toContain("tidegap queue show t-1");
     expect(body.split("\n")).toHaveLength(2);
   });
 
@@ -89,7 +89,7 @@ describe("taskNotificationContent", () => {
       status: "failed",
       error: "\nrate limited\nstack...",
     });
-    expect(title).toBe("ebb-ai: failed: t-2");
-    expect(body).toBe("rate limited\nebb queue show t-2");
+    expect(title).toBe("Tidegap: failed: t-2");
+    expect(body).toBe("rate limited\ntidegap queue show t-2");
   });
 });

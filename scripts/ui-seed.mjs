@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Seed a throwaway ledger for trying `ebb ui` (v2) by hand or in a browser
+// Seed a throwaway ledger for trying `tidegap ui` (v2) by hand or in a browser
 // smoke run. Writes a realistic mix relative to now: an overdue task, an
 // unread failure, scheduled tasks over four days (one weekly series, one
 // quota-reset series), a running and a batch-submitted task, and finished
@@ -7,7 +7,7 @@
 // from a Claude Code session (so the detail shows the resume command).
 //
 //   node scripts/ui-seed.mjs            seed, print the ledger path
-//   node scripts/ui-seed.mjs --serve    seed, then serve `ebb ui` on it
+//   node scripts/ui-seed.mjs --serve    seed, then serve `tidegap ui` on it
 //   node scripts/ui-seed.mjs --empty    an empty ledger (empty states)
 //   --db <path>                         write a NEW ledger here instead of a
 //                                       temp dir (refuses an existing file
@@ -73,7 +73,7 @@ const laterToday = (hoursAhead) => now + hoursAhead * HOUR;
 const body = (provider, model, prompt, extra = {}) =>
   JSON.stringify({ type: "provider_call", provider, model, prompt, maxTokens: 1024, ...extra });
 
-const CWD = "/Users/you/projects/ebb";
+const CWD = "/Users/you/projects/tidegap";
 const SESSION = "3f2a9c1e-5b7d-4e2a-9f10-6c8d2b4a7e91";
 
 function receipt(id, { ranAt, intensity, grams, provider, model, signed = true, est }) {
@@ -214,7 +214,7 @@ function tasks() {
       raw: { id: "msg_seed_1", type: "message", stop_reason: "end_turn", usage: { input_tokens: 412, output_tokens: 1428 } },
     },
     receipt: receipt("seed-done", { ranAt: now - 3.9 * HOUR, intensity: 118, grams: 0.41, provider: "anthropic", model: "claude-sonnet-4-5" }),
-    bodyJson: body("anthropic", "claude-sonnet-4-5", "Draft the release checklist for ebb 0.17.0 based on CONTRIBUTING.md."),
+    bodyJson: body("anthropic", "claude-sonnet-4-5", "Draft the release checklist for tidegap 0.17.0 based on CONTRIBUTING.md."),
   });
   add({
     taskId: "seed-parent",
@@ -294,7 +294,7 @@ store.close();
 console.log(`ui-seed: ${count} tasks in ${dbPath}`);
 if (!flag("--serve")) {
   console.log(`Try it:  node scripts/ui-seed.mjs --serve   (mock forecast, provider secrets stripped)`);
-  console.log(`   or:   ebb ui --db ${dbPath}   (your real environment: Start dispatcher would use your provider keys)`);
+  console.log(`   or:   tidegap ui --db ${dbPath}   (your real environment: Start dispatcher would use your provider keys)`);
   process.exit(0);
 }
 

@@ -1,20 +1,21 @@
 #!/usr/bin/env node
 /**
- * `ebb` — CLI entry point.
+ * `tidegap` — CLI entry point.
  *
- *   ebb tick           drain due tasks (one-shot or --daemon)
- *   ebb install        write launchd plist or print systemd/schtasks templates
- *   ebb queue list     print queued/scheduled/running/completed tasks
- *   ebb queue cancel | reschedule | run-now | reply   change a task (the
+ *   tidegap tick           drain due tasks (one-shot or --daemon)
+ *   tidegap install        write launchd plist or print systemd/schtasks templates
+ *   tidegap queue list     print queued/scheduled/running/completed tasks
+ *   tidegap queue cancel | reschedule | run-now | reply   change a task (the
  *                      next tick runs it; these commands never dispatch)
- *   ebb receipts list  print carbon receipts for completed tasks
- *   ebb stats          local-only personal-impact summary
- *   ebb register-wake  schedule a macOS wake event 30s before a task
- *   ebb ui             local task page (timeline, inbox, detail, actions) on 127.0.0.1
+ *   tidegap receipts list  print carbon receipts for completed tasks
+ *   tidegap stats          local-only personal-impact summary
+ *   tidegap register-wake  schedule a macOS wake event 30s before a task
+ *   tidegap ui             local task page (timeline, inbox, detail, actions) on 127.0.0.1
  */
 
 import { createRequire } from "node:module";
-import { stripControlChars } from "@ebb-ai/core";
+import { basename } from "node:path";
+import { stripControlChars } from "@tidegap/core";
 import { Command } from "commander";
 import { runInstall, type InstallMode } from "./commands/install.js";
 import {
@@ -35,7 +36,7 @@ import { runVerify } from "./commands/verify.js";
 
 /**
  * CLI version — read from this package's own `package.json` so there is
- * a single source of truth and `ebb --version` never drifts from the
+ * a single source of truth and `tidegap --version` never drifts from the
  * published version. `createRequire` resolves relative to this module,
  * so it works from both `src` (tests) and `dist` (published bin).
  */
@@ -54,8 +55,8 @@ const CLI_VERSION = readCliVersion();
 export function buildProgram(): Command {
   const program = new Command();
   program
-    .name("ebb")
-    .description("CLI for ebb-ai — carbon-aware scheduler tick + install")
+    .name("tidegap")
+    .description("CLI for Tidegap — carbon-aware scheduler tick + install")
     .version(CLI_VERSION);
 
   program
@@ -355,7 +356,23 @@ const isDirect = (() => {
   }
 })();
 
+/**
+ * The deprecation line for the 0.18 `ebb` bin alias, or `undefined` when the
+ * program was started under any other name. npm links both bins to this file,
+ * so the name the user typed is the basename of `argv[1]`. The alias goes
+ * away in 0.19.
+ */
+export function binAliasDeprecation(argv1: string | undefined): string | undefined {
+  if (!argv1) return undefined;
+  const name = basename(argv1).replace(/\.(c|m)?js$/, "");
+  if (name !== "ebb") return undefined;
+  return "tidegap: the `ebb` command is now `tidegap`; the `ebb` alias is removed in 0.19.";
+}
+
 if (isDirect) {
+  const deprecation = binAliasDeprecation(process.argv[1]);
+  // eslint-disable-next-line no-console
+  if (deprecation) console.error(deprecation);
   buildProgram().parseAsync(process.argv).catch((err) => {
     // eslint-disable-next-line no-console
     console.error(err);

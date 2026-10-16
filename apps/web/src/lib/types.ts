@@ -15,9 +15,9 @@
 export type {
   GridForecast,
   GridForecastEntry,
-} from "@ebb-ai/core/types";
+} from "@tidegap/core/types";
 
-import type { GridForecastEntry } from "@ebb-ai/core/types";
+import type { GridForecastEntry } from "@tidegap/core/types";
 
 /** The five carbon-intensity bands, as classified on each forecast entry. */
 export type CarbonBand = GridForecastEntry["band"];

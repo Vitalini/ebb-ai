@@ -75,7 +75,7 @@ function assertNotRefused(message: AnthropicMessage | undefined, model: string):
 export interface AnthropicAdapterOptions {
   /**
    * API key. Supplied by the host — this library never reads the environment.
-   * The `ebb` CLI and `@ebb-ai/mcp` server read `ANTHROPIC_API_KEY` and pass
+   * The `tidegap` CLI and `@tidegap/mcp` server read `ANTHROPIC_API_KEY` and pass
    * it here; the OpenClaw plugin passes `anthropicApiKey` from plugin config.
    * Without a key (and without `client`), `ready` is false.
    */
@@ -152,7 +152,7 @@ export class AnthropicAdapter implements ProviderAdapter {
     }
     const client = await this.getClient();
     const requests = prompts.map((prompt, i) => ({
-      custom_id: `ebb-${i}`,
+      custom_id: `tidegap-${i}`,
       params: requestParams(model, prompt, options),
     }));
     const res = (await client.messages.batches.create({ requests })) as {
@@ -266,7 +266,7 @@ export class AnthropicAdapter implements ProviderAdapter {
         "AnthropicAdapter: @anthropic-ai/sdk is not installed. Run `pnpm add @anthropic-ai/sdk`.",
       );
     }
-    // maxRetries: 0 — ebb-ai's scheduler owns the retry policy
+    // maxRetries: 0 — Tidegap's scheduler owns the retry policy
     // (retryWithBackoff); letting the SDK retry too multiplies attempts
     // and can double-bill ambiguous network errors.
     this.client = new Anthropic({ apiKey: this.apiKey, maxRetries: 0 });

@@ -3,12 +3,12 @@
 Python mirror of ``packages/core-ts/src/sign.ts``. Where the TS package
 uses Node's built-in ``crypto`` (no deps), the Python build pulls in
 ``cryptography`` only when the caller opts in via the ``signing`` extras
-package — keeping ``pip install ebb-ai`` lightweight for users who only
+package — keeping ``pip install tidegap`` lightweight for users who only
 want the scheduler.
 
 Install with signing enabled:
 
-    pip install "ebb-ai[signing]"
+    pip install "tidegap[signing]"
 
 Without that extra, importing this module is fine, but :func:`sign_receipt`
 raises :class:`SigningNotInstalled`. Verification (:func:`verify_receipt`)
@@ -18,7 +18,7 @@ absent, so the default install path remains v0.10-compatible.
 
 Cross-language canonical form (audit §0.3): there is exactly ONE
 canonical signing payload shared by both ports — the **camelCase wire
-rendering** of the receipt (the TS shape; ``ebb verify`` is the
+rendering** of the receipt (the TS shape; ``tidegap verify`` is the
 consumer). :func:`sign_receipt` converts the snake_case receipt dict to
 camelCase algorithmically before canonicalization, and numbers are
 serialized ECMAScript-style (RFC 8785 / JCS: ``2.0`` → ``"2"``,
@@ -76,7 +76,7 @@ class SigningNotInstalled(ImportError):
     def __init__(self) -> None:
         super().__init__(
             "Receipt signing requires the `cryptography` library. "
-            "Install via `pip install 'ebb-ai[signing]'`."
+            "Install via `pip install 'tidegap[signing]'`."
         )
 
 
@@ -348,7 +348,7 @@ def sign_receipt(
     cross-language canonical form: the camelCase wire rendering of the
     receipt (converted algorithmically) WITH ``signedAt`` included —
     a receipt signed here verifies as-is in the TS ``verifyReceipt``
-    (``ebb verify``) and vice versa. The returned dict still carries
+    (``tidegap verify``) and vice versa. The returned dict still carries
     snake_case keys and snake_case signature fields, so Python storage
     and consumers are unchanged.
     """

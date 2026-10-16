@@ -3,7 +3,7 @@ import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { mockGridFeed, TaskStore, type TaskRecord } from "@ebb-ai/core";
+import { mockGridFeed, TaskStore, type TaskRecord } from "@tidegap/core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { daemonStatus } from "../src/platform/index.js";
@@ -45,7 +45,7 @@ function seed(dbPath: string): void {
   store.close();
 }
 
-describe("ebb ui server", () => {
+describe("tidegap ui server", () => {
   let dir: string;
   let dbPath: string;
   let assetDir: string;
@@ -57,7 +57,7 @@ describe("ebb ui server", () => {
     dbPath = join(dir, "queue.db");
     assetDir = join(dir, "ui");
     mkdirSync(assetDir);
-    writeFileSync(join(assetDir, "index.html"), "<!doctype html><title>ebb</title>");
+    writeFileSync(join(assetDir, "index.html"), "<!doctype html><title>tidegap</title>");
     writeFileSync(join(dir, "package.json"), "{}");
     seed(dbPath);
     probe = "not_installed";
@@ -251,7 +251,7 @@ describe("ebb ui server", () => {
   });
 });
 
-describe("ebb ui assets", () => {
+describe("tidegap ui assets", () => {
   const dir = join(__dirname, "..", "ui");
   const read = (f: string) => readFileSync(join(dir, f), "utf8");
 
@@ -362,7 +362,7 @@ describe("ebb ui assets", () => {
   });
 });
 
-describe("ebb ui internals", () => {
+describe("tidegap ui internals", () => {
   it("isLoopbackHost accepts loopback names with no port or the server port", () => {
     expect(isLoopbackHost("127.0.0.1:4000", 4000)).toBe(true);
     expect(isLoopbackHost("[::1]", 4000)).toBe(true);

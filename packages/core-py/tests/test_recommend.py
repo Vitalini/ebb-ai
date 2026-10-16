@@ -14,14 +14,14 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from ebb_ai import (
+from tidegap import (
     CarbonBudgetExceededError,
     InvalidDeadlineError,
     RecommendResult,
     recommend_window,
 )
-from ebb_ai.grid import GridFeed
-from ebb_ai.types import Band, GridForecast, GridForecastEntry
+from tidegap.grid import GridFeed
+from tidegap.types import Band, GridForecast, GridForecastEntry
 
 
 def _band(g: float) -> Band:

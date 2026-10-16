@@ -49,13 +49,13 @@ export function getPlatform(name?: PlatformName): {
 
 export { macos, linux, windows };
 
-/** Whether a tick daemon (`ebb install`) is set up on this machine. */
+/** Whether a tick daemon (`tidegap install`) is set up on this machine. */
 export type DaemonStatus = "installed" | "not_installed" | "unknown";
 
 /**
- * Probe for the unit file `ebb install` writes: the macOS LaunchAgent plist
+ * Probe for the unit file `tidegap install` writes: the macOS LaunchAgent plist
  * or the Linux systemd user timer. Windows reports `unknown`, because there
- * `ebb install` only prints a schtasks command and nothing on disk shows
+ * `tidegap install` only prints a schtasks command and nothing on disk shows
  * whether the user ran it.
  */
 export function daemonStatus(

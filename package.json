@@ -1,5 +1,5 @@
 {
-  "name": "ebb-ai",
+  "name": "tidegap",
   "version": "0.1.0",
   "private": true,
   "description": "Carbon-aware scheduling for agentic AI workflows.",
@@ -7,11 +7,11 @@
   "author": "Vitalii Borovyk",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Vitalini/ebb-ai.git"
+    "url": "https://github.com/tidegap/tidegap.git"
   },
-  "homepage": "https://github.com/Vitalini/ebb-ai",
+  "homepage": "https://github.com/tidegap/tidegap",
   "bugs": {
-    "url": "https://github.com/Vitalini/ebb-ai/issues"
+    "url": "https://github.com/tidegap/tidegap/issues"
   },
   "engines": {
     "node": ">=20.0.0",
@@ -20,7 +20,7 @@
   "packageManager": "pnpm@9.15.0",
   "scripts": {
     "gen:data": "node scripts/gen-data.mjs",
-    "gen:data:check": "node scripts/gen-data.mjs && git diff --exit-code -- packages/core-ts/src/data/tables.generated.ts packages/core-py/src/ebb_ai/_data.py",
+    "gen:data:check": "node scripts/gen-data.mjs && git diff --exit-code -- packages/core-ts/src/data/tables.generated.ts packages/core-py/src/tidegap/_data.py",
     "gen:images": "node scripts/render-images.mjs",
     "gen:images:check": "node scripts/check-images.mjs",
     "build": "pnpm -r --filter=./packages/* build",
@@ -30,7 +30,7 @@
     "check:versions": "node scripts/check-versions.mjs",
     "preflight": "pnpm check:versions && pnpm gen:data:check && pnpm typecheck && pnpm test && pnpm lint:py && pnpm gen:images:check",
     "clean": "pnpm -r --filter=./packages/* clean && rm -rf node_modules",
-    "release:npm": "pnpm -r --filter=./packages/* build && pnpm --filter @ebb-ai/core --filter @ebb-ai/cli --filter @ebb-ai/mcp publish --access public --no-git-checks"
+    "release:npm": "pnpm -r --filter=./packages/* build && pnpm --filter @tidegap/core --filter @tidegap/cli --filter @tidegap/mcp publish --access public --no-git-checks"
   },
   "devDependencies": {
     "@types/node": "^22.20.4",

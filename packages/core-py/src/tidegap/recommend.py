@@ -43,7 +43,7 @@ from .types import Band, GridForecastEntry, GridSignalType, GridSource
 _log = logging.getLogger(__name__)
 
 #: Legacy flat estimate, retained for API stability (exported). Since
-#: v0.10 the real math lives in :func:`ebb_ai.energy.grams_for_intensity`;
+#: v0.10 the real math lives in :func:`tidegap.energy.grams_for_intensity`;
 #: with no model it returns exactly this, so model-less callers are
 #: unchanged.
 ENERGY_KWH_PER_TASK: float = 0.0015
@@ -174,7 +174,7 @@ def _normalize_deadline(
 ) -> datetime:
     """Validate and normalize a user-supplied deadline.
 
-    Same rules as :func:`ebb_ai.scheduler.normalize_deadline`, but on this
+    Same rules as :func:`tidegap.scheduler.normalize_deadline`, but on this
     surface a missing deadline is an error (the spec says it's required).
     """
     if d is None:

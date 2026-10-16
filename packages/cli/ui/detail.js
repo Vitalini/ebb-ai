@@ -181,7 +181,7 @@ export function renderDetail() {
     const notFound = drawerState.error instanceof ApiError && drawerState.error.status === 404;
     body = [
       h("div", { class: "drawer-head" }, h("h2", { id: "drawer-title", class: "drawer-title", tabindex: "-1" }, notFound ? "Task not found" : "Could not load this task"), close),
-      h("p", { class: "muted" }, notFound ? "It may have been deleted, or the link is from another ledger." : "The page could not reach ebb ui."),
+      h("p", { class: "muted" }, notFound ? "It may have been deleted, or the link is from another ledger." : "The page could not reach tidegap ui."),
       h("p", {}, notFound ? h("a", { class: "btn", href: "#/agenda" }, "Back to the Agenda") : h("button", { type: "button", class: "btn", "data-action": "detail-retry" }, "Retry")),
     ];
   } else if (!t) {
@@ -319,7 +319,7 @@ function receipt(t) {
       ["grid", r.gridSource === "mock" ? "mock (synthetic, not a measurement)" : r.gridSource],
       ["signature", r.signature ? h("span", { class: "tag tag-completed" }, "signed ✓") : h("span", { class: "tag tag-muted" }, "unsigned")],
     ]),
-    r.signature ? h("p", { class: "muted small" }, "Verify: ", h("code", {}, `ebb verify ${t.task_id}`)) : null);
+    r.signature ? h("p", { class: "muted small" }, "Verify: ", h("code", {}, `tidegap verify ${t.task_id}`)) : null);
 }
 
 function origin(t) {

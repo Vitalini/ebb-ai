@@ -4,10 +4,10 @@
  * A single standardized location for provider API keys that works
  * uniformly across launchd, systemd, and manual cron:
  *
- *   - `ebb install` creates it (0600) with a commented template if it
+ *   - `tidegap install` creates it (0600) with a commented template if it
  *     does not already exist, so the user has one obvious place to drop
  *     `ANTHROPIC_API_KEY=…`.
- *   - `ebb tick` loads it at startup into `process.env` for any key not
+ *   - `tidegap tick` loads it at startup into `process.env` for any key not
  *     already present — this covers launchd (which passes a bare
  *     environment) AND systemd (belt-and-braces with `EnvironmentFile=`)
  *     AND a hand-rolled crontab entry.
@@ -27,7 +27,7 @@ export function envFilePath(): string {
 
 /** The commented template written when the file is first created. */
 export function envFileTemplate(): string {
-  return `# ebb-ai secrets — KEY=VALUE per line. Loaded by \`ebb tick\` at startup
+  return `# Tidegap secrets — KEY=VALUE per line. Loaded by \`tidegap tick\` at startup
 # (and referenced by the systemd unit's EnvironmentFile=). This file is
 # created 0600; keep it that way. Uncomment and fill the keys you use.
 #

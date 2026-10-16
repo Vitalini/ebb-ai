@@ -17,7 +17,7 @@
  *     `execute(params, config, …)` argument;
  *   - the manifest's declared config surface matches the TypeBox schema.
  *
- * Environment variables still configure the `ebb` CLI and the `@ebb-ai/mcp`
+ * Environment variables still configure the `ebb` CLI and the `@tidegap/mcp`
  * server — separate hosts, unchanged behaviour.
  */
 

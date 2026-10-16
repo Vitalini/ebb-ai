@@ -3,8 +3,8 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mockGridFeed, TaskStore } from "@ebb-ai/core";
-import type { TaskRecord } from "@ebb-ai/core";
+import { mockGridFeed, TaskStore } from "@tidegap/core";
+import type { TaskRecord } from "@tidegap/core";
 import {
   localDayBounds,
   renderQueue,
@@ -167,7 +167,7 @@ describe("queue list / show / unread (task visibility)", () => {
   });
 });
 
-describe("ebb queue list --hook (Claude Code SessionStart)", () => {
+describe("tidegap queue list --hook (Claude Code SessionStart)", () => {
   let dir: string;
   let db: string;
 
@@ -195,13 +195,13 @@ describe("ebb queue list --hook (Claude Code SessionStart)", () => {
   it("names the unread count and drops it after a mark read (AE1)", async () => {
     seedDone(2);
     expect((await runQueueList({ db, unread: true, hook: true })).rendered).toBe(
-      "2 unread ebb tasks, run `ebb ui` to read them.",
+      "2 unread Tidegap tasks, run `tidegap ui` to read them.",
     );
     const store = new TaskStore({ dbPath: db });
     store.markRead("done-0");
     store.close();
     expect((await runQueueList({ db, unread: true, hook: true })).rendered).toBe(
-      "1 unread ebb task, run `ebb ui` to read them.",
+      "1 unread Tidegap task, run `tidegap ui` to read them.",
     );
   });
 
@@ -251,8 +251,8 @@ describe("ebb queue list --hook (Claude Code SessionStart)", () => {
     });
 
     it("passes the CLI line through", () => {
-      expect(runHook(`echo "2 unread ebb tasks, run \\\`ebb ui\\\` to read them."`).stdout).toBe(
-        "2 unread ebb tasks, run `ebb ui` to read them.\n",
+      expect(runHook(`echo "2 unread Tidegap tasks, run \\\`tidegap ui\\\` to read them."`).stdout).toBe(
+        "2 unread Tidegap tasks, run `tidegap ui` to read them.\n",
       );
     });
   });

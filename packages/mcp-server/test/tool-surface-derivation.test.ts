@@ -1,10 +1,10 @@
 /**
  * Audit §2.2 — the MCP server's registered tool list is DERIVED from the
- * shared canonical surface in @ebb-ai/core, not hand-authored alongside it.
+ * shared canonical surface in @tidegap/core, not hand-authored alongside it.
  *
  * This pins the derivation so the MCP registration can never drift from the
  * single source of truth: names, per-tool parameter sets, requiredness and
- * descriptions must all match `@ebb-ai/core`'s tool-surface for the "mcp"
+ * descriptions must all match `@tidegap/core`'s tool-surface for the "mcp"
  * host.
  */
 
@@ -13,7 +13,7 @@ import {
   paramOptionalForHost,
   paramsForHost,
   toolsForHost,
-} from "@ebb-ai/core";
+} from "@tidegap/core";
 import { buildToolList, TOOL_DEFINITIONS } from "../src/server.js";
 
 describe("MCP tool list is derived from the shared surface (§2.2)", () => {

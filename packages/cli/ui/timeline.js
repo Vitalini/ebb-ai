@@ -74,7 +74,7 @@ export function renderTimeline(root, { selectedId, width } = {}) {
   }
 
   if (tasks.length === 0) {
-    root.append(emptyState({ title: "No pending tasks.", body: "Deferred tasks appear on the curve at the hour ebb picked.", glyph: "∿" }));
+    root.append(emptyState({ title: "No pending tasks.", body: "Deferred tasks appear on the curve at the hour tidegap picked.", glyph: "∿" }));
     return;
   }
   const list = h("ul", { class: "rows" });

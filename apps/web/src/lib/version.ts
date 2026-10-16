@@ -1,4 +1,4 @@
-import corePackage from "@ebb-ai/core/package.json";
+import corePackage from "@tidegap/core/package.json";
 
-/** Released version of the ebb-ai packages, read from `@ebb-ai/core` so the site never drifts from npm. */
+/** Released version of the Tidegap packages, read from `@tidegap/core` so the site never drifts from npm. */
 export const VERSION: string = corePackage.version;

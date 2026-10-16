@@ -500,7 +500,7 @@ describe("OpenAIAdapter", () => {
 
   it("retrieveBatch parses the completed output JSONL", async () => {
     const outputLine = JSON.stringify({
-      custom_id: "ebb-0",
+      custom_id: "tidegap-0",
       response: {
         body: {
           choices: [{ message: { content: "batched reply" } }],

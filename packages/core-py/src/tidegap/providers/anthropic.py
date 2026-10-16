@@ -4,7 +4,7 @@ Implements :class:`ProviderAdapter` against the official
 ``anthropic`` Python SDK. The module imports cleanly even when the SDK
 isn't installed — the import is deferred to first use, so:
 
-    from ebb_ai.providers.anthropic import AnthropicAdapter  # always OK
+    from tidegap.providers.anthropic import AnthropicAdapter  # always OK
     AnthropicAdapter()                                        # raises if missing
 
 This matches the pattern in the Anthropic SDK quickstart but routed
@@ -100,7 +100,7 @@ def _load_sdk() -> Any:
     except ImportError as err:  # pragma: no cover - exercised in real env
         raise RuntimeError(
             "The `anthropic` package is required to use AnthropicAdapter. "
-            "Install it with `pip install ebb-ai[anthropic]` or "
+            "Install it with `pip install tidegap[anthropic]` or "
             "`pip install anthropic`."
         ) from err
     return anthropic
@@ -132,7 +132,7 @@ class AnthropicAdapter(ProviderAdapter):
             self._client = client
         else:
             sdk = _load_sdk()
-            # max_retries=0 — ebb-ai's scheduler owns the retry policy
+            # max_retries=0 — Tidegap's scheduler owns the retry policy
             # (_retry_with_backoff); letting the SDK retry too multiplies
             # attempts and can double-bill ambiguous network errors.
             self._client = (

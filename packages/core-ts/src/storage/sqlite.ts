@@ -307,7 +307,7 @@ export class TaskStore {
       this.db = openSqliteSync(opts.dbPath);
     }
     // v0.11: enable WAL on disk-backed stores. WAL lifts SQLite's
-    // single-writer-per-DB-file pessimism so the `ebb tick` daemon and
+    // single-writer-per-DB-file pessimism so the `tidegap tick` daemon and
     // an interactive process can hold separate `TaskStore` handles
     // against `~/.ebb-ai/queue.db`. Writers can still collide briefly
     // (one writer at a time even under WAL), so busy_timeout makes a
@@ -325,7 +325,7 @@ export class TaskStore {
         this.db.exec("PRAGMA busy_timeout = 5000");
         // synchronous=NORMAL is the standard WAL companion — durable
         // across app crashes, faster than FULL, only loses the very
-        // last transaction on a hard power loss. ebb-ai dispatch is
+        // last transaction on a hard power loss. Tidegap dispatch is
         // idempotent over `task_id`, so the worst case re-runs one task.
         this.db.exec("PRAGMA synchronous = NORMAL");
       } catch {
@@ -606,7 +606,7 @@ export class TaskStore {
    *
    * With WAL + busy_timeout (v0.11+) two processes can hold writable
    * handles on the same DB file; this row-level claim is what makes a
-   * dispatch exactly-once across them (e.g. an interactive `ebb tick`
+   * dispatch exactly-once across them (e.g. an interactive `tidegap tick`
    * racing the launchd cron, or `expedite_task` racing a cron tick).
    */
   claimScheduled(taskId: string): boolean {
@@ -620,7 +620,7 @@ export class TaskStore {
   /**
    * Atomic row-level claim for the polling side of the Batch API path
    * (v0.12): flips a row from "submitted" to "running" so two racing
-   * ticks (or an interactive `ebb tick` + the launchd cron) cannot both
+   * ticks (or an interactive `tidegap tick` + the launchd cron) cannot both
    * complete the same submitted batch. Mirrors `claimScheduled`. Returns
    * true iff this call performed the transition.
    */

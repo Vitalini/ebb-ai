@@ -215,7 +215,7 @@ export function achievements(
     {
       id: "first-deferral",
       label: "🌱  First Deferral",
-      description: "Queue your first ebb-ai task.",
+      description: "Queue your first Tidegap task.",
       unlocked: stats.taskCount >= 1,
     },
     {

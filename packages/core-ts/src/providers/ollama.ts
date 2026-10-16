@@ -47,7 +47,7 @@ export interface OllamaAdapterOptions {
    * reads the environment. Defaults to `http://localhost:11434` when omitted.
    * A bare `host:port` is accepted and prefixed with `http://`.
    *
-   * The `ebb` CLI and `@ebb-ai/mcp` server read `OLLAMA_HOST` and pass it
+   * The `tidegap` CLI and `@tidegap/mcp` server read `OLLAMA_HOST` and pass it
    * here; the OpenClaw plugin passes `ollamaHost` from plugin config.
    */
   host?: string;

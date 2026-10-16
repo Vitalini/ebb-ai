@@ -1,6 +1,6 @@
 /**
  * Canonical tool surface — the single source of truth for the ebb-ai tool
- * definitions that BOTH the @ebb-ai/mcp MCP server and the @vitalini/ebb
+ * definitions that BOTH the @tidegap/mcp MCP server and the @vitalini/ebb
  * OpenClaw plugin expose.
  *
  * Before this module the two hosts hand-authored their tool lists
@@ -12,7 +12,7 @@
  * The representation here is deliberately NEUTRAL — a compact per-parameter
  * descriptor — rather than a zod or TypeBox schema, so that:
  *
- *   - @ebb-ai/core takes on no schema-library dependency (zod stays in the
+ *   - @tidegap/core takes on no schema-library dependency (zod stays in the
  *     MCP package, TypeBox stays in the OpenClaw plugin); and
  *   - each host renders these descriptors into whatever its runtime needs
  *     (MCP → zod validators → JSON Schema; OpenClaw → TypeBox TSchema).
@@ -518,7 +518,7 @@ export function getToolDef(name: string): CanonicalToolDef | undefined {
 /** Like {@link getToolDef} but throws when the name is unknown. */
 export function getToolDefOrThrow(name: string): CanonicalToolDef {
   const def = BY_NAME.get(name);
-  if (!def) throw new Error(`unknown ebb-ai tool: ${name}`);
+  if (!def) throw new Error(`unknown Tidegap tool: ${name}`);
   return def;
 }
 

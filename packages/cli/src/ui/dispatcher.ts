@@ -1,9 +1,9 @@
 /**
- * Dispatcher state and "Start dispatcher" for `ebb ui` (ui v2, KTD13).
+ * Dispatcher state and "Start dispatcher" for `tidegap ui` (ui v2, KTD13).
  *
  * The UI server never dispatches a task. When no dispatcher has run lately,
- * the page can ask the server to start one: the same `ebb` binary the
- * install step resolves, spawned detached as `ebb tick --daemon --interval
+ * the page can ask the server to start one: the same `tidegap` binary the
+ * install step resolves, spawned detached as `tidegap tick --daemon --interval
  * 60 --db <ledger>`, with stdout and stderr appended to
  * `~/.ebb-ai/logs/ui-tick.log` (directory 0700, file 0600). The child's
  * pid, log path and start time are kept in ledger meta `ui_dispatcher`. A
@@ -21,14 +21,14 @@ import { chmodSync, closeSync, fchmodSync, mkdirSync, openSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { LAST_TICK_META_KEY, type TaskStore } from "@ebb-ai/core";
+import { LAST_TICK_META_KEY, type TaskStore } from "@tidegap/core";
 
 import type { DaemonStatus } from "../platform/index.js";
 
 export const UI_DISPATCHER_META_KEY = "ui_dispatcher";
 /** Tick interval of a dispatcher started from the page, in seconds. */
 export const UI_DISPATCHER_INTERVAL_S = 60;
-/** Interval of the installed daemon (`ebb install` default), in seconds. */
+/** Interval of the installed daemon (`tidegap install` default), in seconds. */
 export const DAEMON_INTERVAL_S = 300;
 
 export interface DispatcherMeta {
@@ -41,7 +41,7 @@ export interface DispatcherMeta {
 export type Spawner = (argv: string[], logPath: string) => number;
 
 export interface DispatcherOptions {
-  /** The `ebb` launcher (`[node, script]` or `[binary]`), from `resolveLauncher`. */
+  /** The `tidegap` launcher (`[node, script]` or `[binary]`), from `resolveLauncher`. */
   launcher: string[];
   dbPath: string;
   /** Default `~/.ebb-ai/logs`. */
@@ -144,7 +144,7 @@ export class DispatcherControl {
   /**
    * Spawn the dispatcher. Refused (`ok: false`) when the child started from
    * the page is alive (`ui_child`), or when another ticker (the installed
-   * daemon, an `ebb tick` loop, OpenClaw) ticked recently (`ticking`): a
+   * daemon, an `tidegap tick` loop, OpenClaw) ticked recently (`ticking`): a
    * second ticker would only race the first.
    */
   start():

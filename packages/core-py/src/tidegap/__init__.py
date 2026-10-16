@@ -1,13 +1,13 @@
-"""ebb-ai — carbon-aware scheduling for agentic AI workflows.
+"""Tidegap — carbon-aware scheduling for agentic AI workflows.
 
-Python port of ``@ebb-ai/core``. Public surface mirrors the
+Python port of ``@tidegap/core``. Public surface mirrors the
 TypeScript package so the two stay in sync.
 
 Quick start
 -----------
 
 >>> import asyncio
->>> from ebb_ai import defer
+>>> from tidegap import defer
 >>> async def main():
 ...     return await defer(
 ...         lambda: 42,
@@ -22,8 +22,8 @@ The default scheduler runs in-memory. For durable receipts and
 crash-recovery, instantiate a :class:`Scheduler` with a SQLite
 ``db_path``:
 
->>> from ebb_ai import Scheduler
->>> scheduler = Scheduler(db_path="/var/lib/ebb/queue.sqlite")
+>>> from tidegap import Scheduler
+>>> scheduler = Scheduler(db_path="/var/lib/tidegap/queue.sqlite")
 
 See ``packages/core-py/README.md`` for the full API reference.
 """
@@ -135,7 +135,7 @@ from .types import (
 # The package version is declared once, in pyproject.toml. Read it back from
 # the installed metadata rather than hard-coding a second copy here.
 try:
-    __version__ = _pkg_version("ebb-ai")
+    __version__ = _pkg_version("tidegap")
 except PackageNotFoundError:  # pragma: no cover - source tree without install
     __version__ = "0+unknown"
 

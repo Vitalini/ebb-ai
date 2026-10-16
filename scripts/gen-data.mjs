@@ -8,7 +8,7 @@
  * thresholds) and regenerates:
  *
  *   - packages/core-ts/src/data/tables.generated.ts  (TypeScript)
- *   - packages/core-py/src/ebb_ai/_data.py           (Python)
+ *   - packages/core-py/src/tidegap/_data.py           (Python)
  *
  * Both outputs are marked GENERATED — DO NOT EDIT. Edit the JSON and run
  * `pnpm gen:data`. CI (`pnpm gen:data:check`) fails if the committed
@@ -27,7 +27,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repo = join(here, "..");
 const dataDir = join(repo, "packages", "core-ts", "src", "data");
 const tsOut = join(dataDir, "tables.generated.ts");
-const pyOut = join(repo, "packages", "core-py", "src", "ebb_ai", "_data.py");
+const pyOut = join(repo, "packages", "core-py", "src", "tidegap", "_data.py");
 
 const readJson = (name) =>
   JSON.parse(readFileSync(join(dataDir, name), "utf8"));
@@ -254,7 +254,7 @@ function renderPy() {
 # Edit those JSON files and run 'pnpm gen:data' to regenerate. CI fails
 # on drift ('pnpm gen:data:check').
 # ruff: noqa
-"""Generated data tables mirrored from the JSON SSOT in @ebb-ai/core."""
+"""Generated data tables mirrored from the JSON SSOT in @tidegap/core."""
 
 from __future__ import annotations
 

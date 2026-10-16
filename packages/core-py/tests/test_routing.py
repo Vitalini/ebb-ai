@@ -15,16 +15,16 @@ from typing import Any
 
 import pytest
 
-from ebb_ai import Scheduler, mock_grid_feed
-from ebb_ai.providers.base import (
+from tidegap import Scheduler, mock_grid_feed
+from tidegap.providers.base import (
     BatchHandle,
     BatchRetrieveResult,
     DispatchOptions,
     DispatchResult,
     ProviderAdapter,
 )
-from ebb_ai.recommend import recommend_window
-from ebb_ai.routing import (
+from tidegap.recommend import recommend_window
+from tidegap.routing import (
     DEFAULT_ROUTE_WEIGHTS,
     ROUTING_PREVIEW_DISCLOSURE,
     InvalidCandidateError,
@@ -37,8 +37,8 @@ from ebb_ai.routing import (
     price_for_model,
     score_candidates,
 )
-from ebb_ai.sign import verify_receipt
-from ebb_ai.types import DeferOptions, ProviderCallSpec
+from tidegap.sign import verify_receipt
+from tidegap.types import DeferOptions, ProviderCallSpec
 
 # Shared fixture, same file the TS suite reads (parents[2] == <repo>/packages).
 FIXTURE_PATH = (

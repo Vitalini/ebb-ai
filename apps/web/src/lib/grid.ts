@@ -29,8 +29,8 @@
 
 import { unstable_cache } from "next/cache";
 
-import { buildDefaultGridFeed } from "@ebb-ai/core/grid";
-import { gramsForIntensity } from "@ebb-ai/core/energy";
+import { buildDefaultGridFeed } from "@tidegap/core/grid";
+import { gramsForIntensity } from "@tidegap/core/energy";
 
 import type { GridForecast, GridForecastEntry } from "./types";
 

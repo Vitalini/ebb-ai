@@ -1,6 +1,6 @@
 /**
  * Audit §2.2 — the OpenClaw plugin's registered tools are DERIVED from the
- * shared canonical surface in @ebb-ai/core, not hand-authored alongside it.
+ * shared canonical surface in @tidegap/core, not hand-authored alongside it.
  *
  * Pins names, per-tool parameter sets, requiredness and descriptions to the
  * single source of truth for the "openclaw" host, so the plugin registration
@@ -12,7 +12,7 @@ import {
   paramOptionalForHost,
   paramsForHost,
   toolsForHost,
-} from "@ebb-ai/core";
+} from "@tidegap/core";
 import ebbPlugin from "../src/index.js";
 
 /** Extract the { properties, required } shape from a TypeBox object schema. */

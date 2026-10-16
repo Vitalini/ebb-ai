@@ -1,8 +1,8 @@
 {
-  "name": "@ebb-ai/web",
+  "name": "@tidegap/web",
   "version": "0.2.0",
   "private": true,
-  "description": "ebb-ai public website — install launcher, live carbon-intensity map, best-window finder, docs.",
+  "description": "Tidegap public website — install launcher, live carbon-intensity map, best-window finder, docs.",
   "license": "Apache-2.0",
   "author": "Vitalii Borovyk",
   "scripts": {
@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ebb-ai/core": "workspace:*",
+    "@tidegap/core": "workspace:*",
     "lucide-react": "^1.48.0",
     "next": "^16.3.6",
     "react": "^19.3.0",

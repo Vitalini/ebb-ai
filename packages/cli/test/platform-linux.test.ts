@@ -28,7 +28,7 @@ describe("systemdService", () => {
       logPath: "/home/test/.ebb/tick.log",
     });
     expect(unit).toContain("[Unit]");
-    expect(unit).toContain("Description=ebb-ai cron-tick drain");
+    expect(unit).toContain("Description=Tidegap cron-tick drain");
     expect(unit).toContain("[Service]");
     expect(unit).toContain("Type=oneshot");
     expect(unit).toContain(

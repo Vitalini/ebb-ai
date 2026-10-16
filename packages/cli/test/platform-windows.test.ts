@@ -10,8 +10,8 @@ describe("windows honesty (P16)", () => {
 
   it("schtasks template builds from the resolved launcher, not a POSIX path", () => {
     const t = schtasksTemplate({
-      launcher: ["C:\\Program Files\\nodejs\\node.exe", "C:\\ebb\\index.js"],
-      dbPath: "C:\\ProgramData\\ebb\\queue.db",
+      launcher: ["C:\\Program Files\\nodejs\\node.exe", "C:\\tidegap\\index.js"],
+      dbPath: "C:\\ProgramData\\tidegap\\queue.db",
       tickIntervalSec: 300,
     });
     expect(t).toContain("schtasks /create");

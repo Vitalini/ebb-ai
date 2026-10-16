@@ -1,6 +1,6 @@
-"""Public and internal types for ebb-ai.
+"""Public and internal types for Tidegap.
 
-These mirror the TypeScript definitions in ``@ebb-ai/core`` 1:1 so that
+These mirror the TypeScript definitions in ``@tidegap/core`` 1:1 so that
 serialized records (carbon receipts, task snapshots) round-trip cleanly
 across language boundaries — important because the MCP server is in
 TypeScript and downstream Python agents will consume the same JSON.
@@ -226,7 +226,7 @@ class CarbonReceipt:
     """Total tokens (input + output) reported by the provider, if any."""
     intensity_g_co2_per_kwh: float | None = None
     """Grid intensity (gCO2eq/kWh) used to compute the actual side of this
-    receipt (v0.12+). Recorded directly so consumers and ``ebb stats``
+    receipt (v0.12+). Recorded directly so consumers and ``tidegap stats``
     never back-derive it from grams (which skews per-model receipts).
     ``None`` means the receipt-side intensity fetch failed and the actual
     side reused the schedule-time estimate."""
@@ -263,7 +263,7 @@ class CarbonReceipt:
     routing: dict[str, Any] | None = None
     """Cross-provider routing provenance (ROADMAP item 1). Present only
     when the task was scheduled with >= 2 candidates. The camelCase wire
-    shape of :class:`ebb_ai.routing.RoutingDecision` (``weights``,
+    shape of :class:`tidegap.routing.RoutingDecision` (``weights``,
     ``considered``, ``chosen``, optional ``fallbackFrom``, ``reasoning``).
     Stored already-camelCased so the value is byte-identical to the TS
     port under the shared canonical signing form. Inside the signed
@@ -371,7 +371,7 @@ class TaskRecord:
     """Cross-provider routing decision (ROADMAP item 1), computed and
     persisted at schedule time when the task was enqueued with >= 2
     candidates. The camelCase wire shape of
-    :class:`ebb_ai.routing.RoutingDecision` — byte-identical to the TS
+    :class:`tidegap.routing.RoutingDecision` — byte-identical to the TS
     port's ``routing_decision`` column so a shared ledger round-trips.
     Folded into the signed receipt at completion. ``None`` when routing
     was not used.

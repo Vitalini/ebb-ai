@@ -1,4 +1,4 @@
-// ebb ui front end: bootstrap, router, actions, dispatcher banner.
+// tidegap ui front end: bootstrap, router, actions, dispatcher banner.
 // Dependency-free ES modules, no build step. Every task string is rendered
 // through text nodes (dom.js); nothing here writes HTML from data.
 
@@ -169,7 +169,7 @@ function showExpired() {
     h("div", { class: "empty empty-full" },
       h("div", { class: "empty-glyph", "aria-hidden": "true" }, "⏻"),
       h("p", { class: "empty-title" }, "This link expired."),
-      h("p", { class: "empty-body" }, "Run ", h("code", {}, "ebb ui"), " again to get a new link. Links work for one run of the server.")),
+      h("p", { class: "empty-body" }, "Run ", h("code", {}, "tidegap ui"), " again to get a new link. Links work for one run of the server.")),
   );
 }
 
@@ -282,7 +282,7 @@ function dispatcherDialog() {
   dlg.className = "dialog";
   dlg.replaceChildren(
     h("header", { class: "dialog-head" }, h("h2", { class: "dialog-title", id: "dialog-title" }, "Dispatcher"),
-      h("p", { class: "dialog-sub" }, "ebb ui never runs tasks itself. A dispatcher (", h("code", {}, "ebb tick"), " or the OpenClaw loop) does.")),
+      h("p", { class: "dialog-sub" }, "tidegap ui never runs tasks itself. A dispatcher (", h("code", {}, "tidegap tick"), " or the OpenClaw loop) does.")),
     dl,
     h("footer", { class: "dialog-foot" },
       h("button", { type: "button", class: "btn btn-ghost", onclick: () => dlg.close() }, "Close"),

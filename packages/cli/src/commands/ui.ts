@@ -1,9 +1,9 @@
 /**
- * `ebb ui` — serve the local task page (timeline, inbox, task detail) on
+ * `tidegap ui` — serve the local task page (timeline, inbox, task detail) on
  * 127.0.0.1 with a per-run bearer token. The page can cancel, reschedule,
  * run now and reply (ui v2): each action writes the ledger through a
- * Scheduler with no adapters. It never dispatches; `ebb tick` (or the
- * OpenClaw loop) does, and the page can start `ebb tick --daemon` when no
+ * Scheduler with no adapters. It never dispatches; `tidegap tick` (or the
+ * OpenClaw loop) does, and the page can start `tidegap tick --daemon` when no
  * dispatcher is running.
  */
 
@@ -14,7 +14,7 @@ import {
   buildDefaultGridFeed,
   loadQuotaResetConfig,
   resolveRegion,
-} from "@ebb-ai/core";
+} from "@tidegap/core";
 
 import { readEnvCredentials } from "../env.js";
 import { daemonStatus } from "../platform/index.js";
@@ -87,7 +87,7 @@ export async function runUi(opts: UiCommandOptions = {}): Promise<number> {
   const { server, link } = await startUi(opts);
   // eslint-disable-next-line no-console
   console.log(
-    `ebb ui: ${link}\n` +
+    `tidegap ui: ${link}\n` +
       `Serving on 127.0.0.1 only. The link carries a one-run access token; ` +
       `do not share it. Press Ctrl-C to stop.`,
   );

@@ -1,8 +1,8 @@
 /**
- * The `@ebb-ai/mcp` server is a HOST: environment variables still configure it
+ * The `@tidegap/mcp` server is a HOST: environment variables still configure it
  * exactly as they always have.
  *
- * `@ebb-ai/core` became environment-pure so the OpenClaw plugin bundle could
+ * `@tidegap/core` became environment-pure so the OpenClaw plugin bundle could
  * contain zero ambient-environment reads (ClawScan flags any such read in a
  * bundle that also makes network calls). That refactor must be INVISIBLE to
  * MCP users: the same variables, the same precedence, the same adapters.
@@ -29,7 +29,7 @@ const VARS = [
   "EBB_CARBON_BUDGET_WINDOW",
 ] as const;
 
-describe("@ebb-ai/mcp env boundary", () => {
+describe("@tidegap/mcp env boundary", () => {
   const saved = new Map<string, string | undefined>();
 
   beforeEach(() => {

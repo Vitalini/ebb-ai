@@ -28,8 +28,8 @@ import { createRequire } from "node:module";
 import { homedir, platform as osPlatform } from "node:os";
 import { dirname, join } from "node:path";
 
-import { osNotifyCommand } from "@ebb-ai/core";
-import type { CarbonAlert, CarbonReceipt, TaskRecord } from "@ebb-ai/core";
+import { osNotifyCommand } from "@tidegap/core";
+import type { CarbonAlert, CarbonReceipt, TaskRecord } from "@tidegap/core";
 
 export type DeliveryMode =
   | "chat"

@@ -6,7 +6,7 @@
  * one Scheduler.tick with a stub adapter, and confirms the task does NOT
  * stay `scheduled` after it is due. Also checks cross-instance cancel.
  *
- * Exercises @ebb-ai/core through Node's built-in node:sqlite — there is
+ * Exercises @tidegap/core through Node's built-in node:sqlite — there is
  * no better-sqlite3 build step. Run with: `pnpm --filter @vitalini/ebb smoke`.
  */
 
@@ -14,7 +14,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { mockGridFeed, Scheduler, TaskStore } from "@ebb-ai/core";
+import { mockGridFeed, Scheduler, TaskStore } from "@tidegap/core";
 
 const tmp = mkdtempSync(join(tmpdir(), "ebb-smoke-"));
 const dbPath = join(tmp, "queue.db");

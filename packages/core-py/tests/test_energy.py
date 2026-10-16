@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from ebb_ai.energy import (
+from tidegap.energy import (
     DEFAULT_PUE,
     ENERGY_SOURCES,
     LEGACY_KWH_PER_TASK,

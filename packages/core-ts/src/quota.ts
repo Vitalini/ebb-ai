@@ -382,7 +382,7 @@ export async function replanSweep(
 
 /**
  * The shared pre-tick step every ticker runs before `Scheduler.tick`
- * (`ebb tick` and the OpenClaw interval loop): record `last_tick_at` in the
+ * (`tidegap tick` and the OpenClaw interval loop): record `last_tick_at` in the
  * ledger, sweep passed quota deadlines, then re-plan unplanned rows the
  * forecast now reaches (`replanSweep`). Never throws.
  */

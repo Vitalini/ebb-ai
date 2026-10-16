@@ -4,11 +4,11 @@ A provider adapter abstracts the differences between LLM vendors so the
 scheduler can route a deferred task to a sync endpoint *or* a batch
 endpoint without the caller needing to know which one will be picked.
 
-Both adapters in v0.2 (:class:`ebb_ai.providers.AnthropicAdapter`,
-:class:`ebb_ai.providers.OpenAIAdapter`) implement this surface.
+Both adapters in v0.2 (:class:`tidegap.providers.AnthropicAdapter`,
+:class:`tidegap.providers.OpenAIAdapter`) implement this surface.
 Adapters are *lazy* about importing the vendor SDK so that:
 
-- ``import ebb_ai.providers.anthropic`` succeeds even if the
+- ``import tidegap.providers.anthropic`` succeeds even if the
   ``anthropic`` package isn't installed.
 - The first time a caller actually constructs the adapter (or invokes
   it) we raise a clear, actionable error.
@@ -175,7 +175,7 @@ class ProviderAdapter(ABC):
         all (local Ollama) leaves this — and :meth:`retrieve_batch` — as the
         base stubs, which raise. The scheduler feature-detects a real
         ``retrieve_batch`` override before routing a task through the batch
-        path (:func:`ebb_ai.scheduler._has_batch_support`), so a sync-only
+        path (:func:`tidegap.scheduler._has_batch_support`), so a sync-only
         adapter is never asked to batch.
         """
         raise NotImplementedError(

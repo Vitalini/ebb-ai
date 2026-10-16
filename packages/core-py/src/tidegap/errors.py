@@ -44,7 +44,7 @@ class TaskCancelledError(Exception):
     from :class:`Exception` — **not** :class:`asyncio.CancelledError` —
     because ``CancelledError`` is a ``BaseException`` that bypasses
     ``except Exception`` handlers, marks the *awaiting* task as cancelled,
-    and unwinds ``asyncio.TaskGroup``\\ s. Cancelling an ebb-ai task must
+    and unwinds ``asyncio.TaskGroup``\\ s. Cancelling a Tidegap task must
     not cancel the caller.
 
     Attributes

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from ebb_ai.sign import (
+from tidegap.sign import (
     SigningNotInstalled,
     _canonicalize,  # type: ignore[attr-defined]
     canonical_receipt_payload,
@@ -25,7 +25,7 @@ from ebb_ai.sign import (
 
 pytestmark = pytest.mark.skipif(
     not is_signing_available(),
-    reason="ebb-ai[signing] extras not installed",
+    reason="tidegap[signing] extras not installed",
 )
 
 BASE_RECEIPT = {
@@ -116,7 +116,7 @@ class TestLoadOrCreateSigningKey:
         kp = load_or_create_signing_key(tmp_path / "k")
         assert len(base64.b64decode(kp.public_key_base64)) == 32
 
-    def test_default_path_under_ebb_ai_home(self) -> None:
+    def test_default_path_under_tidegap_home(self) -> None:
         assert default_signing_key_path().name == "signing.key"
         assert default_signing_key_path().parent.name == ".ebb-ai"
 
@@ -292,7 +292,7 @@ class TestAtomicKeyWrites:
 class TestErrorIfExtraMissing:
     def test_sign_without_extra_raises_signingnotinstalled(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         # Simulate missing crypto without uninstalling the package.
-        from ebb_ai import sign as sign_mod
+        from tidegap import sign as sign_mod
         monkeypatch.setattr(sign_mod, "_HAS_CRYPTO", False)
         with pytest.raises(SigningNotInstalled):
             sign_mod.load_or_create_signing_key(tmp_path / "k")

@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { mockGridFeed, Scheduler, TaskStore } from "@ebb-ai/core";
+import { mockGridFeed, Scheduler, TaskStore } from "@tidegap/core";
 
 import ebbPlugin, {
   bootstrapDispatcherOnStartup,

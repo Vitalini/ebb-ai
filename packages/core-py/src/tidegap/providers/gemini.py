@@ -23,7 +23,7 @@ does not map cleanly:
 
 So this adapter implements only the sync path — it inherits the base
 ``dispatch_batch`` / ``retrieve_batch`` stubs (both raise). The scheduler
-feature-detects that (:func:`ebb_ai.scheduler._has_batch_support`) and keeps
+feature-detects that (:func:`tidegap.scheduler._has_batch_support`) and keeps
 Gemini tasks on the sync path.
 """
 

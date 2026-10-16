@@ -1,5 +1,5 @@
 /**
- * OS notification builder (v0.17), shared by `ebb tick` and the OpenClaw
+ * OS notification builder (v0.17), shared by `tidegap tick` and the OpenClaw
  * `os` delivery mode. Pure: it returns the command to run and never spawns,
  * so core stays free of `child_process` and the hosts own the side effect.
  *
@@ -54,7 +54,7 @@ function winToastScript(titleExpr: string, bodyExpr: string): string {
     `$texts.Item(0).AppendChild($t.CreateTextNode(${titleExpr})) | Out-Null;`,
     `$texts.Item(1).AppendChild($t.CreateTextNode(${bodyExpr})) | Out-Null;`,
     "$toast = [Windows.UI.Notifications.ToastNotification]::new($t);",
-    "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('ebb-ai').Show($toast);",
+    "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('tidegap').Show($toast);",
   ].join(" ");
 }
 
@@ -133,17 +133,17 @@ function grams(receipt: CarbonReceipt | undefined): string {
 /**
  * Notification title and body for a finished task: the task title (or id),
  * a redacted one-line preview of the result (completed) or the first line
- * of the error (failed), the grams, and the `ebb queue show <id>` command.
+ * of the error (failed), the grams, and the `tidegap queue show <id>` command.
  */
 export function taskNotificationContent(
   record: Pick<TaskRecord<unknown>, "taskId" | "status" | "title" | "error" | "result" | "receipt">,
 ): { title: string; body: string } {
   const name = clip(oneLine(record.title ?? "") || record.taskId, 80);
-  const show = `ebb queue show ${record.taskId}`;
+  const show = `tidegap queue show ${record.taskId}`;
   if (record.status === "failed") {
     const firstErr = (record.error ?? "").split(/\r?\n/).find((l) => l.trim()) ?? "unknown error";
     return {
-      title: `ebb-ai: failed: ${name}`,
+      title: `Tidegap: failed: ${name}`,
       body: `${clip(oneLine(firstErr), NOTIFY_PREVIEW_CHARS)}\n${show}`,
     };
   }
@@ -151,7 +151,7 @@ export function taskNotificationContent(
   const text = r && typeof r === "object" && typeof r.text === "string" ? r.text : "";
   const preview = clip(oneLine(text), NOTIFY_PREVIEW_CHARS);
   return {
-    title: `ebb-ai: done: ${name}`,
+    title: `Tidegap: done: ${name}`,
     body: `${preview ? `${preview}\n` : ""}${grams(record.receipt)} · ${show}`,
   };
 }

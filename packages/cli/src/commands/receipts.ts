@@ -1,9 +1,9 @@
 /**
- * `ebb receipts list` — print carbon receipts for completed tasks.
+ * `tidegap receipts list` — print carbon receipts for completed tasks.
  */
 
-import { TaskStore } from "@ebb-ai/core";
-import type { TaskRecord } from "@ebb-ai/core";
+import { TaskStore } from "@tidegap/core";
+import type { TaskRecord } from "@tidegap/core";
 import { defaultDbPath } from "./tick.js";
 
 export interface ReceiptsListOptions {

@@ -121,8 +121,8 @@ export function rescheduleDialog(task, onSubmit) {
   const time = h("input", { type: "time", class: "input", id: "rs-time", value: timeInput(base), step: "300" });
   const modes = [
     ["at", "At this time", "Runs at the exact time. No carbon choice."],
-    ["day", "Cleanest hour that day", "ebb picks the cleanest forecast hour on that day."],
-    ["deadline", "Cleanest hour before", "ebb picks the cleanest hour between now and this time."],
+    ["day", "Cleanest hour that day", "tidegap picks the cleanest forecast hour on that day."],
+    ["deadline", "Cleanest hour before", "tidegap picks the cleanest hour between now and this time."],
   ];
   const err = h("p", { class: "form-error", role: "alert", hidden: true });
   const radios = modes.map(([value, label, hint], i) =>

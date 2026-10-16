@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * ebb-mcp — Model Context Protocol server for carbon-aware AI task scheduling.
+ * tidegap-mcp — Model Context Protocol server for carbon-aware AI task scheduling.
  *
  * Exposes ten tools to any MCP-compatible agent (Claude Desktop,
  * Claude Code, OpenClaw, Cursor, custom MCP clients):
@@ -66,13 +66,13 @@ import {
   type TaskRecord,
   type TickAdapters,
   type ToolParam,
-} from "@ebb-ai/core";
+} from "@tidegap/core";
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 
 import { readEnvCredentials, type ProviderCredentials } from "./env.js";
 
-/** The grid-feed interface is not re-exported by @ebb-ai/core's index;
+/** The grid-feed interface is not re-exported by @tidegap/core's index;
  *  derive it structurally from the factory we already import. */
 type GridFeed = ReturnType<typeof buildDefaultGridFeed>;
 
@@ -129,7 +129,7 @@ export function resolveStartupDb(explicit = process.env.EBB_DB_PATH): {
 /**
  * Build the dispatch adapters from host-supplied credentials.
  *
- * `@ebb-ai/core` no longer reads the environment, so the MCP server (the host)
+ * `@tidegap/core` no longer reads the environment, so the MCP server (the host)
  * reads it once via `readEnvCredentials()` and injects the values here. The
  * registration rules are unchanged: an adapter appears exactly when its
  * credential is present, Gemini prefers GEMINI_API_KEY over GOOGLE_API_KEY,
@@ -157,11 +157,11 @@ export function buildAdapters(
   return out;
 }
 
-// ─── Tool input schemas (derived from @ebb-ai/core's canonical surface) ─────
+// ─── Tool input schemas (derived from @tidegap/core's canonical surface) ─────
 //
 // The tool surface — names, descriptions, parameter sets, requiredness — is
 // the single source of truth shared with the OpenClaw plugin
-// (`@ebb-ai/core`'s tool-surface module, audit §2.2). Here we render each
+// (`@tidegap/core`'s tool-surface module, audit §2.2). Here we render each
 // tool's neutral parameter descriptors into the zod validators the MCP server
 // both parses incoming arguments with AND advertises (via zod-to-json-schema).
 //
@@ -361,7 +361,7 @@ export function originCwd(cwd: string = process.cwd()): string | undefined {
 }
 
 /**
- * Build the real ebb-mcp Server with all nine tool handlers registered.
+ * Build the real tidegap-mcp Server with all nine tool handlers registered.
  * Extracted from main() so tests can drive the actual handlers over an
  * InMemoryTransport instead of re-implementing a stub.
  */
@@ -396,7 +396,7 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
   // Aggregate carbon-budget config (ROADMAP item 4): loaded so
   // check_queue_status can render a budget block. The MCP server does not
   // tick, so no onCarbonAlert hook is wired here — alerts fire from the
-  // tickers (ebb tick / the OpenClaw plugin). Display-only.
+  // tickers (tidegap tick / the OpenClaw plugin). Display-only.
   const carbonBudget: CarbonBudgetConfig | undefined =
     deps.carbonBudget ?? loadCarbonBudgetConfig({ env: env.carbonBudget });
   const loadQuota = (): QuotaResetConfig =>
@@ -418,7 +418,7 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
     dbPath === undefined || dbPath === ":memory:" ? "(in-memory)" : dbPath;
 
   const server = new Server(
-    { name: "ebb-mcp", version: SERVER_VERSION },
+    { name: "tidegap-mcp", version: SERVER_VERSION },
     { capabilities: { tools: {} } },
   );
 
@@ -507,7 +507,7 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
         };
         try {
           // Resolve the deadline. A quota_reset task gets the next reset
-          // minus margin from ~/.ebb-ai/config; `ebb tick` re-resolves it if
+          // minus margin from ~/.ebb-ai/config; `tidegap tick` re-resolves it if
           // that reset passes before the task runs.
           let deadline: string;
           let quotaLine = "";
@@ -591,7 +591,7 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
               ],
             };
           }
-          // Persistence-by-default (v0.7.1+) — dispatchable by `ebb tick`.
+          // Persistence-by-default (v0.7.1+) — dispatchable by `tidegap tick`.
           // Opt out with `dispatch=false` for the legacy in-memory closure
           // mode (mostly useful for testing or no-dispatch placeholders).
           const shouldDispatch = parsed.dispatch ?? true;
@@ -620,7 +620,7 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
                 {
                   type: "text",
                   text:
-                    `Task persisted (provider_call, dispatchable by \`ebb tick\`).\n` +
+                    `Task persisted (provider_call, dispatchable by \`tidegap tick\`).\n` +
                     `task_id: ${record.taskId}\n` +
                     (record.title ? `title: ${record.title}\n` : "") +
                     (record.repeat && record.repeat !== "none"
@@ -642,12 +642,12 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
                     `persisted_to: ${persistedAt}\n` +
                     `\n` +
                     `To actually dispatch tasks at their windows, run the\n` +
-                    `\`ebb tick\` daemon (separate process):\n` +
-                    `  npm install -g @ebb-ai/cli\n` +
-                    `  ebb install      # registers launchd/systemd cron-tick\n` +
+                    `\`tidegap tick\` daemon (separate process):\n` +
+                    `  npm install -g @tidegap/cli\n` +
+                    `  tidegap install  # registers launchd/systemd cron-tick\n` +
                     `\n` +
                     `Without the daemon the task sits queued until you manually\n` +
-                    `run \`ebb tick --once\` against the same EBB_DB_PATH.`,
+                    `run \`tidegap tick --once\` against the same EBB_DB_PATH.`,
                 },
               ],
             };
@@ -705,7 +705,7 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
         };
         if (parsed.task_id) {
           // Persisted row first: a task this session scheduled is cached in
-          // memory, but `ebb tick` may have finished it in another process.
+          // memory, but `tidegap tick` may have finished it in another process.
           // The in-memory record is the fallback when no store backs the
           // scheduler.
           const fresh = (): TaskRecord<unknown> | undefined =>
@@ -842,7 +842,7 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
                   `status: ${child.status}\n` +
                   `scheduled_for: ${child.scheduledFor ?? "(immediate)"}\n` +
                   `deadline: ${child.deadline}\n` +
-                  `Runs on the next \`ebb tick\` after its window (one provider call).`,
+                  `Runs on the next \`tidegap tick\` after its window (one provider call).`,
               },
             ],
           };
@@ -1044,7 +1044,7 @@ export function formatRecommendation(
  * committed schedule response so the block reads identically everywhere.
  */
 export function routingBlockPayload(
-  routing: import("@ebb-ai/core").RoutingDecision & { preview?: true },
+  routing: import("@tidegap/core").RoutingDecision & { preview?: true },
 ): Record<string, unknown> {
   return {
     ...(routing.preview ? { preview: true } : {}),
@@ -1063,7 +1063,7 @@ export function routingBlockPayload(
   };
 }
 
-/** Longest reply text accepted by reply_task (same cap as the `ebb ui` API). */
+/** Longest reply text accepted by reply_task (same cap as the `tidegap ui` API). */
 const REPLY_MAX_CHARS = 32_000;
 
 export function formatTask(
@@ -1169,7 +1169,7 @@ export function formatQueueSummary(
   tasks: ReadonlyArray<TaskRecord<unknown> | undefined>,
   opts: { lastTickAt?: string } = {},
 ): string {
-  // When a ticker (`ebb tick` or the OpenClaw loop) last ran: tells the
+  // When a ticker (`tidegap tick` or the OpenClaw loop) last ran: tells the
   // caller whether scheduled tasks are actually being dispatched.
   const tickLine = `last_tick_at: ${opts.lastTickAt ?? "never recorded"}`;
   if (tasks.length === 0) {
@@ -1226,7 +1226,7 @@ async function main() {
     // stderr only — stdout belongs to the MCP stdio protocol.
     // eslint-disable-next-line no-console
     console.error(
-      `[ebb-mcp] ${fallbackNote} — falling back to an in-memory queue; ` +
+      `[tidegap-mcp] ${fallbackNote} — falling back to an in-memory queue; ` +
         `tasks will NOT survive a restart of this server.`,
     );
   }
@@ -1243,14 +1243,14 @@ async function main() {
         : dbPath;
   // eslint-disable-next-line no-console
   console.error(
-    `[ebb-mcp] ready (stdio, v${SERVER_VERSION}) — region=${defaultRegion}, ` +
+    `[tidegap-mcp] ready (stdio, v${SERVER_VERSION}) — region=${defaultRegion}, ` +
       `grid feed=${feed.source}, ` +
       `db=${dbLabel}`,
   );
 }
 
 /** Run main() only when executed as a script (node dist/server.js or the
- *  `ebb-mcp` bin shim) — importing this module has no side effects. */
+ *  `tidegap-mcp` bin shim) — importing this module has no side effects. */
 function isDirectRun(): boolean {
   const entry = process.argv[1];
   if (!entry) return false;
@@ -1265,7 +1265,7 @@ function isDirectRun(): boolean {
 if (isDirectRun()) {
   main().catch((err: unknown) => {
     // eslint-disable-next-line no-console
-    console.error("[ebb-mcp] fatal:", err);
+    console.error("[tidegap-mcp] fatal:", err);
     process.exit(1);
   });
 }

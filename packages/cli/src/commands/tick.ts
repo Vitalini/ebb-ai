@@ -1,5 +1,5 @@
 /**
- * `ebb tick` — drain due provider-call tasks.
+ * `tidegap tick` — drain due provider-call tasks.
  *
  * One-shot by default; `--daemon` loops on the supplied interval until
  * SIGINT. Reads API keys from the environment and constructs the
@@ -26,7 +26,7 @@ import {
   type CarbonAlert,
   type TickAdapters,
   type TickResultEntry,
-} from "@ebb-ai/core";
+} from "@tidegap/core";
 import { spawn, type SpawnOptions } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir, platform as osPlatform } from "node:os";
@@ -125,8 +125,8 @@ export interface TickRunResult {
 
 /**
  * Default queue path. Matches the MCP server's persistence default
- * (`~/.ebb-ai/queue.db`, established in v0.7.1) so `ebb tick`,
- * `ebb queue list`, `ebb receipts list`, and `ebb stats` all read
+ * (`~/.ebb-ai/queue.db`, established in v0.7.1) so `tidegap tick`,
+ * `tidegap queue list`, `tidegap receipts list`, and `tidegap stats` all read
  * the same SQLite ledger the MCP server writes to. Prior versions
  * defaulted to `~/.ebb/queue.sqlite`, which silently diverged from
  * the MCP server's actual path — fixed in v0.8.x.
@@ -147,7 +147,7 @@ export function defaultDbPath(): string {
 /**
  * Build the tick adapters from host-supplied credentials.
  *
- * `@ebb-ai/core` no longer reads the environment, so the CLI (the host)
+ * `@tidegap/core` no longer reads the environment, so the CLI (the host)
  * reads it once via `readEnvCredentials()` and injects the values here. The
  * registration rules are unchanged: an adapter appears exactly when its
  * credential is present, Gemini prefers GEMINI_API_KEY over GOOGLE_API_KEY,
@@ -317,7 +317,7 @@ export async function runTick(opts: TickCommandOptions = {}): Promise<number> {
   if (opts.daemon) {
     const interval = Math.max(1, opts.interval ?? 60);
     // eslint-disable-next-line no-console
-    console.log(`[ebb] tick daemon: every ${interval}s, db=${opts.db ?? defaultDbPath()}`);
+    console.log(`[tidegap] tick daemon: every ${interval}s, db=${opts.db ?? defaultDbPath()}`);
     let stopped = false;
     const onSignal = () => {
       stopped = true;

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { estimateEnergyKwh } from "@ebb-ai/core/energy";
+import { estimateEnergyKwh } from "@tidegap/core/energy";
 import { InstallPicker } from "@/components/install-picker";
 
 /**
@@ -199,7 +199,7 @@ export default function DocsPage() {
   ENERGY_SOURCES,
   DEFAULT_PUE,
   LEGACY_KWH_PER_TASK,
-} from "@ebb-ai/core";
+} from "@tidegap/core";
 
 estimateEnergyKwh({
   model: "claude-sonnet-5",
@@ -321,7 +321,7 @@ $ ebb verify --file ./inbox/receipt.json --trusted-public-key tTpsWuAS...
   signReceipt,
   verifyReceipt,
   loadOrCreateSigningKey,
-} from "@ebb-ai/core";
+} from "@tidegap/core";
 
 const keyPair = loadOrCreateSigningKey();
 const signed = signReceipt(receipt, keyPair);

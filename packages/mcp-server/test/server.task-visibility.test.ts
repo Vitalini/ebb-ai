@@ -13,7 +13,7 @@ import {
   mockGridFeed,
   resolveQuotaDeadline,
   TaskStore,
-} from "@ebb-ai/core";
+} from "@tidegap/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { createEbbServer } from "../src/server.js";
 
@@ -170,7 +170,7 @@ describe("check_queue_status and read state", () => {
       }),
     );
     const taskId = /task_id: (\S+)/.exec(scheduled)![1]!;
-    // `ebb tick` finishes the row in its own process; this server still
+    // `tidegap tick` finishes the row in its own process; this server still
     // holds the scheduled record in memory.
     const other = new TaskStore({ dbPath });
     const row = other.get(taskId)!;

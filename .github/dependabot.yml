@@ -32,7 +32,7 @@ updates:
       all-npm:
         patterns: ["*"]
 
-  # Python — for ebb_ai
+  # Python — for tidegap
   - package-ecosystem: pip
     directory: "/packages/core-py"
     schedule:

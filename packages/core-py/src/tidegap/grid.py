@@ -240,7 +240,7 @@ class _ElectricityMapsFeed(GridFeed):
             )
         except (httpx.HTTPError, RuntimeError, ValueError) as err:
             _log.warning(
-                "[ebb-ai/grid] electricity-maps fetch failed (%s); falling back to mock",
+                "[tidegap/grid] electricity-maps fetch failed (%s); falling back to mock",
                 err,
             )
             return await self._mock.fetch_forecast(region, hours)
@@ -258,7 +258,7 @@ class _MockWithWarning(GridFeed):
     def __init__(
         self,
         message: str = (
-            "[ebb-ai/grid] no EBB_ELECTRICITY_MAPS_API_KEY set — using mock data"
+            "[tidegap/grid] no EBB_ELECTRICITY_MAPS_API_KEY set — using mock data"
         ),
     ) -> None:
         self._mock = _MockGridFeed()
@@ -321,7 +321,7 @@ class _UkCarbonIntensityFeed(GridFeed):
     to 96h.
 
     The upstream API returns 30-minute settlement periods; we average
-    each consecutive pair into the hourly buckets ebb-ai uses elsewhere.
+    each consecutive pair into the hourly buckets Tidegap uses elsewhere.
     The API's first settlement period can start *before* the requested
     top-of-hour (e.g. a request at 12:00 returns a period starting
     11:30), so leading periods are dropped until one starts at :00 — that
@@ -358,7 +358,7 @@ class _UkCarbonIntensityFeed(GridFeed):
     async def fetch_forecast(self, region: str, hours: int) -> GridForecast:
         if region != "GB":
             _log.warning(
-                '[ebb-ai/grid] ukCarbonIntensityFeed only supports zone "GB" '
+                '[tidegap/grid] ukCarbonIntensityFeed only supports zone "GB" '
                 '(got "%s") — using mock',
                 region,
             )
@@ -441,7 +441,7 @@ class _UkCarbonIntensityFeed(GridFeed):
             )
         except (httpx.HTTPError, RuntimeError, ValueError) as err:
             _log.warning(
-                "[ebb-ai/grid] uk-carbon-intensity fetch failed (%s); "
+                "[tidegap/grid] uk-carbon-intensity fetch failed (%s); "
                 "falling back to mock",
                 err,
             )
@@ -541,7 +541,7 @@ class _EiaFeed(GridFeed):
         respondent = EIA_RESPONDENT_BY_ZONE.get(region)
         if respondent is None:
             _log.warning(
-                '[ebb-ai/grid] eiaFeed does not cover zone "%s" — using mock',
+                '[tidegap/grid] eiaFeed does not cover zone "%s" — using mock',
                 region,
             )
             return await self._mock.fetch_forecast(region, hours)
@@ -659,7 +659,7 @@ class _EiaFeed(GridFeed):
             )
         except (httpx.HTTPError, RuntimeError, ValueError, KeyError) as err:
             _log.warning(
-                "[ebb-ai/grid] eia fetch failed (%s); falling back to mock",
+                "[tidegap/grid] eia fetch failed (%s); falling back to mock",
                 err,
             )
             return await self._mock.fetch_forecast(region, hours)
@@ -677,7 +677,7 @@ def eia_feed(
     key = api_key or os.environ.get("EBB_EIA_API_KEY")
     if not key:
         return _MockWithWarning(
-            "[ebb-ai/grid] no EBB_EIA_API_KEY set — "
+            "[tidegap/grid] no EBB_EIA_API_KEY set — "
             "using mock data for EIA-eligible zones"
         )
     return _EiaFeed(key, timeout_s=timeout_s)
@@ -851,7 +851,7 @@ class _EntsoeFeed(GridFeed):
         zone = ENTSOE_BIDDING_ZONE_BY_REGION.get(region)
         if zone is None:
             _log.warning(
-                '[ebb-ai/grid] entsoeFeed does not cover zone "%s" — using mock',
+                '[tidegap/grid] entsoeFeed does not cover zone "%s" — using mock',
                 region,
             )
             return await self._mock.fetch_forecast(region, hours)
@@ -953,7 +953,7 @@ class _EntsoeFeed(GridFeed):
             )
         except (httpx.HTTPError, RuntimeError, ValueError, KeyError) as err:
             _log.warning(
-                "[ebb-ai/grid] entsoe fetch failed (%s); falling back to mock",
+                "[tidegap/grid] entsoe fetch failed (%s); falling back to mock",
                 err,
             )
             return await self._mock.fetch_forecast(region, hours)
@@ -973,7 +973,7 @@ def entsoe_feed(
     token = security_token or os.environ.get("EBB_ENTSOE_SECURITY_TOKEN")
     if not token:
         return _MockWithWarning(
-            "[ebb-ai/grid] no EBB_ENTSOE_SECURITY_TOKEN set — "
+            "[tidegap/grid] no EBB_ENTSOE_SECURITY_TOKEN set — "
             "using mock data for EU zones"
         )
     return _EntsoeFeed(token, timeout_s=timeout_s)
@@ -1159,7 +1159,7 @@ class _WattTimeFeed(GridFeed):
             )
         except (httpx.HTTPError, RuntimeError, ValueError, KeyError) as err:
             _log.warning(
-                "[ebb-ai/grid] watttime fetch failed (%s); falling through to %s",
+                "[tidegap/grid] watttime fetch failed (%s); falling through to %s",
                 err,
                 self._fallback.source,
             )

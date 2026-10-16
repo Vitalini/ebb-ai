@@ -1,5 +1,5 @@
 /**
- * `ebb stats` aggregate carbon-budget block (ROADMAP item 4).
+ * `tidegap stats` aggregate carbon-budget block (ROADMAP item 4).
  *
  * Seeds completed receipts into a temp ledger and asserts the budget block
  * renders (and appears in --json) when a budget is configured, and is absent
@@ -9,7 +9,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TaskStore, type TaskRecord } from "@ebb-ai/core";
+import { TaskStore, type TaskRecord } from "@tidegap/core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runStats } from "../src/commands/stats.js";
 
@@ -35,7 +35,7 @@ function seedCompleted(dbPath: string, taskId: string, actualG: number): void {
   store.close();
 }
 
-describe("ebb stats — carbon budget block", () => {
+describe("tidegap stats — carbon budget block", () => {
   let dir: string;
   let dbPath: string;
   let cfgPath: string;

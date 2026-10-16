@@ -99,7 +99,7 @@ export interface LaunchdPlistOptions {
   tickIntervalSec: number;
   dbPath: string;
   /**
-   * The argv[0..n] that invoke `ebb`, resolved at install time. For a
+   * The argv[0..n] that invoke `tidegap`, resolved at install time. For a
    * pinned node install this is `[process.execPath, realpath(argv[1])]`
    * — the exact interpreter plus the real dist entry — which is immune
    * to launchd's bare PATH and `#!/usr/bin/env node` shebangs. When the
@@ -116,7 +116,7 @@ export interface LaunchdPlistOptions {
 }
 
 /**
- * Generate a launchd plist that runs `ebb tick` on a fixed interval.
+ * Generate a launchd plist that runs `tidegap tick` on a fixed interval.
  *
  * The plist intentionally uses `StartInterval` (not `StartCalendarInterval`)
  * so the agent fires every N seconds regardless of wall-clock alignment.

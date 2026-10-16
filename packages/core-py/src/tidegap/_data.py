@@ -4,7 +4,7 @@
 # Edit those JSON files and run 'pnpm gen:data' to regenerate. CI fails
 # on drift ('pnpm gen:data:check').
 # ruff: noqa
-"""Generated data tables mirrored from the JSON SSOT in @ebb-ai/core."""
+"""Generated data tables mirrored from the JSON SSOT in @tidegap/core."""
 
 from __future__ import annotations
 

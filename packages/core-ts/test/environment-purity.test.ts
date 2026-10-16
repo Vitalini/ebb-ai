@@ -1,5 +1,5 @@
 /**
- * `@ebb-ai/core` is an ENVIRONMENT-PURE library.
+ * `@tidegap/core` is an ENVIRONMENT-PURE library.
  *
  * Motivation: the OpenClaw plugin bundles this library, and ClawHub's ClawScan
  * raises `suspicious.env_credential_access` (severity: critical) on ANY
@@ -13,7 +13,7 @@
  *   2. Every credentialed entry point IGNORES the same-named environment
  *      variable and honours only its explicit argument.
  *
- * The hosts (`ebb` CLI, `@ebb-ai/mcp` server, the web dashboard) read those
+ * The hosts (`tidegap` CLI, `@tidegap/mcp` server, the web dashboard) read those
  * variables at their own entry points and inject them — see
  * `packages/cli/src/env.ts` and `packages/mcp-server/src/env.ts`. The OpenClaw
  * plugin injects OpenClaw plugin-config values instead.
@@ -75,7 +75,7 @@ const HOST_ENV_VARS = [
   "EBB_CARBON_BUDGET_WINDOW",
 ] as const;
 
-describe("@ebb-ai/core is environment-pure", () => {
+describe("@tidegap/core is environment-pure", () => {
   it("no source file reads the ambient environment", () => {
     // Built by concatenation so this test file's own source does not match the
     // pattern it is searching for.

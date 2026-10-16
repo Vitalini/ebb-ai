@@ -1,13 +1,13 @@
 {
-  "name": "@vitalini/ebb",
+  "name": "@vitalini/tidegap",
   "version": "0.17.0",
-  "description": "OpenClaw plugin: auto-defer \"do it later\" / \"by tomorrow\" / \"overnight\" tasks to the cleanest electricity-grid hour inside a deadline. Native OpenClaw tools for carbon-aware AI workflow scheduling. Shares ~/.ebb-ai/queue.db with the ebb-ai MCP server and CLI.",
+  "description": "OpenClaw plugin: auto-defer \"do it later\" / \"by tomorrow\" / \"overnight\" tasks to the cleanest electricity-grid hour inside a deadline. Native OpenClaw tools for carbon-aware AI workflow scheduling. Shares ~/.tidegap/queue.db with the Tidegap MCP server and CLI.",
   "license": "Apache-2.0",
   "author": "Vitalii Borovyk",
-  "homepage": "https://www.ebb-ai.com",
+  "homepage": "https://www.tidegap.com",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Vitalini/ebb-ai.git",
+    "url": "https://github.com/tidegap/tidegap.git",
     "directory": "packages/openclaw-plugin"
   },
   "type": "module",
@@ -42,7 +42,7 @@
   },
   "dependencies": {},
   "devDependencies": {
-    "@ebb-ai/core": "workspace:*",
+    "@tidegap/core": "workspace:*",
     "typebox": "^1.3.34",
     "esbuild": "^0.28.2",
     "typescript": "^5.6.3",

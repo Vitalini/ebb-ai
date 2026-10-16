@@ -24,7 +24,7 @@ export async function caffeinateWhilePending(
   const seconds = Math.max(1, Math.floor(durationSec));
   const args = [
     "--what=idle",
-    "--why=ebb-ai pending tasks",
+    "--why=Tidegap pending tasks",
     "--mode=block",
     "sleep",
     String(seconds),
@@ -106,7 +106,7 @@ export const pmsetScheduleWake = rtcwakeScheduleWake;
 export interface SystemdServiceOptions {
   dbPath: string;
   /**
-   * The argv[0..n] that invoke `ebb`, resolved at install time. For a
+   * The argv[0..n] that invoke `tidegap`, resolved at install time. For a
    * pinned node install this is `[process.execPath, realpath(argv[1])]`
    * — the exact interpreter plus the real dist entry — immune to a bare
    * service PATH and `#!/usr/bin/env node` shebangs. Falls back to
@@ -123,9 +123,9 @@ export interface SystemdServiceOptions {
 
 /**
  * Render the `ebb-tick.service` unit file. `Type=oneshot` because the
- * service runs `ebb tick --once` and exits; the companion timer is
+ * service runs `tidegap tick --once` and exits; the companion timer is
  * responsible for cadence. `EnvironmentFile=` references a user-owned
- * env file (belt-and-braces: `ebb tick` also loads it directly), so
+ * env file (belt-and-braces: `tidegap tick` also loads it directly), so
  * secrets never land in the service unit itself.
  */
 export function systemdService(opts: SystemdServiceOptions): string {
@@ -144,7 +144,7 @@ export function systemdService(opts: SystemdServiceOptions): string {
     : "";
   const envBlock = envLines ? `${envLines}\n` : "";
   return `[Unit]
-Description=ebb-ai cron-tick drain
+Description=Tidegap cron-tick drain
 After=network.target
 
 [Service]
