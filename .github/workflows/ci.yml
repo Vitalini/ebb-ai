@@ -48,6 +48,8 @@ jobs:
       # root `pnpm test`, never in CI — gate them here (Node 22 and 24).
       - if: matrix.node != '20'
         run: pnpm --filter "@vitalini/tidegap" test
+      # The @ebb-ai/* 0.17.1 shims run against the built @tidegap/* packages.
+      - run: node --test compat/test
 
   data-ssot:
     name: data SSOT drift check
@@ -91,3 +93,9 @@ jobs:
       - name: ruff
         working-directory: packages/core-py
         run: ruff check .
+      - name: ebb-ai PyPI shim re-exports tidegap and warns once
+        env:
+          PYTHONPATH: compat/pypi/ebb-ai/src
+        run: |
+          python -c "import ebb_ai.grid, ebb_ai, tidegap.grid; assert ebb_ai.grid is tidegap.grid; assert ebb_ai.Scheduler is tidegap.Scheduler" 2> shim.err
+          test "$(grep -c 'ebb-ai is now tidegap' shim.err)" = 1
