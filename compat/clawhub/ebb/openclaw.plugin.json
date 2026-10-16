@@ -1,0 +1,14 @@
+{
+  "id": "ebb",
+  "name": "ebb — renamed to Tidegap",
+  "description": "Renamed to @vitalini/tidegap — https://github.com/tidegap/tidegap",
+  "version": "0.17.1",
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": true
+  }
+}

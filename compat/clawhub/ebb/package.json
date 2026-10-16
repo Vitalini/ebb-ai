@@ -1,0 +1,37 @@
+{
+  "name": "@vitalini/ebb",
+  "version": "0.17.1",
+  "description": "Renamed to @vitalini/tidegap — https://github.com/tidegap/tidegap",
+  "license": "Apache-2.0",
+  "author": "Vitalii Borovyk",
+  "homepage": "https://www.tidegap.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tidegap/tidegap.git",
+    "directory": "compat/clawhub/ebb"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22.5"
+  },
+  "main": "./dist/index.js",
+  "files": [
+    "dist",
+    "openclaw.plugin.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "openclaw": {
+    "extensions": [
+      "./dist/index.js"
+    ],
+    "compat": {
+      "pluginApi": ">=2026.3.24-beta.2",
+      "minGatewayVersion": "2026.3.24-beta.2"
+    },
+    "build": {
+      "openclawVersion": "2026.9.4",
+      "pluginSdkVersion": "2026.9.4"
+    }
+  }
+}
