@@ -187,26 +187,26 @@ function heavyWave(size, cx, cy) {
   return wave({ stroke: STROKE_HEAVY, k, ox: cx, oy: cy - k * (unit.top + unit.height / 2) });
 }
 
-function markSvg() {
+// A 64x64 tile: the shared root, the generated-file header, then `parts`.
+function tileSvg(...parts) {
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Tidegap">`,
     HEADER,
-    `<style>@media (prefers-color-scheme: dark) { .ink { stroke: ${WHITE}; } }</style>`,
-    waveSvg(heavyWave(52, 32, 32), "tg-mark", NAVY, TEAL),
+    ...parts,
     "</svg>",
     "",
   ].join("\n");
 }
 
+function markSvg() {
+  return tileSvg(
+    `<style>@media (prefers-color-scheme: dark) { .ink { stroke: ${WHITE}; } }</style>`,
+    waveSvg(heavyWave(52, 32, 32), "tg-mark", NAVY, TEAL),
+  );
+}
+
 function iconSvg() {
-  return [
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Tidegap">`,
-    HEADER,
-    `<rect width="64" height="64" fill="${NAVY}"/>`,
-    waveSvg(heavyWave(48, 32, 32), "tg-icon", WHITE, TEAL),
-    "</svg>",
-    "",
-  ].join("\n");
+  return tileSvg(`<rect width="64" height="64" fill="${NAVY}"/>`, waveSvg(heavyWave(48, 32, 32), "tg-icon", WHITE, TEAL));
 }
 
 // Horizontal header form for the site: heavy mark left, wordmark right.

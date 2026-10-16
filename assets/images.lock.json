@@ -65,7 +65,7 @@
     }
   },
   "brand": {
-    "inputsSha256": "23b83b9f05a11774440d1b93e2f3c0e2351dc0b2375640e7f4f75a0432d490ab",
+    "inputsSha256": "0fa3c530d61b05f92f572ebdc4e2e14d893b53727520f14de02d2cc50a11deaa",
     "outputs": {
       "assets/brand/tidegap-logo-dark.svg": {
         "sha256": "39ea7bf52efd1a6251711deb854ec111e4daaf0195b2020e16e47204020b6116"
