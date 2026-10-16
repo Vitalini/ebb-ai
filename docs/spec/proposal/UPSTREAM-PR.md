@@ -77,7 +77,7 @@ Including these would balloon the PR; both can be added incrementally once the t
 
 A reference server implementing the proposed fields ships today: [`@tidegap/mcp@0.11.0`](https://www.npmjs.com/package/@tidegap/mcp) (Apache-2.0). It exposes a `schedule_task` tool that accepts `deadline` and `carbon_budget_g`, backed by a multi-source grid feed (UK Carbon Intensity, EIA, ENTSO-E, Electricity Maps; 31 zones across NA / EU / APAC), per-model energy coefficients (Patterson 2021, Luccioni 2024, HF AI Energy Score), Ed25519-signed receipts (`tidegap verify`), and a WAL-enabled persistent SQLite queue (`~/.tidegap/queue.db`). Source: <https://github.com/tidegap/tidegap>.
 
-The server has 1,355 passing automated tests (874 TS + 481 Python), including an even-distribution simulation (10,000 synthetic deferred tasks across 7 monitored grid zones) that empirically verifies the scheduler does *not* create a new peak at the global cleanest hour — the chosen-hour distribution sits at ~11 % maximum concentration with randomised tie-break + per-region phase, well below the 24-bucket uniform floor of 4.2 %.
+The server has 1,423 passing automated tests (923 TS + 500 Python), including an even-distribution simulation (10,000 synthetic deferred tasks across 7 monitored grid zones) that empirically verifies the scheduler does *not* create a new peak at the global cleanest hour — the chosen-hour distribution sits at ~11 % maximum concentration with randomised tie-break + per-region phase, well below the 24-bucket uniform floor of 4.2 %.
 
 The fields proposed here are exactly the fields `@tidegap/mcp` already accepts; merging this proposal would make `@tidegap/mcp` a conforming implementation of the standard rather than a provider-specific extension.
 

@@ -138,7 +138,7 @@ Windsurf, OpenClaw, OpenAI Codex CLI, Pi). The agent asks
 `recommend_window`, sees the plan, then commits via `schedule_task`
 — or doesn't.
 
-> **Status:** v0.17.0 (this release) · 2026-10-15 · published on npm and PyPI
+> **Status:** v0.18.0 (this release) · 2026-10-16 · published on npm and PyPI
 > · `@tidegap/{core,mcp,cli}` on npm under the
 > `@tidegap` org; `tidegap` on PyPI; `@vitalini/tidegap` OpenClaw
 > plugin on ClawHub (`openclaw plugins install clawhub:@vitalini/tidegap`),
@@ -173,11 +173,11 @@ Windsurf, OpenClaw, OpenAI Codex CLI, Pi). The agent asks
 > always-on `tidegap tick` CLI with macOS launchd + Linux systemd +
 > pmset/rtcwake wake events, full control surface (`cancel_task` /
 > `expedite_task` / `update_deadline` / `retry_task` / `cancel_all`),
-> receipt redaction, file output, retry-with-backoff. **1,355 tests
-> passing** (874 TS + 481 Python, measured on this branch 2026-10-15)
+> receipt redaction, file output, retry-with-backoff. **1,423 tests
+> passing** (923 TS + 500 Python, measured on this branch 2026-10-16)
 > across 5 packages and 2 languages. See [QUICKSTART.md](./QUICKSTART.md).
 
-[![Tests](https://img.shields.io/badge/tests-1355%20passing-22c55e)](#tests)
+[![Tests](https://img.shields.io/badge/tests-1423%20passing-22c55e)](#tests)
 [![MCP tools](https://img.shields.io/badge/MCP-10%20tools-5eead4)](https://www.tidegap.com/docs)
 [![Hosts](https://img.shields.io/badge/MCP%20hosts-13-5eead4)](https://www.tidegap.com/docs#install)
 [![Website](https://img.shields.io/badge/website-tidegap.com-5eead4)](https://www.tidegap.com)
@@ -420,7 +420,7 @@ a random token that is printed once with the link and changes on every start.
 
 `tidegap tick` posts a desktop notification for each task that completes or
 fails (macOS, Linux with `notify-send`, Windows). Turn it off with
-`tidegap tick --no-notify` or `TIDEGAP_NOTIFY=0` in `~/.tidegap/config`. The Claude
+`tidegap tick --no-notify`, `TIDEGAP_NO_NOTIFY=1` in the environment, or `TIDEGAP_NOTIFY=0` in `~/.tidegap/config`. The Claude
 Code plugin adds one line at session start when finished tasks are unread.
 
 ### Dashboard

@@ -119,8 +119,8 @@ document is built." `[docs/impact-proposal.md]`.
 - 31 grid regions, 5 real-data grid feeds, a 72-hour forecast horizon, 10 MCP
   tools, 8 slash commands, 13 supported hosts — each backed by a count in
   code, not prose `[docs/claims.md #6, #10, #11, #16, #17, #18]`.
-- 1,355 tests passing (874 TypeScript across 4 packages + 481 Python),
-  rerun via `pnpm test` and `pytest -q` on 2026-10-15 `[docs/claims.md #13]`.
+- 1,423 tests passing (923 TypeScript across 4 packages + 500 Python),
+  rerun via `pnpm test` and `pytest -q` on 2026-10-16 `[docs/claims.md #13]`.
 
 **Could not measure** (simulated, projected, or dropped for lack of a
 source — see `docs/claims.md` for the full audit):

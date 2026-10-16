@@ -1,11 +1,105 @@
 # Changelog
 
-All notable changes to ebb-ai will be documented in this file.
+All notable changes to Tidegap (called Ebb AI until 0.17) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.18.0] — 2026-10-16
+
+Ebb AI is now **Tidegap**. "Ebb" conflicts with an existing software
+trademark, so every public name changes: packages, commands, paths,
+environment variables, the plugin and MCP identities, and the site. A 0.17
+install keeps its queue, receipts, signing key and daemon, and the old names
+keep working for this release.
+
+### Changed
+
+- **Renamed to Tidegap.** npm `@ebb-ai/{core,cli,mcp}` → `@tidegap/{core,cli,mcp}`;
+  PyPI `ebb-ai` / `import ebb_ai` → `tidegap` / `import tidegap`; OpenClaw
+  `@vitalini/ebb` (plugin id `ebb`) → `@vitalini/tidegap` (plugin id
+  `tidegap`); commands `ebb` → `tidegap` and `ebb-mcp` → `tidegap-mcp`;
+  Claude Code marketplace and plugin `ebb-ai` → `tidegap`, commands
+  `/ebb-ai:*` → `/tidegap:*`; MCP host config key `ebb-ai` → `tidegap` (tools
+  `mcp__tidegap__*`); MCP Registry `io.github.Vitalini/ebb-ai` →
+  `io.github.tidegap/tidegap`, `serverInfo.name` `tidegap`; repository
+  `github.com/tidegap/tidegap`; site `https://www.tidegap.com`.
+- **Data directory `~/.tidegap`.** The first 0.18 process moves `~/.ebb-ai`
+  there and leaves `~/.ebb-ai` as a link, so a 0.17 process still reads the
+  same ledger. It never deletes anything; when the move or the link fails it
+  keeps using `~/.ebb-ai` and prints one line. A `~/.ebb-ai` that is already
+  your own link to another directory is followed, not moved. On Windows the
+  back-link is a junction. Both cores apply the same rules.
+- **Environment variables and config keys `TIDEGAP_*`** (`TIDEGAP_EIA_API_KEY`,
+  `TIDEGAP_DB_PATH`, `TIDEGAP_CARBON_BUDGET_G`, `TIDEGAP_QUOTA_RESET_<LABEL>`,
+  `TIDEGAP_NOTIFY` and the rest).
+- **Secrets file `~/.config/tidegap/env`.** `tidegap install` copies a 0.17
+  `~/.config/ebb/env` there (0600) and leaves the old file in place.
+- **Daemon** `com.tidegap.tick` / `tidegap-tick.{service,timer}` / schtasks
+  `tidegap-tick`, log `~/.tidegap/logs/tick.log`, wake helper
+  `~/.tidegap/laptop-wake.sh`. `tidegap install` creates the log directory
+  before it writes the unit.
+- Images re-rendered from the same forecast with the Tidegap wordmark.
+
+### Added
+
+- `paths` module in `@tidegap/core` (`resolveTidegapHome`, `tidegapPath`) and
+  `tidegap.paths` in Python: one home resolver for every file under the data
+  directory.
+- `withTidegapKeys`, `KEY_PREFIX` and `LEGACY_KEY_PREFIX` in `@tidegap/core`;
+  `CarbonBudgetEnv` gains `TIDEGAP_CARBON_BUDGET_G` and
+  `TIDEGAP_CARBON_BUDGET_WINDOW`.
+- `@tidegap/mcp` exports `main`.
+- Shims under the old names, version 0.17.1 (`compat/`): `@ebb-ai/core`
+  re-exports `@tidegap/core`; `@ebb-ai/cli` keeps the `ebb` bin and the
+  `dist/index.js` path 0.17 daemon units pin; `@ebb-ai/mcp` keeps
+  `npx -y @ebb-ai/mcp` working; PyPI `ebb-ai` installs `tidegap` and keeps
+  `import ebb_ai` working. Each prints one deprecation line.
+- `tidegap install` detects a 0.17 unit and prints the commands that unload
+  and remove it. Run through the `@ebb-ai/cli` shim, it warns that the unit
+  would point inside `@ebb-ai/cli` and asks for `@tidegap/cli`.
+- `TIDEGAP_NO_NOTIFY=1` turns off the OS notification `tidegap tick` posts
+  per finished task; the OpenClaw plugin's counterpart is the config field
+  `disableOsNotifications`.
+
+### Deprecated
+
+Removed in 0.19:
+
+- The `ebb` and `ebb-mcp` bins (each prints one deprecation line on stderr).
+- `EBB_*` environment variables and config-file keys: read when the
+  `TIDEGAP_*` name is unset, with one stderr line per process naming them.
+- The `~/.ebb-ai` back-link and the `~/.config/ebb/env` fallback.
+- The `EBB_*` fields of `CarbonBudgetEnv`.
+
+### Fixed
+
+- Test runs no longer post real desktop notifications: under a test runner
+  the default notifier spawns nothing, and the tick suite fails if any child
+  process is spawned.
+
+### Upgrade notes
+
+- Data in `~/.ebb-ai`: nothing to do; it moves on first run.
+- `EBB_*` in your shell, MCP host config or Vercel: rename to `TIDEGAP_*`
+  before 0.19.
+- CLI and daemon: `npm i -g @tidegap/cli` (run `npm uninstall -g @ebb-ai/cli`
+  first if npm reports `EEXIST`), `tidegap install`, run the unload commands
+  it prints, then `npm uninstall -g @ebb-ai/cli`. Uninstalling the old
+  package before the old unit is unloaded makes every old tick fail.
+- MCP host config: `npx -y @tidegap/mcp` under the key `tidegap`; prompts or
+  allowlists naming `mcp__ebb-ai__*` must change to `mcp__tidegap__*`.
+- Claude Code: `claude plugin uninstall ebb-ai`,
+  `claude plugin marketplace remove ebb-ai`,
+  `claude plugin marketplace add tidegap/tidegap`,
+  `claude plugin install tidegap`.
+- OpenClaw: `openclaw plugins install clawhub:@vitalini/tidegap`, move your
+  config block from `plugins.entries.ebb` to `plugins.entries.tidegap`,
+  remove the old plugin.
+- Python: `pip install tidegap`, `import tidegap`.
+- Links to `github.com/Vitalini/ebb-ai` and `www.ebb-ai.com` redirect.
 
 ## [0.17.0] — 2026-10-15
 
@@ -1661,7 +1755,8 @@ their mind, and how to mitigate the operational failure modes
   Batches APIs. Direct Batch routing lands in v0.2.
 - Python port (`ebb-ai` PyPI) is a placeholder. v0.2.
 
-[Unreleased]: https://github.com/Vitalini/ebb-ai/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/tidegap/tidegap/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/tidegap/tidegap/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/Vitalini/ebb-ai/compare/v0.16.1...v0.17.0
 [0.16.1]: https://github.com/Vitalini/ebb-ai/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/Vitalini/ebb-ai/compare/v0.15.1...v0.16.0
