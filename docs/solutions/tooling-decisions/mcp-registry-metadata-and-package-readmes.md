@@ -26,3 +26,4 @@ Registry ownership of an npm package is proven by `mcpName` in `packages/mcp-ser
 - Use absolute links (`https://github.com/tidegap/tidegap/blob/main/...`). Relative links break on npm and PyPI.
 - Never link a file that does not exist. PR #43 fixed dead links in the README head.
 - Every number in the README needs a row in `docs/claims.md`, see [claims-audit-method](../best-practices/claims-audit-method.md).
+- Org namespaces (`io.github.tidegap/*`) publish only through `.github/workflows/mcp-registry.yml` (GitHub OIDC). The interactive `mcp-publisher login github` grants just `io.github.<user>/*` and returns 403 for the org name, even with public org membership.

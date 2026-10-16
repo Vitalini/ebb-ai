@@ -1,0 +1,75 @@
+name: Publish to MCP Registry
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  MCP_PUBLISHER_VERSION: v1.8.1
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # GitHub OIDC grants the io.github.tidegap/* namespace
+      contents: read
+    defaults:
+      run:
+        working-directory: packages/mcp-server
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install mcp-publisher
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+          ./mcp-publisher --version || true
+
+      - name: Check server.json version
+        id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          VERSION=$(jq -r '.version' server.json)
+          PKG_VERSION=$(jq -r '.packages[0].version' server.json)
+          if [ "$VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::server.json version ($VERSION) differs from packages[0].version ($PKG_VERSION)"
+            exit 1
+          fi
+          if [ "$EVENT_NAME" = "release" ] && [ "$VERSION" != "${TAG#v}" ]; then
+            echo "::error::server.json version ($VERSION) does not match release tag ($TAG)"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check the npm package exists
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          MCP_NAME=$(npm view "@tidegap/mcp@${VERSION}" mcpName)
+          echo "mcpName=${MCP_NAME}"
+          [ "$MCP_NAME" = "$(jq -r '.name' server.json)" ] || { echo "::error::npm mcpName does not match server.json name"; exit 1; }
+
+      - name: Authenticate to MCP Registry
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish server to MCP Registry
+        run: ./mcp-publisher publish
+
+      - name: Read back from the registry
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          URL="https://registry.modelcontextprotocol.io/v0/servers?search=tidegap"
+          {
+            echo "### MCP Registry"
+            echo "Published \`io.github.tidegap/tidegap\` ${VERSION}"
+            echo "Search: ${URL}"
+            echo '```json'
+            curl -fsS "$URL" | jq -c '.servers[]? | {name: .server.name, version: .server.version}' || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

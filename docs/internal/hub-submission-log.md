@@ -23,6 +23,7 @@ when it runs.
 | - | npm | Publish `@tidegap/{core,cli,mcp}` 0.18.0 from the reviewed PR head | https://www.npmjs.com/org/tidegap | not started | Before merge |
 | - | PyPI | Publish `tidegap` 0.18.0 | https://pypi.org/project/tidegap/ | not started | |
 | - | MCP Registry | Publish `io.github.tidegap/tidegap` 0.18.0 | https://registry.modelcontextprotocol.io | not started | npm 0.18.0 first; org membership public |
+| 2026-10-16 | MCP Registry | Interactive `mcp-publisher login github` refused `io.github.tidegap/tidegap` (403); publish via `mcp-registry.yml` (GitHub OIDC) | https://registry.modelcontextprotocol.io | blocked: workflow pending | `gh workflow run mcp-registry.yml` after merge |
 | - | npm | Publish shims `@ebb-ai/{core,cli,mcp}` 0.17.1, then `npm deprecate` | https://www.npmjs.com/org/ebb-ai | not started | `compat/npm/*` |
 | - | PyPI | Publish shim `ebb-ai` 0.17.1 | https://pypi.org/project/ebb-ai/ | not started | `compat/pypi/ebb-ai` |
 | - | MCP Registry | Final `io.github.Vitalini/ebb-ai` 0.17.1 pointing at the new id; set old versions `deprecated` | https://registry.modelcontextprotocol.io | not started | Confirm the `mcp-publisher` status command |
