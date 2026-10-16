@@ -4,6 +4,8 @@ node_modules/
 
 # Build output
 dist/
+# The @ebb-ai/cli 0.17.1 shim is hand-written, and 0.17 daemon units pin dist/index.js.
+!compat/npm/cli/dist/
 build/
 *.tsbuildinfo
 .next/

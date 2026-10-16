@@ -1,0 +1,19 @@
+{
+  "name": "@ebb-ai/cli",
+  "version": "0.17.1",
+  "description": "Renamed to @tidegap/cli. The ebb command here runs tidegap and stops receiving updates.",
+  "license": "Apache-2.0",
+  "author": "Vitalii Borovyk",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "ebb": "./dist/index.js"
+  },
+  "files": ["dist", "README.md"],
+  "dependencies": {
+    "@tidegap/cli": "^0.18.0"
+  },
+  "engines": { "node": ">=20" },
+  "repository": { "type": "git", "url": "https://github.com/tidegap/tidegap.git", "directory": "compat/npm/cli" },
+  "homepage": "https://www.tidegap.com"
+}
