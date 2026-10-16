@@ -35,7 +35,7 @@ describe("TaskStore (SQLite-backed)", () => {
   let dbPath: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-sqlite-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-sqlite-"));
     dbPath = join(dir, "queue.sqlite");
   });
 
@@ -75,7 +75,7 @@ describe("TaskStore (SQLite-backed)", () => {
     const a = new TaskStore({ dbPath });
     const b = new TaskStore({ dbPath });
     // Interleave writes — without WAL this used to throw SQLITE_BUSY
-    // intermittently when the `ebb tick` daemon and the MCP server held
+    // intermittently when the `tidegap tick` daemon and the MCP server held
     // separate connections.
     for (let i = 0; i < 20; i++) {
       const writer = i % 2 === 0 ? a : b;
@@ -146,7 +146,7 @@ describe("Scheduler with dbPath persists task transitions", () => {
   let dbPath: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-sched-sqlite-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-sched-sqlite-"));
     dbPath = join(dir, "queue.sqlite");
   });
 
@@ -174,7 +174,7 @@ describe("TaskStore task-visibility fields (v0.17)", () => {
   let dbPath: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-visibility-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-visibility-"));
     dbPath = join(dir, "queue.db");
   });
 
@@ -433,7 +433,7 @@ describe("TaskStore series, repeat, session and CAS writes (ui v2)", () => {
   let dbPath: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-series-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-series-"));
     dbPath = join(dir, "queue.db");
   });
 

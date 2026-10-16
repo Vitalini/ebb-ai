@@ -17,7 +17,7 @@ from typing import Any
 
 import pytest
 
-from ebb_ai.energy import resolve_model_energy
+from tidegap.energy import resolve_model_energy
 
 # parents[2] == <repo>/packages, then down into core-ts/test/fixtures.
 FIXTURE_PATH = (

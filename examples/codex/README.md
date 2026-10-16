@@ -1,7 +1,7 @@
-# ebb-ai for OpenAI Codex CLI
+# Tidegap for OpenAI Codex CLI
 
 OpenAI Codex CLI supports MCP servers via its `mcp_servers` configuration.
-Wiring `ebb-ai` in lets Codex defer long-running coding tasks to clean
+Wiring `tidegap` in lets Codex defer long-running coding tasks to clean
 grid windows the same way Claude Code does.
 
 ## Install
@@ -16,13 +16,13 @@ pnpm build
 Add an entry to `~/.codex/config.toml`:
 
 ```toml
-[mcp_servers.ebb-ai]
+[mcp_servers.tidegap]
 command = "node"
-args = ["/ABSOLUTE/PATH/TO/ebb-ai/packages/mcp-server/dist/server.js"]
+args = ["/ABSOLUTE/PATH/TO/tidegap/packages/mcp-server/dist/server.js"]
 
-[mcp_servers.ebb-ai.env]
-EBB_ELECTRICITY_MAPS_API_KEY = ""
-EBB_DEFAULT_REGION = "US-CAL-CISO"
+[mcp_servers.tidegap.env]
+TIDEGAP_ELECTRICITY_MAPS_API_KEY = ""
+TIDEGAP_DEFAULT_REGION = "US-CAL-CISO"
 ```
 
 Restart Codex.
@@ -32,7 +32,7 @@ Restart Codex.
 In a Codex session:
 
 ```
-list tools that come from ebb-ai
+list tools that come from Tidegap
 ```
 
 You should see three: `get_grid_forecast`, `schedule_task`,

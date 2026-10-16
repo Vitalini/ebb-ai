@@ -289,7 +289,7 @@ describe("Batch API routing (§0.1)", () => {
   });
 
   it("two racing ticks on the same DB complete a submitted row exactly once", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "ebb-batch-"));
+    const dir = mkdtempSync(join(tmpdir(), "tidegap-batch-"));
     const dbPath = join(dir, "queue.db");
     const s1 = new Scheduler({ feed: mockGridFeed(), dbPath });
     const adapter = makeBatchAdapter();
@@ -314,7 +314,7 @@ describe("Batch API routing (§0.1)", () => {
 
   it.skipIf(!nodeSqliteAvailable)("cross-language: a PY-submitted row is completed by a TS tick", async () => {
     // Reproduce the exact PY port's column layout (packages/core-py/src/
-    // ebb_ai/scheduler.py _SCHEMA) — identical to the TS schema — with a
+    // tidegap/scheduler.py _SCHEMA) — identical to the TS schema — with a
     // raw node:sqlite write, then read + poll it with the TS scheduler.
     // (createRequire dodges vitest's ESM resolver, which can't map the
     // "node:sqlite" builtin.)
@@ -326,7 +326,7 @@ describe("Batch API routing (§0.1)", () => {
         close(): void;
       };
     };
-    const dir = mkdtempSync(join(tmpdir(), "ebb-batch-xl-"));
+    const dir = mkdtempSync(join(tmpdir(), "tidegap-batch-xl-"));
     const dbPath = join(dir, "queue.db");
     const raw = new DatabaseSync(dbPath);
     raw.exec(`

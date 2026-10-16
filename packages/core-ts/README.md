@@ -1,11 +1,13 @@
-# @ebb-ai/core
+# @tidegap/core
+
+> Renamed from `@ebb-ai/core` in 0.18.0. See [Renamed from Ebb AI](https://github.com/tidegap/tidegap#renamed-from-ebb-ai).
 
 Workload scheduling for the agentic-AI economy — the core TypeScript library.
 
-`@ebb-ai/core` lets your code defer non-urgent LLM tasks to cheap, off-peak
+`@tidegap/core` lets your code defer non-urgent LLM tasks to cheap, off-peak
 grid windows. Anthropic and OpenAI Batch APIs already give a flat **50%
 discount (projected, provider list price)** for 24h-tolerant work;
-`@ebb-ai/core` makes the choice automatic,
+`@tidegap/core` makes the choice automatic,
 picks the cheapest window inside your deadline, and writes an auditable
 receipt (cost + carbon + provider + duration) for every dispatch.
 
@@ -25,7 +27,7 @@ It ships:
 ## Install
 
 ```bash
-npm install @ebb-ai/core
+npm install @tidegap/core
 # optional adapters; install only what you use
 npm install @anthropic-ai/sdk openai
 ```
@@ -33,7 +35,7 @@ npm install @anthropic-ai/sdk openai
 ## Quick start
 
 ```ts
-import { defer } from "@ebb-ai/core";
+import { defer } from "@tidegap/core";
 
 const summary = await defer(
   async () => callAnthropic("Summarize today's CHANGELOG"),
@@ -44,7 +46,7 @@ const summary = await defer(
 ## Documentation
 
 Full docs, MCP server, dashboard, and architecture in the
-[monorepo README](https://github.com/Vitalini/ebb-ai).
+[monorepo README](https://github.com/tidegap/tidegap).
 
 ## License
 

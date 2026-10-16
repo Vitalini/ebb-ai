@@ -1,10 +1,10 @@
 /**
- * `ebb verify <task-id | --file path>` — verify the Ed25519 signature
+ * `tidegap verify <task-id | --file path>` — verify the Ed25519 signature
  * on a carbon receipt.
  *
- *   - From the local ledger:   `ebb verify <task_id>` (looks up
- *     `~/.ebb-ai/queue.db`, or `--db` if set).
- *   - From a JSON receipt:     `ebb verify --file ./receipt.json`.
+ *   - From the local ledger:   `tidegap verify <task_id>` (looks up
+ *     `~/.tidegap/queue.db`, or `--db` if set).
+ *   - From a JSON receipt:     `tidegap verify --file ./receipt.json`.
  *
  * Exit code reflects the outcome so CI / batch jobs can branch:
  *   0 = valid; 1 = tampered; 2 = legacy-unsigned; 3 = key-mismatch;
@@ -13,8 +13,8 @@
 
 import { readFileSync } from "node:fs";
 
-import { TaskStore, verifyReceipt } from "@ebb-ai/core";
-import type { CarbonReceipt, TaskRecord } from "@ebb-ai/core";
+import { TaskStore, verifyReceipt } from "@tidegap/core";
+import type { CarbonReceipt, TaskRecord } from "@tidegap/core";
 
 import { defaultDbPath } from "./tick.js";
 

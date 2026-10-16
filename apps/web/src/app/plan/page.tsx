@@ -15,8 +15,8 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Best-window finder",
   description:
-    "Plan a deferrable LLM workload: pick a grid region, a deadline, and an optional carbon budget — ebb-ai shows the cleanest dispatch hour and the projected CO2e per task.",
-  alternates: { canonical: "https://www.ebb-ai.com/plan" },
+    "Plan a deferrable LLM workload: pick a grid region, a deadline, and an optional carbon budget — Tidegap shows the cleanest dispatch hour and the projected CO2e per task.",
+  alternates: { canonical: "https://www.tidegap.com/plan" },
 };
 
 interface PlanQuery {
@@ -108,7 +108,7 @@ export default async function PlanPage({
           Plan a deferrable LLM workload
         </h1>
         <p className="max-w-2xl text-sm text-fg-muted">
-          Pick a region, a deadline, and (optionally) a carbon budget. ebb-ai
+          Pick a region, a deadline, and (optionally) a carbon budget. Tidegap
           will choose the cleanest hour that still meets your deadline and
           show you the projected carbon cost.
         </p>

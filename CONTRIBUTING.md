@@ -1,6 +1,6 @@
-# Contributing to ebb-ai
+# Contributing to Tidegap
 
-Thank you for considering a contribution. ebb-ai is a small, carefully
+Thank you for considering a contribution. Tidegap is a small, carefully
 scoped project: a carbon-aware scheduler for agentic-AI workloads, a
 matching Model Context Protocol server, and a future spec proposal
 for upstream MCP. Contributions in any of those three areas, plus
@@ -21,8 +21,8 @@ outside that scope is welcome to discuss but may be deferred.
 ## Development setup
 
 ```bash
-git clone https://github.com/Vitalini/ebb-ai.git
-cd ebb-ai
+git clone https://github.com/tidegap/tidegap.git
+cd Tidegap
 pnpm install
 pnpm build
 pnpm test     # 18/18 should pass
@@ -86,14 +86,14 @@ and 22; PRs need it green before merge.
 
 - Update `CHANGELOG.md` under `[Unreleased]` for any user-visible
   change.
-- If you change the public API of `@ebb-ai/core` or `@ebb-ai/mcp`,
+- If you change the public API of `@tidegap/core` or `@tidegap/mcp`,
   update the relevant package README.
 - If you add a new example integration, add a `README.md` to its
   folder.
 
 ## Releases
 
-ebb-ai follows [Semantic Versioning](https://semver.org). The
+Tidegap follows [Semantic Versioning](https://semver.org). The
 release process (cut a tag, publish to npm, draft GitHub release
 notes from the CHANGELOG) lands when the project decides to publish
 to npm — which is post-v0.1.0 per the roadmap. For now, all releases

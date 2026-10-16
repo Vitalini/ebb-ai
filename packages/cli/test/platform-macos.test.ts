@@ -29,25 +29,25 @@ describe("launchdPlist", () => {
   it("renders a complete plist for laptop install", () => {
     const xml = launchdPlist({
       tickIntervalSec: 300,
-      ebbBinaryPath: "/usr/local/bin/ebb",
-      dbPath: "/Users/test/.ebb/queue.sqlite",
-      logPath: "/Users/test/.ebb/tick.log",
+      ebbBinaryPath: "/usr/local/bin/tidegap",
+      dbPath: "/Users/test/.tidegap/queue.sqlite",
+      logPath: "/Users/test/.tidegap/tick.log",
     });
     expect(xml).toContain("<key>Label</key>");
-    expect(xml).toContain("<string>com.ebb-ai.tick</string>");
-    expect(xml).toContain("<string>/usr/local/bin/ebb</string>");
+    expect(xml).toContain("<string>com.tidegap.tick</string>");
+    expect(xml).toContain("<string>/usr/local/bin/tidegap</string>");
     expect(xml).toContain("<string>tick</string>");
     expect(xml).toContain("<string>--once</string>");
     expect(xml).toContain("<integer>300</integer>");
     expect(xml).toContain("<true/>");
-    expect(xml).toContain("/Users/test/.ebb/queue.sqlite");
-    expect(xml).toContain("/Users/test/.ebb/tick.log");
+    expect(xml).toContain("/Users/test/.tidegap/queue.sqlite");
+    expect(xml).toContain("/Users/test/.tidegap/tick.log");
   });
 
   it("XML-escapes paths that contain & < > characters", () => {
     const xml = launchdPlist({
       tickIntervalSec: 60,
-      ebbBinaryPath: "/usr/bin/ebb",
+      ebbBinaryPath: "/usr/bin/tidegap",
       dbPath: "/tmp/a&b/<x>/queue.sqlite",
     });
     expect(xml).toContain("a&amp;b");
@@ -59,7 +59,7 @@ describe("launchdPlist", () => {
   it("emits an EnvironmentVariables block when env is supplied", () => {
     const xml = launchdPlist({
       tickIntervalSec: 60,
-      ebbBinaryPath: "/usr/bin/ebb",
+      ebbBinaryPath: "/usr/bin/tidegap",
       dbPath: "/tmp/q.sqlite",
       env: { ANTHROPIC_API_KEY: "sk-test", FOO: "bar" },
     });
@@ -72,7 +72,7 @@ describe("launchdPlist", () => {
   it("omits EnvironmentVariables when env is not supplied", () => {
     const xml = launchdPlist({
       tickIntervalSec: 60,
-      ebbBinaryPath: "/usr/bin/ebb",
+      ebbBinaryPath: "/usr/bin/tidegap",
       dbPath: "/tmp/q.sqlite",
     });
     expect(xml).not.toContain("<key>EnvironmentVariables</key>");
@@ -81,7 +81,7 @@ describe("launchdPlist", () => {
   it("clamps tickIntervalSec to at least 1 second", () => {
     const xml = launchdPlist({
       tickIntervalSec: 0,
-      ebbBinaryPath: "/usr/bin/ebb",
+      ebbBinaryPath: "/usr/bin/tidegap",
       dbPath: "/tmp/q.sqlite",
     });
     expect(xml).toContain("<integer>1</integer>");

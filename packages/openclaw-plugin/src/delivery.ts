@@ -25,11 +25,11 @@
 import { spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { homedir, platform as osPlatform } from "node:os";
+import { platform as osPlatform } from "node:os";
 import { dirname, join } from "node:path";
 
-import { osNotifyCommand } from "@ebb-ai/core";
-import type { CarbonAlert, CarbonReceipt, TaskRecord } from "@ebb-ai/core";
+import { osNotifyCommand, resolveTidegapHome } from "@tidegap/core";
+import type { CarbonAlert, CarbonReceipt, TaskRecord } from "@tidegap/core";
 
 export type DeliveryMode =
   | "chat"
@@ -178,7 +178,7 @@ export function setDeliveryStorePath(path: string | undefined): void {
 }
 
 function storePath(): string {
-  return configuredStorePath ?? join(homedir(), ".ebb-ai", "delivery.db");
+  return configuredStorePath ?? join(resolveTidegapHome(), "delivery.db");
 }
 
 let cachedStore: { path: string; db: SqliteDb } | undefined;
@@ -328,7 +328,7 @@ export function formatReport(
 ): string {
   const text = resultText(task);
   const meta = receiptLine(task);
-  const title = "ebb-ai — deferred task complete";
+  const title = "Tidegap — deferred task complete";
 
   if (format === "json") {
     return JSON.stringify(
@@ -380,7 +380,7 @@ export function formatChatMessage(task: CompletedTask): string {
   const text = resultText(task);
   const meta = receiptLine(task);
   const body = text.length > 3500 ? `${text.slice(0, 3500)}\n…(truncated)` : text;
-  return `✅ ebb-ai — deferred task complete\ntask ${task.taskId} · ${meta}\n\n${body}`;
+  return `✅ Tidegap — deferred task complete\ntask ${task.taskId} · ${meta}\n\n${body}`;
 }
 
 // ── Delivery execution ──────────────────────────────────────────────────────
@@ -407,10 +407,26 @@ function osNotifySupported(platform: NodeJS.Platform = osPlatform()): boolean {
 // Injectable spawn so tests can assert the exact binary + args and simulate a
 // missing binary without touching the real OS. Defaults to node's spawn.
 type SpawnFn = typeof spawn;
+let defaultSpawn: SpawnFn = spawn;
 let spawnImpl: SpawnFn = spawn;
+let osNotificationsDisabled = false;
+
+/** Turn the `os` delivery mode off or on (plugin config `disableOsNotifications`). */
+export function setOsNotificationsDisabled(disabled: boolean): void {
+  osNotificationsDisabled = disabled;
+}
+
+/**
+ * Replace the spawner that `__setSpawnForTest(undefined)` restores. The test
+ * setup installs a stub here so no test ever spawns a real notifier.
+ */
+export function __setDefaultSpawnForTest(fn: SpawnFn | undefined): void {
+  defaultSpawn = fn ?? spawn;
+  spawnImpl = defaultSpawn;
+}
 /** Test hook: override the spawn used by OS-notification delivery. */
 export function __setSpawnForTest(fn: SpawnFn | undefined): void {
-  spawnImpl = fn ?? spawn;
+  spawnImpl = fn ?? defaultSpawn;
 }
 
 /** Lightweight secret scrub for the notification body — the native surface is
@@ -454,12 +470,12 @@ export function notificationContent(task: CompletedTask): {
     .trim();
   const short = preview.length > 140 ? `${preview.slice(0, 140)}…` : preview;
   return {
-    title: `ebb-ai — task ${task.taskId} complete`,
+    title: `Tidegap — task ${task.taskId} complete`,
     body: `${short}\n${carbonGrams(task)}`,
   };
 }
 
-// The per-platform command builder lives in core (shared with `ebb tick`);
+// The per-platform command builder lives in core (shared with `tidegap tick`);
 // re-exported here so existing imports keep working.
 export { osNotifyCommand };
 
@@ -511,6 +527,9 @@ function runNotifyCommand(
 }
 
 async function deliverOs(task: CompletedTask): Promise<DeliveryOutcome> {
+  if (osNotificationsDisabled) {
+    return { mode: "os", ok: false, detail: "os notifications are off (disableOsNotifications)" };
+  }
   const platform = osPlatform();
   const { title, body } = notificationContent(task);
   // The plugin reads no environment, so it cannot merge env vars into the
@@ -536,7 +555,7 @@ async function deliverWebhook(
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        source: "ebb-ai",
+        source: "tidegap",
         task_id: task.taskId,
         status: task.status,
         completed_at: task.completedAt ?? null,
@@ -611,7 +630,7 @@ export function __setPuppeteerImportForTest(
 const PUPPETEER_INSTALL_HINT =
   "pdf delivery needs the optional 'puppeteer' package, which is not installed. " +
   "Install it where the gateway loaded the plugin, then restart the gateway: " +
-  "`cd ~/.openclaw/extensions/ebb && npm install puppeteer`. " +
+  "`cd ~/.openclaw/extensions/tidegap && npm install puppeteer`. " +
   "The report was kept in the queue.";
 
 function isModuleNotFound(err: unknown): boolean {
@@ -780,7 +799,7 @@ export async function deliverResult(
 /** A compact chat/Telegram message for a crossed carbon budget. */
 export function formatCarbonAlertMessage(alert: CarbonAlert): string {
   return (
-    `⚠ ebb-ai — ${alert.windowKind} carbon budget crossed\n` +
+    `⚠ Tidegap — ${alert.windowKind} carbon budget crossed\n` +
     `${alert.actualG} gCO2e used this window vs ${alert.thresholdG} g threshold\n` +
     `crossed by task ${alert.taskIdThatCrossed} · window since ${alert.windowStart}`
   );
@@ -813,7 +832,7 @@ export async function deliverCarbonAlert(
         const res = await fetch(config.webhookUrl, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ source: "ebb-ai", kind: "carbon_budget_alert", alert }),
+          body: JSON.stringify({ source: "tidegap", kind: "carbon_budget_alert", alert }),
         });
         outcomes.push({
           mode,

@@ -38,7 +38,7 @@ real wall-clock latency tolerance.
 
 When deferral is available — and it is, via the Anthropic Message
 Batches API, the OpenAI Batches API, Google Gemini Batch, plus
-carbon-aware schedulers like `ebb-ai` — there is no protocol-level
+carbon-aware schedulers like `tidegap` — there is no protocol-level
 way for the *caller* to express the relevant constraints:
 
 - *How soon do I need this?* (priority / deadline)
@@ -135,11 +135,11 @@ do anything.
 
 ### Companion implementation
 
-I'm building `@ebb-ai/mcp` — a reference MCP server that
+I'm building `@tidegap/mcp` — a reference MCP server that
 implements these semantics today (`schedule_task` tool that accepts
 `deadline` and `carbon_budget`, backed by a carbon-aware
 scheduler with Electricity Maps and a 24-hour batch-API path).
-Source: https://github.com/Vitalini/ebb-ai.
+Source: https://github.com/tidegap/tidegap.
 
 I would propose the spec changes here only if maintainers see
 appetite for adding these fields. If the project's preference is to
@@ -170,7 +170,7 @@ Happy to draft the PR once we've converged on placement.
 3. If positive: draft the spec PR (the actual edits to `schema.ts`
    and the markdown spec doc).
 4. If neutral: refine the proposal to address concerns; re-engage.
-5. If negative: keep `ebb-ai` running on its own
+5. If negative: keep `tidegap` running on its own
    private-extension semantics and document the workaround in the
    project README.
 

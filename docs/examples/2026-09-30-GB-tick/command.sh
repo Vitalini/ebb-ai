@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Reproduces the committed GB `ebb tick` run end to end.
+# Reproduces the committed GB `tidegap tick` run end to end.
 #
 #   bash docs/examples/2026-09-30-GB-tick/command.sh [OUT_DIR]
 #
 # Needs: a built repo (`pnpm build`), network access to
 # api.carbonintensity.org.uk (keyless), and a local Ollama with the model
 # pulled (`ollama serve`, `ollama pull llama3.2:1b`). The ledger is a fresh
-# temp file passed via --db, so ~/.ebb-ai/queue.db is never read or written.
-# The receipt is signed with this machine's key (~/.ebb-ai/signing.key).
+# temp file passed via --db, so ~/.tidegap/queue.db is never read or written.
+# The receipt is signed with this machine's key (~/.tidegap/signing.key).
 # The ledger's temp directory is printed as <tmp> in output.txt and
 # verify.txt. Without OUT_DIR the outputs go to a temp directory; timestamps, task id,
 # intensities and the signature differ on every run, the field set does not.
@@ -33,7 +33,7 @@ curl -sf "$OLLAMA_HOST/api/tags" >/dev/null || {
 run() { echo "\$ $*"; "$@"; echo; }
 
 {
-  echo "# ebb-ai example run"
+  echo "# Tidegap example run"
   echo "# date (UTC):  $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "# region:      GB"
   echo "# grid feed:   ukCarbonIntensity (National Grid ESO Carbon Intensity API, live, keyless)"

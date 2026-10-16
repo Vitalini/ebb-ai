@@ -181,7 +181,7 @@ describe("Scheduler.enqueueProviderCall task-visibility fields", () => {
   let dbPath: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-history-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-history-"));
     dbPath = join(dir, "queue.db");
   });
   afterEach(() => {
@@ -293,8 +293,8 @@ describe("session resume helpers (ui v2)", () => {
   });
 
   it("builds the resume command only when cwd and a valid session exist, quoting the cwd", () => {
-    expect(resumeCommand({ originCwd: "/work/ebb", originSessionId: "sess-12345678" })).toBe(
-      "cd /work/ebb && claude --resume sess-12345678",
+    expect(resumeCommand({ originCwd: "/work/tidegap", originSessionId: "sess-12345678" })).toBe(
+      "cd /work/tidegap && claude --resume sess-12345678",
     );
     expect(
       resumeCommand({ originCwd: "/work/my project's", originSessionId: "sess-12345678" }),

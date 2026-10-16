@@ -1,13 +1,18 @@
 /**
- * Shared secrets file: `~/.config/ebb/env`.
+ * Shared secrets file: `~/.config/tidegap/env`.
+ *
+ * 0.17 kept it at `~/.config/ebb/env`. That file is read, never moved: a
+ * 0.17 systemd unit still names it in `EnvironmentFile=`. `tidegap tick`
+ * reads the new file, else the old one; `tidegap install` creates the new
+ * file as a copy of the old one when only the old one exists.
  *
  * A single standardized location for provider API keys that works
  * uniformly across launchd, systemd, and manual cron:
  *
- *   - `ebb install` creates it (0600) with a commented template if it
+ *   - `tidegap install` creates it (0600) with a commented template if it
  *     does not already exist, so the user has one obvious place to drop
  *     `ANTHROPIC_API_KEY=…`.
- *   - `ebb tick` loads it at startup into `process.env` for any key not
+ *   - `tidegap tick` loads it at startup into `process.env` for any key not
  *     already present — this covers launchd (which passes a bare
  *     environment) AND systemd (belt-and-braces with `EnvironmentFile=`)
  *     AND a hand-rolled crontab entry.
@@ -16,18 +21,30 @@
  * lines, `#` comments, blank lines, optional surrounding quotes.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 /** Absolute path to the standardized secrets file. */
-export function envFilePath(): string {
-  return join(homedir(), ".config", "ebb", "env");
+export function envFilePath(home: string = homedir()): string {
+  return join(home, ".config", "tidegap", "env");
+}
+
+/** The 0.17 secrets file, read when the new one is absent (until 0.19). */
+export function legacyEnvFilePath(home: string = homedir()): string {
+  return join(home, ".config", "ebb", "env");
+}
+
+/** The secrets file to load: the new one, else the 0.17 one if present. */
+export function resolveEnvFilePath(home: string = homedir()): string {
+  const current = envFilePath(home);
+  const legacy = legacyEnvFilePath(home);
+  return !existsSync(current) && existsSync(legacy) ? legacy : current;
 }
 
 /** The commented template written when the file is first created. */
 export function envFileTemplate(): string {
-  return `# ebb-ai secrets — KEY=VALUE per line. Loaded by \`ebb tick\` at startup
+  return `# Tidegap secrets — KEY=VALUE per line. Loaded by \`tidegap tick\` at startup
 # (and referenced by the systemd unit's EnvironmentFile=). This file is
 # created 0600; keep it that way. Uncomment and fill the keys you use.
 #
@@ -36,9 +53,9 @@ export function envFileTemplate(): string {
 #OPENAI_API_KEY=
 #
 # Per-region grid-data feed keys (only for the regions you schedule into):
-#EBB_ELECTRICITY_MAPS_API_KEY=
-#EBB_EIA_API_KEY=
-#EBB_ENTSOE_SECURITY_TOKEN=
+#TIDEGAP_ELECTRICITY_MAPS_API_KEY=
+#TIDEGAP_EIA_API_KEY=
+#TIDEGAP_ENTSOE_SECURITY_TOKEN=
 # WattTime marginal-emissions (US ISOs) — HTTP Basic login, takes
 # precedence over EIA for the zones it covers. Username + password, not
 # a single key:
@@ -77,7 +94,7 @@ export function parseEnvFile(contents: string): Record<string, string> {
  * Load the env file into `process.env` for any key not already set.
  * Returns the keys that were applied. Missing file is a silent no-op.
  */
-export function loadEnvFileIntoProcess(path: string = envFilePath()): string[] {
+export function loadEnvFileIntoProcess(path: string = resolveEnvFilePath()): string[] {
   if (!existsSync(path)) return [];
   let parsed: Record<string, string>;
   try {
@@ -98,17 +115,26 @@ export function loadEnvFileIntoProcess(path: string = envFilePath()): string[] {
 export interface EnsureEnvFileResult {
   path: string;
   created: boolean;
+  /** The 0.17 file the new one was copied from, when it was. */
+  copiedFrom?: string;
 }
 
 /**
- * Create the secrets file (0600) with the commented template if it does
- * not already exist. Idempotent: never overwrites an existing file.
+ * Create the secrets file (0600) if it does not already exist: a copy of the
+ * 0.17 file `legacy` when that exists, else the commented template.
+ * Idempotent: never overwrites an existing file, never touches `legacy`.
  */
 export function ensureEnvFile(
   path: string = envFilePath(),
+  legacy: string = legacyEnvFilePath(),
 ): EnsureEnvFileResult {
   if (existsSync(path)) return { path, created: false };
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  if (existsSync(legacy)) {
+    copyFileSync(legacy, path);
+    chmodSync(path, 0o600);
+    return { path, created: true, copiedFrom: legacy };
+  }
   writeFileSync(path, envFileTemplate(), { encoding: "utf8", mode: 0o600 });
   return { path, created: true };
 }

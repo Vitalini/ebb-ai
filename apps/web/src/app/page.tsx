@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   title: "Carbon-aware scheduling for AI workflows",
   description:
     "Open-source MCP server that defers non-urgent AI tasks to the cleanest electricity-grid window inside your deadline. One-line install in Claude Code, Cursor, Claude Desktop, and any MCP host.",
-  alternates: { canonical: "https://www.ebb-ai.com" },
+  alternates: { canonical: "https://www.tidegap.com" },
 };
 
 const TILES: Array<{
@@ -39,13 +39,13 @@ const TILES: Array<{
     href: "/stats",
     Icon: BarChart3,
     title: "My impact",
-    body: "Personal carbon-receipt summary from your local ebb-ai queue. CLI-parity in the browser.",
+    body: "Personal carbon-receipt summary from your local Tidegap queue. CLI-parity in the browser.",
   },
   {
     href: "/docs",
     Icon: BookOpen,
     title: "Docs & commands",
-    body: "All 8 /ebb-ai:* slash commands, 10 MCP tools, install matrix for every host. Architecture deep-dive.",
+    body: "All 8 /tidegap:* slash commands, 10 MCP tools, install matrix for every host. Architecture deep-dive.",
   },
 ];
 
@@ -77,7 +77,7 @@ function Hero() {
       </h1>
       <p className="max-w-2xl text-base leading-relaxed text-fg-muted sm:text-lg">
         US data centers are projected to reach 6.7–12 % of national grid
-        load by 2028 (DOE 2024), driven primarily by AI compute. Ebb AI is
+        load by 2028 (DOE 2024), driven primarily by AI compute. Tidegap is
         an open-source MCP scheduler that
         defers non-urgent LLM tasks to off-peak hours — 50 % cheaper via
         Anthropic/OpenAI Batch APIs, and lower carbon. Per-task receipts to a
@@ -87,7 +87,7 @@ function Hero() {
         50% cheaper: projected, Batch-API list price. Lower carbon: the
         saving depends on region and day. See{" "}
         <a
-          href="https://github.com/Vitalini/ebb-ai/blob/main/docs/claims.md"
+          href="https://github.com/tidegap/tidegap/blob/main/docs/claims.md"
           target="_blank"
           rel="noreferrer"
           className="text-accent hover:underline"
@@ -99,7 +99,7 @@ function Hero() {
       <p className="max-w-2xl text-xs text-fg-dim">
         Built by Vitalii Borovyk, independent and open source. See the{" "}
         <a
-          href="https://github.com/Vitalini/ebb-ai"
+          href="https://github.com/tidegap/tidegap"
           target="_blank"
           rel="noreferrer"
           className="text-accent hover:underline"
@@ -170,7 +170,7 @@ function InstallBlock() {
       <p className="mt-6 text-sm text-fg-muted">
         Once installed, your assistant can call{" "}
         <code className="rounded bg-bg-elev px-1 font-mono text-xs">
-          /ebb-ai:defer &quot;summarize this&quot; --by tomorrow 6pm
+          /tidegap:defer &quot;summarize this&quot; --by tomorrow 6pm
         </code>{" "}
         and the task lands at the cleanest grid hour inside the deadline.{" "}
         <Link href="/docs" className="text-accent hover:underline">
@@ -252,7 +252,7 @@ function ValueRow() {
       <p className="mt-2 text-center text-[11px] text-fg-dim sm:text-left">
         Measured directly from the code — see{" "}
         <a
-          href="https://github.com/Vitalini/ebb-ai/blob/main/docs/claims.md"
+          href="https://github.com/tidegap/tidegap/blob/main/docs/claims.md"
           target="_blank"
           rel="noreferrer"
           className="text-accent hover:underline"

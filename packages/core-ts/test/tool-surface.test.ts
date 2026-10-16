@@ -74,7 +74,7 @@ describe("tool surface — shape and invariants", () => {
   });
 
   it("getToolDefOrThrow throws on an unknown name", () => {
-    expect(() => getToolDefOrThrow("nope")).toThrow(/unknown ebb-ai tool/);
+    expect(() => getToolDefOrThrow("nope")).toThrow(/unknown Tidegap tool/);
   });
 
   it("the schedule_task provider enum offers all four providers", () => {

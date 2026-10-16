@@ -37,7 +37,7 @@ describe("cross-process task identity (store-backed scheduler)", () => {
   let dbPath: string;
 
   beforeAll(() => {
-    tmp = mkdtempSync(join(tmpdir(), "ebb-xproc-"));
+    tmp = mkdtempSync(join(tmpdir(), "tidegap-xproc-"));
     dbPath = join(tmp, "queue.db");
   });
   afterAll(() => rmSync(tmp, { recursive: true, force: true }));

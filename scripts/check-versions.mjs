@@ -27,7 +27,7 @@ const found = {
   "packages/openclaw-plugin/package.json": json("packages/openclaw-plugin/package.json").version,
   "packages/openclaw-plugin/openclaw.plugin.json": json("packages/openclaw-plugin/openclaw.plugin.json").version,
   "packages/claude-code-plugin/.claude-plugin/plugin.json": json("packages/claude-code-plugin/.claude-plugin/plugin.json").version,
-  ".claude-plugin/marketplace.json": json(".claude-plugin/marketplace.json").plugins.find((p) => p.name === "ebb-ai")?.version ?? "(not found)",
+  ".claude-plugin/marketplace.json": json(".claude-plugin/marketplace.json").plugins.find((p) => p.name === "tidegap")?.version ?? "(not found)",
   "packages/core-py/pyproject.toml": match("packages/core-py/pyproject.toml", /^version = "([^"]+)"/m),
   "README.md (status line)": match("README.md", /^> \*\*Status:\*\* v(\S+)/m),
   "CHANGELOG.md (newest dated heading)": match("CHANGELOG.md", /^## \[(\d[^\]]*)\] — \d{4}-\d{2}-\d{2}/m),

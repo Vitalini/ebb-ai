@@ -1,8 +1,8 @@
-# @vitalini/ebb
+# @vitalini/tidegap
 
-OpenClaw plugin that exposes ebb-ai as native OpenClaw tools.
-Published on ClawHub as `@vitalini/ebb`; its runtime id in the gateway
-is `ebb`.
+OpenClaw plugin that exposes Tidegap as native OpenClaw tools.
+Published on ClawHub as `@vitalini/tidegap`; its runtime id in the gateway
+is `tidegap`.
 
 When a user says "do this later", "by tomorrow", "tonight", "overnight",
 "by EOD", "remind me to", or any other deferral phrase, this plugin's
@@ -13,7 +13,7 @@ day — see [docs/claims.md](../../docs/claims.md)).
 
 ## Tools registered
 
-Tool names match the `@ebb-ai/mcp` MCP-server surface (no `ebb_` prefix).
+Tool names match the `@tidegap/mcp` MCP-server surface (no prefix).
 
 | Tool                  | Purpose                                                       |
 |-----------------------|---------------------------------------------------------------|
@@ -43,7 +43,7 @@ Tool names match the `@ebb-ai/mcp` MCP-server surface (no `ebb_` prefix).
 > | `os` | a desktop notification on the gateway host (truncated preview) — local |
 > | `chat` | **your gateway's configured chat channel — which today is Telegram.** `chat` and `telegram` currently take the *same* Bot-API path, so "chat" is **not** an inside-OpenClaw-only mode on a Telegram-backed gateway |
 > | `telegram` | **the full result to Telegram's servers** — a third party |
-> | `webhook` | **HTTP POST of the full result to whatever URL you supply** — ebb does not restrict, allowlist, or inspect that destination |
+> | `webhook` | **HTTP POST of the full result to whatever URL you supply** — Tidegap does not restrict, allowlist, or inspect that destination |
 > | `file` | written to **any path you supply** on the gateway host, readable by anything with filesystem access |
 >
 > The prompt you defer is also stored in the local ledger until the task
@@ -75,7 +75,7 @@ and not required to install the plugin. Add it only if you want PDF output,
 where the gateway loaded the plugin, then restart the gateway:
 
 ```bash
-cd ~/.openclaw/extensions/ebb && npm install puppeteer
+cd ~/.openclaw/extensions/tidegap && npm install puppeteer
 ```
 
 If puppeteer is absent when a `pdf` delivery runs, the delivery records a
@@ -89,11 +89,18 @@ exact install steps, and the report is still kept in the queue.
 ≥ 22.5 (declared in `engines`).
 
 ```bash
-openclaw plugins install clawhub:@vitalini/ebb
+openclaw plugins install clawhub:@vitalini/tidegap
 ```
 
 Restart the OpenClaw gateway. To update later:
-`openclaw plugins update @vitalini/ebb`.
+`openclaw plugins update @vitalini/tidegap`.
+
+**Upgrading from `@vitalini/ebb` (0.17 and earlier).** The plugin id changed
+from `ebb` to `tidegap`, and OpenClaw gives a plugin only its own config
+block, so the new plugin cannot read the old one. Install the new plugin,
+move your settings from `plugins.entries.ebb` to `plugins.entries.tidegap`
+in the gateway config, then remove the old plugin. The queue moves from
+`~/.ebb-ai` to `~/.tidegap` on its own.
 
 ## Verify the install (smoke test)
 
@@ -102,7 +109,7 @@ After installing and restarting the gateway:
 1. **Inspect** — all eleven tools should be listed:
 
    ```bash
-   openclaw plugins inspect ebb --runtime --json
+   openclaw plugins inspect tidegap --runtime --json
    ```
 
    The `tools` array contains `schedule_task`, `recommend_window`,
@@ -115,14 +122,14 @@ After installing and restarting the gateway:
 2. **Validate** the installed package:
 
    ```bash
-   openclaw plugins validate --root ~/.openclaw/extensions/ebb --entry ./dist/index.js
+   openclaw plugins validate --root ~/.openclaw/extensions/tidegap --entry ./dist/index.js
    ```
 
 3. **Exercise the tools** in any OpenClaw session:
    - "preview the cleanest window for a task due tomorrow 6pm in GB"
      → `recommend_window`
    - "do this overnight: summarise today's commits" → `schedule_task`
-   - "what's in my ebb queue?" → `check_queue_status`
+   - "what's in my tidegap queue?" → `check_queue_status`
 
 The queue is a SQLite ledger opened through Node's built-in `node:sqlite`
 (Node ≥ 22.5) — there is no native module to compile, so a fresh install
@@ -131,41 +138,41 @@ needs no extra build step.
 ### Building from source
 
 ```bash
-pnpm --filter @vitalini/ebb build          # bundle to dist/index.js
+pnpm --filter @vitalini/tidegap build          # bundle to dist/index.js
 openclaw plugins build    --root packages/openclaw-plugin --entry ./dist/index.js
 openclaw plugins validate --root packages/openclaw-plugin --entry ./dist/index.js
-pnpm --filter @vitalini/ebb test           # run the plugin test suite
+pnpm --filter @vitalini/tidegap test           # run the plugin test suite
 ```
 
 Pack and install the tarball directly (no ClawHub round-trip):
 
 ```bash
 cd packages/openclaw-plugin && npm pack
-openclaw plugins install ./vitalini-ebb-<version>.tgz
+openclaw plugins install ./vitalini-tidegap-<version>.tgz
 ```
 
 ## Configuration
 
 **This plugin reads no environment variables.** Everything is configured
-through OpenClaw plugin config, under `plugins.entries.ebb.config` in your
-gateway config. (Environment variables still configure the `ebb` CLI and the
-`@ebb-ai/mcp` server — they are separate hosts and are unaffected.)
+through OpenClaw plugin config, under `plugins.entries.tidegap.config` in your
+gateway config. (Environment variables still configure the `tidegap` CLI and the
+`@tidegap/mcp` server — they are separate hosts and are unaffected.)
 
 Why: ClawHub's ClawScan raises `suspicious.env_credential_access` (severity:
 critical) on any ambient-environment read inside a bundle that also makes
 network calls, regardless of whether the value is a secret. So the reads are
-gone entirely, and `@ebb-ai/core` is environment-pure for the same reason.
+gone entirely, and `@tidegap/core` is environment-pure for the same reason.
 
 ```json
 {
   "plugins": {
     "entries": {
-      "ebb": {
+      "tidegap": {
         "enabled": true,
         "config": {
-          "dbPath": "/home/you/.ebb-ai/queue.db",
+          "dbPath": "/home/you/.tidegap/queue.db",
           "defaultRegion": "GB",
-          "eiaApiKey": "${EBB_EIA_API_KEY}",
+          "eiaApiKey": "${TIDEGAP_EIA_API_KEY}",
           "anthropicApiKey": "${ANTHROPIC_API_KEY}"
         }
       }
@@ -185,9 +192,9 @@ export these variables, keep exporting them and reference them as shown above.
 
 | Was (environment variable) | Now (plugin config field) |
 |---|---|
-| `EBB_ELECTRICITY_MAPS_API_KEY` | `electricityMapsApiKey` |
-| `EBB_EIA_API_KEY` | `eiaApiKey` |
-| `EBB_ENTSOE_SECURITY_TOKEN` | `entsoeSecurityToken` |
+| `TIDEGAP_ELECTRICITY_MAPS_API_KEY` | `electricityMapsApiKey` |
+| `TIDEGAP_EIA_API_KEY` | `eiaApiKey` |
+| `TIDEGAP_ENTSOE_SECURITY_TOKEN` | `entsoeSecurityToken` |
 | `WATTTIME_USERNAME` | `wattTimeUsername` |
 | `WATTTIME_PASSWORD` | `wattTimePassword` |
 | `ANTHROPIC_API_KEY` | `anthropicApiKey` |
@@ -196,23 +203,24 @@ export these variables, keep exporting them and reference them as shown above.
 | `GOOGLE_API_KEY` | `googleApiKey` |
 | `OLLAMA_HOST` | `ollamaHost` |
 | `OLLAMA_MODELS` | `ollamaModels` |
-| `EBB_CARBON_BUDGET_G` | `carbonBudgetG` (a number, not a string) |
-| `EBB_CARBON_BUDGET_WINDOW` | `carbonBudgetWindow` |
-| `EBB_DEFAULT_REGION` | `defaultRegion` |
+| `TIDEGAP_CARBON_BUDGET_G` | `carbonBudgetG` (a number, not a string) |
+| `TIDEGAP_CARBON_BUDGET_WINDOW` | `carbonBudgetWindow` |
+| `TIDEGAP_DEFAULT_REGION` | `defaultRegion` |
 | `EBB_DELIVERY_FILE` | `deliveryStorePath` |
 | `EBB_DISABLE_STARTUP_DISPATCH=1` | `disableStartupDispatch: true` |
+| `TIDEGAP_NO_NOTIFY=1` (read by the CLI) | `disableOsNotifications: true` |
 
 Provider credentials are usually unnecessary: with the OpenClaw runtime LLM
 bridge captured (on the first tool call), deferred tasks dispatch through the
 gateway's own configured model with no API key at all.
 
-`dbPath` defaults to `~/.ebb-ai/queue.db` — the same path used by
-`@ebb-ai/mcp` (MCP server) and `@ebb-ai/cli` (CLI). All three share
+`dbPath` defaults to `~/.tidegap/queue.db` — the same path used by
+`@tidegap/mcp` (MCP server) and `@tidegap/cli` (CLI). All three share
 one ledger, so deferring a task in OpenClaw and listing it from
-`ebb stats` Just Works.
+`tidegap stats` Just Works.
 
 `defaultRegion` — the grid region used when a tool call doesn't name
-one. **Leave it unset and ebb-ai auto-detects the region from the host
+one. **Leave it unset and Tidegap auto-detects the region from the host
 machine's timezone:** `Europe/London`→`GB`,
 `America/Los_Angeles`→`US-CAL-CISO`, `America/New_York`→`US-MIDA-PJM`,
 `Europe/Paris`→`FR`, `Europe/Berlin`→`DE`. Timezones it can't map fall
@@ -242,4 +250,4 @@ function") the plugin stays out of the way.
 
 ## License
 
-Apache-2.0 © Vitalii Borovyk · https://github.com/Vitalini/ebb-ai
+Apache-2.0 © Vitalii Borovyk · https://github.com/tidegap/tidegap

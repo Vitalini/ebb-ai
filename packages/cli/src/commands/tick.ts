@@ -1,5 +1,5 @@
 /**
- * `ebb tick` — drain due provider-call tasks.
+ * `tidegap tick` — drain due provider-call tasks.
  *
  * One-shot by default; `--daemon` loops on the supplied interval until
  * SIGINT. Reads API keys from the environment and constructs the
@@ -18,6 +18,8 @@ import {
   OpenAIAdapter,
   osNotifyCommand,
   parseKeyValues,
+  resolveTidegapHome,
+  withTidegapKeys,
   prepareTick,
   resolveRegion,
   Scheduler,
@@ -26,7 +28,7 @@ import {
   type CarbonAlert,
   type TickAdapters,
   type TickResultEntry,
-} from "@ebb-ai/core";
+} from "@tidegap/core";
 import { spawn, type SpawnOptions } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir, platform as osPlatform } from "node:os";
@@ -40,10 +42,10 @@ export interface TickCommandOptions {
   once?: boolean;
   interval?: number;
   region?: string;
-  /** Override the secrets file path (tests). Defaults to ~/.config/ebb/env. */
+  /** Override the secrets file path (tests). Defaults to ~/.config/tidegap/env. */
   envFile?: string;
   /**
-   * Override the ~/.ebb-ai/config path (tests): carbon budget and quota
+   * Override the ~/.tidegap/config path (tests): carbon budget and quota
    * reset schedules are both read from it.
    */
   budgetConfig?: string;
@@ -60,18 +62,28 @@ export type NotifySpawner = (cmd: string, args: string[], opts: SpawnOptions) =>
 
 const NOTIFY_TIMEOUT_MS = 5_000;
 
+/**
+ * True under a test runner. A test that reaches the default spawner without
+ * injecting `spawnNotify` must not post a real notification on the
+ * developer's desktop.
+ */
+function underTest(): boolean {
+  return process.env.VITEST !== undefined || process.env.NODE_ENV === "test";
+}
+
 const defaultSpawnNotify: NotifySpawner = (cmd, args, opts) => {
+  if (underTest()) return;
   const child = spawn(cmd, args, opts);
   // A missing binary (no notify-send) or a failed toast is not a tick error.
   child.on("error", () => {});
   child.unref();
 };
 
-/** `EBB_NOTIFY=0` (or false/off/no) in ~/.ebb-ai/config turns notifications off. */
+/** `TIDEGAP_NOTIFY=0` (or false/off/no; 0.17: `EBB_NOTIFY`) in ~/.tidegap/config turns notifications off. */
 export function notifyDisabledInConfig(path: string = carbonBudgetConfigPath()): boolean {
   try {
     if (!existsSync(path)) return false;
-    const v = parseKeyValues(readFileSync(path, "utf8")).EBB_NOTIFY;
+    const v = withTidegapKeys(parseKeyValues(readFileSync(path, "utf8"))).TIDEGAP_NOTIFY;
     return v !== undefined && /^(0|false|off|no)$/i.test(v.trim());
   } catch {
     return false;
@@ -125,8 +137,8 @@ export interface TickRunResult {
 
 /**
  * Default queue path. Matches the MCP server's persistence default
- * (`~/.ebb-ai/queue.db`, established in v0.7.1) so `ebb tick`,
- * `ebb queue list`, `ebb receipts list`, and `ebb stats` all read
+ * (`~/.tidegap/queue.db`, established in v0.7.1) so `tidegap tick`,
+ * `tidegap queue list`, `tidegap receipts list`, and `tidegap stats` all read
  * the same SQLite ledger the MCP server writes to. Prior versions
  * defaulted to `~/.ebb/queue.sqlite`, which silently diverged from
  * the MCP server's actual path — fixed in v0.8.x.
@@ -138,7 +150,7 @@ export interface TickRunResult {
  * read the old one.
  */
 export function defaultDbPath(): string {
-  const newPath = join(homedir(), ".ebb-ai", "queue.db");
+  const newPath = join(resolveTidegapHome(), "queue.db");
   const legacyPath = join(homedir(), ".ebb", "queue.sqlite");
   if (!existsSync(newPath) && existsSync(legacyPath)) return legacyPath;
   return newPath;
@@ -147,7 +159,7 @@ export function defaultDbPath(): string {
 /**
  * Build the tick adapters from host-supplied credentials.
  *
- * `@ebb-ai/core` no longer reads the environment, so the CLI (the host)
+ * `@tidegap/core` no longer reads the environment, so the CLI (the host)
  * reads it once via `readEnvCredentials()` and injects the values here. The
  * registration rules are unchanged: an adapter appears exactly when its
  * credential is present, Gemini prefers GEMINI_API_KEY over GOOGLE_API_KEY,
@@ -243,7 +255,7 @@ export async function runTickOnce(
     const missing = missingProviderKeysForPending(dbPath);
     const detail =
       missing.length > 0
-        ? `; pending tasks need ${missing.join(" / ")} — set them in ~/.config/ebb/env`
+        ? `; pending tasks need ${missing.join(" / ")} — set them in ~/.config/tidegap/env`
         : "";
     return {
       exitCode: 0,
@@ -255,8 +267,8 @@ export async function runTickOnce(
   // we do not have (e.g. OpenAI tasks queued but only ANTHROPIC set).
   const missingForPending = missingProviderKeysForPending(dbPath);
   // Aggregate carbon-budget alerts (ROADMAP item 4): read the local budget
-  // config (env wins over ~/.ebb-ai/config) and log any crossing prominently.
-  // Core no longer reads the environment, so the two EBB_CARBON_BUDGET_*
+  // config (env wins over ~/.tidegap/config) and log any crossing prominently.
+  // Core no longer reads the environment, so the two TIDEGAP_CARBON_BUDGET_*
   // variables are read here and passed in — same precedence as before.
   const carbonBudget = loadCarbonBudgetConfig({
     path: opts.budgetConfig,
@@ -289,7 +301,7 @@ export async function runTickOnce(
     // they are rescheduled through the window picker, not dispatched late.
     const preTick = await prepareTick(scheduler, { quotaConfig });
     const result = await scheduler.tick(adapters);
-    if (opts.notify !== false && !notifyDisabledInConfig(opts.budgetConfig)) {
+    if (opts.notify !== false && !env.noNotify && !notifyDisabledInConfig(opts.budgetConfig)) {
       notifyFinished(dbPath, result.results, opts);
     }
     let msg = `tick: ${result.inspected} inspected, ${result.dispatched} dispatched, ${result.failed} failed`;
@@ -305,7 +317,7 @@ export async function runTickOnce(
       msg +=
         `\n!! WARNING: pending tasks need ${missingForPending.join(" / ")} ` +
         `but that key is not set — those tasks cannot dispatch. ` +
-        `Add it to ~/.config/ebb/env.`;
+        `Add it to ~/.config/tidegap/env.`;
     }
     return { exitCode: result.failed > 0 ? 1 : 0, message: msg };
   } finally {
@@ -317,7 +329,7 @@ export async function runTick(opts: TickCommandOptions = {}): Promise<number> {
   if (opts.daemon) {
     const interval = Math.max(1, opts.interval ?? 60);
     // eslint-disable-next-line no-console
-    console.log(`[ebb] tick daemon: every ${interval}s, db=${opts.db ?? defaultDbPath()}`);
+    console.log(`[tidegap] tick daemon: every ${interval}s, db=${opts.db ?? defaultDbPath()}`);
     let stopped = false;
     const onSignal = () => {
       stopped = true;

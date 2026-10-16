@@ -1,4 +1,4 @@
-# Claude Code plugin — Ebb AI
+# Claude Code plugin — Tidegap
 
 A one-command install that turns any Claude Code session into a
 carbon-aware AI scheduler. Defer non-urgent LLM tasks (overnight
@@ -18,43 +18,51 @@ root (`.claude-plugin/marketplace.json`) points to this folder via
 
 ```bash
 # 1. Add the marketplace (this repo).
-/plugin marketplace add Vitalini/ebb-ai
+/plugin marketplace add tidegap/tidegap
 
 # 2. Install the plugin.
-/plugin install ebb-ai
+/plugin install tidegap
 ```
+
+On Claude Code 2.1.275 or later, one step does both:
+`/plugin install tidegap --marketplace tidegap/tidegap`.
+
+Upgrading from the 0.17 `ebb-ai` plugin: there is no in-place update,
+because the marketplace and plugin names changed. Run
+`/plugin uninstall ebb-ai` and `/plugin marketplace remove ebb-ai` first,
+then the steps above. The commands are now `/tidegap:*`.
 
 Restart the Claude Code session — the plugin is live.
 
-The plugin auto-wires the `ebb-ai` MCP server via `npx -y @ebb-ai/mcp`
+The plugin auto-wires the `tidegap` MCP server via `npx -y @tidegap/mcp`
 on first invocation, so no separate `claude mcp add` step is needed.
 
 ## Slash commands (8)
 
 | Command                              | Purpose                                                |
 |--------------------------------------|--------------------------------------------------------|
-| `/ebb-ai:defer <task> --by <when>`   | Queue a deferrable LLM task at the cleanest grid hour. |
-| `/ebb-ai:plan <task> --by <when>`    | Preview the chosen window without queueing.            |
-| `/ebb-ai:check [<id>\|--all]`        | List all tasks or detail one (with carbon receipt).    |
-| `/ebb-ai:cancel <id> \| --all`       | Cancel a queued/scheduled task. Idempotent.            |
-| `/ebb-ai:expedite <id>`              | Dispatch immediately, bypass the chosen window.        |
-| `/ebb-ai:reschedule <id> --by <new>` | Change the deadline and re-score the window.           |
-| `/ebb-ai:retry <id>`                 | Re-dispatch a task currently in `failed` status.       |
-| `/ebb-ai:grid <zone>`                | Show current intensity + 24-hour forecast, no task.    |
+| `/tidegap:defer <task> --by <when>`   | Queue a deferrable LLM task at the cleanest grid hour. |
+| `/tidegap:plan <task> --by <when>`    | Preview the chosen window without queueing.            |
+| `/tidegap:check [<id>\|--all]`        | List all tasks or detail one (with carbon receipt).    |
+| `/tidegap:cancel <id> \| --all`       | Cancel a queued/scheduled task. Idempotent.            |
+| `/tidegap:expedite <id>`              | Dispatch immediately, bypass the chosen window.        |
+| `/tidegap:reschedule <id> --by <new>` | Change the deadline and re-score the window.           |
+| `/tidegap:retry <id>`                 | Re-dispatch a task currently in `failed` status.       |
+| `/tidegap:grid <zone>`                | Show current intensity + 24-hour forecast, no task.    |
 
 ## Auto-invocation skill
 
-The bundled Claude Code skill at `skills/ebb-ai/SKILL.md` tells the
-agent **when** to reach for `/ebb-ai:defer` automatically — for
+The bundled Claude Code skill at `skills/tidegap/SKILL.md` tells the
+agent **when** to reach for `/tidegap:defer` automatically — for
 example when the user says any of: "do this later", "by tomorrow",
 "tonight", "overnight", "by EOD", "sometime this week", "when you have
 a moment", "remind me to", "queue this up", "schedule this", "no
 rush", "not urgent". Convert that phrasing to a deadline and route the
-task through ebb-ai instead of dispatching synchronously.
+task through Tidegap instead of dispatching synchronously.
 
 ## Persistence
 
-Tasks queued via `/ebb-ai:defer` are persisted to `~/.ebb-ai/queue.db`
+Tasks queued via `/tidegap:defer` are persisted to `~/.tidegap/queue.db`
 (SQLite) by default. The queue survives Claude Code restarts and is
 shared across MCP hosts (Claude Code, Claude Desktop, Cursor,
 OpenClaw, etc.) — defer on one host, check on another.
@@ -62,27 +70,27 @@ OpenClaw, etc.) — defer on one host, check on another.
 Inspect from the CLI:
 
 ```bash
-npx -y @ebb-ai/cli stats
-npx -y @ebb-ai/cli queue list
+npx -y @tidegap/cli stats
+npx -y @tidegap/cli queue list
 ```
 
-Override the path via `EBB_DB_PATH=/some/where/queue.db` in the
-plugin's `.mcp.json` env block. Use `EBB_DB_PATH=:memory:` to opt out
+Override the path via `TIDEGAP_DB_PATH=/some/where/queue.db` in the
+plugin's `.mcp.json` env block. Use `TIDEGAP_DB_PATH=:memory:` to opt out
 of persistence (mainly for tests).
 
 ## Actually dispatching tasks
 
 The MCP server **queues** tasks but does not run a clock. Actual
-dispatch at the chosen window requires the **`ebb tick` daemon**:
+dispatch at the chosen window requires the **`tidegap tick` daemon**:
 
 ```bash
-npm install -g @ebb-ai/cli
-ebb install      # registers launchd (macOS) / systemd (Linux) cron-tick
-ebb queue list   # confirm tasks are visible and dispatching
+npm install -g @tidegap/cli
+tidegap install      # registers launchd (macOS) / systemd (Linux) cron-tick
+tidegap queue list   # confirm tasks are visible and dispatching
 ```
 
 Until the daemon is installed, tasks sit queued and can be dispatched
-manually with `ebb tick --once`. The plugin-install path does not
+manually with `tidegap tick --once`. The plugin-install path does not
 auto-install the daemon (it would create system-level state without
 explicit opt-in).
 
@@ -90,38 +98,38 @@ explicit opt-in).
 
 The plugin registers a `SessionStart` hook (`hooks/hooks.json`). When
 finished tasks are waiting unread, a new session starts with one line
-such as ``2 unread ebb tasks, run `ebb ui` to read them.`` It prints
-nothing when nothing is unread or when the `ebb` CLI is not on `PATH`.
+such as ``2 unread Tidegap tasks, run `tidegap ui` to read them.`` It prints
+nothing when nothing is unread or when the `tidegap` CLI is not on `PATH`.
 The line holds only the count, never task text.
 
 ## Result delivery
 
 Three options to get the result back after a task completes:
 
-1. **Poll.** `/ebb-ai:check <task_id>` returns the LLM response under
+1. **Poll.** `/tidegap:check <task_id>` returns the LLM response under
    `result` once the receipt is written.
 2. **File output.** Pass `--output <abs-path>` at defer time. The
    dispatcher writes `{ taskId, result, receipt }` as JSON to that
    path on completion. Pair with `tail -f` or a file-watcher.
-3. **CLI inbox.** Point `--output` at `~/.ebb-ai/inbox/<id>.json` and
+3. **CLI inbox.** Point `--output` at `~/.tidegap/inbox/<id>.json` and
    wire a tiny `fswatch` / `entr` loop to forward to Telegram, email,
    macOS notifications — your choice.
 
 ## Example
 
 ```
-> /ebb-ai:defer "Summarize today's GitHub notifications" --by 4h --region US-CAL-CISO
+> /tidegap:defer "Summarize today's GitHub notifications" --by 4h --region US-CAL-CISO
 Deferred ✓
   task id        7f3a2b9e
   scheduled for  in 3h, 22:15 UTC
   band           clean
-  check status   /ebb-ai:check 7f3a2b9e
+  check status   /tidegap:check 7f3a2b9e
 ```
 
 Three hours later:
 
 ```
-> /ebb-ai:check 7f3a2b9e
+> /tidegap:check 7f3a2b9e
 status     completed
 region     US-CAL-CISO
 scheduled  22:15 UTC (4h ago)
@@ -139,34 +147,34 @@ If you only want the MCP server (no slash commands, no skill), wire it
 directly into your MCP host. From Claude Code:
 
 ```bash
-claude mcp add ebb-ai npx -- -y @ebb-ai/mcp
+claude mcp add tidegap npx -- -y @tidegap/mcp
 ```
 
 You get the ten MCP tools (`schedule_task`, `recommend_window`,
 `check_queue_status`, `cancel_task`, `cancel_all`, `update_deadline`,
 `expedite_task`, `retry_task`, `reply_task`, `get_grid_forecast`) but not the
-slash-command shortcuts or the `ebb-ai` auto-invocation skill.
+slash-command shortcuts or the `tidegap` auto-invocation skill.
 
 ## Files
 
 - `.claude-plugin/plugin.json` — plugin manifest (name, description,
   version, auto-invocation trigger language)
-- `.mcp.json` — MCP server wiring (runs `npx -y @ebb-ai/mcp`)
+- `.mcp.json` — MCP server wiring (runs `npx -y @tidegap/mcp`)
 - `commands/*.md` — the eight slash commands
-- `skills/ebb-ai/SKILL.md` — when-to-auto-invoke skill
+- `skills/tidegap/SKILL.md` — when-to-auto-invoke skill
 - `hooks/hooks.json` — SessionStart hook that prints the unread count
 
-`/ebb-ai:defer` passes `origin_session_id: "${CLAUDE_SESSION_ID}"`, so a
-deferred task remembers the conversation it came from; `ebb ui` and
-`ebb queue show` print the `claude --resume` command for it. `--repeat
+`/tidegap:defer` passes `origin_session_id: "${CLAUDE_SESSION_ID}"`, so a
+deferred task remembers the conversation it came from; `tidegap ui` and
+`tidegap queue show` print the `claude --resume` command for it. `--repeat
 daily|weekly` makes a repeating task (default: a one-off).
 
 ## Related packages
 
-- `@ebb-ai/core` — scheduling logic, grid feeds, SQLite ledger
-- `@ebb-ai/mcp` — MCP server (used by this plugin and any other host)
-- `@ebb-ai/cli` — `ebb stats`, `ebb tick`, `ebb install`, `ebb queue`
-- `@ebb-ai/openclaw-plugin` — same surface, native OpenClaw tools
+- `@tidegap/core` — scheduling logic, grid feeds, SQLite ledger
+- `@tidegap/mcp` — MCP server (used by this plugin and any other host)
+- `@tidegap/cli` — `tidegap stats`, `tidegap tick`, `tidegap install`, `tidegap queue`
+- `@tidegap/openclaw-plugin` — same surface, native OpenClaw tools
 
 ## License
 

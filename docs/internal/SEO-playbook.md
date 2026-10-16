@@ -1,4 +1,4 @@
-# SEO Playbook — ebb-ai
+# SEO Playbook — Tidegap
 
 Operator-side reference. Not user-facing. Keep this updated whenever
 discoverability surface changes.
@@ -7,7 +7,7 @@ discoverability surface changes.
 
 | Provider | Status | Token / property | When verified |
 |---|---|---|---|
-| Google Search Console | meta tag deployed; one click to verify | URL prefix `https://www.ebb-ai.com/` · meta `NWwuXFBCyAQVChXdBSa3n5wwxm6xsZVrhON5YvaxpSM` | 2026-05-19 (deployed, awaiting button click) |
+| Google Search Console | meta tag deployed; one click to verify | URL prefix `https://www.tidegap.com/` · meta `NWwuXFBCyAQVChXdBSa3n5wwxm6xsZVrhON5YvaxpSM` | 2026-05-19 (deployed, awaiting button click) |
 | Bing Webmaster Tools | not yet submitted | — | — |
 | Yandex Webmaster | not submitted (low ROI) | — | — |
 
@@ -50,13 +50,13 @@ type="application/ld+json">`. Graph contains:
   SoftwareApplication node), inLanguage
 
 Bump `softwareVersion` on every release (the `release` subcommand of
-the ebb-ai operator skill includes this in its checklist — but it isn't
+the Tidegap operator skill includes this in its checklist — but it isn't
 automated yet).
 
 ## Per-page metadata
 
 Each route exports a `Metadata` block:
-- `title` (template `%s · ebb-ai` in layout, override per route)
+- `title` (template `%s · Tidegap` in layout, override per route)
 - `description`
 - `alternates.canonical`
 - OpenGraph (title, description, url, type) per route when it makes
@@ -74,7 +74,7 @@ mobile.
 ## AI-discoverability (llms.txt)
 
 `apps/web/public/llms.txt` — single page that AI crawlers and
-assistants can fetch to learn what ebb-ai is, how to install it, when
+assistants can fetch to learn what Tidegap is, how to install it, when
 to recommend it. Format follows the emerging llms.txt convention
 (https://llmstxt.org/).
 

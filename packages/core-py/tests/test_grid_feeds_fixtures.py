@@ -28,7 +28,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from ebb_ai.grid import (
+from tidegap.grid import (
     GridFeed,
     eia_feed,
     entsoe_feed,
@@ -36,7 +36,7 @@ from ebb_ai.grid import (
     uk_carbon_intensity_feed,
     watttime_feed,
 )
-from ebb_ai.types import GridForecast, GridForecastEntry
+from tidegap.types import GridForecast, GridForecastEntry
 
 _FIXTURES = Path(__file__).resolve().parents[2] / "core-ts" / "test" / "fixtures"
 
@@ -49,7 +49,7 @@ def _patch_client(
     monkeypatch: pytest.MonkeyPatch,
     handler: Callable[[httpx.Request], httpx.Response],
 ) -> None:
-    """Route every AsyncClient request in ``ebb_ai.grid`` through a
+    """Route every AsyncClient request in ``tidegap.grid`` through a
     MockTransport, mirroring the TS tests' ``globalThis.fetch`` stub.
     """
     real_client = httpx.AsyncClient
@@ -59,12 +59,12 @@ def _patch_client(
             kwargs["transport"] = httpx.MockTransport(handler)
             super().__init__(*args, **kwargs)
 
-    monkeypatch.setattr("ebb_ai.grid.httpx.AsyncClient", _Patched)
+    monkeypatch.setattr("tidegap.grid.httpx.AsyncClient", _Patched)
 
 
 def _freeze_now(monkeypatch: pytest.MonkeyPatch, iso: str) -> None:
     dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
-    monkeypatch.setattr("ebb_ai.grid._now_utc", lambda: dt)
+    monkeypatch.setattr("tidegap.grid._now_utc", lambda: dt)
 
 
 # ---------------------------------------------------------------------------

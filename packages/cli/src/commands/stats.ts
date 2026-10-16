@@ -1,7 +1,7 @@
 /**
- * `ebb stats` — local-only personal-impact aggregator.
+ * `tidegap stats` — local-only personal-impact aggregator.
  *
- * Reads the SQLite ledger at ~/.ebb-ai/queue.db (or --db) and renders the
+ * Reads the SQLite ledger at ~/.tidegap/queue.db (or --db) and renders the
  * cumulative carbon stats + per-region breakdown + achievement-badge list.
  * No telemetry, no network, no third-party reporting — everything stays
  * on the user's machine. The dashboard `/stats` route reads the same
@@ -26,14 +26,14 @@ import {
   type BandHistogram,
   type Achievement,
   type CarbonBudgetStatus,
-} from "@ebb-ai/core";
+} from "@tidegap/core";
 import { readEnvCredentials } from "../env.js";
 import { defaultDbPath } from "./tick.js";
 
 export interface StatsCommandOptions {
   db?: string;
   json?: boolean;
-  /** Override the carbon-budget config path (tests). Defaults to ~/.ebb-ai/config. */
+  /** Override the carbon-budget config path (tests). Defaults to ~/.tidegap/config. */
   budgetConfig?: string;
 }
 
@@ -71,7 +71,7 @@ function relativeTime(iso: string | null): string {
 export function renderStats(r: StatsResult): string {
   const { stats, perRegion, bands, badges, budget } = r;
   const lines: string[] = [];
-  lines.push("ebb-ai · personal impact");
+  lines.push("Tidegap · personal impact");
   lines.push("=".repeat(48));
   lines.push("");
 
@@ -133,9 +133,9 @@ export function renderStats(r: StatsResult): string {
 
   if (stats.taskCount === 0) {
     lines.push(
-      "Queue is empty. Run `/ebb-ai:defer …` from a Claude Code session,",
+      "Queue is empty. Run `/tidegap:defer …` from a Claude Code session,",
     );
-    lines.push("or `npx -y @ebb-ai/mcp` from your MCP host, to start.");
+    lines.push("or `npx -y @tidegap/mcp` from your MCP host, to start.");
   }
 
   return lines.join("\n");
@@ -144,7 +144,7 @@ export function renderStats(r: StatsResult): string {
 export async function runStats(opts: StatsCommandOptions = {}): Promise<StatsResult> {
   const dbPath = opts.db ?? defaultDbPath();
   // Ensure the parent directory exists before better-sqlite3 opens the
-  // file. Matches the MCP server's behaviour, so a first-time `ebb
+  // file. Matches the MCP server's behaviour, so a first-time `tidegap
   // stats` invocation before the MCP server has ever written to the
   // ledger returns an empty result rather than throwing ENOENT.
   if (dbPath !== ":memory:") {
@@ -163,8 +163,8 @@ export async function runStats(opts: StatsCommandOptions = {}): Promise<StatsRes
     const badges = achievements(stats, perRegion);
     // Aggregate carbon-budget status (ROADMAP item 4): only when configured.
     // Core is environment-pure, so the CLI (the host) reads the two
-    // EBB_CARBON_BUDGET_* variables and passes them in — same precedence as
-    // before: an exported variable beats the ~/.ebb-ai/config file.
+    // TIDEGAP_CARBON_BUDGET_* variables and passes them in — same precedence as
+    // before: an exported variable beats the ~/.tidegap/config file.
     const budgetConfig = loadCarbonBudgetConfig({
       path: opts.budgetConfig,
       env: readEnvCredentials().carbonBudget,

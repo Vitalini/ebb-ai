@@ -2,7 +2,7 @@
  * /stats — personal carbon-impact preview.
  *
  * No synthetic data. The site doesn't have access to your local
- * SQLite ledger (~/.ebb-ai/queue.db); this page explains where your
+ * SQLite ledger (~/.tidegap/queue.db); this page explains where your
  * numbers live, how to read them, and what the schema looks like.
  *
  * A later release will optionally surface aggregate community totals
@@ -18,14 +18,14 @@ import { BatteryCharging, CalendarCheck, Globe, MapPinned, Sprout, Target, Zap }
 export const metadata: Metadata = {
   title: "Your impact",
   description:
-    "Per-task carbon receipts live in ~/.ebb-ai/queue.db. Inspect them with `ebb stats` from the CLI. No telemetry, no cloud copy — your numbers are yours.",
-  alternates: { canonical: "https://www.ebb-ai.com/stats" },
+    "Per-task carbon receipts live in ~/.tidegap/queue.db. Inspect them with `tidegap stats` from the CLI. No telemetry, no cloud copy — your numbers are yours.",
+  alternates: { canonical: "https://www.tidegap.com/stats" },
 };
 
 type Achievement = { id: string; label: string; Icon: LucideIcon; description: string };
 
 const ACHIEVEMENTS: Achievement[] = [
-  { id: "first-deferral",     label: "First Deferral", Icon: Sprout,          description: "Queue your first ebb-ai task." },
+  { id: "first-deferral",     label: "First Deferral", Icon: Sprout,          description: "Queue your first Tidegap task." },
   { id: "ten-deferrals",      label: "Ten Up",         Icon: Zap,             description: "Ship 10 deferred tasks." },
   { id: "hundred-deferrals",  label: "Centurion",      Icon: BatteryCharging, description: "Ship 100 deferred tasks." },
   { id: "thousand-deferrals", label: "Long Run",       Icon: Globe,           description: "Ship 1 000 deferred tasks." },
@@ -43,7 +43,7 @@ export default function StatsPage() {
           Local first. Your numbers are yours.
         </h1>
         <p className="max-w-2xl text-base leading-relaxed text-fg-muted">
-          ebb-ai writes a per-task carbon receipt to a SQLite ledger on
+          Tidegap writes a per-task carbon receipt to a SQLite ledger on
           your own machine. Nothing leaves your device. This page
           explains how to read those numbers.
         </p>
@@ -53,7 +53,7 @@ export default function StatsPage() {
         <h2 className="text-2xl font-bold tracking-tight">Where your data lives</h2>
         <p className="leading-relaxed text-fg-muted">
           Every dispatched task writes one row to{" "}
-          <code className="rounded bg-bg-elev px-1 font-mono text-sm">~/.ebb-ai/queue.db</code>
+          <code className="rounded bg-bg-elev px-1 font-mono text-sm">~/.tidegap/queue.db</code>
           {" "}— a local SQLite file. Schema:{" "}
           <code className="rounded bg-bg-elev px-1 font-mono text-sm">task_id</code>,{" "}
           <code className="rounded bg-bg-elev px-1 font-mono text-sm">dispatched_at</code>,{" "}
@@ -77,20 +77,20 @@ export default function StatsPage() {
         <h2 className="text-2xl font-bold tracking-tight">Read it from the CLI</h2>
         <CodeBlock>
 {`# Install once
-npm install -g @ebb-ai/cli
+npm install -g @tidegap/cli
 
 # Personal-impact summary (counts, totals, per-region, achievements)
-ebb stats
+tidegap stats
 
 # Programmatic
-ebb stats --json | jq '.stats.totalEstimatedCarbonGCo2'
+tidegap stats --json | jq '.stats.totalEstimatedCarbonGCo2'
 
 # Per-task receipts (completed tasks)
-ebb receipts list
-ebb receipts list --since 2026-05-01
+tidegap receipts list
+tidegap receipts list --since 2026-05-01
 
 # Verify a receipt's Ed25519 signature
-ebb verify <task_id>`}
+tidegap verify <task_id>`}
         </CodeBlock>
       </section>
 
@@ -164,7 +164,7 @@ ebb verify <task_id>`}
           that the site can read (no per-user identifying data). Design
           is at{" "}
           <a
-            href="https://github.com/Vitalini/ebb-ai/blob/main/docs/spec/proposal/v09-leaderboard.md"
+            href="https://github.com/tidegap/tidegap/blob/main/docs/spec/proposal/v09-leaderboard.md"
             target="_blank"
             rel="noreferrer"
             className="text-accent hover:underline"

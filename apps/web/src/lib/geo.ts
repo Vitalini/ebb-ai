@@ -3,7 +3,7 @@
  *
  * Vercel adds `x-vercel-ip-country` / `x-vercel-ip-country-region` to
  * every request — free, no permission prompt, country / US-state
- * granularity. We map that to the nearest grid zone ebb-ai covers. No
+ * granularity. We map that to the nearest grid zone Tidegap covers. No
  * match (or local dev with no header) → GB, the keyless always-live
  * default, flagged `fallback` so the UI can phrase it honestly.
  */

@@ -1,7 +1,7 @@
-# Article notes: ebb-ai for InfoQ
+# Article notes: Tidegap for InfoQ
 
 Working notes for "Carbon-aware scheduling for AI workloads: what we learned
-building ebb-ai." Facts only, no marketing language. Every statement cites a
+building Tidegap." Facts only, no marketing language. Every statement cites a
 commit hash, a `CHANGELOG.md` version heading, a file path, a `docs/claims.md`
 row, or the `docs/examples/2026-09-30-GB-tick/` run. Adoption numbers carry
 the date they were fetched. Anything not answerable from the sources listed
@@ -9,7 +9,7 @@ below is written as "unknown" and repeated in "Needs Vitalii."
 
 ## Origin story (5 bullets)
 
-- The project starts as a single initial commit, "ebb-ai v0.1 — carbon-aware
+- The project starts as a single initial commit, "Tidegap v0.1 — carbon-aware
   scheduling for agentic AI": an MCP server that defers non-urgent LLM tool
   calls to the cleanest electricity-grid window inside a caller-supplied
   deadline `[a2746d8, 2026-05-12]`.
@@ -47,13 +47,13 @@ properties — cryptographic origin and field-level tamper-evidence — without
 the verifier trusting the vendor: "Direct B2B ESG export path now possible —
 receipts are auditable artefacts, not just claims" `[CHANGELOG.md 0.11.0]`.
 The private key never leaves the machine: "The keys are NEVER sent anywhere
-by ebb-ai itself" `[packages/core-ts/src/sign.ts]`.
+by Tidegap itself" `[packages/core-ts/src/sign.ts]`.
 
 **Alternative rejected:** unsigned receipts, which is what every release
 through v0.10 shipped, and which the code still falls back to today. A
 receipt with no signature verifies as `legacy-unsigned` rather than being
 rejected `[CHANGELOG.md 0.11.0]`, and the Python port keeps signing as an
-optional extra (`pip install "ebb-ai[signing]"`): "Without the extra,
+optional extra (`pip install "tidegap[signing]"`): "Without the extra,
 receipts go out unsigned and the scheduler degrades silently (v0.10 shape)"
 `[CHANGELOG.md 0.11.0]`. The cost of signing by default was cross-language
 correctness: a first cut bound dialect-specific field names (snake_case in
@@ -94,7 +94,7 @@ summarizes user impact has to either (a) phone home with telemetry — which
 we explicitly decided against through v0.10 — or (b) fabricate aggregate
 numbers that look real but aren't. Both are bad. Local-first is honest."
 `[apps/web/src/app/stats/page.tsx:153-168]`. Every task's data stays in a
-local SQLite ledger at `~/.ebb-ai/queue.db`
+local SQLite ledger at `~/.tidegap/queue.db`
 `[packages/core-ts/src/storage/sqlite.ts]`.
 
 **Alternative rejected:** an opt-in, signed, anonymized leaderboard,
@@ -119,8 +119,8 @@ document is built." `[docs/impact-proposal.md]`.
 - 31 grid regions, 5 real-data grid feeds, a 72-hour forecast horizon, 10 MCP
   tools, 8 slash commands, 13 supported hosts — each backed by a count in
   code, not prose `[docs/claims.md #6, #10, #11, #16, #17, #18]`.
-- 1,355 tests passing (874 TypeScript across 4 packages + 481 Python),
-  rerun via `pnpm test` and `pytest -q` on 2026-10-15 `[docs/claims.md #13]`.
+- 1,423 tests passing (923 TypeScript across 4 packages + 500 Python),
+  rerun via `pnpm test` and `pytest -q` on 2026-10-16 `[docs/claims.md #13]`.
 
 **Could not measure** (simulated, projected, or dropped for lack of a
 source — see `docs/claims.md` for the full audit):
@@ -168,24 +168,24 @@ source — see `docs/claims.md` for the full audit):
   ComposioHQ/awesome-claude-skills #877); the log's last recorded status for
   each is "OPEN" / "awaiting review" — it contains no later entry recording
   a merge `[docs/internal/hub-submission-log.md]`.
-- Publishing the OpenClaw plugin took three attempts: `@vitalini/ebb-ai`
-  and `@vitalini/ebb-ai-mcp` were both published and then withdrawn
-  (wrong runtime id, then a rejected slug) before `@vitalini/ebb` stuck
+- Publishing the OpenClaw plugin took three attempts: `@vitalini/tidegap-ai`
+  and `@vitalini/tidegap-ai-mcp` were both published and then withdrawn
+  (wrong runtime id, then a rejected slug) before `@vitalini/tidegap` stuck
   `[docs/internal/hub-submission-log.md; 9860387, c52ce50, b8b64ee]`.
 - Live adoption numbers, fetched 2026-09-30:
-  - npm, last 30 days: `@ebb-ai/core` 69 downloads, `@ebb-ai/cli` 77
-    downloads, `@ebb-ai/mcp` 78 downloads (window 2026-08-30 to
+  - npm, last 30 days: `@tidegap/core` 69 downloads, `@tidegap/cli` 77
+    downloads, `@tidegap/mcp` 78 downloads (window 2026-08-30 to
     2026-09-28). Fetched 2026-09-30 with
-    `curl -s https://api.npmjs.org/downloads/point/last-month/@ebb-ai/<core|cli|mcp>`;
+    `curl -s https://api.npmjs.org/downloads/point/last-month/@tidegap/<core|cli|mcp>`;
     refetched the same day with the same result.
-  - PyPI `ebb-ai`, last month: 62 downloads (4 in the last week, 0 the day
+  - PyPI `tidegap`, last month: 62 downloads (4 in the last week, 0 the day
     of the fetch). Fetched 2026-09-30 with
-    `curl -s https://pypistats.org/api/packages/ebb-ai/recent`; a same-day
+    `curl -s https://pypistats.org/api/packages/tidegap/recent`; a same-day
     refetch was rate-limited (HTTP 429), so this number is from the first
     fetch only.
   - GitHub: 1 star, 0 forks, 0 open issues, repository created
     2026-05-12. Fetched 2026-09-30 with
-    `gh api repos/Vitalini/ebb-ai --jq '{stargazers_count,forks_count,open_issues_count,created_at}'`;
+    `gh api repos/tidegap/tidegap --jq '{stargazers_count,forks_count,open_issues_count,created_at}'`;
     refetched the same day with the same result.
 
 ## What we would do differently

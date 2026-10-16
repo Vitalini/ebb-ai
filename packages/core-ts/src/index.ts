@@ -1,12 +1,12 @@
 /**
- * @ebb-ai/core — carbon-aware scheduling for agentic AI workflows.
+ * @tidegap/core — carbon-aware scheduling for agentic AI workflows.
  *
  * Everything re-exported below is the public surface; the export list
  * itself is the source of truth. The main entry points:
  *
- *   import { defer, Scheduler, recommendWindow } from "@ebb-ai/core";
- *   import { AnthropicAdapter, OpenAIAdapter } from "@ebb-ai/core";
- *   import { TaskStore } from "@ebb-ai/core";
+ *   import { defer, Scheduler, recommendWindow } from "@tidegap/core";
+ *   import { AnthropicAdapter, OpenAIAdapter } from "@tidegap/core";
+ *   import { TaskStore } from "@tidegap/core";
  *
  * Highlights: Anthropic + OpenAI + Gemini + Ollama provider adapters,
  * SQLite-backed durable queue with a cross-process audit ledger,
@@ -21,19 +21,19 @@
  * threshold is an explicit argument; the HOST application decides where its
  * configuration comes from and injects it:
  *
- *   - `ebb` CLI and `@ebb-ai/mcp` server → read the documented env vars
+ *   - `tidegap` CLI and `@tidegap/mcp` server → read the documented env vars
  *     (ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY / GOOGLE_API_KEY,
- *     OLLAMA_HOST, EBB_EIA_API_KEY, EBB_ELECTRICITY_MAPS_API_KEY,
- *     EBB_ENTSOE_SECURITY_TOKEN, WATTTIME_USERNAME / WATTTIME_PASSWORD,
- *     EBB_CARBON_BUDGET_*) at their own entry points.
- *   - the OpenClaw plugin (`@vitalini/ebb`) → reads its OpenClaw plugin
+ *     OLLAMA_HOST, TIDEGAP_EIA_API_KEY, TIDEGAP_ELECTRICITY_MAPS_API_KEY,
+ *     TIDEGAP_ENTSOE_SECURITY_TOKEN, WATTTIME_USERNAME / WATTTIME_PASSWORD,
+ *     TIDEGAP_CARBON_BUDGET_*) at their own entry points.
+ *   - the OpenClaw plugin (`@vitalini/tidegap`) → reads its OpenClaw plugin
  *     config and reads no environment variables at all, so the published
  *     bundle contains zero ambient-environment accesses.
  *
- * The `~/.ebb-ai/config` FILE is still read by `loadCarbonBudgetConfig` —
+ * The `~/.tidegap/config` FILE is still read by `loadCarbonBudgetConfig` —
  * that is filesystem I/O against a path this project owns, not ambient state.
  *
- * NOTE — deliberate TS/Python asymmetry: the Python mirror (`ebb_ai`, in
+ * NOTE — deliberate TS/Python asymmetry: the Python mirror (`tidegap`, in
  * packages/core-py) is NOT environment-pure. It is used directly as its own
  * host (scripts, notebooks) rather than being bundled into a third-party
  * plugin, so its `os.environ` fallbacks stay for ergonomics.
@@ -141,6 +141,9 @@ export {
   carbonBudgetUsage,
   loadCarbonBudgetConfig,
   parseKeyValues,
+  withTidegapKeys,
+  KEY_PREFIX,
+  LEGACY_KEY_PREFIX,
   receiptCarbonG,
   windowBounds,
 } from "./budget.js";
@@ -279,3 +282,10 @@ export type {
   VerifyOutcome,
   VerifyResult,
 } from "./sign.js";
+export {
+  LEGACY_HOME_DIR,
+  TIDEGAP_HOME_DIR,
+  resolveTidegapHome,
+  tidegapPath,
+} from "./paths.js";
+export type { HomeFs, ResolveHomeOptions } from "./paths.js";

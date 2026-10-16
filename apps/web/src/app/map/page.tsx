@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { estimateEnergyKwh } from "@ebb-ai/core/energy";
+import { estimateEnergyKwh } from "@tidegap/core/energy";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { RegionCard, RegionCardSkeleton } from "@/components/region-card";
 import { getGridForecast } from "@/lib/grid";
@@ -10,7 +10,7 @@ import type { GridForecast } from "@/lib/types";
 
 /**
  * Format a model's typical-call energy (500 in + 500 out tokens, PUE 1.15,
- * per `estimateEnergyKwh` in `@ebb-ai/core/energy`) as "~N Wh". Mirrors the
+ * per `estimateEnergyKwh` in `@tidegap/core/energy`) as "~N Wh". Mirrors the
  * docs page's convention so both pages agree on every Wh-per-call figure.
  */
 function formatWh(model: string): string {
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   title: "Live carbon map",
   description:
     "Real-time carbon-intensity map of the electricity grids that power major LLM-provider regions. Click any region for the 72-hour forecast and best-window finder.",
-  alternates: { canonical: "https://www.ebb-ai.com/map" },
+  alternates: { canonical: "https://www.tidegap.com/map" },
 };
 
 // ISR: regenerate at most every 5 min. The inner grid feeds are
@@ -229,7 +229,7 @@ function Methodology() {
           <p className="mt-1">
             The map cards show a single number per region using a flat
             typical-task estimate (<span className="font-mono text-fg">~0.0015 kWh</span>,
-            PUE 1.15). Actual ebb-ai dispatches (v0.10+) use{" "}
+            PUE 1.15). Actual Tidegap dispatches (v0.10+) use{" "}
             <strong className="text-fg">per-model coefficients</strong>
             {" "}from Patterson 2021, Luccioni 2024, and the Hugging Face AI
             Energy Score — e.g. claude-sonnet-5 {formatWh("claude-sonnet-5")}/call

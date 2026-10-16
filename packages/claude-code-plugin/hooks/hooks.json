@@ -1,12 +1,12 @@
 {
-  "description": "ebb-ai: at session start, print one line when deferred tasks have finished and nobody has read them yet. Silent when nothing is unread or the ebb CLI is not installed.",
+  "description": "Tidegap: at session start, print one line when deferred tasks have finished and nobody has read them yet. Silent when nothing is unread or the tidegap CLI is not installed (falls back to the 0.17 ebb command).",
   "hooks": {
     "SessionStart": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "command -v ebb >/dev/null 2>&1 && ebb queue list --unread --hook 2>/dev/null; exit 0",
+            "command": "if command -v tidegap >/dev/null 2>&1; then tidegap queue list --unread --hook 2>/dev/null; elif command -v ebb >/dev/null 2>&1; then ebb queue list --unread --hook 2>/dev/null; fi; exit 0",
             "timeout": 10
           }
         ]

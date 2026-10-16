@@ -1,12 +1,12 @@
 /**
- * Change feed for `ebb ui` (KTD10). Polls `PRAGMA data_version`, which moves
+ * Change feed for `tidegap ui` (KTD10). Polls `PRAGMA data_version`, which moves
  * when another connection commits (the tick, the MCP server). On a move it
  * re-lists the ledger and reports the ids whose status, read marker or
  * scheduled time changed. The server's own writes do not move
  * `data_version`, so the server calls `emit` itself after a mark-read.
  */
 
-import type { TaskStore } from "@ebb-ai/core";
+import type { TaskStore } from "@tidegap/core";
 
 export type TaskChangeListener = (ids: string[]) => void;
 

@@ -3,8 +3,8 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mockGridFeed, TaskStore } from "@ebb-ai/core";
-import type { TaskRecord } from "@ebb-ai/core";
+import { mockGridFeed, TaskStore } from "@tidegap/core";
+import type { TaskRecord } from "@tidegap/core";
 import {
   localDayBounds,
   renderQueue,
@@ -45,7 +45,7 @@ describe("queue list / show / unread (task visibility)", () => {
   let db: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-cli-queue-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-cli-queue-"));
     db = join(dir, "queue.db");
     const store = new TaskStore({ dbPath: db });
     store.upsert({
@@ -139,7 +139,7 @@ describe("queue list / show / unread (task visibility)", () => {
 
   it("show labels a quota deadline and does not mark an unfinished task read", async () => {
     const config = join(dir, "config");
-    writeFileSync(config, "EBB_QUOTA_RESET_CLAUDE=mon 10:00 UTC\nEBB_QUOTA_MARGIN_H_CLAUDE=2\n");
+    writeFileSync(config, "TIDEGAP_QUOTA_RESET_CLAUDE=mon 10:00 UTC\nTIDEGAP_QUOTA_MARGIN_H_CLAUDE=2\n");
     const { rendered } = await runQueueShow("t-quota", { db, config });
     expect(rendered).toContain(
       "deadline: 2026-10-19T08:00:00.000Z (quota reset (claude), reset_at 2026-10-19T10:00:00.000Z, margin_h 2)",
@@ -167,12 +167,12 @@ describe("queue list / show / unread (task visibility)", () => {
   });
 });
 
-describe("ebb queue list --hook (Claude Code SessionStart)", () => {
+describe("tidegap queue list --hook (Claude Code SessionStart)", () => {
   let dir: string;
   let db: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-hook-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-hook-"));
     db = join(dir, "queue.db");
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
@@ -195,13 +195,13 @@ describe("ebb queue list --hook (Claude Code SessionStart)", () => {
   it("names the unread count and drops it after a mark read (AE1)", async () => {
     seedDone(2);
     expect((await runQueueList({ db, unread: true, hook: true })).rendered).toBe(
-      "2 unread ebb tasks, run `ebb ui` to read them.",
+      "2 unread Tidegap tasks, run `tidegap ui` to read them.",
     );
     const store = new TaskStore({ dbPath: db });
     store.markRead("done-0");
     store.close();
     expect((await runQueueList({ db, unread: true, hook: true })).rendered).toBe(
-      "1 unread ebb task, run `ebb ui` to read them.",
+      "1 unread Tidegap task, run `tidegap ui` to read them.",
     );
   });
 
@@ -224,12 +224,12 @@ describe("ebb queue list --hook (Claude Code SessionStart)", () => {
       }
     ).hooks.SessionStart[0]!.hooks[0]!;
 
-    function runHook(stub: string | null): { status: number | null; stdout: string } {
+    function runHook(stub: string | null, name = "tidegap"): { status: number | null; stdout: string } {
       const bin = join(dir, "bin");
       mkdirSync(bin, { recursive: true });
       if (stub !== null) {
-        writeFileSync(join(bin, "ebb"), `#!/bin/sh\n${stub}\n`);
-        chmodSync(join(bin, "ebb"), 0o755);
+        writeFileSync(join(bin, name), `#!/bin/sh\n${stub}\n`);
+        chmodSync(join(bin, name), 0o755);
       }
       const r = spawnSync("/bin/sh", ["-c", command.command], {
         env: { PATH: `${bin}:/usr/bin:/bin` },
@@ -242,17 +242,21 @@ describe("ebb queue list --hook (Claude Code SessionStart)", () => {
       expect(command.type).toBe("command");
     });
 
-    it("stays silent with exit 0 when ebb is not installed", () => {
+    it("stays silent with exit 0 when neither tidegap nor ebb is installed", () => {
       expect(runHook(null)).toEqual({ status: 0, stdout: "" });
     });
 
     it("stays silent with exit 0 when an older ebb rejects --hook", () => {
-      expect(runHook(`echo "error: unknown option '--hook'" >&2; exit 1`)).toEqual({ status: 0, stdout: "" });
+      expect(runHook(`echo "error: unknown option '--hook'" >&2; exit 1`, "ebb")).toEqual({ status: 0, stdout: "" });
+    });
+
+    it("falls back to the 0.17 ebb command when tidegap is absent", () => {
+      expect(runHook(`echo "1 unread task via $0"`, "ebb").stdout).toMatch(/via .*\/ebb\n$/);
     });
 
     it("passes the CLI line through", () => {
-      expect(runHook(`echo "2 unread ebb tasks, run \\\`ebb ui\\\` to read them."`).stdout).toBe(
-        "2 unread ebb tasks, run `ebb ui` to read them.\n",
+      expect(runHook(`echo "2 unread Tidegap tasks, run \\\`tidegap ui\\\` to read them."`).stdout).toBe(
+        "2 unread Tidegap tasks, run `tidegap ui` to read them.\n",
       );
     });
   });
@@ -290,7 +294,7 @@ describe("queue write commands (ui v2)", () => {
   const feed = mockGridFeed();
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-cli-write-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-cli-write-"));
     db = join(dir, "queue.db");
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
@@ -360,7 +364,7 @@ describe("queue write commands (ui v2)", () => {
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
       await expect(
-        buildProgram().parseAsync(["node", "ebb", "queue", "run-now", "gone", "--db", db]),
+        buildProgram().parseAsync(["node", "tidegap", "queue", "run-now", "gone", "--db", db]),
       ).rejects.toThrow("exit 1");
       expect(err.mock.calls.flat().join(" ")).toMatch(/runNow: task gone is cancelled/);
     } finally {

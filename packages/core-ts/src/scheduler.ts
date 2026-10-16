@@ -1,5 +1,5 @@
 /**
- * Scheduler — the in-process orchestrator for ebb-ai.
+ * Scheduler — the in-process orchestrator for Tidegap.
  *
  * Responsibilities:
  *   - Hold a queue of deferrable tasks (closure-based `defer`/`enqueue`
@@ -146,7 +146,7 @@ export interface SchedulerOptions {
   /**
    * Ed25519 receipt-signing configuration. By default the scheduler
    * signs every receipt with a per-installation keypair at
-   * `~/.ebb-ai/signing.key` (lazily created on first dispatch). Pass:
+   * `~/.tidegap/signing.key` (lazily created on first dispatch). Pass:
    *   - `false` to disable signing entirely (receipts shipped without
    *     signature/signerPublicKey/signedAt fields — back to v0.10 shape).
    *   - `{ keyPath: "..." }` to override the keypair location (mostly
@@ -335,7 +335,7 @@ export class Scheduler {
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn(
-        `[ebb-ai/scheduler] failed to record carbon-budget alert marker: ${describeErr(err)}`,
+        `[tidegap/scheduler] failed to record carbon-budget alert marker: ${describeErr(err)}`,
       );
       return;
     }
@@ -352,7 +352,7 @@ export class Scheduler {
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn(
-        `[ebb-ai/scheduler] onCarbonAlert hook threw (${describeErr(err)}); ignoring`,
+        `[tidegap/scheduler] onCarbonAlert hook threw (${describeErr(err)}); ignoring`,
       );
     }
   }
@@ -376,7 +376,7 @@ export class Scheduler {
       // stderr once so operators notice without crashing dispatch.
       // eslint-disable-next-line no-console
       console.warn(
-        `[ebb-ai/scheduler] failed to load signing key, receipts will go out unsigned: ${
+        `[tidegap/scheduler] failed to load signing key, receipts will go out unsigned: ${
           err instanceof Error ? err.message : String(err)
         }`,
       );
@@ -428,14 +428,14 @@ export class Scheduler {
     this.store?.setMeta(LAST_TICK_META_KEY, at.toISOString());
   }
 
-  /** When a ticker (`ebb tick` or the OpenClaw loop) last ran, if ever recorded. */
+  /** When a ticker (`tidegap tick` or the OpenClaw loop) last ran, if ever recorded. */
   lastTickAt(): string | undefined {
     return this.store?.getMeta(LAST_TICK_META_KEY);
   }
 
   /**
    * Defer a task. Returns a promise that resolves with the task's eventual
-   * result when ebb-ai dispatches it.
+   * result when Tidegap dispatches it.
    *
    * For testing / synchronous workflows, see `enqueue` + `tick` + `flush`.
    */
@@ -500,7 +500,7 @@ export class Scheduler {
    * Enqueue a persistent provider-call task. The body is JSON-serialized
    * into the SQLite ledger, so the task survives the enqueuing process
    * exiting — `Scheduler.tick(adapters)`, typically invoked from
-   * `ebb tick` on a cron, can rehydrate the spec and dispatch it.
+   * `tidegap tick` on a cron, can rehydrate the spec and dispatch it.
    *
    * Unlike `enqueue`, no in-process closure is registered; the scheduler
    * does NOT call `dispatch` for these tasks at the chosen window. They
@@ -613,7 +613,7 @@ export class Scheduler {
         } catch (err) {
           // eslint-disable-next-line no-console
           console.warn(
-            `[ebb-ai/scheduler] tick: could not claim task ${record.taskId} for batch submit: ${describeErr(err)}; skipping this round`,
+            `[tidegap/scheduler] tick: could not claim task ${record.taskId} for batch submit: ${describeErr(err)}; skipping this round`,
           );
           continue;
         }
@@ -653,7 +653,7 @@ export class Scheduler {
     // ---- (2) Due sweep (sync provider calls) ----
     const now = Date.now();
     // Source-of-truth is the in-memory map for this process, plus any
-    // persisted records (e.g. when a v0.4 `ebb tick` opens the SQLite file).
+    // persisted records (e.g. when a v0.4 `tidegap tick` opens the SQLite file).
     const seen = new Set<string>();
     const candidates: TaskRecord<unknown>[] = [];
     if (this.store) {
@@ -673,7 +673,7 @@ export class Scheduler {
       // Row-level claim: only one tick gets to dispatch this task. If
       // the store is configured, the claim is also visible to other
       // processes pointing at the same SQLite file (e.g. an
-      // interactive `ebb tick` racing the launchd cron).
+      // interactive `tidegap tick` racing the launchd cron).
       if (this.store) {
         let claimed = false;
         try {
@@ -684,7 +684,7 @@ export class Scheduler {
           // and a later tick retries. It must never abort the whole tick.
           // eslint-disable-next-line no-console
           console.warn(
-            `[ebb-ai/scheduler] tick: could not claim task ${record.taskId}: ${describeErr(err)}; skipping this round`,
+            `[tidegap/scheduler] tick: could not claim task ${record.taskId}: ${describeErr(err)}; skipping this round`,
           );
           continue;
         }
@@ -715,7 +715,7 @@ export class Scheduler {
         } catch (err) {
           // eslint-disable-next-line no-console
           console.warn(
-            `[ebb-ai/scheduler] tick: could not claim submitted task ${record.taskId}: ${describeErr(err)}; skipping this round`,
+            `[tidegap/scheduler] tick: could not claim submitted task ${record.taskId}: ${describeErr(err)}; skipping this round`,
           );
           continue;
         }
@@ -987,7 +987,7 @@ export class Scheduler {
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn(
-        `[ebb-ai/scheduler] series rollover after ${record.taskId} failed: ${describeErr(err)}`,
+        `[tidegap/scheduler] series rollover after ${record.taskId} failed: ${describeErr(err)}`,
       );
     }
   }
@@ -1060,7 +1060,7 @@ export class Scheduler {
         // and warn that the batch may still run and bill.
         // eslint-disable-next-line no-console
         console.warn(
-          `[ebb-ai/scheduler] cancelTask: task ${taskId} was submitted to the provider's Batch API (batch id ${record.batchId ?? "unknown"}); marking cancelled locally, but the provider-side batch may still run and bill`,
+          `[tidegap/scheduler] cancelTask: task ${taskId} was submitted to the provider's Batch API (batch id ${record.batchId ?? "unknown"}); marking cancelled locally, but the provider-side batch may still run and bill`,
         );
       }
       const next: TaskRecord<unknown> = {
@@ -1090,7 +1090,7 @@ export class Scheduler {
   /**
    * Run a pending provider-call task at the next tick (ui v2). A write
    * only: no dispatch happens here, so a process without adapters (the
-   * `ebb ui` server) can call it. The row becomes `scheduled` for now with
+   * `tidegap ui` server) can call it. The row becomes `scheduled` for now with
    * `intensitySource: "expedited"`, which keeps it out of the Batch API and
    * survives onto the completed row. Throws when the task's state does not
    * allow it (see `taskActions`).
@@ -1718,7 +1718,7 @@ export class Scheduler {
     if (statusAfterRun === "cancelled") {
       // eslint-disable-next-line no-console
       console.warn(
-        `[ebb-ai/scheduler] task ${taskId} was cancelled while running; dropping its late result`,
+        `[tidegap/scheduler] task ${taskId} was cancelled while running; dropping its late result`,
       );
       this.bodies.delete(taskId);
       this.resolvers.delete(taskId);
@@ -1747,7 +1747,7 @@ export class Scheduler {
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn(
-        `[ebb-ai/scheduler] intensity fetch for the receipt failed (${describeErr(err)}); receipt falls back to the schedule-time estimate`,
+        `[tidegap/scheduler] intensity fetch for the receipt failed (${describeErr(err)}); receipt falls back to the schedule-time estimate`,
       );
     }
     let receipt: CarbonReceipt | undefined;
@@ -1788,7 +1788,7 @@ export class Scheduler {
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn(
-        `[ebb-ai/scheduler] failed to build the carbon receipt for ${taskId}: ${describeErr(err)}; task stays completed without a receipt`,
+        `[tidegap/scheduler] failed to build the carbon receipt for ${taskId}: ${describeErr(err)}; task stays completed without a receipt`,
       );
     }
     try {
@@ -1807,7 +1807,7 @@ export class Scheduler {
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn(
-        `[ebb-ai/scheduler] failed to persist completed task ${taskId}: ${describeErr(err)}`,
+        `[tidegap/scheduler] failed to persist completed task ${taskId}: ${describeErr(err)}`,
       );
     }
     resolver?.resolve(result);
@@ -2053,7 +2053,7 @@ export class Scheduler {
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn(
-        `[ebb-ai/scheduler] failed to persist running status for ${record.taskId}: ${describeErr(err)}`,
+        `[tidegap/scheduler] failed to persist running status for ${record.taskId}: ${describeErr(err)}`,
       );
     }
     if (!stillOurs) {
@@ -2107,7 +2107,7 @@ export class Scheduler {
       record.status = "cancelled";
       // eslint-disable-next-line no-console
       console.warn(
-        `[ebb-ai/scheduler] task ${record.taskId} was cancelled while running; dropping its late result`,
+        `[tidegap/scheduler] task ${record.taskId} was cancelled while running; dropping its late result`,
       );
       return {
         taskId: record.taskId,
@@ -2127,7 +2127,7 @@ export class Scheduler {
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn(
-        `[ebb-ai/scheduler] intensity fetch for the receipt failed (${describeErr(err)}); receipt falls back to the schedule-time estimate`,
+        `[tidegap/scheduler] intensity fetch for the receipt failed (${describeErr(err)}); receipt falls back to the schedule-time estimate`,
       );
     }
     // A run-now row keeps its `expedited` marker on the completed record.
@@ -2198,7 +2198,7 @@ export class Scheduler {
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn(
-        `[ebb-ai/scheduler] failed to build the carbon receipt for ${record.taskId}: ${describeErr(err)}; task stays completed without a receipt`,
+        `[tidegap/scheduler] failed to build the carbon receipt for ${record.taskId}: ${describeErr(err)}; task stays completed without a receipt`,
       );
     }
     // Terminal transition: redact secrets out of the persisted body. The
@@ -2221,7 +2221,7 @@ export class Scheduler {
       if (!this.writeIf(record, completed, ["running"])) {
         // eslint-disable-next-line no-console
         console.warn(
-          `[ebb-ai/scheduler] task ${record.taskId} was ${record.status} while running; dropping its late result`,
+          `[tidegap/scheduler] task ${record.taskId} was ${record.status} while running; dropping its late result`,
         );
         return {
           taskId: record.taskId,
@@ -2232,7 +2232,7 @@ export class Scheduler {
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn(
-        `[ebb-ai/scheduler] failed to persist completed task ${record.taskId}: ${describeErr(err)}`,
+        `[tidegap/scheduler] failed to persist completed task ${record.taskId}: ${describeErr(err)}`,
       );
     }
     if (spec.outputPath && receipt) {
@@ -2289,7 +2289,7 @@ export class Scheduler {
       } catch (err) {
         // eslint-disable-next-line no-console
         console.warn(
-          `[ebb-ai/scheduler] failed to persist submitted status for ${record.taskId}: ${describeErr(err)}`,
+          `[tidegap/scheduler] failed to persist submitted status for ${record.taskId}: ${describeErr(err)}`,
         );
       }
       return { taskId: record.taskId, status: "submitted" };
@@ -2305,7 +2305,7 @@ export class Scheduler {
       if (record.routingDecision) {
         // eslint-disable-next-line no-console
         console.warn(
-          `[ebb-ai/scheduler] batch submit failed for ${record.taskId} (${msg}); falling back to the synchronous dispatch path for the routed candidate`,
+          `[tidegap/scheduler] batch submit failed for ${record.taskId} (${msg}); falling back to the synchronous dispatch path for the routed candidate`,
         );
         record.status = "scheduled";
         record.batchId = undefined;
@@ -2352,7 +2352,7 @@ export class Scheduler {
       this.writeIf(record, { ...record, status: "submitted" }, ["running"]);
       // eslint-disable-next-line no-console
       console.warn(
-        `[ebb-ai/scheduler] tick: no retrieveBatch on adapter for ${spec.provider}; leaving ${record.taskId} submitted`,
+        `[tidegap/scheduler] tick: no retrieveBatch on adapter for ${spec.provider}; leaving ${record.taskId} submitted`,
       );
       return { taskId: record.taskId, status: "submitted" };
     }
@@ -2372,7 +2372,7 @@ export class Scheduler {
       this.writeIf(record, { ...record, status: "submitted" }, ["running"]);
       // eslint-disable-next-line no-console
       console.warn(
-        `[ebb-ai/scheduler] tick: retrieveBatch failed for ${record.taskId} (${describeErr(err)}); leaving submitted`,
+        `[tidegap/scheduler] tick: retrieveBatch failed for ${record.taskId} (${describeErr(err)}); leaving submitted`,
       );
       return { taskId: record.taskId, status: "submitted" };
     }
@@ -2425,7 +2425,7 @@ export class Scheduler {
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn(
-        `[ebb-ai/scheduler] intensity fetch for the receipt failed (${describeErr(err)}); receipt falls back to the schedule-time estimate`,
+        `[tidegap/scheduler] intensity fetch for the receipt failed (${describeErr(err)}); receipt falls back to the schedule-time estimate`,
       );
     }
     const usage = result.usage;
@@ -2475,7 +2475,7 @@ export class Scheduler {
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn(
-        `[ebb-ai/scheduler] failed to build the carbon receipt for ${record.taskId}: ${describeErr(err)}; task stays completed without a receipt`,
+        `[tidegap/scheduler] failed to build the carbon receipt for ${record.taskId}: ${describeErr(err)}; task stays completed without a receipt`,
       );
     }
     const completed: TaskRecord<unknown> = {
@@ -2499,7 +2499,7 @@ export class Scheduler {
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn(
-        `[ebb-ai/scheduler] failed to persist completed task ${record.taskId}: ${describeErr(err)}`,
+        `[tidegap/scheduler] failed to persist completed task ${record.taskId}: ${describeErr(err)}`,
       );
     }
     if (spec.outputPath && receipt) {
@@ -2764,7 +2764,7 @@ export function pickBestWindow(
  * (ETIMEDOUT, ECONNRESET) are NOT retried — the provider may already
  * have accepted and billed the call. Other 4xx bubble up immediately.
  *
- * This is the single retry policy for ebb-ai: provider adapters
+ * This is the single retry policy for Tidegap: provider adapters
  * construct their SDK clients with `maxRetries: 0` so vendor-side
  * retries cannot multiply with this one.
  */
@@ -2781,7 +2781,7 @@ async function retryWithBackoff<T>(fn: () => Promise<T>): Promise<T> {
       }
       // eslint-disable-next-line no-console
       console.warn(
-        `[ebb-ai/scheduler] dispatch attempt ${attempt + 1} failed (${describeErr(err)}); retrying in ${waits[attempt]! / 1000}s`,
+        `[tidegap/scheduler] dispatch attempt ${attempt + 1} failed (${describeErr(err)}); retrying in ${waits[attempt]! / 1000}s`,
       );
       await new Promise((r) => setTimeout(r, waits[attempt]!));
     }
@@ -2852,7 +2852,7 @@ async function writeOutputFile(
   } catch (err) {
     // eslint-disable-next-line no-console
     console.warn(
-      `[ebb-ai/scheduler] failed to write output_path=${path}: ${describeErr(err)}; result is still in the SQLite ledger`,
+      `[tidegap/scheduler] failed to write output_path=${path}: ${describeErr(err)}; result is still in the SQLite ledger`,
     );
   }
 }

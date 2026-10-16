@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-const SITE = "https://www.ebb-ai.com";
+const SITE = "https://www.tidegap.com";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();

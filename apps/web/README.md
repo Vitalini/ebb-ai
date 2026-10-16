@@ -1,13 +1,13 @@
-# `@ebb-ai/web`
+# `@tidegap/web`
 
-The public dashboard for **ebb-ai** — a live map of AI-compute carbon
+The public dashboard for **Tidegap** — a live map of AI-compute carbon
 intensity across the major LLM-provider regions, with a 72-hour forecast,
 a best-window finder, and a view into the scheduler's task queue.
 
 Built with Next.js 15 (app router), React 19, TypeScript strict mode,
 Tailwind 4, and Recharts.
 
-This app is the single public website at https://www.ebb-ai.com —
+This app is the single public website at https://www.tidegap.com —
 combines install picker, live data, planner, and docs.
 
 ---
@@ -19,7 +19,7 @@ combines install picker, live data, planner, and docs.
 
 (The repo is a pnpm workspace; running the dashboard from anywhere else
 will not pick up the workspace package linkage. Always invoke from this
-directory or from the repo root with `pnpm --filter @ebb-ai/web`.)
+directory or from the repo root with `pnpm --filter @tidegap/web`.)
 
 ---
 
@@ -28,7 +28,7 @@ directory or from the repo root with `pnpm --filter @ebb-ai/web`.)
 ```bash
 # From the repo root
 pnpm install
-pnpm --filter @ebb-ai/web dev
+pnpm --filter @tidegap/web dev
 
 # Or from this directory
 cd apps/web
@@ -51,7 +51,7 @@ dashboard must demo cleanly without any external API keys.
 |---|---|
 | `/` | Live grid of 31 regions (NA / EU / APAC — measured, see `docs/claims.md`). Each card: current g CO2e/kWh, band, 24-hour sparkline. Click → forecast. |
 | `/forecast?region=US-CAL-CISO` | 72-hour line chart with band-threshold reference lines; tables of the cleanest and dirtiest hours; min/max/avg/swing stats; region picker. |
-| `/plan` | Form: region, deadline (datetime-local), optional carbon budget in grams. Submits to the same page; renders the chosen window with projected carbon, a "copy CLI command" button for ebb-mcp, and the forecast chart with the chosen hour highlighted. |
+| `/plan` | Form: region, deadline (datetime-local), optional carbon budget in grams. Submits to the same page; renders the chosen window with projected carbon, a "copy CLI command" button for tidegap-mcp, and the forecast chart with the chosen hour highlighted. |
 | `/queue` | Snapshot of the scheduler queue with carbon receipts on completed tasks. Stub data in v0.2; v0.3 will wire this to the live scheduler. |
 | `/api/grid/[region]?hours=72` | JSON. Electricity Maps if key is set; mock otherwise. Edge-cached 5 minutes. |
 | `/api/queue` | JSON. Stub queue, deterministic per 5-minute slot so screenshots are stable. |
@@ -62,7 +62,7 @@ dashboard must demo cleanly without any external API keys.
 
 | Var | Required | Effect |
 |---|---|---|
-| `EBB_ELECTRICITY_MAPS_API_KEY` | no | When set, `/api/grid/[region]` and the home/forecast pages call Electricity Maps' free-tier API. On any failure (timeout, 401, empty payload) the dashboard transparently falls back to the mock — it never goes dark. |
+| `TIDEGAP_ELECTRICITY_MAPS_API_KEY` | no | When set, `/api/grid/[region]` and the home/forecast pages call Electricity Maps' free-tier API. On any failure (timeout, 401, empty payload) the dashboard transparently falls back to the mock — it never goes dark. |
 | `NEXT_PUBLIC_BASE_URL` | no | Override the base URL the queue page uses when calling `/api/queue` on the server. Defaults to `https://$VERCEL_URL` on Vercel or `http://localhost:3000` locally. |
 
 Free-tier API key signup: <https://www.electricitymaps.com/free-tier-api>
@@ -97,19 +97,19 @@ In the Vercel project settings:
 - **Root directory:** `apps/web`
 - **Build command:** `pnpm build` (default)
 - **Install command:** `pnpm install`
-- **Environment variables:** add `EBB_ELECTRICITY_MAPS_API_KEY` if you
+- **Environment variables:** add `TIDEGAP_ELECTRICITY_MAPS_API_KEY` if you
   have a key. Otherwise the mock keeps things working.
 
 ---
 
 ## Architecture notes
 
-- **No dependency on `@ebb-ai/core` in v0.2.** The dashboard ships a
+- **No dependency on `@tidegap/core` in v0.2.** The dashboard ships a
   trimmed copy of the grid feed (`src/lib/grid.ts`) and the type shapes
   (`src/lib/types.ts`). This is deliberate: it avoids fighting the
   ESM/CJS interop story while both packages are iterating quickly.
   When the v0.3 HTTP control plane lands on the scheduler, this app
-  will import `@ebb-ai/core` for the shared types and call the
+  will import `@tidegap/core` for the shared types and call the
   scheduler over HTTP for the live queue.
 - **Server components by default.** The home, forecast, plan, and
   queue pages are all React Server Components. The chart components,

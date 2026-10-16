@@ -51,7 +51,7 @@ type FetchLike = (
 export interface GeminiAdapterOptions {
   /**
    * API key. Supplied by the host — this library never reads the environment.
-   * The `ebb` CLI and `@ebb-ai/mcp` server read `GEMINI_API_KEY` (else
+   * The `tidegap` CLI and `@tidegap/mcp` server read `GEMINI_API_KEY` (else
    * `GOOGLE_API_KEY`) and pass the winner here; the OpenClaw plugin passes
    * `geminiApiKey` (else `googleApiKey`) from plugin config.
    */

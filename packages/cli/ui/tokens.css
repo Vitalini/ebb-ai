@@ -1,4 +1,4 @@
-/* ebb ui design tokens. Every colour, size and duration in app.css comes
+/* tidegap ui design tokens. Every colour, size and duration in app.css comes
    from here. Light is the default; dark follows the OS setting. Each band
    fg/bg pair meets WCAG AA (4.5:1) at 12 px; ui-server.test.ts checks it. */
 

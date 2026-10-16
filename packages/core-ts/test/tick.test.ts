@@ -200,7 +200,7 @@ describe("body_json migration", () => {
   let dbPath: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-tick-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-tick-"));
     dbPath = join(dir, "queue.sqlite");
   });
 

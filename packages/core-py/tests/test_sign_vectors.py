@@ -23,7 +23,7 @@ from typing import Any
 
 import pytest
 
-from ebb_ai.sign import (
+from tidegap.sign import (
     SigningKeyPair,
     canonical_receipt_payload,
     is_signing_available,
@@ -33,7 +33,7 @@ from ebb_ai.sign import (
 
 pytestmark = pytest.mark.skipif(
     not is_signing_available(),
-    reason="ebb-ai[signing] extras not installed",
+    reason="tidegap[signing] extras not installed",
 )
 
 # Relative path from packages/core-py/tests up to the shared fixture in

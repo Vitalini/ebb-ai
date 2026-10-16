@@ -1,4 +1,4 @@
-# ebb-ai in Zed
+# Tidegap in Zed
 
 [Zed](https://zed.dev) supports MCP via "context servers" in its
 native settings since version 0.160.
@@ -6,9 +6,9 @@ native settings since version 0.160.
 ## 1. Build the MCP server
 
 ```bash
-cd /path/to/ebb-ai
+cd /path/to/tidegap
 pnpm install
-pnpm --filter @ebb-ai/mcp build
+pnpm --filter @tidegap/mcp build
 ```
 
 ## 2. Register the server in Zed
@@ -20,13 +20,13 @@ section:
 ```json
 {
   "context_servers": {
-    "ebb-ai": {
+    "tidegap": {
       "command": {
         "path": "node",
-        "args": ["/absolute/path/to/ebb-ai/packages/mcp-server/dist/server.js"]
+        "args": ["/absolute/path/to/tidegap/packages/mcp-server/dist/server.js"]
       },
       "env": {
-        "EBB_ELECTRICITY_MAPS_API_KEY": "optional"
+        "TIDEGAP_ELECTRICITY_MAPS_API_KEY": "optional"
       }
     }
   }
@@ -34,7 +34,7 @@ section:
 ```
 
 Save. Zed picks up MCP config changes live. Open the Assistant panel —
-the four ebb-ai tools should appear in the model's tool list.
+the four Tidegap tools should appear in the model's tool list.
 
 ## 3. Use it
 
@@ -49,7 +49,7 @@ Zed's assistant will plan via `recommend_window`, queue via
 ## Notes
 
 - Zed's MCP integration is comparatively new (0.160+). If you don't
-  see ebb-ai tools, check `~/Library/Logs/Zed/Zed.log` (macOS) for
+  see Tidegap tools, check `~/Library/Logs/Zed/Zed.log` (macOS) for
   spawn errors — most often missing absolute `node` path.
 - The Zed integration uses the same MCP server binary as every other
   host; no Zed-specific code in this project.

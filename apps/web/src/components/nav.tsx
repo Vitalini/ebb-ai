@@ -21,7 +21,7 @@ export function Nav() {
           >
             ~
           </span>
-          <span className="text-fg">Ebb AI</span>
+          <span className="text-fg">Tidegap</span>
         </Link>
 
         <nav className="flex items-center gap-0.5 whitespace-nowrap text-xs sm:gap-1 sm:text-sm">
@@ -35,7 +35,7 @@ export function Nav() {
             </Link>
           ))}
           <a
-            href="https://github.com/Vitalini/ebb-ai"
+            href="https://github.com/tidegap/tidegap"
             target="_blank"
             rel="noreferrer"
             className="ml-0.5 rounded-md px-1.5 py-1.5 text-fg-muted transition-colors hover:bg-bg-elev hover:text-fg sm:ml-2 sm:px-3"

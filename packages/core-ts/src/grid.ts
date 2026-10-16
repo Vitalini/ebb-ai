@@ -17,8 +17,8 @@
  *   - buildDefaultGridFeed: best free feed per zone, mock fallback.
  *
  * ENVIRONMENT PURITY: nothing in this module reads the ambient environment. Every
- * credential arrives as an explicit argument — the HOST (the `ebb` CLI, the
- * `@ebb-ai/mcp` server, the web dashboard, the OpenClaw plugin) decides where
+ * credential arrives as an explicit argument — the HOST (the `tidegap` CLI, the
+ * `@tidegap/mcp` server, the web dashboard, the OpenClaw plugin) decides where
  * its configuration comes from and injects it. A library that reaches into the
  * ambient environment is both untestable and indistinguishable, to a static
  * auditor, from credential harvesting.
@@ -119,7 +119,7 @@ export function mockGridFeed(clock?: () => Date): GridFeed {
  * end-to-end without signing up.
  *
  * The key is always passed in by the host (CLI/MCP read
- * `EBB_ELECTRICITY_MAPS_API_KEY`; the OpenClaw plugin reads
+ * `TIDEGAP_ELECTRICITY_MAPS_API_KEY`; the OpenClaw plugin reads
  * `electricityMapsApiKey` from plugin config). This function never reads env.
  */
 export function electricityMapsFeed(apiKey?: string): GridFeed {
@@ -132,7 +132,7 @@ export function electricityMapsFeed(apiKey?: string): GridFeed {
       async fetchForecast(region, hours) {
         // eslint-disable-next-line no-console
         console.warn(
-          "[ebb-ai/grid] no Electricity Maps API key configured — using mock data",
+          "[tidegap/grid] no Electricity Maps API key configured — using mock data",
         );
         return mock.fetchForecast(region, hours);
       },
@@ -179,7 +179,7 @@ export function electricityMapsFeed(apiKey?: string): GridFeed {
       } catch (err) {
         // eslint-disable-next-line no-console
         console.warn(
-          `[ebb-ai/grid] electricity-maps fetch failed (${(err as Error).message}); falling back to mock`,
+          `[tidegap/grid] electricity-maps fetch failed (${(err as Error).message}); falling back to mock`,
         );
         return mock.fetchForecast(region, hours);
       }
@@ -199,7 +199,7 @@ export function electricityMapsFeed(apiKey?: string): GridFeed {
  * at `from + 48h` and the two are merged, extending coverage to 96h.
  *
  * The upstream API returns 30-minute settlement periods; we average each
- * consecutive pair into the hourly buckets ebb-ai uses elsewhere. The
+ * consecutive pair into the hourly buckets Tidegap uses elsewhere. The
  * API's first settlement period can start *before* the requested
  * top-of-hour (e.g. a request at 12:00 returns a period starting 11:30),
  * so leading periods are dropped until one starts at :00 — that keeps
@@ -217,7 +217,7 @@ export function ukCarbonIntensityFeed(): GridFeed {
       if (region !== "GB") {
         // eslint-disable-next-line no-console
         console.warn(
-          `[ebb-ai/grid] ukCarbonIntensityFeed only supports zone "GB" (got "${region}") — using mock`,
+          `[tidegap/grid] ukCarbonIntensityFeed only supports zone "GB" (got "${region}") — using mock`,
         );
         return mock.fetchForecast(region, hours);
       }
@@ -320,7 +320,7 @@ export function ukCarbonIntensityFeed(): GridFeed {
       } catch (err) {
         // eslint-disable-next-line no-console
         console.warn(
-          `[ebb-ai/grid] uk-carbon-intensity fetch failed (${(err as Error).message}); falling back to mock`,
+          `[tidegap/grid] uk-carbon-intensity fetch failed (${(err as Error).message}); falling back to mock`,
         );
         return mock.fetchForecast(region, hours);
       }
@@ -429,7 +429,7 @@ interface EiaFuelRow {
  * v2 Open Data API. Returns a synthesized hourly forecast from the last
  * 24 hours of realized fuel mix.
  *
- * The key is always passed in by the host (CLI/MCP read `EBB_EIA_API_KEY`;
+ * The key is always passed in by the host (CLI/MCP read `TIDEGAP_EIA_API_KEY`;
  * the OpenClaw plugin reads `eiaApiKey` from plugin config).
  */
 export function eiaFeed(apiKey?: string): GridFeed {
@@ -441,7 +441,7 @@ export function eiaFeed(apiKey?: string): GridFeed {
       async fetchForecast(region, hours) {
         // eslint-disable-next-line no-console
         console.warn(
-          "[ebb-ai/grid] no EIA API key configured — using mock data for EIA-eligible zones",
+          "[tidegap/grid] no EIA API key configured — using mock data for EIA-eligible zones",
         );
         return mock.fetchForecast(region, hours);
       },
@@ -455,7 +455,7 @@ export function eiaFeed(apiKey?: string): GridFeed {
       if (!respondent) {
         // eslint-disable-next-line no-console
         console.warn(
-          `[ebb-ai/grid] eiaFeed does not cover zone "${region}" — using mock`,
+          `[tidegap/grid] eiaFeed does not cover zone "${region}" — using mock`,
         );
         return mock.fetchForecast(region, hours);
       }
@@ -566,7 +566,7 @@ export function eiaFeed(apiKey?: string): GridFeed {
       } catch (err) {
         // eslint-disable-next-line no-console
         console.warn(
-          `[ebb-ai/grid] eia fetch failed (${(err as Error).message}); falling back to mock`,
+          `[tidegap/grid] eia fetch failed (${(err as Error).message}); falling back to mock`,
         );
         return mock.fetchForecast(region, hours);
       }
@@ -660,7 +660,7 @@ export interface EntsoeTimeSeries {
  *
  * Why regex rather than a real parser: ENTSO-E's response shape is
  * stable, the fields we read are well-namespaced, and adding a 30KB
- * XML dep to `@ebb-ai/core` for one adapter is bad cost-benefit.
+ * XML dep to `@tidegap/core` for one adapter is bad cost-benefit.
  * Exported for parse-level fixture tests.
  */
 export function parseEntsoeXml(xml: string): EntsoeTimeSeries[] {
@@ -716,7 +716,7 @@ export function parseEntsoeXml(xml: string): EntsoeTimeSeries[] {
  * intensity, which is why realised A75 data + persistence is used instead.
  *
  * The token is always passed in by the host (CLI/MCP read
- * `EBB_ENTSOE_SECURITY_TOKEN`; the OpenClaw plugin reads
+ * `TIDEGAP_ENTSOE_SECURITY_TOKEN`; the OpenClaw plugin reads
  * `entsoeSecurityToken` from plugin config).
  */
 export function entsoeFeed(securityToken?: string): GridFeed {
@@ -728,7 +728,7 @@ export function entsoeFeed(securityToken?: string): GridFeed {
       async fetchForecast(region, hours) {
         // eslint-disable-next-line no-console
         console.warn(
-          "[ebb-ai/grid] no ENTSO-E security token configured — using mock data for EU zones",
+          "[tidegap/grid] no ENTSO-E security token configured — using mock data for EU zones",
         );
         return mock.fetchForecast(region, hours);
       },
@@ -741,7 +741,7 @@ export function entsoeFeed(securityToken?: string): GridFeed {
       if (!zone) {
         // eslint-disable-next-line no-console
         console.warn(
-          `[ebb-ai/grid] entsoeFeed does not cover zone "${region}" — using mock`,
+          `[tidegap/grid] entsoeFeed does not cover zone "${region}" — using mock`,
         );
         return mock.fetchForecast(region, hours);
       }
@@ -856,7 +856,7 @@ export function entsoeFeed(securityToken?: string): GridFeed {
       } catch (err) {
         // eslint-disable-next-line no-console
         console.warn(
-          `[ebb-ai/grid] entsoe fetch failed (${(err as Error).message}); falling back to mock`,
+          `[tidegap/grid] entsoe fetch failed (${(err as Error).message}); falling back to mock`,
         );
         return mock.fetchForecast(region, hours);
       }
@@ -1057,7 +1057,7 @@ export function wattTimeFeed(options?: {
       } catch (err) {
         // eslint-disable-next-line no-console
         console.warn(
-          `[ebb-ai/grid] watttime fetch failed (${(err as Error).message}); falling through to ${fallback.source}`,
+          `[tidegap/grid] watttime fetch failed (${(err as Error).message}); falling through to ${fallback.source}`,
         );
         return fallback.fetchForecast(region, hours);
       }
@@ -1108,11 +1108,11 @@ export function multiSourceGridFeed(options: {
  * `eiaApiKey`, `entsoeSecurityToken`, `wattTimeUsername`, `wattTimePassword`).
  */
 export interface GridFeedCredentials {
-  /** Electricity Maps free-tier key. CLI/MCP env: `EBB_ELECTRICITY_MAPS_API_KEY`. */
+  /** Electricity Maps free-tier key. CLI/MCP env: `TIDEGAP_ELECTRICITY_MAPS_API_KEY`. */
   electricityMapsApiKey?: string;
-  /** US EIA v2 Open Data key. CLI/MCP env: `EBB_EIA_API_KEY`. */
+  /** US EIA v2 Open Data key. CLI/MCP env: `TIDEGAP_EIA_API_KEY`. */
   eiaApiKey?: string;
-  /** ENTSO-E Transparency Platform token. CLI/MCP env: `EBB_ENTSOE_SECURITY_TOKEN`. */
+  /** ENTSO-E Transparency Platform token. CLI/MCP env: `TIDEGAP_ENTSOE_SECURITY_TOKEN`. */
   entsoeSecurityToken?: string;
   /** WattTime account username. CLI/MCP env: `WATTTIME_USERNAME`. */
   wattTimeUsername?: string;

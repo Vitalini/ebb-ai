@@ -22,7 +22,7 @@ can decide whether to run a workload now or wait.
 
 ## What to do
 
-1. Call the `ebb-ai` MCP server's **`get_grid_forecast`** tool with:
+1. Call the `tidegap` MCP server's **`get_grid_forecast`** tool with:
    - `region` — the parsed zone code
    - `hours` — 24
 2. The tool returns a **plain-text report**, not JSON. Its shape:
@@ -69,7 +69,7 @@ can decide whether to run a workload now or wait.
 ## Examples
 
 ```
-/ebb-ai:grid
-/ebb-ai:grid GB
-/ebb-ai:grid US-TEX-ERCO
+/tidegap:grid
+/tidegap:grid GB
+/tidegap:grid US-TEX-ERCO
 ```

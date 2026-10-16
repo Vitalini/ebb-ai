@@ -1,13 +1,13 @@
 {
   "mcpServers": {
-    "ebb-ai": {
+    "tidegap": {
       "command": "node",
       "args": [
-        "/ABSOLUTE/PATH/TO/ebb-ai/packages/mcp-server/dist/server.js"
+        "/ABSOLUTE/PATH/TO/tidegap/packages/mcp-server/dist/server.js"
       ],
       "env": {
-        "EBB_ELECTRICITY_MAPS_API_KEY": "",
-        "EBB_DEFAULT_REGION": "US-CAL-CISO"
+        "TIDEGAP_ELECTRICITY_MAPS_API_KEY": "",
+        "TIDEGAP_DEFAULT_REGION": "US-CAL-CISO"
       }
     }
   }

@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   title: "72-hour carbon forecast",
   description:
     "Hourly grid carbon-intensity forecast for 31 regions — min/avg/max, diurnal swing, cleanest and dirtiest hours over the next 72 hours.",
-  alternates: { canonical: "https://www.ebb-ai.com/forecast" },
+  alternates: { canonical: "https://www.tidegap.com/forecast" },
 };
 
 const DEFAULT_REGION = "US-CAL-CISO";
@@ -124,7 +124,7 @@ export default async function ForecastPage({
         <div>
           <h2 className="text-sm font-semibold text-fg">Plan a workload here</h2>
           <p className="mt-1 text-xs text-fg-muted">
-            Set a deadline and an optional carbon budget; ebb-ai will pick the
+            Set a deadline and an optional carbon budget; Tidegap will pick the
             cheapest+cleanest hour and hand you a CLI command.
           </p>
         </div>

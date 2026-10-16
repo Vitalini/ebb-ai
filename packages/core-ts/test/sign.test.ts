@@ -70,7 +70,7 @@ describe("loadOrCreateSigningKey", () => {
   let dir: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-sign-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-sign-"));
   });
   afterEach(() => {
     rmSync(dir, { recursive: true, force: true });
@@ -89,8 +89,8 @@ describe("loadOrCreateSigningKey", () => {
     expect(Buffer.from(kp.publicKeyBase64, "base64")).toHaveLength(32);
   });
 
-  it("defaults to ~/.ebb-ai/signing.key", () => {
-    expect(defaultSigningKeyPath()).toMatch(/[/\\]\.ebb-ai[/\\]signing\.key$/);
+  it("defaults to ~/.tidegap/signing.key", () => {
+    expect(defaultSigningKeyPath()).toMatch(/[/\\]\.tidegap[/\\]signing\.key$/);
   });
 });
 
@@ -99,7 +99,7 @@ describe("signReceipt + verifyReceipt", () => {
   let keyPath: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-sign-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-sign-"));
     keyPath = join(dir, "signing.key");
   });
   afterEach(() => {
@@ -192,7 +192,7 @@ describe("legacy v0.11 verification fallback", () => {
   let keyPath: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-sign-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-sign-"));
     keyPath = join(dir, "signing.key");
   });
   afterEach(() => {
@@ -256,7 +256,7 @@ describe("cross-rendering verification (audit §0.3)", () => {
   let keyPath: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-sign-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-sign-"));
     keyPath = join(dir, "signing.key");
   });
   afterEach(() => {
@@ -305,7 +305,7 @@ describe("cross-rendering verification (audit §0.3)", () => {
 
 describe("file lifecycle", () => {
   it("creates the parent directory and writes the public key alongside", () => {
-    const dir = mkdtempSync(join(tmpdir(), "ebb-sign-"));
+    const dir = mkdtempSync(join(tmpdir(), "tidegap-sign-"));
     try {
       const keyPath = join(dir, "nested", "signing.key");
       const kp = loadOrCreateSigningKey({ privateKeyPath: keyPath });
@@ -319,7 +319,7 @@ describe("file lifecycle", () => {
   });
 
   it("writes both key files via temp+rename with no temp leftovers", () => {
-    const dir = mkdtempSync(join(tmpdir(), "ebb-sign-"));
+    const dir = mkdtempSync(join(tmpdir(), "tidegap-sign-"));
     try {
       const keyPath = join(dir, "signing.key");
       loadOrCreateSigningKey({ privateKeyPath: keyPath });
@@ -330,7 +330,7 @@ describe("file lifecycle", () => {
   });
 
   it("a corrupted key file fails fast (does not silently regenerate)", () => {
-    const dir = mkdtempSync(join(tmpdir(), "ebb-sign-"));
+    const dir = mkdtempSync(join(tmpdir(), "tidegap-sign-"));
     try {
       const keyPath = join(dir, "signing.key");
       writeFileSync(keyPath, "this is not a PEM");

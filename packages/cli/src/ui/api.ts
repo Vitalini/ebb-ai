@@ -1,8 +1,8 @@
 /**
- * JSON API handlers for `ebb ui`. Reads go through the `TaskStore`. Writes
+ * JSON API handlers for `tidegap ui`. Reads go through the `TaskStore`. Writes
  * (ui v2) go through `ctx.scheduler`, a `Scheduler` built with NO adapters:
  * cancel, reschedule, run now and reply only write the ledger, with a
- * compare-and-set, and the dispatcher (`ebb tick` or the OpenClaw loop)
+ * compare-and-set, and the dispatcher (`tidegap tick` or the OpenClaw loop)
  * runs the task. Nothing here dispatches a provider call. A refused action
  * returns 409 with the core's one-line rule, never a stack or a path.
  *
@@ -30,7 +30,7 @@ import {
   type TaskRecord,
   type TaskStatus,
   type TaskStore,
-} from "@ebb-ai/core";
+} from "@tidegap/core";
 
 import {
   rawPayload,

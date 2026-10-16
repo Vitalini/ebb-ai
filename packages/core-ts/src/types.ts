@@ -1,5 +1,5 @@
 /**
- * Public + internal types for @ebb-ai/core.
+ * Public + internal types for @tidegap/core.
  */
 
 import type { RouteWeights, RoutingDecision, RoutingPreview } from "./routing.js";
@@ -169,7 +169,7 @@ export interface CarbonReceipt {
   totalTokens?: number;
   /**
    * Grid intensity (gCO2eq/kWh) used to compute the actual side of this
-   * receipt (v0.12+). Recorded directly so consumers and `ebb stats`
+   * receipt (v0.12+). Recorded directly so consumers and `tidegap stats`
    * never back-derive it from grams (which skews per-model receipts).
    */
   intensityGCo2PerKwh?: number;
@@ -216,7 +216,7 @@ export interface CarbonReceipt {
    * Base64-encoded Ed25519 public key (32 bytes) that produced
    * `signature`. Bundled on every signed receipt so any consumer can
    * verify without out-of-band key distribution; the absolute trust
-   * anchor is whoever owns `~/.ebb-ai/signing.key.pub`.
+   * anchor is whoever owns `~/.tidegap/signing.key.pub`.
    */
   signerPublicKey?: string;
   /** ISO-8601 timestamp the signature was produced. Helps with replay

@@ -1,5 +1,5 @@
 /**
- * `@ebb-ai/core` is an ENVIRONMENT-PURE library.
+ * `@tidegap/core` is an ENVIRONMENT-PURE library.
  *
  * Motivation: the OpenClaw plugin bundles this library, and ClawHub's ClawScan
  * raises `suspicious.env_credential_access` (severity: critical) on ANY
@@ -13,7 +13,7 @@
  *   2. Every credentialed entry point IGNORES the same-named environment
  *      variable and honours only its explicit argument.
  *
- * The hosts (`ebb` CLI, `@ebb-ai/mcp` server, the web dashboard) read those
+ * The hosts (`tidegap` CLI, `@tidegap/mcp` server, the web dashboard) read those
  * variables at their own entry points and inject them — see
  * `packages/cli/src/env.ts` and `packages/mcp-server/src/env.ts`. The OpenClaw
  * plugin injects OpenClaw plugin-config values instead.
@@ -66,16 +66,22 @@ const HOST_ENV_VARS = [
   "GEMINI_API_KEY",
   "GOOGLE_API_KEY",
   "OLLAMA_HOST",
+  "TIDEGAP_ELECTRICITY_MAPS_API_KEY",
+  "TIDEGAP_EIA_API_KEY",
+  "TIDEGAP_ENTSOE_SECURITY_TOKEN",
+  "WATTTIME_USERNAME",
+  "WATTTIME_PASSWORD",
+  "TIDEGAP_CARBON_BUDGET_G",
+  "TIDEGAP_CARBON_BUDGET_WINDOW",
+  // The 0.17 names, still read by the hosts as a fallback.
   "EBB_ELECTRICITY_MAPS_API_KEY",
   "EBB_EIA_API_KEY",
   "EBB_ENTSOE_SECURITY_TOKEN",
-  "WATTTIME_USERNAME",
-  "WATTTIME_PASSWORD",
   "EBB_CARBON_BUDGET_G",
   "EBB_CARBON_BUDGET_WINDOW",
 ] as const;
 
-describe("@ebb-ai/core is environment-pure", () => {
+describe("@tidegap/core is environment-pure", () => {
   it("no source file reads the ambient environment", () => {
     // Built by concatenation so this test file's own source does not match the
     // pattern it is searching for.
@@ -93,9 +99,9 @@ describe("@ebb-ai/core is environment-pure", () => {
       for (const key of HOST_ENV_VARS) {
         saved.set(key, process.env[key]);
         // A value that would be obviously wrong if it ever leaked through.
-        process.env[key] = key === "EBB_CARBON_BUDGET_G" ? "1" : `leaked-${key}`;
+        process.env[key] = key.endsWith("_CARBON_BUDGET_G") ? "1" : `leaked-${key}`;
       }
-      process.env.EBB_CARBON_BUDGET_WINDOW = "weekly";
+      process.env.TIDEGAP_CARBON_BUDGET_WINDOW = "weekly";
     });
 
     afterEach(() => {
@@ -174,8 +180,8 @@ describe("@ebb-ai/core is environment-pure", () => {
       expect(urls.some((u) => u.includes("leaked-"))).toBe(false);
     });
 
-    it("loadCarbonBudgetConfig ignores EBB_CARBON_BUDGET_* and takes opts.env", () => {
-      // EBB_CARBON_BUDGET_G=1 is exported above. With a config path that does
+    it("loadCarbonBudgetConfig ignores TIDEGAP_CARBON_BUDGET_* and takes opts.env", () => {
+      // TIDEGAP_CARBON_BUDGET_G=1 is exported above. With a config path that does
       // not exist and no injected override, the feature must stay OFF.
       expect(
         loadCarbonBudgetConfig({ path: join(SRC, "does-not-exist") }),
@@ -184,7 +190,7 @@ describe("@ebb-ai/core is environment-pure", () => {
       expect(
         loadCarbonBudgetConfig({
           path: join(SRC, "does-not-exist"),
-          env: { EBB_CARBON_BUDGET_G: "250", EBB_CARBON_BUDGET_WINDOW: "monthly" },
+          env: { TIDEGAP_CARBON_BUDGET_G: "250", TIDEGAP_CARBON_BUDGET_WINDOW: "monthly" },
         }),
       ).toEqual({ thresholdG: 250, windowKind: "monthly" });
     });

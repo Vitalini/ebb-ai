@@ -49,13 +49,13 @@ export function getPlatform(name?: PlatformName): {
 
 export { macos, linux, windows };
 
-/** Whether a tick daemon (`ebb install`) is set up on this machine. */
+/** Whether a tick daemon (`tidegap install`) is set up on this machine. */
 export type DaemonStatus = "installed" | "not_installed" | "unknown";
 
 /**
- * Probe for the unit file `ebb install` writes: the macOS LaunchAgent plist
+ * Probe for the unit file `tidegap install` writes: the macOS LaunchAgent plist
  * or the Linux systemd user timer. Windows reports `unknown`, because there
- * `ebb install` only prints a schtasks command and nothing on disk shows
+ * `tidegap install` only prints a schtasks command and nothing on disk shows
  * whether the user ran it.
  */
 export function daemonStatus(
@@ -68,13 +68,16 @@ export function daemonStatus(
   const platform = opts.platform ?? process.platform;
   const home = opts.home ?? homedir();
   const exists = opts.exists ?? existsSync;
+  // The 0.17 unit counts too: it keeps ticking the same ledger until removed.
   if (platform === "darwin") {
-    return exists(join(home, "Library", "LaunchAgents", "com.ebb-ai.tick.plist"))
+    const agents = join(home, "Library", "LaunchAgents");
+    return [macos.LAUNCHD_LABEL, macos.LEGACY_LAUNCHD_LABEL].some((l) => exists(join(agents, `${l}.plist`)))
       ? "installed"
       : "not_installed";
   }
   if (platform === "win32") return "unknown";
-  return exists(join(home, ".config", "systemd", "user", "ebb-tick.timer"))
+  const units = join(home, ".config", "systemd", "user");
+  return [linux.SYSTEMD_UNIT, linux.LEGACY_SYSTEMD_UNIT].some((u) => exists(join(units, `${u}.timer`)))
     ? "installed"
     : "not_installed";
 }

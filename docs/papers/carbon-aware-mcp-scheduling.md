@@ -2,10 +2,10 @@
 title: "Carbon-Aware Scheduling for Agentic AI Workflows via the Model Context Protocol"
 author:
   - name: "Vitalii Borovyk"
-    affiliation: "ebb-ai (independent)"
-    email: "vitalii@ebb-ai.com"
+    affiliation: "Tidegap (independent)"
+    email: "vitalii@www.tidegap.com"
 abstract: |
-  We describe **ebb-ai**, an open-source Model Context Protocol (MCP)
+  We describe **Tidegap**, an open-source Model Context Protocol (MCP)
   server that defers non-urgent agentic-AI tool calls to the
   cleanest grid window inside a caller-supplied deadline. The system
   composes (i) a per-zone grid-carbon-intensity router across four
@@ -63,8 +63,8 @@ for the caller to communicate a deadline, a priority, or a carbon
 budget. As a result, every deferral implementation to date is a
 provider-specific extension that does not compose across hosts.
 
-We address this with **ebb-ai**, an open-source MCP server (Apache-
-2.0, `npm @ebb-ai/mcp@0.8.1`) that exposes a `schedule_task` tool
+We address this with **Tidegap**, an open-source MCP server (Apache-
+2.0, `npm @tidegap/mcp@0.8.1`) that exposes a `schedule_task` tool
 accepting `deadline` and `carbon_budget_g`, backed by a multi-
 source grid-intensity router and a randomised-tie-break scheduler
 that avoids the pathology of every task converging on a single
@@ -145,13 +145,13 @@ the protocol, so it cannot tell the server to use the Batch path.
 
 # 3. System design
 
-`ebb-ai` is a pnpm monorepo containing four packages:
+`tidegap` is a pnpm monorepo containing four packages:
 
-- `@ebb-ai/core` — TypeScript scheduler, grid feeds, scoring,
+- `@tidegap/core` — TypeScript scheduler, grid feeds, scoring,
   retry policy, persistence, aggregation.
-- `@ebb-ai/mcp` — Stdio MCP server exposing nine tools.
-- `@ebb-ai/cli` — Command-line `ebb tick`, `ebb queue list`,
-  `ebb receipts list`, `ebb stats`.
+- `@tidegap/mcp` — Stdio MCP server exposing nine tools.
+- `@tidegap/cli` — Command-line `tidegap tick`, `tidegap queue list`,
+  `tidegap receipts list`, `tidegap stats`.
 - `core-py` — Python parity port.
 
 A separate `apps/dashboard` Next.js application surfaces live
@@ -183,12 +183,12 @@ router reports its actual source on the returned forecast object,
 so callers can distinguish *live* from *mock* without inspecting
 URLs.
 
-The dashboard at `https://ebb-ai.com` runs this router in
+The dashboard at `https://www.tidegap.com` runs this router in
 production. As of submission, the live deployment serves real-
 time data for `GB` (UK Carbon Intensity, key-less) and mock data
 for the other six regions pending operator addition of the
-optional `EBB_EIA_API_KEY`, `EBB_ENTSOE_SECURITY_TOKEN`, and
-`EBB_ELECTRICITY_MAPS_API_KEY` Vercel environment variables.
+optional `TIDEGAP_EIA_API_KEY`, `TIDEGAP_ENTSOE_SECURITY_TOKEN`, and
+`TIDEGAP_ELECTRICITY_MAPS_API_KEY` Vercel environment variables.
 
 ## 3.2 Scheduler scoring + randomised tie-break
 
@@ -220,14 +220,14 @@ production it samples wall-clock entropy. Implementation:
 ## 3.3 Persistent SQLite queue
 
 The MCP server writes every `schedule_task` to a SQLite database
-at `~/.ebb-ai/queue.db` (override via `EBB_DB_PATH`). The
+at `~/.tidegap/queue.db` (override via `TIDEGAP_DB_PATH`). The
 schema records the task body (provider-call spec, prompt, model,
 deadline), the chosen window, the dispatch state, and the carbon
 receipt on completion. The queue is shared across MCP hosts and
 survives MCP server restarts — both of which were the loudest UX
 deficits in the pre-v0.7.1 in-memory-only design.
 
-A separate `ebb tick` daemon (launchd on macOS, systemd on Linux)
+A separate `tidegap tick` daemon (launchd on macOS, systemd on Linux)
 reads scheduled rows from the same database and dispatches them
 through the provider adapter at the chosen window. The MCP
 server can run in any host; the tick daemon runs once per machine.
@@ -240,7 +240,7 @@ Each completed task writes a `CarbonReceipt` row containing
 receipt is the immutable audit-trail unit: aggregations
 (`aggregateStats`, `aggregateByRegion`, `bandHistogram`,
 `achievements`) are pure functions over receipt collections, and
-the `ebb stats` CLI and the dashboard `/stats` route both render
+the `tidegap stats` CLI and the dashboard `/stats` route both render
 the same shape.
 
 # 4. Proposed MCP protocol extension
@@ -261,7 +261,7 @@ not nested in `arguments` (which is tool-specific) or `_meta`
 
 The full proposal, including filing checklist and rationale for
 the placement decision, is at
-`docs/spec/proposal/UPSTREAM-PR.md` in the `ebb-ai` repository.
+`docs/spec/proposal/UPSTREAM-PR.md` in the `tidegap` repository.
 
 # 5. Evaluation
 
@@ -314,10 +314,10 @@ source and reusable.
 
 ## 5.3 Production deployment
 
-`ebb-ai` ships as `@ebb-ai/mcp@0.8.1` on npm, with 204 passing
+`tidegap` ships as `@tidegap/mcp@0.8.1` on npm, with 204 passing
 automated tests (99 + 21 + 8 in TypeScript, 75 in Python). The
-Claude Code marketplace plugin `ebb-ai@0.8.1` auto-wires the
-server. The dashboard at `https://ebb-ai.com` serves live GB
+Claude Code marketplace plugin `tidegap@0.8.1` auto-wires the
+server. The dashboard at `https://www.tidegap.com` serves live GB
 data and a `/forecast`, `/plan`, `/queue`, `/stats` UX. Ten
 documented host integrations cover Claude Code, Claude Desktop,
 Cursor, Cline, Continue, Zed, Windsurf, Pi, OpenClaw, and
@@ -329,7 +329,7 @@ generic stdio.
 
 Batch APIs already give cost discounts independent of carbon. A
 purely cost-driven scheduler would land at the same Batch-API
-window selection ebb-ai does, without needing a grid feed. The
+window selection Tidegap does, without needing a grid feed. The
 carbon framing matters for three reasons:
 
 - **Different cost curves.** Provider-batch discounts are step
@@ -371,7 +371,7 @@ to make their own additionality argument.
 # 7. Related work
 
 The Green Software Foundation's Carbon Aware SDK [4] is the
-closest analogue at the library level; ebb-ai is positioned one
+closest analogue at the library level; Tidegap is positioned one
 layer up, at the agentic-host integration. WattTime's marginal-
 emissions methodology [5] is reused verbatim. Electricity Maps [6]
 is one of four data sources. Academic carbon-aware schedulers
@@ -381,7 +381,7 @@ the MCP layer specifically.
 
 # 8. Conclusion
 
-`ebb-ai` is an open-source carbon-aware scheduler for agentic-AI
+`tidegap` is an open-source carbon-aware scheduler for agentic-AI
 workloads at the Model Context Protocol layer. We refute the
 "new peak at 03:00" anti-pattern empirically (10.8 % maximum
 concentration in a 10,000-task simulation, vs. 66.9 % for a
@@ -392,8 +392,8 @@ implementation is shippable today (204 passing tests, npm
 distribution, Claude Code marketplace plugin); the spec
 proposal is filing-ready.
 
-Source: <https://github.com/Vitalini/ebb-ai>
-Live dashboard: <https://ebb-ai.com>
+Source: <https://github.com/tidegap/tidegap>
+Live dashboard: <https://www.tidegap.com>
 
 # References
 
@@ -421,4 +421,4 @@ Live dashboard: <https://ebb-ai.com>
 
 *Alternative submission:* arXiv cs.DC preprint (no peer review gate, useful as a citation anchor).
 
-*Authoritative source for this paper:* `docs/papers/carbon-aware-mcp-scheduling.md` in [`github.com/Vitalini/ebb-ai`](https://github.com/Vitalini/ebb-ai). LaTeX/PDF rendering pipeline at `docs/papers/build.sh` (TBD).
+*Authoritative source for this paper:* `docs/papers/carbon-aware-mcp-scheduling.md` in [`github.com/tidegap/tidegap`](https://github.com/tidegap/tidegap). LaTeX/PDF rendering pipeline at `docs/papers/build.sh` (TBD).

@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { mockGridFeed, type TaskRecord } from "@ebb-ai/core";
+import { mockGridFeed, type TaskRecord } from "@tidegap/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import {
@@ -59,7 +59,7 @@ async function connect(deps: Parameters<typeof createEbbServer>[0] = {}) {
 }
 
 function tmpDb(): { dir: string; dbPath: string } {
-  const dir = mkdtempSync(join(tmpdir(), "ebb-mcp-test-"));
+  const dir = mkdtempSync(join(tmpdir(), "tidegap-mcp-test-"));
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
   return { dir, dbPath: join(dir, "queue.db") };
 }
@@ -222,10 +222,10 @@ describe("schedule_task response enrichment (§1.11)", () => {
   });
 
   describe("per-provider default model (R12)", () => {
-    const saved = process.env.EBB_DEFAULT_MODEL;
+    const saved = process.env.TIDEGAP_DEFAULT_MODEL;
     afterEach(() => {
-      if (saved === undefined) delete process.env.EBB_DEFAULT_MODEL;
-      else process.env.EBB_DEFAULT_MODEL = saved;
+      if (saved === undefined) delete process.env.TIDEGAP_DEFAULT_MODEL;
+      else process.env.TIDEGAP_DEFAULT_MODEL = saved;
     });
 
     async function previewModel(provider?: string): Promise<string> {
@@ -253,19 +253,19 @@ describe("schedule_task response enrichment (§1.11)", () => {
       ["gemini", "gemini-3.8-flash"],
       ["ollama", "llama3.1"],
     ])("dry_run with provider %s and no model previews %s", async (provider, model) => {
-      delete process.env.EBB_DEFAULT_MODEL;
+      delete process.env.TIDEGAP_DEFAULT_MODEL;
       expect(await previewModel(provider)).toBe(model);
     });
 
-    it("EBB_DEFAULT_MODEL overrides the Anthropic default only", async () => {
-      process.env.EBB_DEFAULT_MODEL = "claude-opus-5";
+    it("TIDEGAP_DEFAULT_MODEL overrides the Anthropic default only", async () => {
+      process.env.TIDEGAP_DEFAULT_MODEL = "claude-opus-5";
       expect(await previewModel()).toBe("claude-opus-5");
       expect(await previewModel("openai")).toBe("gpt-6-sol");
       expect(await previewModel("gemini")).toBe("gemini-3.8-flash");
     });
 
     it("the persisted task carries the same per-provider default as the preview", async () => {
-      delete process.env.EBB_DEFAULT_MODEL;
+      delete process.env.TIDEGAP_DEFAULT_MODEL;
       const { client, scheduler, close } = await connect({ dbPath: ":memory:" });
       const deadline = new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString();
       const result = await client.callTool({

@@ -2,14 +2,38 @@ import type { SpawnOptions } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TaskStore } from "@ebb-ai/core";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { TaskStore } from "@tidegap/core";
+import * as childProcess from "node:child_process";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   missingProviderKeysForPending,
   runTickOnce,
 } from "../src/commands/tick.js";
 
-describe("ebb tick", () => {
+// Every child_process entry point is a pass-through spy, so the suite can
+// prove that no tick path spawns a real process (a real notifier would post
+// on the developer's desktop).
+vi.mock("node:child_process", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:child_process")>();
+  return {
+    ...actual,
+    spawn: vi.fn(actual.spawn),
+    spawnSync: vi.fn(actual.spawnSync),
+    exec: vi.fn(actual.exec),
+    execFile: vi.fn(actual.execFile),
+    execFileSync: vi.fn(actual.execFileSync),
+    execSync: vi.fn(actual.execSync),
+    fork: vi.fn(actual.fork),
+  };
+});
+
+afterAll(() => {
+  for (const name of ["spawn", "spawnSync", "exec", "execFile", "execFileSync", "execSync", "fork"] as const) {
+    expect(vi.mocked(childProcess[name]), `child_process.${name} was called`).not.toHaveBeenCalled();
+  }
+});
+
+describe("tidegap tick", () => {
   const saved = {
     a: process.env.ANTHROPIC_API_KEY,
     o: process.env.OPENAI_API_KEY,
@@ -40,7 +64,7 @@ describe("ebb tick", () => {
   });
 
   it("exits 0 with a clear message when no adapters are configured", async () => {
-    const r = await runTickOnce({ db: ":memory:", envFile: "/nonexistent/ebb/env" });
+    const r = await runTickOnce({ db: ":memory:", envFile: "/nonexistent/tidegap/env" });
     expect(r.exitCode).toBe(0);
     expect(r.message).toMatch(/no adapters configured/i);
   });
@@ -58,7 +82,7 @@ describe("missing-provider-key warning", () => {
   };
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-tick-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-tick-"));
     dbPath = join(dir, "queue.db");
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
@@ -109,7 +133,7 @@ describe("missing-provider-key warning", () => {
     const r = await runTickOnce({ db: dbPath, envFile: join(dir, "no-env") });
     expect(r.exitCode).toBe(0);
     expect(r.message).toContain("ANTHROPIC_API_KEY");
-    expect(r.message).toMatch(/config\/ebb\/env/);
+    expect(r.message).toMatch(/config\/tidegap\/env/);
   });
 
   it("returns [] for a missing/unreadable db", () => {
@@ -123,7 +147,7 @@ describe("tick receipts use the region's grid feed", () => {
   const savedHost = process.env.OLLAMA_HOST;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-tick-feed-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-tick-feed-"));
     dbPath = join(dir, "queue.db");
     process.env.OLLAMA_HOST = "http://ollama.test";
     // One fetch stub answers both sides of the tick: the GB Carbon
@@ -190,13 +214,13 @@ describe("tick receipts use the region's grid feed", () => {
   });
 });
 
-describe("ebb tick pre-tick step (quota sweep, last_tick_at)", () => {
+describe("tidegap tick pre-tick step (quota sweep, last_tick_at)", () => {
   let dir: string;
   let db: string;
   const savedOllama = process.env.OLLAMA_HOST;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-cli-quota-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-cli-quota-"));
     db = join(dir, "queue.db");
     // An adapter must exist for the tick to run. The seeded tasks use the
     // anthropic provider, which has no adapter here, so even a task the
@@ -230,11 +254,11 @@ describe("ebb tick pre-tick step (quota sweep, last_tick_at)", () => {
     const prevReset = new Date(Math.floor((Date.now() - 3_600_000) / 60_000) * 60_000);
     const day = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][prevReset.getUTCDay()];
     const config = join(dir, "config");
-    writeFileSync(config, `EBB_QUOTA_RESET_CLAUDE=${day} ${prevReset.toISOString().slice(11, 16)} UTC\n`);
+    writeFileSync(config, `TIDEGAP_QUOTA_RESET_CLAUDE=${day} ${prevReset.toISOString().slice(11, 16)} UTC\n`);
     seed("claude", prevReset);
     seed("codex", prevReset);
 
-    const r = await runTickOnce({ db, envFile: "/nonexistent/ebb/env", budgetConfig: config });
+    const r = await runTickOnce({ db, envFile: "/nonexistent/tidegap/env", budgetConfig: config });
     expect(r.message).toMatch(/quota reset \(claude\) passed for quota-claude/);
     expect(r.message).toMatch(/"codex" is not configured/);
 
@@ -249,13 +273,13 @@ describe("ebb tick pre-tick step (quota sweep, last_tick_at)", () => {
   });
 });
 
-describe("ebb tick notifications", () => {
+describe("tidegap tick notifications", () => {
   let dir: string;
   let dbPath: string;
   const savedHost = process.env.OLLAMA_HOST;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-tick-notify-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-tick-notify-"));
     dbPath = join(dir, "queue.db");
     process.env.OLLAMA_HOST = "http://ollama.test";
     vi.stubGlobal("fetch", async (input: string | URL) => {
@@ -321,9 +345,9 @@ describe("ebb tick notifications", () => {
     expect(calls.every((c) => c.cmd === "notify-send" && c.args[0] === "--")).toBe(true);
     const titles = calls.map((c) => c.args[1]).sort();
     expect(titles).toEqual([
-      "ebb-ai: done: title ok-1",
-      "ebb-ai: done: title ok-2",
-      "ebb-ai: failed: title bad-1",
+      "Tidegap: done: title ok-1",
+      "Tidegap: done: title ok-2",
+      "Tidegap: failed: title bad-1",
     ]);
   });
 
@@ -333,12 +357,38 @@ describe("ebb tick notifications", () => {
     expect(calls).toHaveLength(0);
   });
 
-  it("EBB_NOTIFY=0 in the config posts nothing", async () => {
+  it("TIDEGAP_NOTIFY=0 in the config posts nothing", async () => {
     const config = join(dir, "config");
-    writeFileSync(config, "EBB_NOTIFY=0\n");
+    writeFileSync(config, "TIDEGAP_NOTIFY=0\n");
     const { result, calls } = run({ budgetConfig: config });
     await result;
     expect(calls).toHaveLength(0);
+  });
+
+  for (const name of ["TIDEGAP_NO_NOTIFY", "EBB_NO_NOTIFY"] as const) {
+    it(`${name}=1 in the environment posts nothing`, async () => {
+      const saved = { TIDEGAP_NO_NOTIFY: process.env.TIDEGAP_NO_NOTIFY, EBB_NO_NOTIFY: process.env.EBB_NO_NOTIFY };
+      delete process.env.TIDEGAP_NO_NOTIFY;
+      delete process.env.EBB_NO_NOTIFY;
+      process.env[name] = "1";
+      try {
+        const { result, calls } = run();
+        await result;
+        expect(calls).toHaveLength(0);
+      } finally {
+        for (const [k, v] of Object.entries(saved)) {
+          if (v === undefined) delete process.env[k];
+          else process.env[k] = v;
+        }
+      }
+    });
+  }
+
+  it("without an injected spawner, a test run spawns no notifier", async () => {
+    const { result } = run({ spawnNotify: undefined, platform: "darwin" });
+    const r = await result;
+    expect(r.message.split("\n")[0]).toBe("tick: 3 inspected, 2 dispatched, 1 failed");
+    // The suite-level afterAll asserts child_process was never called.
   });
 
   it("win32 passes the text through env vars with a timeout on the child", async () => {
@@ -348,7 +398,7 @@ describe("ebb tick notifications", () => {
     for (const c of calls) {
       expect(c.cmd).toBe("powershell");
       expect(c.opts.timeout).toBeGreaterThan(0);
-      expect(c.opts.env?.EBB_NOTIFY_TITLE).toMatch(/^ebb-ai: (done|failed): title /);
+      expect(c.opts.env?.TIDEGAP_NOTIFY_TITLE).toMatch(/^Tidegap: (done|failed): title /);
       expect(c.opts.env?.PATH).toBe(process.env.PATH);
       expect(c.args.join(" ")).not.toContain("title ok-1");
     }

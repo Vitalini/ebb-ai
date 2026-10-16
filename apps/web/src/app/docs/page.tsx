@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { estimateEnergyKwh } from "@ebb-ai/core/energy";
+import { estimateEnergyKwh } from "@tidegap/core/energy";
 import { InstallPicker } from "@/components/install-picker";
 
 /**
  * Format a model's typical-call energy (500 in + 500 out tokens, PUE 1.15,
- * per `estimateEnergyKwh` in `@ebb-ai/core/energy`) as "~N Wh".
+ * per `estimateEnergyKwh` in `@tidegap/core/energy`) as "~N Wh".
  */
 function formatWh(model: string): string {
   const wh = estimateEnergyKwh({ model }) * 1000;
@@ -15,8 +15,8 @@ function formatWh(model: string): string {
 export const metadata: Metadata = {
   title: "Docs · install, commands, MCP tools",
   description:
-    "Install ebb-ai in any MCP host (Claude Code, Cursor, Claude Desktop, Windsurf, Continue, Cline, Zed, Goose, OpenClaw). Full reference for the eight /ebb-ai:* slash commands and ten MCP tools.",
-  alternates: { canonical: "https://www.ebb-ai.com/docs" },
+    "Install Tidegap in any MCP host (Claude Code, Cursor, Claude Desktop, Windsurf, Continue, Cline, Zed, Goose, OpenClaw). Full reference for the eight /tidegap:* slash commands and ten MCP tools.",
+  alternates: { canonical: "https://www.tidegap.com/docs" },
 };
 
 export default function DocsPage() {
@@ -25,7 +25,7 @@ export default function DocsPage() {
       <header className="space-y-3">
         <p className="font-mono text-[11px] uppercase tracking-wider text-accent">docs</p>
         <h1 className="text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-5xl">
-          Everything you need to install + use ebb-ai.
+          Everything you need to install + use Tidegap.
         </h1>
         <p className="max-w-2xl text-base leading-relaxed text-fg-muted">
           Pick your AI host below, copy the command. Then call any of the eight
@@ -58,7 +58,7 @@ export default function DocsPage() {
           </h2>
           <p className="text-sm text-fg-muted">
             After installing the Claude Code plugin, these are available as
-            <code className="ml-1 rounded bg-bg-elev px-1 font-mono text-xs">/ebb-ai:&lt;cmd&gt;</code>
+            <code className="ml-1 rounded bg-bg-elev px-1 font-mono text-xs">/tidegap:&lt;cmd&gt;</code>
             in any session. Identical CRUD over the task queue.
           </p>
         </header>
@@ -189,7 +189,7 @@ export default function DocsPage() {
         </p>
 
         <div className="rounded-md border border-rule bg-bg-card p-4 font-mono text-xs leading-relaxed text-fg-muted">
-          <p className="mb-2 text-fg">Public API (<code>@ebb-ai/core</code> 0.10+, <code>ebb_ai</code> 0.6+)</p>
+          <p className="mb-2 text-fg">Public API (<code>@tidegap/core</code> 0.10+, <code>tidegap</code> 0.6+)</p>
           <pre className="overflow-x-auto whitespace-pre text-fg">
 {`import {
   estimateEnergyKwh,
@@ -199,7 +199,7 @@ export default function DocsPage() {
   ENERGY_SOURCES,
   DEFAULT_PUE,
   LEGACY_KWH_PER_TASK,
-} from "@ebb-ai/core";
+} from "@tidegap/core";
 
 estimateEnergyKwh({
   model: "claude-sonnet-5",
@@ -228,7 +228,7 @@ estimateEnergyKwh();
           <p className="text-sm text-fg-muted">
             Every dispatched task ships a cryptographic signature so
             any consumer can verify, offline and asynchronously, that
-            (1) the receipt was produced by an ebb-ai installation
+            (1) the receipt was produced by an Tidegap installation
             holding the matching private key, and (2) none of the
             receipt&apos;s fields have been tampered with since signing.
             Direct path to B2B ESG export — receipts are auditable
@@ -238,7 +238,7 @@ estimateEnergyKwh();
 
         <div className="space-y-3">
           <p className="text-sm text-fg-muted">
-            Keys live at <code className="rounded bg-bg-elev px-1 font-mono text-xs">~/.ebb-ai/signing.key</code>{" "}
+            Keys live at <code className="rounded bg-bg-elev px-1 font-mono text-xs">~/.tidegap/signing.key</code>{" "}
             (private, <code className="font-mono text-xs">0600</code>) and
             {" "}<code className="rounded bg-bg-elev px-1 font-mono text-xs">signing.key.pub</code>{" "}
             (public). Generated lazily on first dispatch — no opt-in
@@ -259,13 +259,13 @@ estimateEnergyKwh();
             gCO2/kWh at 2026-10-01T17:00 UTC; recommended window for a
             72h deadline 88 gCO2/kWh at 2026-10-02T09:00 UTC. Measured at
             dispatch, from the live feed and recorded in the receipt: 158
-            gCO2/kWh. Price: not available for this run; ebb
+            gCO2/kWh. Price: not available for this run; Tidegap
             has no electricity-price feed, and its sync vs Batch
             list-price comparison needs at least two candidate models.
             Raw output and the reproducer are in{" "}
             <a
               className="text-accent hover:underline"
-              href="https://github.com/Vitalini/ebb-ai/tree/main/docs/examples/2026-09-30-GB-tick"
+              href="https://github.com/tidegap/tidegap/tree/main/docs/examples/2026-09-30-GB-tick"
               target="_blank"
               rel="noreferrer"
             >
@@ -279,11 +279,11 @@ estimateEnergyKwh();
           <p className="mb-2 text-fg">CLI</p>
           <pre className="overflow-x-auto whitespace-pre text-fg">
 {`# Drain due tasks; the receipt uses the region's live grid feed
-$ ebb tick --db <temp> --region GB
+$ tidegap tick --db <temp> --region GB
 tick: 1 inspected, 1 dispatched, 0 failed
 
 # Verify the receipt for a completed task in the local ledger
-$ ebb verify t-ef2354ee-eff0-431c-b11e-6edfcb8299b0 --db <temp>
+$ tidegap verify t-ef2354ee-eff0-431c-b11e-6edfcb8299b0 --db <temp>
 ✓ VALID
 
 task_id           t-ef2354ee-eff0-431c-b11e-6edfcb8299b0
@@ -305,11 +305,11 @@ signed_at         2026-09-30T21:03:34.050Z
 Ed25519 signature verified against canonical payload (512 bytes)
 
 # Verify a receipt JSON file (e.g. as shipped to outputPath)
-$ ebb verify --file ./receipt.json --json
+$ tidegap verify --file ./receipt.json --json
 { "outcome": "valid", "signerPublicKey": "tTpsWuAS52easY0sgqz5E42aen7tdE5otdfLN6F+kxg=", ... }
 
 # Pin the expected signer for B2B/ESG pipelines
-$ ebb verify --file ./inbox/receipt.json --trusted-public-key tTpsWuAS...
+$ tidegap verify --file ./inbox/receipt.json --trusted-public-key tTpsWuAS...
 # exit 0 on match; exit 3 on key-mismatch`}
           </pre>
         </div>
@@ -321,7 +321,7 @@ $ ebb verify --file ./inbox/receipt.json --trusted-public-key tTpsWuAS...
   signReceipt,
   verifyReceipt,
   loadOrCreateSigningKey,
-} from "@ebb-ai/core";
+} from "@tidegap/core";
 
 const keyPair = loadOrCreateSigningKey();
 const signed = signReceipt(receipt, keyPair);
@@ -334,9 +334,9 @@ const result = verifyReceipt(signed);
         <div className="rounded-md border border-rule bg-bg-card p-4 font-mono text-xs leading-relaxed text-fg-muted">
           <p className="mb-2 text-fg">Library (Python — opt-in)</p>
           <pre className="overflow-x-auto whitespace-pre text-fg">
-{`# pip install "ebb-ai[signing]"   (pulls in the cryptography library)
+{`# pip install "tidegap[signing]"   (pulls in the cryptography library)
 
-from ebb_ai import (
+from tidegap import (
     sign_receipt, verify_receipt,
     load_or_create_signing_key, is_signing_available,
 )
@@ -367,15 +367,15 @@ result = verify_receipt(signed)
         </header>
         <div className="grid gap-3 sm:grid-cols-2">
           <PathCard
-            path="~/.ebb-ai/queue.db"
+            path="~/.tidegap/queue.db"
             desc="SQLite ledger — queue + carbon receipts. The CLI, MCP server, and dashboard all read this same file. Read-only from your agent; modifiable from the CLI."
           />
           <PathCard
-            path="~/.ebb-ai/signing.key"
-            desc="Per-installation Ed25519 private key (0600, with `signing.key.pub` alongside). Lazily generated on first dispatch; signs every carbon receipt so consumers can verify offline via `ebb verify`. Local-only — ebb-ai never sends it anywhere. v0.11+."
+            path="~/.tidegap/signing.key"
+            desc="Per-installation Ed25519 private key (0600, with `signing.key.pub` alongside). Lazily generated on first dispatch; signs every carbon receipt so consumers can verify offline via `tidegap verify`. Local-only — Tidegap never sends it anywhere. v0.11+."
           />
           <PathCard
-            path="~/.ebb-ai/telemetry.key"
+            path="~/.tidegap/telemetry.key"
             desc="Local-only 256-bit token + Ed25519 keypair for the (planned) opt-in leaderboard. Never sent. Not generated until you opt in."
           />
         </div>
@@ -388,20 +388,20 @@ result = verify_receipt(signed)
           </p>
           <h2 className="text-2xl font-semibold tracking-tight">Optional API keys</h2>
           <p className="text-sm text-fg-muted">
-            ebb-ai works without any keys (GB is always live via UK National
+            Tidegap works without any keys (GB is always live via UK National
             Grid ESO; everything else falls back to a deterministic mock). Set
             these in your MCP host&apos;s env block to unlock live data for more
             regions.
           </p>
           <p className="text-sm text-fg-muted">
             These environment variables configure the{" "}
-            <strong className="font-semibold text-fg">ebb CLI</strong> and the{" "}
-            <strong className="font-semibold text-fg">@ebb-ai/mcp server</strong>.
+            <strong className="font-semibold text-fg">tidegap CLI</strong> and the{" "}
+            <strong className="font-semibold text-fg">@tidegap/mcp server</strong>.
             The <strong className="font-semibold text-fg">OpenClaw plugin</strong>{" "}
             reads no environment variables at all — configure it through plugin
             config instead, under{" "}
             <code className="font-mono text-[13px]">
-              plugins.entries.ebb.config
+              plugins.entries.tidegap.config
             </code>{" "}
             in your gateway config. Each field below lists the plugin-config key
             that replaces it, and OpenClaw resolves{" "}
@@ -439,7 +439,7 @@ result = verify_receipt(signed)
         </header>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <a
-            href="https://github.com/Vitalini/ebb-ai#architecture"
+            href="https://github.com/tidegap/tidegap#architecture"
             className="rounded-md border border-rule bg-bg-card p-4 transition-colors hover:border-accent/40 hover:bg-accent/5"
           >
             <p className="font-semibold text-fg">Architecture</p>
@@ -449,7 +449,7 @@ result = verify_receipt(signed)
             </p>
           </a>
           <a
-            href="https://github.com/Vitalini/ebb-ai"
+            href="https://github.com/tidegap/tidegap"
             target="_blank"
             rel="noreferrer"
             className="rounded-md border border-rule bg-bg-card p-4 transition-colors hover:border-accent/40 hover:bg-accent/5"
@@ -474,42 +474,42 @@ type Cmd = {
 
 const COMMANDS: Cmd[] = [
   {
-    name: "/ebb-ai:defer",
+    name: "/tidegap:defer",
     args: "<prompt> [--by <when>] [--region <zone>] [--budget <g>]",
     desc: "Queue a task to run at the cleanest grid hour inside the deadline. Returns task_id + scheduled UTC time + region.",
   },
   {
-    name: "/ebb-ai:plan",
+    name: "/tidegap:plan",
     args: "<deadline> [--region <zone>] [--budget <g>]",
     desc: "Preview what window the scheduler would pick — without queueing. Returns chosen hour, savings vs now, top-3 alternatives.",
   },
   {
-    name: "/ebb-ai:check",
+    name: "/tidegap:check",
     args: "[task_id] [--all]",
     desc: "List all tasks (default) or get full detail + carbon receipt for one task. Read-only.",
   },
   {
-    name: "/ebb-ai:cancel",
+    name: "/tidegap:cancel",
     args: "<task_id>",
     desc: "Cancel a queued or scheduled task. Idempotent — completed/failed/cancelled tasks return their existing status.",
   },
   {
-    name: "/ebb-ai:expedite",
+    name: "/tidegap:expedite",
     args: "<task_id>",
     desc: "Dispatch a scheduled task immediately, bypassing the cleanest-window pick. Receipt is tagged intensitySource=expedited.",
   },
   {
-    name: "/ebb-ai:reschedule",
+    name: "/tidegap:reschedule",
     args: "<task_id> <new_deadline>",
     desc: "Re-score a task against a new deadline. Lets you extend (more window for clean hour) or compress (may exceed carbon budget).",
   },
   {
-    name: "/ebb-ai:retry",
+    name: "/tidegap:retry",
     args: "<task_id>",
     desc: "Re-dispatch a task currently in failed status. New receipt overwrites the old. No-op for non-failed tasks.",
   },
   {
-    name: "/ebb-ai:grid",
+    name: "/tidegap:grid",
     args: "<zone> [--hours N]",
     desc: "Show current carbon intensity + next-24h forecast for a region. Useful for deciding now-vs-wait without queueing.",
   },
@@ -525,7 +525,7 @@ const TOOLS: Tool[] = [
   {
     name: "get_grid_forecast",
     access: "read-only",
-    desc: "Hourly carbon-intensity forecast for a region (gCO2/kWh + band). Backs /ebb-ai:grid.",
+    desc: "Hourly carbon-intensity forecast for a region (gCO2/kWh + band). Backs /tidegap:grid.",
   },
   {
     name: "recommend_window",
@@ -535,12 +535,12 @@ const TOOLS: Tool[] = [
   {
     name: "schedule_task",
     access: "write",
-    desc: "Persist a task to the SQLite queue with a deadline. Returns task_id. Backs /ebb-ai:defer.",
+    desc: "Persist a task to the SQLite queue with a deadline. Returns task_id. Backs /tidegap:defer.",
   },
   {
     name: "check_queue_status",
     access: "read-only",
-    desc: "List all tasks or detail for one (with receipt). Backs /ebb-ai:check.",
+    desc: "List all tasks or detail for one (with receipt). Backs /tidegap:check.",
   },
   {
     name: "cancel_task",
@@ -555,17 +555,17 @@ const TOOLS: Tool[] = [
   {
     name: "update_deadline",
     access: "write",
-    desc: "Re-score a task against a new deadline. Backs /ebb-ai:reschedule.",
+    desc: "Re-score a task against a new deadline. Backs /tidegap:reschedule.",
   },
   {
     name: "retry_task",
     access: "write (dispatch)",
-    desc: "Re-dispatch a failed task. Requires a provider API key. Backs /ebb-ai:retry.",
+    desc: "Re-dispatch a failed task. Requires a provider API key. Backs /tidegap:retry.",
   },
   {
     name: "reply_task",
     access: "write (dispatch)",
-    desc: "Continue a completed task: queues a new task that sends the earlier prompt, the reply and your follow-up to the same model. Backs `ebb queue reply`.",
+    desc: "Continue a completed task: queues a new task that sends the earlier prompt, the reply and your follow-up to the same model. Backs `tidegap queue reply`.",
   },
   {
     name: "cancel_all",
@@ -575,15 +575,15 @@ const TOOLS: Tool[] = [
 ];
 
 /**
- * Environment variables are HOST-level configuration: they configure the `ebb`
- * CLI and the `@ebb-ai/mcp` server. The OpenClaw plugin reads no environment
+ * Environment variables are HOST-level configuration: they configure the `tidegap`
+ * CLI and the `@tidegap/mcp` server. The OpenClaw plugin reads no environment
  * variables — `plugin` names the plugin-config field that replaces each one
- * (set under `plugins.entries.ebb.config`; OpenClaw resolves `"${ENV_VAR}"`
+ * (set under `plugins.entries.tidegap.config`; OpenClaw resolves `"${ENV_VAR}"`
  * there, so the gateway can still source the value from the environment).
  */
 const ENVS: Array<{ name: string; desc: string; plugin: string }> = [
   {
-    name: "EBB_EIA_API_KEY",
+    name: "TIDEGAP_EIA_API_KEY",
     plugin: "eiaApiKey",
     desc: "U.S. Energy Information Administration. Unlocks live AVERAGE-emissions data for the six US ISOs (CISO, ERCO, ISNE, MIDA-PJM, NY-NYIS, MIDW-MISO). Free at eia.gov/opendata/register.php.",
   },
@@ -593,19 +593,19 @@ const ENVS: Array<{ name: string; desc: string; plugin: string }> = [
     desc: "WattTime v3 account. Unlocks live MARGINAL-emissions (co2_moer) forecasts for the US ISOs — the honest signal for time-shifting. Takes precedence over EIA where covered and falls through to EIA on any error; the marginal signal is disclosed as signalType:\"marginal\" on forecasts and receipts. Free account at watttime.org.",
   },
   {
-    name: "EBB_ENTSOE_SECURITY_TOKEN",
+    name: "TIDEGAP_ENTSOE_SECURITY_TOKEN",
     plugin: "entsoeSecurityToken",
     desc: "ENTSO-E Transparency Platform. Unlocks live data for European zones (FR, DE, ES, IT, NL). Free at transparency.entsoe.eu.",
   },
   {
-    name: "EBB_ELECTRICITY_MAPS_API_KEY",
+    name: "TIDEGAP_ELECTRICITY_MAPS_API_KEY",
     plugin: "electricityMapsApiKey",
     desc: "Electricity Maps free tier (100 req/day). Universal fallback for any other zone. Free at electricitymaps.com/free-tier-api.",
   },
   {
     name: "ANTHROPIC_API_KEY · OPENAI_API_KEY",
     plugin: "anthropicApiKey · openaiApiKey",
-    desc: "Required only if you want ebb-ai to actually dispatch provider calls (vs. just queueing them). Either is enough. anthropic and openai can auto-route through a 50%-cheaper Batch API (projected, provider list price) when the deadline allows.",
+    desc: "Required only if you want Tidegap to actually dispatch provider calls (vs. just queueing them). Either is enough. anthropic and openai can auto-route through a 50%-cheaper Batch API (projected, provider list price) when the deadline allows.",
   },
   {
     name: "GEMINI_API_KEY · GOOGLE_API_KEY",

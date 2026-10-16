@@ -1,11 +1,11 @@
 {
   "_comment": "Drop this stanza into ~/.cursor/mcp.json (merge with any existing mcpServers).",
   "mcpServers": {
-    "ebb-ai": {
+    "tidegap": {
       "command": "node",
-      "args": ["/absolute/path/to/ebb-ai/packages/mcp-server/dist/server.js"],
+      "args": ["/absolute/path/to/tidegap/packages/mcp-server/dist/server.js"],
       "env": {
-        "EBB_ELECTRICITY_MAPS_API_KEY": "optional — falls back to deterministic mock data without one"
+        "TIDEGAP_ELECTRICITY_MAPS_API_KEY": "optional — falls back to deterministic mock data without one"
       }
     }
   }

@@ -1,9 +1,12 @@
 {
   "mcpServers": {
-    "ebb-ai": {
+    "tidegap": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@ebb-ai/mcp"]
+      "args": [
+        "-y",
+        "@tidegap/mcp"
+      ]
     }
   }
 }

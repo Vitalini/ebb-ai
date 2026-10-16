@@ -2,6 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "installCommand": "cd ../.. && pnpm install --frozen-lockfile=false",
-  "buildCommand": "cd ../.. && pnpm --filter @ebb-ai/core build && pnpm --filter @ebb-ai/web build",
+  "buildCommand": "cd ../.. && pnpm --filter @tidegap/core build && pnpm --filter @tidegap/web build",
   "outputDirectory": ".next"
 }

@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { mockGridFeed, TaskStore, type TaskRecord } from "@ebb-ai/core";
+import { mockGridFeed, TaskStore, type TaskRecord } from "@tidegap/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { createEbbServer } from "../src/server.js";
 
@@ -64,7 +64,7 @@ describe("check_queue_status — carbon budget block", () => {
   let dbPath: string;
 
   function fresh(): void {
-    dir = mkdtempSync(join(tmpdir(), "ebb-mcp-budget-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-mcp-budget-"));
     dbPath = join(dir, "queue.db");
     cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
   }

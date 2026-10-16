@@ -1,12 +1,40 @@
-# Hub-Submission Log — ebb-ai
+# Hub-Submission Log — Tidegap
 
-Single source of truth for "where have we submitted ebb-ai, what's the
+Single source of truth for "where have we submitted Tidegap, what's the
 status, when did we last touch it." Update on every submission and on
 every status change (approved / rejected / merged).
+
+The project was called Ebb AI (`ebb-ai`) until 0.18. Rows dated before
+2026-10-16 are history and keep the old names and URLs.
 
 ## Format
 
 Each row: `YYYY-MM-DD | platform | action | URL | status | notes`.
+
+## Rename to Tidegap (0.18)
+
+Steps from the Release and Deprecation Runbook in
+`docs/plans/2026-10-16-1008-feat-rebrand-tidegap-plan.md`. Update each row
+when it runs.
+
+| Date | Platform | Action | URL | Status | Notes |
+|---|---|---|---|---|---|
+| - | GitHub | Create org `tidegap`, transfer `Vitalini/ebb-ai`, rename the repo to `tidegap`; re-upload the social preview; re-check the 20 topics | https://github.com/tidegap/tidegap | not started | Do not create a new `Vitalini/ebb-ai` repo: it breaks the redirect |
+| - | npm | Publish `@tidegap/{core,cli,mcp}` 0.18.0 from the reviewed PR head | https://www.npmjs.com/org/tidegap | not started | Before merge |
+| - | PyPI | Publish `tidegap` 0.18.0 | https://pypi.org/project/tidegap/ | not started | |
+| - | MCP Registry | Publish `io.github.tidegap/tidegap` 0.18.0 | https://registry.modelcontextprotocol.io | not started | npm 0.18.0 first; org membership public |
+| - | npm | Publish shims `@ebb-ai/{core,cli,mcp}` 0.17.1, then `npm deprecate` | https://www.npmjs.com/org/ebb-ai | not started | `compat/npm/*` |
+| - | PyPI | Publish shim `ebb-ai` 0.17.1 | https://pypi.org/project/ebb-ai/ | not started | `compat/pypi/ebb-ai` |
+| - | MCP Registry | Final `io.github.Vitalini/ebb-ai` 0.17.1 pointing at the new id; set old versions `deprecated` | https://registry.modelcontextprotocol.io | not started | Confirm the `mcp-publisher` status command |
+| - | ClawHub | Publish `@vitalini/tidegap` 0.18.0 (runtime id `tidegap` locks on first publish); point the old `@vitalini/ebb` description at it | https://clawhub.ai/plugins/@vitalini/tidegap | not started | Do not delete `@vitalini/ebb` |
+| - | Vercel | Reconnect git to `tidegap/tidegap`; add `tidegap.com` and `www.tidegap.com` (www primary); add `TIDEGAP_*` env vars | https://www.tidegap.com | not started | Before merge |
+| - | Vercel | `ebb-ai.com` and `www.ebb-ai.com` 301 to `https://www.tidegap.com`, path kept | https://www.ebb-ai.com | not started | After merge; keep the domain 12 months |
+| - | Google Search Console, Bing | Resubmit sitemap; change of address for the old property | https://search.google.com/search-console | not started | |
+| - | mcp.so | Edit the entry: name, URL, config JSON with `@tidegap/mcp` | https://mcp.so/server/ebb-ai | not started | Entry already stale (v0.7) |
+| - | punkpeye/awesome-mcp-servers | Update PR #16076: name `tidegap/tidegap`, new link and Glama badge path | https://github.com/punkpeye/awesome-mcp-servers/pull/16076 | not started | |
+| - | Green-Software-Foundation/awesome-green-software | One-line PR renaming the entry and link | https://github.com/Green-Software-Foundation/awesome-green-software | not started | PR #215 merged to `dev` |
+| - | Glama | Re-check the server page after the transfer; claim `tidegap/tidegap` if a new entry appears | https://glama.ai/mcp/servers/tidegap/tidegap | not started | |
+| - | ComposioHQ/awesome-claude-skills | Update PR #877 with the renamed entry, alphabetical position near "T" | https://github.com/ComposioHQ/awesome-claude-skills/pull/877 | not started | |
 
 ## Search engines
 

@@ -1,22 +1,22 @@
 #!/usr/bin/env node
 /**
- * Dispatcher smoke test for @vitalini/ebb.
+ * Dispatcher smoke test for @vitalini/tidegap.
  *
  * Schedules a provider-call task, forces its window into the past, runs
  * one Scheduler.tick with a stub adapter, and confirms the task does NOT
  * stay `scheduled` after it is due. Also checks cross-instance cancel.
  *
- * Exercises @ebb-ai/core through Node's built-in node:sqlite — there is
- * no better-sqlite3 build step. Run with: `pnpm --filter @vitalini/ebb smoke`.
+ * Exercises @tidegap/core through Node's built-in node:sqlite — there is
+ * no better-sqlite3 build step. Run with: `pnpm --filter @vitalini/tidegap smoke`.
  */
 
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { mockGridFeed, Scheduler, TaskStore } from "@ebb-ai/core";
+import { mockGridFeed, Scheduler, TaskStore } from "@tidegap/core";
 
-const tmp = mkdtempSync(join(tmpdir(), "ebb-smoke-"));
+const tmp = mkdtempSync(join(tmpdir(), "tidegap-smoke-"));
 const dbPath = join(tmp, "queue.db");
 
 function fail(msg) {

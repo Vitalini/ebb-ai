@@ -22,7 +22,7 @@ import type {
 export interface OpenAIAdapterOptions {
   /**
    * API key. Supplied by the host — this library never reads the environment.
-   * The `ebb` CLI and `@ebb-ai/mcp` server read `OPENAI_API_KEY` and pass it
+   * The `tidegap` CLI and `@tidegap/mcp` server read `OPENAI_API_KEY` and pass it
    * here; the OpenClaw plugin passes `openaiApiKey` from plugin config.
    */
   apiKey?: string;
@@ -151,7 +151,7 @@ export class OpenAIAdapter implements ProviderAdapter {
       .map((prompt, i) => {
         const messages = chatMessages(prompt, options);
         const body = {
-          custom_id: `ebb-${i}`,
+          custom_id: `tidegap-${i}`,
           method: "POST",
           url: "/v1/chat/completions",
           body: {
@@ -283,7 +283,7 @@ export class OpenAIAdapter implements ProviderAdapter {
         "OpenAIAdapter: `openai` SDK is not installed. Run `pnpm add openai`.",
       );
     }
-    // maxRetries: 0 — ebb-ai's scheduler owns the retry policy
+    // maxRetries: 0 — Tidegap's scheduler owns the retry policy
     // (retryWithBackoff); letting the SDK retry too multiplies attempts
     // and can double-bill ambiguous network errors.
     this.client = new OpenAI({ apiKey: this.apiKey, maxRetries: 0 });

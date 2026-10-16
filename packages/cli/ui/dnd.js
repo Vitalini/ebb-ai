@@ -7,7 +7,7 @@
 import { dayLabel, dayOffset, h, parse, relDay } from "./dom.js";
 import { dayBounds } from "./dialog.js";
 
-const MIME = "text/x-ebb-task";
+const MIME = "text/x-tidegap-task";
 let drag = null;
 
 export function isDragging() {

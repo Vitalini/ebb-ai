@@ -15,9 +15,9 @@
 <!-- How did you verify this? Specific commands or scenarios. -->
 
 ```
-pnpm --filter @ebb-ai/core test
-pnpm --filter @ebb-ai/mcp test
-pnpm --filter @ebb-ai/cli test
+pnpm --filter @tidegap/core test
+pnpm --filter @tidegap/mcp test
+pnpm --filter @tidegap/cli test
 ```
 
 ## Checklist

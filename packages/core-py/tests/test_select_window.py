@@ -23,15 +23,15 @@ from typing import Any
 
 import pytest
 
-from ebb_ai import (
+from tidegap import (
     DeferOptions,
     ProviderCallSpec,
     Scheduler,
     recommend_window,
     select_window,
 )
-from ebb_ai.grid import GridFeed
-from ebb_ai.types import Band, GridForecast, GridForecastEntry
+from tidegap.grid import GridFeed
+from tidegap.types import Band, GridForecast, GridForecastEntry
 
 
 def _seeded(seed: int) -> Callable[[], float]:
@@ -257,7 +257,7 @@ async def test_enqueue_provider_call_spreads_across_hours() -> None:
 
 
 def test_default_rng_returns_unit_interval() -> None:
-    from ebb_ai.scheduler import _default_rng
+    from tidegap.scheduler import _default_rng
 
     for _ in range(100):
         v = _default_rng()

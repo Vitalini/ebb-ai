@@ -24,8 +24,8 @@ from typing import Any
 import httpx
 import pytest
 
-import ebb_ai.scheduler as scheduler_mod
-from ebb_ai import (
+import tidegap.scheduler as scheduler_mod
+from tidegap import (
     DeferOptions,
     ProviderCallSpec,
     Scheduler,
@@ -35,14 +35,14 @@ from ebb_ai import (
     pick_best_window,
     recommend_window,
 )
-from ebb_ai.providers.base import (
+from tidegap.providers.base import (
     BatchHandle,
     DispatchOptions,
     DispatchResult,
     ProviderAdapter,
 )
-from ebb_ai.providers.openai import OpenAIAdapter
-from ebb_ai.types import GridForecast, GridForecastEntry
+from tidegap.providers.openai import OpenAIAdapter
+from tidegap.types import GridForecast, GridForecastEntry
 
 # --------------------------------------------------------------------- #
 # Helpers
@@ -997,7 +997,7 @@ def test_default_patterns_are_vendor_shaped() -> None:
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX permission bits")
 async def test_ledger_chmod_0600_dir_0700(tmp_path: Path) -> None:
-    dirpath = tmp_path / "ebb-home"
+    dirpath = tmp_path / "tidegap-home"
     dirpath.mkdir()
     db = dirpath / "queue.sqlite"
     async with Scheduler(feed=mock_grid_feed(), db_path=str(db)):

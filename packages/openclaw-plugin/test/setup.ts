@@ -2,7 +2,7 @@
  * Vitest setup — suppress the module-load startup dispatcher.
  *
  * Importing the plugin entry kicks `bootstrapDispatcherOnStartup()`, whose
- * deferred callback would open the DEFAULT `~/.ebb-ai/queue.db`. The suite must
+ * deferred callback would open the DEFAULT `~/.tidegap/queue.db`. The suite must
  * stay hermetic on temp DBs, so we opt out here.
  *
  * This used to be `EBB_DISABLE_STARTUP_DISPATCH=1` in `vitest.config.ts`. The
@@ -17,3 +17,14 @@
 import { suppressStartupDispatch } from "../src/index.js";
 
 suppressStartupDispatch();
+
+// No test may post a real desktop notification: the `os` delivery mode spawns
+// through this stub unless a test installs its own spawner.
+import { EventEmitter } from "node:events";
+import { __setDefaultSpawnForTest } from "../src/delivery.js";
+
+__setDefaultSpawnForTest((() => {
+  const child = new EventEmitter();
+  queueMicrotask(() => child.emit("close", 0));
+  return child;
+}) as never);

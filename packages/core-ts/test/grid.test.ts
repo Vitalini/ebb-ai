@@ -202,7 +202,7 @@ describe("multiSourceGridFeed", () => {
 
 describe("eiaFeed", () => {
   it("returns mock when no API key is configured", async () => {
-    delete process.env.EBB_EIA_API_KEY;
+    delete process.env.TIDEGAP_EIA_API_KEY;
     const fc = await eiaFeed().fetchForecast("US-CAL-CISO", 6);
     expect(fc.source).toBe("mock");
     expect(fc.entries.length).toBe(6);
@@ -285,7 +285,7 @@ describe("eiaFeed", () => {
 
 describe("entsoeFeed", () => {
   it("returns mock when no security token is configured", async () => {
-    delete process.env.EBB_ENTSOE_SECURITY_TOKEN;
+    delete process.env.TIDEGAP_ENTSOE_SECURITY_TOKEN;
     const fc = await entsoeFeed().fetchForecast("FR", 6);
     expect(fc.source).toBe("mock");
   });

@@ -290,7 +290,7 @@ describe("multi-process safety (§1.1–1.4)", () => {
   let dbPath: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-audit-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-audit-"));
     dbPath = join(dir, "queue.db");
   });
   afterEach(() => {
@@ -494,7 +494,7 @@ describe("ledger permissions and redaction (§0.8)", () => {
   let dbPath: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-perm-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-perm-"));
     dbPath = join(dir, "queue.db");
   });
   afterEach(() => {

@@ -5,7 +5,7 @@
  * scheduler signs each receipt with a per-installation Ed25519 keypair
  * so any consumer can verify, offline and asynchronously, that:
  *
- *   1. The receipt was produced by an `ebb-ai` installation holding
+ *   1. The receipt was produced by an `tidegap` installation holding
  *      the matching private key (cryptographic origin authentication).
  *   2. None of the receipt's fields have been tampered with since the
  *      moment of signing (integrity). As of v0.12 this includes
@@ -20,12 +20,12 @@
  *
  * Key lifecycle is local-first by design:
  *
- *   - Keys live at `~/.ebb-ai/signing.key` (private, 0600) +
+ *   - Keys live at `~/.tidegap/signing.key` (private, 0600) +
  *     `signing.key.pub` (public, 0644).
  *   - The pair is generated lazily on the first call to
  *     `loadOrCreateSigningKey()`. There is no opt-in flow — the goal
  *     is that every receipt is signable by default.
- *   - The keys are NEVER sent anywhere by ebb-ai itself. Verification
+ *   - The keys are NEVER sent anywhere by Tidegap itself. Verification
  *     consumers bundle the receipt's `signerPublicKey` along with the
  *     receipt; downstream ESG-export pipelines can pin the key on
  *     first sight.
@@ -68,14 +68,14 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
+import { resolveTidegapHome } from "./paths.js";
 import type { CarbonReceipt } from "./types.js";
 
 /** Override the keypair location (mainly for tests). */
 export interface SigningKeyOptions {
-  /** Absolute path to the private key (PEM). Defaults to `~/.ebb-ai/signing.key`. */
+  /** Absolute path to the private key (PEM). Defaults to `~/.tidegap/signing.key`. */
   privateKeyPath?: string;
 }
 
@@ -90,7 +90,7 @@ export interface SigningKeyPair {
 
 /** Default location of the local signing private key. */
 export function defaultSigningKeyPath(): string {
-  return join(homedir(), ".ebb-ai", "signing.key");
+  return join(resolveTidegapHome(), "signing.key");
 }
 
 /**

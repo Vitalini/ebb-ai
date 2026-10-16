@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from ebb_ai.providers import (
+from tidegap.providers import (
     AnthropicAdapter,
     DispatchOptions,
     GeminiAdapter,
@@ -23,8 +23,8 @@ from ebb_ai.providers import (
     ProviderAdapter,
     ProviderRefusalError,
 )
-from ebb_ai.providers.anthropic import _extract_text as _extract_anth
-from ebb_ai.providers.openai import _extract_text as _extract_oai
+from tidegap.providers.anthropic import _extract_text as _extract_anth
+from tidegap.providers.openai import _extract_text as _extract_oai
 
 # --------------------------------------------------------------------- #
 # Anthropic
@@ -590,7 +590,7 @@ async def test_provider_runs_under_scheduler() -> None:
     """
     from datetime import UTC, datetime, timedelta
 
-    from ebb_ai import DeferOptions, Scheduler, mock_grid_feed
+    from tidegap import DeferOptions, Scheduler, mock_grid_feed
 
     client = _make_anthropic_client()
     adapter = AnthropicAdapter(client=client)

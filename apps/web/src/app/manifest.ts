@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "ebb-ai — Carbon-aware scheduling for AI workflows",
-    short_name: "ebb-ai",
+    name: "Tidegap — Carbon-aware scheduling for AI workflows",
+    short_name: "Tidegap",
     description:
       "Defer non-urgent AI tasks to the cleanest grid window inside your deadline. Per-task carbon receipts, Anthropic + OpenAI Batch APIs, durable SQLite queue.",
     start_url: "/",

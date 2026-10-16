@@ -61,7 +61,7 @@ describe("series rollover", () => {
   }
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-series-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-series-"));
     dbPath = join(dir, "queue.db");
   });
   afterEach(() => {
@@ -318,7 +318,7 @@ describe("series rollover", () => {
 
 describe("quota_reset series and the quota sweep", () => {
   it("the sweep re-resolves a successor once its reset passed", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "ebb-series-sweep-"));
+    const dir = mkdtempSync(join(tmpdir(), "tidegap-series-sweep-"));
     const dbPath = join(dir, "queue.db");
     const quota: QuotaResetConfig = {
       claude: { label: "claude", weekday: 4, hour: 9, minute: 0, timeZone: "UTC", marginH: 2 },

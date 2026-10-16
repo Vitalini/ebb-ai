@@ -1,5 +1,5 @@
 ---
-title: Repo and site images are rendered from real run data, drift-checked by hash, and the brand is "Ebb AI" in prose only
+title: Repo and site images are rendered from real run data, drift-checked by hash, and the brand is "Tidegap" in prose only
 date: 2026-10-15
 category: tooling-decisions
 module: scripts/render-images.mjs, scripts/check-images.mjs, assets/templates
@@ -15,7 +15,7 @@ resolution_type: tooling_addition
 tags: [images, playwright, drift-check, claims, brand, og-image]
 ---
 
-# Repo and site images are rendered from real run data, drift-checked by hash, and the brand is "Ebb AI" in prose only
+# Repo and site images are rendered from real run data, drift-checked by hash, and the brand is "Tidegap" in prose only
 
 ## Context
 
@@ -23,7 +23,7 @@ PR #46 added three PNGs (social preview, README hero, OG card). All show one rea
 
 ## Guidance
 
-**Render.** `pnpm gen:images` runs `scripts/render-images.mjs`. It uses `playwright-core` (exact pin 1.63.0) with the installed Chrome (`channel: "chrome"`, fallback `EBB_CHROME_PATH`). Templates live in `assets/templates/`. They use system font stacks and no network. Two renders on one machine give identical bytes.
+**Render.** `pnpm gen:images` runs `scripts/render-images.mjs`. It uses `playwright-core` (exact pin 1.63.0) with the installed Chrome (`channel: "chrome"`, fallback `TIDEGAP_CHROME_PATH`). Templates live in `assets/templates/`. They use system font stacks and no network. Two renders on one machine give identical bytes.
 
 **Labels come from data.** The chart is computed from the forecast. Before rendering, the script asserts peak 183 (2026-10-01 17:00Z), recommended 88 (2026-10-02 09:00Z), and that the recommended hour is inside the clean band (the `select-window.ts` rule). Mark labels take their numbers from the asserted values, not from template text. A failed assertion aborts the render, so an image cannot disagree with `docs/claims.md`. Adding a label means adding an assertion and a claims entry.
 
@@ -33,7 +33,7 @@ Why not re-render in CI: pixels depend on the OS font rasteriser and the Chrome 
 
 **Hash exactly the files the renderer reads.** Use the explicit list (`base.css`, the three templates, the render script, the data file). The first version hashed the whole templates directory. A Finder `.DS_Store` or editor swap file then broke the hash, and a re-render recorded the junk, which failed CI. Also compare `realpathSync` values in the entry-point guard; a symlinked invocation otherwise exits 0 without checking anything.
 
-**Brand rule.** "Ebb AI" is the display name in prose: README H1 and first sentence, package README headings, site title and metadata, JSON-LD names, nav wordmark, about page. `ebb-ai` stays in identifiers: package names, commands, URLs, paths, `docs/claims.md`. Do not run a global replace. Replace only prose, and check that URLs and code spans stayed intact.
+**Brand rule.** "Tidegap" is the display name in prose: README H1 and first sentence, package README headings, site title and metadata, JSON-LD names, nav wordmark, about page. `tidegap` is the identifier form: package names, commands, URLs, paths. (Until 0.17 the product was "Ebb AI" / `ebb-ai`; the 0.18 rename kept the old names only in compatibility code, migration notes and history.) Do not run a global replace. Replace only prose, and check that URLs and code spans stayed intact.
 
 **New OG URL.** The card is `/og-image.png`, not the old `/og.png`. A new URL forces X, Slack and LinkedIn to refetch their cached card. The old file was deleted.
 

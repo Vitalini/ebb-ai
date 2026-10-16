@@ -13,7 +13,7 @@ from typing import Any
 import httpx
 import pytest
 
-from ebb_ai.providers import (
+from tidegap.providers import (
     DispatchOptions,
     GeminiAdapter,
     OllamaAdapter,
@@ -123,7 +123,7 @@ async def test_gemini_non_200_raises() -> None:
 
 
 def test_gemini_has_no_batch_override() -> None:
-    from ebb_ai.scheduler import _has_batch_support
+    from tidegap.scheduler import _has_batch_support
 
     adapter = GeminiAdapter(api_key="k")
     # Base stubs are inherited (not overridden) → not batch-capable.
@@ -197,7 +197,7 @@ async def test_ollama_non_200_raises() -> None:
 
 
 def test_ollama_has_no_batch_override() -> None:
-    from ebb_ai.scheduler import _has_batch_support
+    from tidegap.scheduler import _has_batch_support
 
     assert _has_batch_support(OllamaAdapter()) is False
 
@@ -215,8 +215,8 @@ def test_ollama_is_provider() -> None:
 async def test_enqueue_accepts_gemini_and_ollama_rejects_unknown() -> None:
     from datetime import UTC, datetime, timedelta
 
-    from ebb_ai import DeferOptions, Scheduler, mock_grid_feed
-    from ebb_ai.types import ProviderCallSpec
+    from tidegap import DeferOptions, Scheduler, mock_grid_feed
+    from tidegap.types import ProviderCallSpec
 
     opts = DeferOptions(
         deadline=(datetime.now(UTC) + timedelta(hours=1)).isoformat()

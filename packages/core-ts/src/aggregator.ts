@@ -3,7 +3,7 @@
  * dashboard and CLI surface.
  *
  * Inputs are TaskRecord rows read from a TaskStore (typically
- * `~/.ebb-ai/queue.db`). Output is pure data — no I/O. Renderers
+ * `~/.tidegap/queue.db`). Output is pure data — no I/O. Renderers
  * (CLI / dashboard) layer formatting on top.
  *
  * Scope (local-only): aggregates exactly what is stored on receipts
@@ -215,7 +215,7 @@ export function achievements(
     {
       id: "first-deferral",
       label: "🌱  First Deferral",
-      description: "Queue your first ebb-ai task.",
+      description: "Queue your first Tidegap task.",
       unlocked: stats.taskCount >= 1,
     },
     {

@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from ebb_ai import (
+from tidegap import (
     CarbonBudgetExceededError,
     DeferOptions,
     InvalidDeadlineError,
@@ -26,8 +26,8 @@ from ebb_ai import (
     mock_grid_feed,
     pick_best_window,
 )
-from ebb_ai.providers import AnthropicAdapter
-from ebb_ai.types import GridForecastEntry
+from tidegap.providers import AnthropicAdapter
+from tidegap.types import GridForecastEntry
 
 
 def _in_hours(h: float) -> datetime:

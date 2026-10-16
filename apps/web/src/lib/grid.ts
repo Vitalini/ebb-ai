@@ -1,11 +1,11 @@
 /**
- * Grid carbon-intensity for the dashboard — a thin adapter over @ebb-ai/core.
+ * Grid carbon-intensity for the dashboard — a thin adapter over @tidegap/core.
  *
  * Until audit §2.3 this file carried a ~500-line hand-ported copy of
  * `packages/core-ts/src/grid.ts` (mock curve, Electricity Maps / UK / EIA /
  * ENTSO-E fetchers, XML parser, emission factors, per-zone routing). The
  * dashboard is now a real consumer of core: all of that lives in
- * `@ebb-ai/core/grid` (a browser-safe subpath — its import graph is just the
+ * `@tidegap/core/grid` (a browser-safe subpath — its import graph is just the
  * generated data tables plus the shared types, no Node built-ins), reached
  * here through `buildDefaultGridFeed()`.
  *
@@ -16,12 +16,13 @@
  *     also reports the chosen entry's offset for chart highlighting.
  *   - `intensityToGrams`: a rounded single-number projection for the UI.
  *
- * `@ebb-ai/core` is environment-pure — it reads no environment variables and
+ * `@tidegap/core` is environment-pure — it reads no environment variables and
  * takes credentials as arguments. The dashboard is a HOST, so it reads the
- * feed env vars here (EBB_EIA_API_KEY, EBB_ENTSOE_SECURITY_TOKEN,
- * EBB_ELECTRICITY_MAPS_API_KEY, and WATTTIME_USERNAME/WATTTIME_PASSWORD for
- * the US ISOs' marginal feed) and injects them into `buildDefaultGridFeed`,
- * which falls back to the deterministic mock so the dashboard never goes dark.
+ * feed env vars here (TIDEGAP_EIA_API_KEY, TIDEGAP_ENTSOE_SECURITY_TOKEN,
+ * TIDEGAP_ELECTRICITY_MAPS_API_KEY, and WATTTIME_USERNAME/WATTTIME_PASSWORD for
+ * the US ISOs' marginal feed; the 0.17 EBB_* names are read as a fallback)
+ * and injects them into `buildDefaultGridFeed`, which falls back to the
+ * deterministic mock so the dashboard never goes dark.
  *
  * This module is server-only (the env reads run in the Next.js server
  * runtime); no credential ever reaches the browser bundle.
@@ -29,8 +30,8 @@
 
 import { unstable_cache } from "next/cache";
 
-import { buildDefaultGridFeed } from "@ebb-ai/core/grid";
-import { gramsForIntensity } from "@ebb-ai/core/energy";
+import { buildDefaultGridFeed } from "@tidegap/core/grid";
+import { gramsForIntensity } from "@tidegap/core/energy";
 
 import type { GridForecast, GridForecastEntry } from "./types";
 
@@ -41,13 +42,35 @@ import type { GridForecast, GridForecastEntry } from "./types";
  * key or failure → deterministic mock. Each leaf reports its own `source`,
  * so the UI can still distinguish "live" from "mock".
  */
+const fellBack: string[] = [];
+
+/** `TIDEGAP_<name>`, else the 0.17 `EBB_<name>` (recorded for one log line). */
+function pick(current: string | undefined, legacy: string | undefined, name: string): string | undefined {
+  if (current) return current;
+  if (legacy) fellBack.push(`EBB_${name} -> TIDEGAP_${name}`);
+  return legacy;
+}
+
 const feed = buildDefaultGridFeed({
-  electricityMapsApiKey: process.env.EBB_ELECTRICITY_MAPS_API_KEY,
-  eiaApiKey: process.env.EBB_EIA_API_KEY,
-  entsoeSecurityToken: process.env.EBB_ENTSOE_SECURITY_TOKEN,
+  electricityMapsApiKey: pick(
+    process.env.TIDEGAP_ELECTRICITY_MAPS_API_KEY,
+    process.env.EBB_ELECTRICITY_MAPS_API_KEY,
+    "ELECTRICITY_MAPS_API_KEY",
+  ),
+  eiaApiKey: pick(process.env.TIDEGAP_EIA_API_KEY, process.env.EBB_EIA_API_KEY, "EIA_API_KEY"),
+  entsoeSecurityToken: pick(
+    process.env.TIDEGAP_ENTSOE_SECURITY_TOKEN,
+    process.env.EBB_ENTSOE_SECURITY_TOKEN,
+    "ENTSOE_SECURITY_TOKEN",
+  ),
   wattTimeUsername: process.env.WATTTIME_USERNAME,
   wattTimePassword: process.env.WATTTIME_PASSWORD,
 });
+
+if (fellBack.length > 0) {
+  // One line per server process; the EBB_* names stop working in 0.19.
+  console.warn(`tidegap: rename ${fellBack.join(", ")}; the EBB_* names stop working in 0.19.`);
+}
 
 /**
  * Fetch a forecast for `region` over `hours`, routed across the configured
@@ -122,7 +145,7 @@ export function pickBestWindow(
  *
  * `model` is optional — without it, the function returns the legacy
  * flat-task estimate (matches the per-region map cards). With a model, it uses
- * the per-model Wh/token table from `@ebb-ai/core/energy`.
+ * the per-model Wh/token table from `@tidegap/core/energy`.
  */
 export function intensityToGrams(gCo2PerKwh: number, model?: string): number {
   return Math.round(gramsForIntensity(gCo2PerKwh, { model }) * 10) / 10;

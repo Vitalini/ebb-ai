@@ -1,6 +1,6 @@
 {
-  "name": "@ebb-ai/core",
-  "version": "0.17.0",
+  "name": "@tidegap/core",
+  "version": "0.18.0",
   "description": "Carbon-aware scheduling for agentic AI workflows — core TypeScript library.",
   "license": "Apache-2.0",
   "author": "Vitalii Borovyk",
@@ -62,7 +62,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Vitalini/ebb-ai.git",
+    "url": "https://github.com/tidegap/tidegap.git",
     "directory": "packages/core-ts"
   },
   "publishConfig": {

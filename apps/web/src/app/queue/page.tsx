@@ -3,7 +3,7 @@
  *
  * The site is read-only and doesn't have access to your local
  * SQLite ledger. This page explains the queue lifecycle, the status
- * vocabulary, and how to inspect it locally with `ebb ui` and the CLI.
+ * vocabulary, and how to inspect it locally with `tidegap ui` and the CLI.
  * No synthetic counters, no fake task list.
  */
 
@@ -13,8 +13,8 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Scheduler queue",
   description:
-    "How ebb-ai's task queue works — seven statuses, one SQLite file, a local task page (ebb ui) and the CLI. No telemetry; your queue is your queue.",
-  alternates: { canonical: "https://www.ebb-ai.com/queue" },
+    "How Tidegap's task queue works — seven statuses, one SQLite file, a local task page (tidegap ui) and the CLI. No telemetry; your queue is your queue.",
+  alternates: { canonical: "https://www.tidegap.com/queue" },
 };
 
 const STATUSES: Array<{ name: string; description: string }> = [
@@ -46,7 +46,7 @@ const STATUSES: Array<{ name: string; description: string }> = [
   {
     name: "failed",
     description:
-      "Provider returned an error. The reason is persisted; the /ebb-ai:retry slash command (or the retry_task MCP tool) re-dispatches.",
+      "Provider returned an error. The reason is persisted; the /tidegap:retry slash command (or the retry_task MCP tool) re-dispatches.",
   },
   {
     name: "cancelled",
@@ -68,7 +68,7 @@ export default function QueuePage() {
         <p className="max-w-2xl text-base leading-relaxed text-fg-muted">
           Every task — pending, scheduled, completed, failed,
           cancelled — lives in{" "}
-          <code className="rounded bg-bg-elev px-1 font-mono text-sm">~/.ebb-ai/queue.db</code>
+          <code className="rounded bg-bg-elev px-1 font-mono text-sm">~/.tidegap/queue.db</code>
           . The Claude Code plugin, the OpenClaw plugin, the MCP
           server, and the CLI all read and write this same file.
           Inspect it however you like.
@@ -90,9 +90,9 @@ export default function QueuePage() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-2xl font-bold tracking-tight">See it on your machine: ebb ui</h2>
+        <h2 className="text-2xl font-bold tracking-tight">See it on your machine: tidegap ui</h2>
         <p className="leading-relaxed text-fg-muted">
-          <code className="rounded bg-bg-elev px-1 font-mono text-sm">ebb ui</code>{" "}
+          <code className="rounded bg-bg-elev px-1 font-mono text-sm">tidegap ui</code>{" "}
           opens a local page with three views: a timeline of queued tasks
           on the forecast curve (tasks that must run before your weekly
           quota resets are listed as their own group), an inbox of finished
@@ -109,12 +109,12 @@ export default function QueuePage() {
           forecast.
         </p>
         <CodeBlock>
-{`ebb ui
-ebb ui: http://127.0.0.1:53817/#token=<random, per run>
+{`tidegap ui
+tidegap ui: http://127.0.0.1:53817/#token=<random, per run>
 Serving on 127.0.0.1 only. The link carries a one-run access token; do not share it. Press Ctrl-C to stop.`}
         </CodeBlock>
         <p className="leading-relaxed text-fg-muted">
-          <code className="rounded bg-bg-elev px-1 font-mono text-sm">ebb tick</code>{" "}
+          <code className="rounded bg-bg-elev px-1 font-mono text-sm">tidegap tick</code>{" "}
           also posts a desktop notification when a task completes or
           fails, and the Claude Code plugin prints one line at session
           start when finished tasks are unread.
@@ -125,22 +125,22 @@ Serving on 127.0.0.1 only. The link carries a one-run access token; do not share
         <h2 className="text-2xl font-bold tracking-tight">Inspect from the CLI</h2>
         <CodeBlock>
 {`# All tasks (any status)
-ebb queue list
+tidegap queue list
 
 # Filter by status, deadline kind, or unread results
-ebb queue list --status scheduled
-ebb queue list --kind quota_reset
-ebb queue list --unread
+tidegap queue list --status scheduled
+tidegap queue list --kind quota_reset
+tidegap queue list --unread
 
 # One task: prompt, result, receipt (marks it read)
-ebb queue show <task_id>
+tidegap queue show <task_id>
 
 # Receipts only (completed tasks)
-ebb receipts list
-ebb receipts list --since 2026-05-01
+tidegap receipts list
+tidegap receipts list --since 2026-05-01
 
 # Verify a receipt's Ed25519 signature
-ebb verify <task_id>`}
+tidegap verify <task_id>`}
         </CodeBlock>
       </section>
 
@@ -153,11 +153,11 @@ ebb verify <task_id>`}
           {`"did that task run?"`} inline:
         </p>
         <CodeBlock>
-{`> /ebb-ai:check
+{`> /tidegap:check
 Total tasks: 3
   scheduled: 1 · completed: 2
 
-> /ebb-ai:check 7f3a2b9e
+> /tidegap:check 7f3a2b9e
 status     completed
 region     US-CAL-CISO
 scheduled  22:15 UTC (4h ago)
@@ -174,7 +174,7 @@ result     <the LLM response>`}
           This site has no back-channel to your machine, and it should not:
           a live queue here would mean storing your prompts on a server.
           The live view is{" "}
-          <code className="rounded bg-bg-elev px-1 font-mono text-sm">ebb ui</code>
+          <code className="rounded bg-bg-elev px-1 font-mono text-sm">tidegap ui</code>
           , served from your own machine.
         </p>
       </section>
@@ -196,7 +196,7 @@ result     <the LLM response>`}
             </Link>{" "}
             — the eight{" "}
             <code className="rounded bg-bg-elev px-1 font-mono text-xs">
-              /ebb-ai:*
+              /tidegap:*
             </code>{" "}
             commands.
           </li>

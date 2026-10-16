@@ -24,7 +24,7 @@ export async function caffeinateWhilePending(
   const seconds = Math.max(1, Math.floor(durationSec));
   const args = [
     "--what=idle",
-    "--why=ebb-ai pending tasks",
+    "--why=Tidegap pending tasks",
     "--mode=block",
     "sleep",
     String(seconds),
@@ -103,10 +103,15 @@ export async function rtcwakeScheduleWake(
  */
 export const pmsetScheduleWake = rtcwakeScheduleWake;
 
+/** Base name of the systemd user units (`.service` and `.timer`). */
+export const SYSTEMD_UNIT = "tidegap-tick";
+/** The 0.17 unit name, detected so `tidegap install` can print its cleanup. */
+export const LEGACY_SYSTEMD_UNIT = "ebb-tick";
+
 export interface SystemdServiceOptions {
   dbPath: string;
   /**
-   * The argv[0..n] that invoke `ebb`, resolved at install time. For a
+   * The argv[0..n] that invoke `tidegap`, resolved at install time. For a
    * pinned node install this is `[process.execPath, realpath(argv[1])]`
    * — the exact interpreter plus the real dist entry — immune to a bare
    * service PATH and `#!/usr/bin/env node` shebangs. Falls back to
@@ -115,25 +120,25 @@ export interface SystemdServiceOptions {
   launcher?: string[];
   /** Legacy single-binary launcher. Prefer `launcher`. */
   ebbBinaryPath?: string;
-  /** Absolute path to write stdout/stderr logs. Defaults to ~/.ebb/tick.log. */
+  /** Absolute path to write stdout/stderr logs. Defaults to ~/.tidegap/logs/tick.log. */
   logPath?: string;
   /** Optional env vars added as `Environment=KEY=VAL` lines. */
   env?: Record<string, string>;
 }
 
 /**
- * Render the `ebb-tick.service` unit file. `Type=oneshot` because the
- * service runs `ebb tick --once` and exits; the companion timer is
+ * Render the `tidegap-tick.service` unit file. `Type=oneshot` because the
+ * service runs `tidegap tick --once` and exits; the companion timer is
  * responsible for cadence. `EnvironmentFile=` references a user-owned
- * env file (belt-and-braces: `ebb tick` also loads it directly), so
+ * env file (belt-and-braces: `tidegap tick` also loads it directly), so
  * secrets never land in the service unit itself.
  */
 export function systemdService(opts: SystemdServiceOptions): string {
-  const logPath = opts.logPath ?? `${homeDir()}/.ebb/tick.log`;
+  const logPath = opts.logPath ?? `${homeDir()}/.tidegap/logs/tick.log`;
   const launcher =
     opts.launcher && opts.launcher.length > 0
       ? opts.launcher
-      : [opts.ebbBinaryPath ?? "ebb"];
+      : [opts.ebbBinaryPath ?? "tidegap"];
   const execStart = [...launcher, "tick", "--db", opts.dbPath, "--once"].join(
     " ",
   );
@@ -144,13 +149,13 @@ export function systemdService(opts: SystemdServiceOptions): string {
     : "";
   const envBlock = envLines ? `${envLines}\n` : "";
   return `[Unit]
-Description=ebb-ai cron-tick drain
+Description=Tidegap cron-tick drain
 After=network.target
 
 [Service]
 Type=oneshot
 ExecStart=${execStart}
-EnvironmentFile=-%h/.config/ebb/env
+EnvironmentFile=-%h/.config/tidegap/env
 ${envBlock}StandardOutput=append:${logPath}
 StandardError=append:${logPath}
 
@@ -164,7 +169,7 @@ export interface SystemdTimerOptions {
 }
 
 /**
- * Render the `ebb-tick.timer` unit file. Uses `OnUnitActiveSec=<n>s`
+ * Render the `tidegap-tick.timer` unit file. Uses `OnUnitActiveSec=<n>s`
  * so the cadence matches the launchd `StartInterval` — fires every N
  * seconds regardless of wall-clock alignment. `OnBootSec=30s` covers
  * the case where the user-session starts before the network does.
@@ -172,12 +177,12 @@ export interface SystemdTimerOptions {
 export function systemdTimer(opts: SystemdTimerOptions): string {
   const interval = Math.max(1, Math.floor(opts.tickIntervalSec));
   return `[Unit]
-Description=Run ebb-tick every ${interval} seconds
+Description=Run ${SYSTEMD_UNIT} every ${interval} seconds
 
 [Timer]
 OnBootSec=30s
 OnUnitActiveSec=${interval}s
-Unit=ebb-tick.service
+Unit=${SYSTEMD_UNIT}.service
 
 [Install]
 WantedBy=timers.target

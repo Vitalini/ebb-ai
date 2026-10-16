@@ -3,8 +3,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "ebb-ai"
-version = "0.17.0"
+name = "tidegap"
+version = "0.18.0"
 description = "Run non-urgent LLM tasks at the cleanest grid hour before a deadline, via Batch APIs when allowed."
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -52,12 +52,12 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Vitalini/ebb-ai"
-Issues = "https://github.com/Vitalini/ebb-ai/issues"
-Repository = "https://github.com/Vitalini/ebb-ai"
+Homepage = "https://github.com/tidegap/tidegap"
+Issues = "https://github.com/tidegap/tidegap/issues"
+Repository = "https://github.com/tidegap/tidegap"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/ebb_ai"]
+packages = ["src/tidegap"]
 
 [tool.hatch.build.targets.sdist]
 include = [

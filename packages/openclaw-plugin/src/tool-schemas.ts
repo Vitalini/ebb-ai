@@ -1,9 +1,9 @@
 /**
- * OpenClaw-side renderer for the canonical ebb-ai tool surface.
+ * OpenClaw-side renderer for the canonical Tidegap tool surface.
  *
  * The names, descriptions, parameter sets and requiredness live in
- * @ebb-ai/core's tool-surface module — the single source of truth shared
- * with the @ebb-ai/mcp server (audit §2.2). This file converts those
+ * @tidegap/core's tool-surface module — the single source of truth shared
+ * with the @tidegap/mcp server (audit §2.2). This file converts those
  * schema-library-neutral descriptors into the TypeBox `TSchema` objects the
  * OpenClaw plugin runtime consumes for each tool's `parameters`.
  *
@@ -22,7 +22,7 @@ import {
   paramOptionalForHost,
   paramsForHost,
   type ToolParam,
-} from "@ebb-ai/core";
+} from "@tidegap/core";
 
 const HOST = "openclaw" as const;
 

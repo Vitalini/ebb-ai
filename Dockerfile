@@ -1,8 +1,8 @@
 # Dockerfile for Glama.ai MCP server evaluation
-# (paste into the Glama dashboard at https://glama.ai/mcp/servers/Vitalini/ebb-ai
+# (paste into the Glama dashboard at https://glama.ai/mcp/servers/tidegap/tidegap
 #  so the server becomes installable and gets a quality score)
 FROM node:22-alpine
 
-RUN npm install -g @ebb-ai/mcp
+RUN npm install -g @tidegap/mcp
 
-ENTRYPOINT ["ebb-mcp"]
+ENTRYPOINT ["tidegap-mcp"]

@@ -5,7 +5,7 @@ description: Preview the optimal carbon-aware window for a task — without comm
 Show the scheduler's recommended execution window for a task without
 actually queueing anything. Useful when the user wants to see "when
 *would* this run, and how much carbon would it save?" before deciding
-whether to commit via `/ebb-ai:defer`.
+whether to commit via `/tidegap:defer`.
 
 `recommend_window` is the planning twin of `schedule_task`. Same
 math, no side effects.
@@ -23,7 +23,7 @@ Expected format:
 - **Task description** — informational only; not used in the math but
   helpful for echoing back the recommendation in human terms.
 - **`--by <duration>`** — required. Same parsing rules as
-  `/ebb-ai:defer`. Default if missing: 24h.
+  `/tidegap:defer`. Default if missing: 24h.
 - **`--region <zone>`** — Electricity Maps zone code. **Required by
   this tool** — `recommend_window` is intentionally explicit. If the
   user gave none, derive one from their timezone the same way the
@@ -39,7 +39,7 @@ Expected format:
 ## What to do
 
 1. Convert `--by` to an absolute ISO-8601 deadline.
-2. Call the `ebb-ai` MCP server's **`recommend_window`** tool with:
+2. Call the `tidegap` MCP server's **`recommend_window`** tool with:
    - `deadline`
    - `region`
    - `carbon_budget_g` (if given)
@@ -66,7 +66,7 @@ Expected format:
    baseline, not a measurement.
 
 4. End with a single-line offer:
-   "Run `/ebb-ai:defer "<echoed task>" --by <duration> --region <zone>`
+   "Run `/tidegap:defer "<echoed task>" --by <duration> --region <zone>`
    to actually queue this."
 
 5. If `recommend_window` raises `CarbonBudgetExceededError`, tell the
@@ -76,6 +76,6 @@ Expected format:
 ## Examples
 
 ```
-/ebb-ai:plan summarize this week's GitHub notifications --by 12h --region GB
-/ebb-ai:plan translate the README --by 24h --budget 0.5 --region FR
+/tidegap:plan summarize this week's GitHub notifications --by 12h --region GB
+/tidegap:plan translate the README --by 24h --budget 0.5 --region FR
 ```

@@ -167,7 +167,7 @@ function CopyHint({
   deadlineIso: string;
   carbonBudgetG: number | null;
 }) {
-  const slashCommand = `/ebb-ai:defer "<your task>" --by ${deadlineIso} --region ${region}${
+  const slashCommand = `/tidegap:defer "<your task>" --by ${deadlineIso} --region ${region}${
     carbonBudgetG !== null ? ` --budget ${carbonBudgetG.toFixed(1)}` : ""
   }`;
 
@@ -189,7 +189,7 @@ function CopyHint({
         Defer it from your agent
       </h4>
       <p className="mt-1 text-xs text-fg-muted">
-        In Claude Code (with the ebb-ai plugin installed), paste the slash
+        In Claude Code (with the Tidegap plugin installed), paste the slash
         command. Any other MCP host can call the{" "}
         <code className="rounded bg-bg px-1 font-mono">schedule_task</code>{" "}
         tool with the same arguments.

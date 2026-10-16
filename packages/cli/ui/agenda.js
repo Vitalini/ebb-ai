@@ -210,10 +210,10 @@ export function renderAgenda(root, { selectedId } = {}) {
         title: "Nothing scheduled.",
         body: [
           "Defer work from Claude Code with ",
-          h("code", {}, "/ebb-ai:defer <task> --by 6h"),
+          h("code", {}, "/tidegap:defer <task> --by 6h"),
           ", or from any MCP client with ",
           h("code", {}, "schedule_task"),
-          ". It shows up here with the hour ebb picked.",
+          ". It shows up here with the hour tidegap picked.",
         ],
         link: journalCount ? { href: "#/journal", text: `${journalCount} finished in the Journal →` } : null,
       }),

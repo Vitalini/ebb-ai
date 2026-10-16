@@ -1,28 +1,30 @@
-# Ebb AI
+# Tidegap
+
+> Renamed from `ebb-ai` (import `ebb_ai`) in 0.18.0: `pip install tidegap`, `import tidegap`. See [Renamed from Ebb AI](https://github.com/tidegap/tidegap#renamed-from-ebb-ai).
 
 **Run non-urgent LLM tasks at the cleanest grid hour before your deadline — Python library.**
 
-ebb-ai takes LLM tasks that can wait, runs them at the lowest-carbon grid hour before a deadline you set, and sends them through the provider Batch API when the deadline allows.
+Tidegap takes LLM tasks that can wait, runs them at the lowest-carbon grid hour before a deadline you set, and sends them through the provider Batch API when the deadline allows.
 
 - `recommend_window()` picks the hour from a live 72-hour carbon-intensity forecast: 5 real-data feeds, 31 regions (measured).
 - `defer()` queues the task in SQLite. Work with a deadline over 24 hours goes through the Anthropic and OpenAI Batch APIs, at 50 % of the sync list price (projected, provider list price).
 - With the `signing` extra, every dispatch writes an Ed25519-signed carbon receipt.
 
 ```bash
-pip install "ebb-ai[anthropic,openai,signing]"     # Python 3.11+
+pip install "tidegap[anthropic,openai,signing]"     # Python 3.11+
 ```
 
 ```python
 import asyncio; from datetime import datetime, timedelta, timezone
-from ebb_ai import recommend_window, uk_carbon_intensity_feed
+from tidegap import recommend_window, uk_carbon_intensity_feed
 deadline = datetime.now(timezone.utc) + timedelta(hours=24)
 plan = asyncio.run(recommend_window(region="GB", deadline=deadline, feed=uk_carbon_intensity_feed(), rng=lambda: 0))
 print(plan.scheduled_for, plan.intensity_g_co2_per_kwh, plan.band)
 ```
 
-Without `rng`, ebb-ai picks at random among the cleanest band of near-equal hours, so repeated runs spread load and can return different hours; an `rng` that returns 0 gives the strict minimum.
+Without `rng`, Tidegap picks at random among the cleanest band of near-equal hours, so repeated runs spread load and can return different hours; an `rng` that returns 0 gives the strict minimum.
 
-Proof: one real GB run, 2026-09-30. Forecast peak 183 gCO2/kWh vs recommended window 88 gCO2/kWh, about 52 % lower for this run only (forecast, projected). Same API as the TypeScript package [@ebb-ai/core](https://www.npmjs.com/package/@ebb-ai/core). Source: https://github.com/Vitalini/ebb-ai
+Proof: one real GB run, 2026-09-30. Forecast peak 183 gCO2/kWh vs recommended window 88 gCO2/kWh, about 52 % lower for this run only (forecast, projected). Same API as the TypeScript package [@tidegap/core](https://www.npmjs.com/package/@tidegap/core). Source: https://github.com/tidegap/tidegap
 
 ---
 
@@ -43,7 +45,7 @@ Modern AI agents call LLM APIs synchronously by default. Three costs follow:
   is *not* faster** — it trades latency (up to 24h SLA) for the
   50% discount (projected, provider list price).
 
-`ebb-ai` fixes all three for any task that is not "answer me right now."
+`tidegap` fixes all three for any task that is not "answer me right now."
 
 ---
 
@@ -51,20 +53,20 @@ Modern AI agents call LLM APIs synchronously by default. Three costs follow:
 
 The Python package reads provider credentials from the environment
 (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, …) as a convenience — you are the host
-here: you import `ebb_ai` directly into your own script, notebook or service.
+here: you import `tidegap` directly into your own script, notebook or service.
 
-> **Deliberate asymmetry with the TypeScript packages.** `@ebb-ai/core` (the TS
+> **Deliberate asymmetry with the TypeScript packages.** `@tidegap/core` (the TS
 > mirror of this library) is *environment-pure*: it reads no environment
 > variables and takes every credential as an explicit argument, because it gets
-> bundled into the `@vitalini/ebb` OpenClaw plugin, and ClawHub's ClawScan flags
+> bundled into the `@vitalini/tidegap` OpenClaw plugin, and ClawHub's ClawScan flags
 > any ambient-environment read in a bundle that also makes network calls. This
 > Python package is never bundled into a third-party plugin, so the ergonomic
 > fallbacks stay. Passing credentials explicitly (`AnthropicAdapter(api_key=…)`)
 > works here too and is preferred in library code.
 >
-> Environment variables configure the **`ebb` CLI** and the **`@ebb-ai/mcp`
+> Environment variables configure the **`tidegap` CLI** and the **`@tidegap/mcp`
 > server**; the **OpenClaw plugin** is configured through OpenClaw plugin config
-> (`plugins.entries.ebb.config`), where each field names the variable it
+> (`plugins.entries.tidegap.config`), where each field names the variable it
 > replaced.
 
 ---
@@ -72,12 +74,12 @@ here: you import `ebb_ai` directly into your own script, notebook or service.
 ## Install
 
 ```bash
-pip install ebb-ai
+pip install tidegap
 
 # with vendor extras and receipt signing
-pip install "ebb-ai[anthropic,openai,signing]"
+pip install "tidegap[anthropic,openai,signing]"
 
-# from source, for contributors (in a clone of https://github.com/Vitalini/ebb-ai)
+# from source, for contributors (in a clone of https://github.com/tidegap/tidegap)
 pip install -e "packages/core-py[dev,anthropic,openai]"
 ```
 
@@ -92,7 +94,7 @@ the Anthropic and OpenAI extras pull in the official vendor SDKs.
 
 ```python
 import asyncio
-from ebb_ai import defer
+from tidegap import defer
 
 async def main():
     result = await defer(
@@ -116,10 +118,10 @@ scheduler with a durable queue:
 
 ```python
 import asyncio
-from ebb_ai import Scheduler, DeferOptions
+from tidegap import Scheduler, DeferOptions
 
 async def main():
-    async with Scheduler(db_path="/var/lib/ebb/queue.sqlite") as scheduler:
+    async with Scheduler(db_path="/var/lib/tidegap/queue.sqlite") as scheduler:
         await scheduler.defer(
             lambda: do_research_run(),
             DeferOptions(
@@ -140,8 +142,8 @@ completed receipts via `await scheduler.list_persisted_tasks()`.
 
 ```python
 import asyncio
-from ebb_ai import Scheduler, DeferOptions
-from ebb_ai.providers import AnthropicAdapter
+from tidegap import Scheduler, DeferOptions
+from tidegap.providers import AnthropicAdapter
 
 async def main():
     adapter = AnthropicAdapter()  # reads ANTHROPIC_API_KEY
@@ -181,7 +183,7 @@ print(handle.batch_id)  # poll via the Anthropic SDK
 
 ```python
 import asyncio
-from ebb_ai.providers import OpenAIAdapter
+from tidegap.providers import OpenAIAdapter
 
 async def main():
     adapter = OpenAIAdapter()  # reads OPENAI_API_KEY
@@ -266,7 +268,7 @@ per-model Wh/token coefficients from the published research
 (Patterson et al. 2021; Luccioni, Jernite, Strubell 2024; Hugging
 Face AI Energy Score). When no model is specified the function
 returns the pre-v0.6 flat `0.0015` kWh estimate to preserve
-backwards compatibility. See `ebb_ai.energy` for the table and
+backwards compatibility. See `tidegap.energy` for the table and
 citation metadata.
 
 ### Grid feeds
@@ -287,7 +289,7 @@ Supported region codes match Electricity Maps' zone codes
 ### Provider adapters
 
 ```python
-from ebb_ai.providers import (
+from tidegap.providers import (
     AnthropicAdapter,
     OpenAIAdapter,
     GeminiAdapter,
@@ -332,7 +334,7 @@ The Python port ships SQLite-backed durability from day one. To enable
 it, construct the `Scheduler` with a `db_path`:
 
 ```python
-async with Scheduler(db_path="/var/lib/ebb/queue.sqlite") as scheduler:
+async with Scheduler(db_path="/var/lib/tidegap/queue.sqlite") as scheduler:
     ...
 ```
 
@@ -390,13 +392,13 @@ The test suite covers:
 
 ## Changes
 
-Release notes: https://github.com/Vitalini/ebb-ai/blob/main/CHANGELOG.md
+Release notes: https://github.com/tidegap/tidegap/blob/main/CHANGELOG.md
 
 ---
 
 ## License
 
-[Apache License 2.0](https://github.com/Vitalini/ebb-ai/blob/main/LICENSE) — patent grant included.
+[Apache License 2.0](https://github.com/tidegap/tidegap/blob/main/LICENSE) — patent grant included.
 
 ---
 

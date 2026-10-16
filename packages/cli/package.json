@@ -1,7 +1,7 @@
 {
-  "name": "@ebb-ai/cli",
-  "version": "0.17.0",
-  "description": "The ebb command: runs queued ebb-ai LLM tasks at the cleanest grid hour before their deadline.",
+  "name": "@tidegap/cli",
+  "version": "0.18.0",
+  "description": "The tidegap command: runs queued Tidegap LLM tasks at the cleanest grid hour before their deadline.",
   "license": "Apache-2.0",
   "author": "Vitalii Borovyk",
   "type": "module",
@@ -10,6 +10,7 @@
   },
   "main": "./dist/index.js",
   "bin": {
+    "tidegap": "./dist/index.js",
     "ebb": "./dist/index.js"
   },
   "files": [
@@ -25,7 +26,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@ebb-ai/core": "workspace:*",
+    "@tidegap/core": "workspace:*",
     "commander": "^12.1.0"
   },
   "peerDependencies": {
@@ -47,7 +48,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Vitalini/ebb-ai.git",
+    "url": "https://github.com/tidegap/tidegap.git",
     "directory": "packages/cli"
   },
   "publishConfig": {

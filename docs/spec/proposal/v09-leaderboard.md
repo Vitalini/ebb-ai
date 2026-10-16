@@ -7,12 +7,12 @@
 
 ## Why this exists
 
-The v0.8 personal-impact surface (`ebb stats` CLI + `/stats`
+The v0.8 personal-impact surface (`tidegap stats` CLI + `/stats`
 dashboard route) is local-only. Useful for the individual user;
 silent on the aggregate. Two things the v0.8 surface cannot
 answer:
 
-- *Aggregate impact* — "how much CO2e has the `ebb-ai`
+- *Aggregate impact* — "how much CO2e has the `tidegap`
   community avoided in total this month?"
 - *Comparative motivation* — "where do I rank within my grid
   zone? in my city? globally?"
@@ -31,7 +31,7 @@ individual user didn't explicitly opt in to send.
 
 ```
 ┌───────────────────────────┐         ┌──────────────────────────┐
-│  ebb-mcp / ebb-tick       │         │  ebb-ai.com edge function│
+│  tidegap-mcp / tidegap-tick       │         │  www.tidegap.com edge function│
 │  (per-user machine)       │ ──POST──► /api/ping                 │
 │                           │         │                          │
 │  every completed task →   │         │  validates signature     │
@@ -68,9 +68,9 @@ Three components:
 ## Privacy model
 
 **Opt-in only.** Users must explicitly enable telemetry via
-`ebb config set telemetry on` (off by default). The CLI prints
+`tidegap config set telemetry on` (off by default). The CLI prints
 a one-paragraph privacy summary the first time it's enabled,
-and offers `ebb config set telemetry off` at any time.
+and offers `tidegap config set telemetry off` at any time.
 
 **What's sent per task:**
 
@@ -101,20 +101,20 @@ and offers `ebb config set telemetry off` at any time.
   from any other active user.
 
 **`userHash` generation:** at first opt-in, the CLI generates a
-random 256-bit token, stores it in `~/.ebb-ai/telemetry.key`,
+random 256-bit token, stores it in `~/.tidegap/telemetry.key`,
 and computes `userHash = sha256(token).slice(0, 16)`. The token
 never leaves the machine. Rotating the token via
-`ebb config telemetry rotate` produces a new userHash and
+`tidegap config telemetry rotate` produces a new userHash and
 invalidates the user's existing rank attribution.
 
-**Ed25519 signature:** the same `~/.ebb-ai/telemetry.key` is
+**Ed25519 signature:** the same `~/.tidegap/telemetry.key` is
 expanded into an Ed25519 keypair. The CLI signs every event
 with the private key; the server verifies against the public
 key that was registered at first opt-in. This makes spoofing
 events against another user's rank computationally expensive,
 without requiring server-side authentication.
 
-**Right to be forgotten:** `ebb config telemetry forget` rotates
+**Right to be forgotten:** `tidegap config telemetry forget` rotates
 the local key AND posts a tombstone request to
 `POST /api/forget/:hash`. The server purges the userHash from
 all stored aggregates within 24 hours (and zeroes its rank
@@ -303,21 +303,21 @@ import { join } from "node:path";
 import { randomBytes, createHash } from "node:crypto";
 import { generateKeyPair } from "@noble/ed25519";
 
-const KEY_PATH = join(homedir(), ".ebb-ai", "telemetry.key");
-const URL = process.env.EBB_TELEMETRY_URL ?? "https://www.ebb-ai.com/api/ping";
+const KEY_PATH = join(homedir(), ".tidegap", "telemetry.key");
+const URL = process.env.TIDEGAP_TELEMETRY_URL ?? "https://www.tidegap.com/api/ping";
 
 export async function enable() {
   const token = randomBytes(32);
   const userHash = createHash("sha256").update(token).digest("hex").slice(0, 16);
   const { privateKey, publicKey } = await generateKeyPair(token);
-  await fs.mkdir(join(homedir(), ".ebb-ai"), { recursive: true });
+  await fs.mkdir(join(homedir(), ".tidegap"), { recursive: true });
   await fs.writeFile(KEY_PATH, JSON.stringify({ token: token.toString("hex"), userHash, publicKey: Buffer.from(publicKey).toString("base64") }), { mode: 0o600 });
-  console.log(`Telemetry enabled. Your userHash is ${userHash}.\nRotate any time with: ebb config telemetry rotate`);
+  console.log(`Telemetry enabled. Your userHash is ${userHash}.\nRotate any time with: tidegap config telemetry rotate`);
 }
 
 export async function disable() {
   try { await fs.rm(KEY_PATH); } catch {}
-  console.log("Telemetry disabled. Local key removed. Existing aggregated data will roll off the server within 60 days; use 'ebb config telemetry forget' to request immediate removal.");
+  console.log("Telemetry disabled. Local key removed. Existing aggregated data will roll off the server within 60 days; use 'tidegap config telemetry forget' to request immediate removal.");
 }
 ```
 
@@ -348,7 +348,7 @@ starts.
 - [ ] Privacy-policy review for legal implications
       (California CCPA, GDPR — opt-in helps; data-residency
       doesn't apply to anonymised aggregates).
-- [ ] Write the public privacy policy at `ebb-ai.com/privacy`.
+- [ ] Write the public privacy policy at `www.tidegap.com/privacy`.
 - [ ] Implement and test the reference edge function in a v0.9-pre branch.
 - [ ] Soft-launch with a 50-user beta from the existing Show HN audience.
 - [ ] Monitor for spam / abuse over 30 days before public launch.
@@ -362,8 +362,8 @@ starts.
   their org's aggregates). Useful but not in the v0.9 cut;
   defer to v1.0 if there's enterprise pull.
 - **Cross-language client.** v0.9 ships the telemetry hook in
-  `@ebb-ai/cli` only. Python `core-py` parity can wait.
+  `@tidegap/cli` only. Python `core-py` parity can wait.
 
 ---
 
-*Authoritative source:* `docs/spec/proposal/v09-leaderboard.md` in `github.com/Vitalini/ebb-ai`. Implementation sketch will live under `packages/telemetry/` in the v0.9 branch when development starts.
+*Authoritative source:* `docs/spec/proposal/v09-leaderboard.md` in `github.com/tidegap/tidegap`. Implementation sketch will live under `packages/telemetry/` in the v0.9 branch when development starts.

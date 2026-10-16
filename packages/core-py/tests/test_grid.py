@@ -10,9 +10,9 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from ebb_ai import electricity_maps_feed, mock_grid_feed
-from ebb_ai.grid import _classify
-from ebb_ai.grid import electricity_maps_feed as feed_factory
+from tidegap import electricity_maps_feed, mock_grid_feed
+from tidegap.grid import _classify
+from tidegap.grid import electricity_maps_feed as feed_factory
 
 
 @pytest.mark.asyncio
@@ -80,7 +80,7 @@ def test_classify_thresholds() -> None:
 async def test_electricity_maps_without_key_falls_back_to_mock(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("EBB_ELECTRICITY_MAPS_API_KEY", raising=False)
+    monkeypatch.delenv("TIDEGAP_ELECTRICITY_MAPS_API_KEY", raising=False)
     feed = electricity_maps_feed()
     # The wrapper reports "mock" source because the fallback is the
     # mock feed — same behavior the TS port has.
@@ -110,7 +110,7 @@ async def test_electricity_maps_fetch_falls_back_on_http_error(
             kwargs["transport"] = httpx.MockTransport(transport_handler)
             super().__init__(*args, **kwargs)
 
-    monkeypatch.setattr("ebb_ai.grid.httpx.AsyncClient", _Patched)
+    monkeypatch.setattr("tidegap.grid.httpx.AsyncClient", _Patched)
     forecast = await feed.fetch_forecast("US-CAL-CISO", 3)
     assert forecast.source == "mock"
     assert len(forecast.entries) == 3
@@ -143,7 +143,7 @@ async def test_electricity_maps_fetch_success(monkeypatch: pytest.MonkeyPatch) -
             kwargs["transport"] = httpx.MockTransport(transport_handler)
             super().__init__(*args, **kwargs)
 
-    monkeypatch.setattr("ebb_ai.grid.httpx.AsyncClient", _Patched)
+    monkeypatch.setattr("tidegap.grid.httpx.AsyncClient", _Patched)
     forecast = await feed.fetch_forecast("US-CAL-CISO", 3)
     assert forecast.source == "electricityMaps"
     assert len(forecast.entries) == 3
