@@ -69,8 +69,8 @@ const writeOnce: DeprecationWriter = (line) => {
 
 /**
  * Collects the 0.17 names a read fell back on. `pick(current, legacy, name)`
- * returns the `TIDEGAP_<name>` value, else the `TIDEGAP_<name>` value (recording
- * `TIDEGAP_<name>`), else `undefined`.
+ * returns the `TIDEGAP_<name>` value, else the `EBB_<name>` value (recording
+ * `EBB_<name>`), else `undefined`.
  */
 class Fallbacks {
   readonly used: string[] = [];
