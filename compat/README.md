@@ -7,7 +7,7 @@ prints one deprecation line on stderr, and is never updated again.
 | Package | Version | What it does |
 |---|---|---|
 | `npm/core` → `@ebb-ai/core` | 0.17.1 | Re-exports `@tidegap/core` and its `grid`, `energy`, `types` subpaths |
-| `npm/cli` → `@ebb-ai/cli` | 0.17.1 | Bin `ebb` and the `dist/index.js` path that 0.17 daemon units pin; runs `@tidegap/cli` |
+| `npm/cli` → `@ebb-ai/cli` | 0.17.2 | Bin `ebb` and the `dist/index.js` path that 0.17 daemon units pin; runs `@tidegap/cli` |
 | `npm/mcp` → `@ebb-ai/mcp` | 0.17.1 | Bin `ebb-mcp` for `npx -y @ebb-ai/mcp`; starts the `@tidegap/mcp` server. Keeps `mcpName: io.github.Vitalini/ebb-ai` |
 | `pypi/ebb-ai` → `ebb-ai` | 0.17.1 | `import ebb_ai` (and its submodules) resolves to `tidegap`; classifier `Development Status :: 7 - Inactive` |
 
