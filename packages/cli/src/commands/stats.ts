@@ -1,7 +1,7 @@
 /**
  * `tidegap stats` — local-only personal-impact aggregator.
  *
- * Reads the SQLite ledger at ~/.ebb-ai/queue.db (or --db) and renders the
+ * Reads the SQLite ledger at ~/.tidegap/queue.db (or --db) and renders the
  * cumulative carbon stats + per-region breakdown + achievement-badge list.
  * No telemetry, no network, no third-party reporting — everything stays
  * on the user's machine. The dashboard `/stats` route reads the same
@@ -33,7 +33,7 @@ import { defaultDbPath } from "./tick.js";
 export interface StatsCommandOptions {
   db?: string;
   json?: boolean;
-  /** Override the carbon-budget config path (tests). Defaults to ~/.ebb-ai/config. */
+  /** Override the carbon-budget config path (tests). Defaults to ~/.tidegap/config. */
   budgetConfig?: string;
 }
 
@@ -163,8 +163,8 @@ export async function runStats(opts: StatsCommandOptions = {}): Promise<StatsRes
     const badges = achievements(stats, perRegion);
     // Aggregate carbon-budget status (ROADMAP item 4): only when configured.
     // Core is environment-pure, so the CLI (the host) reads the two
-    // EBB_CARBON_BUDGET_* variables and passes them in — same precedence as
-    // before: an exported variable beats the ~/.ebb-ai/config file.
+    // TIDEGAP_CARBON_BUDGET_* variables and passes them in — same precedence as
+    // before: an exported variable beats the ~/.tidegap/config file.
     const budgetConfig = loadCarbonBudgetConfig({
       path: opts.budgetConfig,
       env: readEnvCredentials().carbonBudget,

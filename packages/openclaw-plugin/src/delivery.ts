@@ -25,10 +25,10 @@
 import { spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { homedir, platform as osPlatform } from "node:os";
+import { platform as osPlatform } from "node:os";
 import { dirname, join } from "node:path";
 
-import { osNotifyCommand } from "@tidegap/core";
+import { osNotifyCommand, resolveTidegapHome } from "@tidegap/core";
 import type { CarbonAlert, CarbonReceipt, TaskRecord } from "@tidegap/core";
 
 export type DeliveryMode =
@@ -163,7 +163,7 @@ function loadSqlite(): SqliteCtor {
 /**
  * Where the delivery-preference store lives. Set from the plugin's
  * `deliveryStorePath` config field (which replaces the old
- * `EBB_DELIVERY_FILE` environment variable — this bundle reads no
+ * `TIDEGAP_DELIVERY_FILE` environment variable — this bundle reads no
  * environment variables at all). `undefined` ⇒ the default path.
  */
 let configuredStorePath: string | undefined;
@@ -178,7 +178,7 @@ export function setDeliveryStorePath(path: string | undefined): void {
 }
 
 function storePath(): string {
-  return configuredStorePath ?? join(homedir(), ".ebb-ai", "delivery.db");
+  return configuredStorePath ?? join(resolveTidegapHome(), "delivery.db");
 }
 
 let cachedStore: { path: string; db: SqliteDb } | undefined;

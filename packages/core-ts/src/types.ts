@@ -216,7 +216,7 @@ export interface CarbonReceipt {
    * Base64-encoded Ed25519 public key (32 bytes) that produced
    * `signature`. Bundled on every signed receipt so any consumer can
    * verify without out-of-band key distribution; the absolute trust
-   * anchor is whoever owns `~/.ebb-ai/signing.key.pub`.
+   * anchor is whoever owns `~/.tidegap/signing.key.pub`.
    */
   signerPublicKey?: string;
   /** ISO-8601 timestamp the signature was produced. Helps with replay

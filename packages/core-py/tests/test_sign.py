@@ -118,7 +118,7 @@ class TestLoadOrCreateSigningKey:
 
     def test_default_path_under_tidegap_home(self) -> None:
         assert default_signing_key_path().name == "signing.key"
-        assert default_signing_key_path().parent.name == ".ebb-ai"
+        assert default_signing_key_path().parent.name == ".tidegap"
 
 
 class TestSignAndVerify:

@@ -46,7 +46,7 @@ describe("ensureEnvFile", () => {
     const body = readFileSync(path, "utf8");
     expect(body).toContain("#ANTHROPIC_API_KEY=");
     expect(body).toContain("#OPENAI_API_KEY=");
-    expect(body).toContain("EBB_ELECTRICITY_MAPS_API_KEY");
+    expect(body).toContain("TIDEGAP_ELECTRICITY_MAPS_API_KEY");
     expect(body).toContain("#WATTTIME_USERNAME=");
   });
 
@@ -63,7 +63,7 @@ describe("ensureEnvFile", () => {
 
 describe("loadEnvFileIntoProcess", () => {
   let dir: string;
-  const KEY = "EBB_TEST_LOAD_KEY";
+  const KEY = "TIDEGAP_TEST_LOAD_KEY";
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "ebb-env-"));
     delete process.env[KEY];
@@ -103,9 +103,9 @@ describe("envFileTemplate", () => {
     for (const k of [
       "ANTHROPIC_API_KEY",
       "OPENAI_API_KEY",
-      "EBB_ELECTRICITY_MAPS_API_KEY",
-      "EBB_EIA_API_KEY",
-      "EBB_ENTSOE_SECURITY_TOKEN",
+      "TIDEGAP_ELECTRICITY_MAPS_API_KEY",
+      "TIDEGAP_EIA_API_KEY",
+      "TIDEGAP_ENTSOE_SECURITY_TOKEN",
       "WATTTIME_USERNAME",
       "WATTTIME_PASSWORD",
     ]) {

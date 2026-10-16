@@ -21,8 +21,8 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { resolveTidegapHome } from "./paths.js";
 import type { CarbonReceipt, TaskRecord } from "./types.js";
 
 /** The rolling windows an aggregate carbon budget can be scoped to. */
@@ -72,12 +72,37 @@ export interface CarbonBudgetStatus {
   alerted: boolean;
 }
 
-const CONFIG_WINDOW_ENV = "EBB_CARBON_BUDGET_WINDOW";
-const CONFIG_THRESHOLD_ENV = "EBB_CARBON_BUDGET_G";
+const CONFIG_WINDOW_ENV = "TIDEGAP_CARBON_BUDGET_WINDOW";
+const CONFIG_THRESHOLD_ENV = "TIDEGAP_CARBON_BUDGET_G";
 
-/** Absolute path to the aggregate-budget config file. */
+/** Absolute path to the aggregate-budget config file (`~/.tidegap/config`). */
 export function carbonBudgetConfigPath(): string {
-  return join(homedir(), ".ebb-ai", "config");
+  return join(resolveTidegapHome(), "config");
+}
+
+/** Prefix of every config-file key and host variable since 0.18. */
+export const KEY_PREFIX = "TIDEGAP_";
+/** The 0.17 prefix, still read as a fallback until 0.19. */
+export const LEGACY_KEY_PREFIX = "EBB_";
+
+/**
+ * Fold 0.17 `EBB_*` keys into their `TIDEGAP_*` names: an `EBB_<NAME>` key
+ * is kept as `TIDEGAP_<NAME>` only when `TIDEGAP_<NAME>` is absent, so the new
+ * name wins per key. Other keys pass through unchanged.
+ */
+export function withTidegapKeys<T extends string | undefined>(
+  values: Record<string, T>,
+): Record<string, T> {
+  const out: Record<string, T> = {};
+  for (const [key, value] of Object.entries(values)) {
+    if (!key.startsWith(LEGACY_KEY_PREFIX)) out[key] = value;
+  }
+  for (const [key, value] of Object.entries(values)) {
+    if (!key.startsWith(LEGACY_KEY_PREFIX) || value === undefined) continue;
+    const name = KEY_PREFIX + key.slice(LEGACY_KEY_PREFIX.length);
+    if (out[name] === undefined) out[name] = value;
+  }
+  return out;
 }
 
 /**
@@ -205,7 +230,7 @@ function normalizeWindowKind(raw: string | undefined): CarbonBudgetWindowKind | 
 }
 
 /**
- * Tiny KEY=VALUE parser — the same shape as the `~/.config/ebb/env` secrets
+ * Tiny KEY=VALUE parser — the same shape as the `~/.config/tidegap/env` secrets
  * file so the config format is one the project already establishes.
  * `#` comments, blank lines, one layer of surrounding quotes.
  */
@@ -240,22 +265,26 @@ export function parseKeyValues(contents: string): Record<string, string> {
  * `carbonBudgetWindow`).
  */
 export interface CarbonBudgetEnv {
+  TIDEGAP_CARBON_BUDGET_G?: string;
+  TIDEGAP_CARBON_BUDGET_WINDOW?: string;
+  /** @deprecated 0.17 name, read when `TIDEGAP_CARBON_BUDGET_G` is unset; removed in 0.19. */
   EBB_CARBON_BUDGET_G?: string;
+  /** @deprecated 0.17 name, read when `TIDEGAP_CARBON_BUDGET_WINDOW` is unset; removed in 0.19. */
   EBB_CARBON_BUDGET_WINDOW?: string;
 }
 
 export interface LoadCarbonBudgetOptions {
-  /** Override the config file path (tests). Defaults to `~/.ebb-ai/config`. */
+  /** Override the config file path (tests). Defaults to `~/.tidegap/config`. */
   path?: string;
   /**
    * Host-supplied overrides for the two recognized keys. Omitted / `{}` means
-   * "no overrides" — the `~/.ebb-ai/config` file alone decides.
+   * "no overrides" — the `~/.tidegap/config` file alone decides.
    */
   env?: CarbonBudgetEnv;
 }
 
 /**
- * Resolve the aggregate carbon budget from the `~/.ebb-ai/config` KEY=VALUE
+ * Resolve the aggregate carbon budget from the `~/.tidegap/config` KEY=VALUE
  * file, with host-supplied `opts.env` overrides taking precedence (exactly the
  * secrets-file precedence: an explicit override always wins). Returns
  * `undefined` when no threshold is configured (feature off), or when the
@@ -263,24 +292,24 @@ export interface LoadCarbonBudgetOptions {
  * feature.
  *
  * Recognized keys (file or `opts.env`):
- *   - `EBB_CARBON_BUDGET_G`      — threshold in grams CO2e (required to enable)
- *   - `EBB_CARBON_BUDGET_WINDOW` — daily | weekly | monthly (default: daily)
+ *   - `TIDEGAP_CARBON_BUDGET_G`      — threshold in grams CO2e (required to enable)
+ *   - `TIDEGAP_CARBON_BUDGET_WINDOW` — daily | weekly | monthly (default: daily)
  *
- * Reading the `~/.ebb-ai/config` FILE is deliberate and stays: that is
+ * Reading the `~/.tidegap/config` FILE is deliberate and stays: that is
  * filesystem I/O against a path this library owns. What is gone is any
- * ambient-environment read — the CLI / MCP server read `EBB_CARBON_BUDGET_G` and
- * `EBB_CARBON_BUDGET_WINDOW` at their own entry points and pass them in as
+ * ambient-environment read — the CLI / MCP server read `TIDEGAP_CARBON_BUDGET_G` and
+ * `TIDEGAP_CARBON_BUDGET_WINDOW` at their own entry points and pass them in as
  * `opts.env`; the OpenClaw plugin builds the same shape from plugin config.
  */
 export function loadCarbonBudgetConfig(
   opts: LoadCarbonBudgetOptions = {},
 ): CarbonBudgetConfig | undefined {
-  const env: CarbonBudgetEnv = opts.env ?? {};
+  const env = withTidegapKeys<string | undefined>({ ...opts.env });
   const path = opts.path ?? carbonBudgetConfigPath();
   let fileValues: Record<string, string> = {};
   if (existsSync(path)) {
     try {
-      fileValues = parseKeyValues(readFileSync(path, "utf8"));
+      fileValues = withTidegapKeys(parseKeyValues(readFileSync(path, "utf8")));
     } catch {
       fileValues = {};
     }

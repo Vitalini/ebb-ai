@@ -68,13 +68,16 @@ export function daemonStatus(
   const platform = opts.platform ?? process.platform;
   const home = opts.home ?? homedir();
   const exists = opts.exists ?? existsSync;
+  // The 0.17 unit counts too: it keeps ticking the same ledger until removed.
   if (platform === "darwin") {
-    return exists(join(home, "Library", "LaunchAgents", "com.ebb-ai.tick.plist"))
+    const agents = join(home, "Library", "LaunchAgents");
+    return [macos.LAUNCHD_LABEL, macos.LEGACY_LAUNCHD_LABEL].some((l) => exists(join(agents, `${l}.plist`)))
       ? "installed"
       : "not_installed";
   }
   if (platform === "win32") return "unknown";
-  return exists(join(home, ".config", "systemd", "user", "ebb-tick.timer"))
+  const units = join(home, ".config", "systemd", "user");
+  return [linux.SYSTEMD_UNIT, linux.LEGACY_SYSTEMD_UNIT].some((u) => exists(join(units, `${u}.timer`)))
     ? "installed"
     : "not_installed";
 }

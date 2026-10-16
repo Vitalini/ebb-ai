@@ -22,12 +22,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
+from ._env import env_value, with_tidegap_keys
+from .paths import resolve_tidegap_home
 from .types import CarbonReceipt, TaskRecord
 
 CarbonBudgetWindowKind = Literal["daily", "weekly", "monthly"]
 
-_CONFIG_WINDOW_ENV = "EBB_CARBON_BUDGET_WINDOW"
-_CONFIG_THRESHOLD_ENV = "EBB_CARBON_BUDGET_G"
+_CONFIG_WINDOW_ENV = "TIDEGAP_CARBON_BUDGET_WINDOW"
+_CONFIG_THRESHOLD_ENV = "TIDEGAP_CARBON_BUDGET_G"
 
 
 @dataclass(frozen=True)
@@ -80,8 +82,8 @@ class CarbonBudgetStatus:
 
 
 def carbon_budget_config_path() -> str:
-    """Absolute path to the aggregate-budget config file."""
-    return os.path.join(os.path.expanduser("~"), ".ebb-ai", "config")
+    """Absolute path to the aggregate-budget config file (``~/.tidegap/config``)."""
+    return str(resolve_tidegap_home() / "config")
 
 
 def receipt_carbon_g(receipt: CarbonReceipt | None) -> float:
@@ -237,7 +239,7 @@ def load_carbon_budget_config(
     path: str | None = None,
     env: dict[str, str] | None = None,
 ) -> CarbonBudgetConfig | None:
-    """Resolve the aggregate carbon budget from ``~/.ebb-ai/config`` (KEY=VALUE),
+    """Resolve the aggregate carbon budget from ``~/.tidegap/config`` (KEY=VALUE),
     with same-named environment variables taking precedence (an explicit env
     var always wins — exactly the secrets-file precedence).
 
@@ -247,20 +249,26 @@ def load_carbon_budget_config(
 
     Recognized keys (file or env):
 
-    - ``EBB_CARBON_BUDGET_G``      — threshold in grams CO2e (required to enable)
-    - ``EBB_CARBON_BUDGET_WINDOW`` — daily | weekly | monthly (default: daily)
+    - ``TIDEGAP_CARBON_BUDGET_G``      — threshold in grams CO2e (required to enable)
+    - ``TIDEGAP_CARBON_BUDGET_WINDOW`` — daily | weekly | monthly (default: daily)
+
+    The 0.17 names ``EBB_CARBON_BUDGET_*`` are still read, in the file and in
+    the environment, when the ``TIDEGAP_*`` twin is absent (until 0.19).
     """
     # Read the two budget variables BY NAME rather than copying the whole
     # environment into this scope — the values here are a gram threshold and a
     # window name, and nothing else the host exports has any business being
     # visible to this function. (Mirrors the TS loader; see budget.ts.)
-    environ = (
+    environ = with_tidegap_keys(
         env
         if env is not None
         else {
             k: v
-            for k in (_CONFIG_THRESHOLD_ENV, _CONFIG_WINDOW_ENV)
-            if (v := os.environ.get(k)) is not None
+            for k, name in (
+                (_CONFIG_THRESHOLD_ENV, "CARBON_BUDGET_G"),
+                (_CONFIG_WINDOW_ENV, "CARBON_BUDGET_WINDOW"),
+            )
+            if (v := env_value(name)) is not None
         }
     )
     cfg_path = path if path is not None else carbon_budget_config_path()
@@ -268,7 +276,7 @@ def load_carbon_budget_config(
     if os.path.exists(cfg_path):
         try:
             with open(cfg_path, encoding="utf-8") as fh:
-                file_values = _parse_key_values(fh.read())
+                file_values = with_tidegap_keys(_parse_key_values(fh.read()))
         except OSError:
             file_values = {}
     raw_threshold = environ.get(_CONFIG_THRESHOLD_ENV) or file_values.get(

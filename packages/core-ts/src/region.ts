@@ -51,7 +51,7 @@ export function detectRegionFromTimezone(): string | undefined {
 /**
  * Resolve a grid region. Precedence:
  *   1. an explicit request region (a tool argument / CLI flag),
- *   2. a configured default (plugin config / EBB_DEFAULT_REGION),
+ *   2. a configured default (plugin config / TIDEGAP_DEFAULT_REGION),
  *   3. a guess from the host machine's timezone,
  *   4. FALLBACK_REGION.
  */

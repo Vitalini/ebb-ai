@@ -133,14 +133,14 @@ def test_load_config_none_when_unset(tmp_path: Path) -> None:
 
 def test_load_config_from_file(tmp_path: Path) -> None:
     p = tmp_path / "config"
-    p.write_text("# budget\nEBB_CARBON_BUDGET_G=500\nEBB_CARBON_BUDGET_WINDOW=weekly\n")
+    p.write_text("# budget\nTIDEGAP_CARBON_BUDGET_G=500\nTIDEGAP_CARBON_BUDGET_WINDOW=weekly\n")
     cfg = load_carbon_budget_config(path=str(p), env={})
     assert cfg == CarbonBudgetConfig("weekly", 500)
 
 
 def test_load_config_defaults_daily(tmp_path: Path) -> None:
     p = tmp_path / "config"
-    p.write_text("EBB_CARBON_BUDGET_G=250\n")
+    p.write_text("TIDEGAP_CARBON_BUDGET_G=250\n")
     cfg = load_carbon_budget_config(path=str(p), env={})
     assert cfg is not None
     assert cfg.window_kind == "daily"
@@ -148,19 +148,19 @@ def test_load_config_defaults_daily(tmp_path: Path) -> None:
 
 def test_load_config_env_overrides_file(tmp_path: Path) -> None:
     p = tmp_path / "config"
-    p.write_text("EBB_CARBON_BUDGET_G=500\nEBB_CARBON_BUDGET_WINDOW=weekly\n")
+    p.write_text("TIDEGAP_CARBON_BUDGET_G=500\nTIDEGAP_CARBON_BUDGET_WINDOW=weekly\n")
     cfg = load_carbon_budget_config(
         path=str(p),
-        env={"EBB_CARBON_BUDGET_G": "999", "EBB_CARBON_BUDGET_WINDOW": "monthly"},
+        env={"TIDEGAP_CARBON_BUDGET_G": "999", "TIDEGAP_CARBON_BUDGET_WINDOW": "monthly"},
     )
     assert cfg == CarbonBudgetConfig("monthly", 999)
 
 
 def test_load_config_disabled_on_bad_threshold(tmp_path: Path) -> None:
     p = tmp_path / "config"
-    p.write_text("EBB_CARBON_BUDGET_G=0\n")
+    p.write_text("TIDEGAP_CARBON_BUDGET_G=0\n")
     assert load_carbon_budget_config(path=str(p), env={}) is None
-    assert load_carbon_budget_config(path=str(tmp_path / "x"), env={"EBB_CARBON_BUDGET_G": "abc"}) is None
+    assert load_carbon_budget_config(path=str(tmp_path / "x"), env={"TIDEGAP_CARBON_BUDGET_G": "abc"}) is None
 
 
 # --------------------------------------------------------------------- #
@@ -306,3 +306,34 @@ async def test_scheduler_status(tmp_path: Path) -> None:
 async def test_scheduler_status_none_without_budget(tmp_path: Path) -> None:
     async with Scheduler(feed=mock_grid_feed(), db_path=str(tmp_path / "q.db"), signing=False) as s:
         assert await s.get_carbon_budget_status() is None
+
+
+def test_reads_017_ebb_keys_when_tidegap_twin_absent(tmp_path):
+    p = tmp_path / "config"
+    p.write_text("EBB_CARBON_BUDGET_G=500\nEBB_CARBON_BUDGET_WINDOW=weekly\n")
+    cfg = load_carbon_budget_config(path=str(p), env={})
+    assert cfg is not None
+    assert (cfg.threshold_g, cfg.window_kind) == (500, "weekly")
+
+
+def test_tidegap_key_wins_over_ebb_key_in_file(tmp_path):
+    p = tmp_path / "config"
+    p.write_text("EBB_CARBON_BUDGET_G=500\nTIDEGAP_CARBON_BUDGET_G=300\n")
+    cfg = load_carbon_budget_config(path=str(p), env={})
+    assert cfg is not None and cfg.threshold_g == 300
+
+
+def test_ebb_env_fallback_prints_one_line(tmp_path, monkeypatch, capsys):
+    from tidegap import _env
+
+    monkeypatch.setattr(_env, "_reported", set())
+    monkeypatch.delenv("TIDEGAP_CARBON_BUDGET_G", raising=False)
+    monkeypatch.setenv("EBB_CARBON_BUDGET_G", "40")
+    cfg = load_carbon_budget_config(path=str(tmp_path / "absent"))
+    assert cfg is not None and cfg.threshold_g == 40
+    load_carbon_budget_config(path=str(tmp_path / "absent"))
+    err = capsys.readouterr().err.strip().splitlines()
+    assert len(err) == 1 and "TIDEGAP_CARBON_BUDGET_G" in err[0]
+    monkeypatch.setenv("TIDEGAP_CARBON_BUDGET_G", "70")
+    cfg = load_carbon_budget_config(path=str(tmp_path / "absent"))
+    assert cfg is not None and cfg.threshold_g == 70

@@ -43,7 +43,7 @@ export async function pmsetScheduleWake(
  * periodically. `launcher` is the resolved invocation
  * (`[process.execPath, realpath(argv[1])]` for a pinned-node install),
  * so the task runs the exact interpreter + entry rather than relying on
- * a POSIX-style `/usr/local/bin/ebb` path that never exists on Windows.
+ * a POSIX-style `/usr/local/bin/tidegap` path that never exists on Windows.
  */
 export function schtasksTemplate(opts: {
   launcher?: string[];
@@ -54,7 +54,7 @@ export function schtasksTemplate(opts: {
   const launcher =
     opts.launcher && opts.launcher.length > 0
       ? opts.launcher
-      : [opts.ebbBinaryPath ?? "ebb"];
+      : [opts.ebbBinaryPath ?? "tidegap"];
   const quote = (s: string) => (/\s/.test(s) ? `\\"${s}\\"` : s);
   const run = [...launcher, "tick", "--db", opts.dbPath, "--once"]
     .map(quote)
@@ -63,7 +63,7 @@ export function schtasksTemplate(opts: {
   return `Windows daemon install is not supported. Run \`tidegap tick\` yourself under
 Task Scheduler or nssm. From an elevated PowerShell / CMD:
 
-  schtasks /create /TN "ebb-tick" /TR "${run}" /SC MINUTE /MO ${everyMin} /F
+  schtasks /create /TN "tidegap-tick" /TR "${run}" /SC MINUTE /MO ${everyMin} /F
 
 Provide provider keys via %USERPROFILE%\\.config\\tidegap\\env (KEY=VALUE lines);
 \`tidegap tick\` loads that file on startup. Wake-from-sleep events are not

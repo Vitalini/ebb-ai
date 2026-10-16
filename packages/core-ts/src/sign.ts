@@ -20,7 +20,7 @@
  *
  * Key lifecycle is local-first by design:
  *
- *   - Keys live at `~/.ebb-ai/signing.key` (private, 0600) +
+ *   - Keys live at `~/.tidegap/signing.key` (private, 0600) +
  *     `signing.key.pub` (public, 0644).
  *   - The pair is generated lazily on the first call to
  *     `loadOrCreateSigningKey()`. There is no opt-in flow — the goal
@@ -68,14 +68,14 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
+import { resolveTidegapHome } from "./paths.js";
 import type { CarbonReceipt } from "./types.js";
 
 /** Override the keypair location (mainly for tests). */
 export interface SigningKeyOptions {
-  /** Absolute path to the private key (PEM). Defaults to `~/.ebb-ai/signing.key`. */
+  /** Absolute path to the private key (PEM). Defaults to `~/.tidegap/signing.key`. */
   privateKeyPath?: string;
 }
 
@@ -90,7 +90,7 @@ export interface SigningKeyPair {
 
 /** Default location of the local signing private key. */
 export function defaultSigningKeyPath(): string {
-  return join(homedir(), ".ebb-ai", "signing.key");
+  return join(resolveTidegapHome(), "signing.key");
 }
 
 /**

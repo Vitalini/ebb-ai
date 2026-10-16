@@ -1250,7 +1250,7 @@ class Scheduler:
         when ``db_path`` is set.
     signing:
         Ed25519 receipt-signing config (v0.11). ``None`` (default) signs
-        every receipt with ``~/.ebb-ai/signing.key`` (lazily created);
+        every receipt with ``~/.tidegap/signing.key`` (lazily created);
         ``False`` disables signing; a dict may pass ``{"key_path": "..."}``.
         If the ``cryptography`` extra is absent, signing self-disables and
         receipts ship unsigned.
@@ -1290,7 +1290,7 @@ class Scheduler:
         self._store: _TaskStore | None = _TaskStore(db_path) if db_path else None
         self._connected = False
         # Ed25519 receipt-signing config (v0.11). ``None`` → sign every
-        # receipt with the default ``~/.ebb-ai/signing.key`` (lazily
+        # receipt with the default ``~/.tidegap/signing.key`` (lazily
         # created on first dispatch); ``False`` → never sign; a dict may
         # carry ``{"key_path": "..."}``. If the ``cryptography`` extra is
         # absent (or the key can't be loaded), signing self-disables on

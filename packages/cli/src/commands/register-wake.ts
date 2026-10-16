@@ -43,7 +43,7 @@ export async function runRegisterWake(
       message:
         `[tidegap/cli] register-wake is not supported on Windows — there is no ` +
         `pmset/rtcwake equivalent wired. Use Task Scheduler's "Wake the ` +
-        `computer to run this task" option on your ebb-tick job instead.`,
+        `computer to run this task" option on your tidegap-tick job instead.`,
     };
   }
 

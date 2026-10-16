@@ -53,7 +53,7 @@ const inSixHours = () => new Date(Date.now() + 6 * 3_600_000).toISOString();
 describe("schedule_task with deadline_kind quota_reset", () => {
   it("resolves the deadline from the one configured label and stores kind, label, title, origin", async () => {
     const { dbPath, configPath } = tmp();
-    writeFileSync(configPath, "EBB_QUOTA_RESET_CLAUDE=mon 10:00 UTC\nEBB_QUOTA_MARGIN_H_CLAUDE=3\n");
+    writeFileSync(configPath, "TIDEGAP_QUOTA_RESET_CLAUDE=mon 10:00 UTC\nTIDEGAP_QUOTA_MARGIN_H_CLAUDE=3\n");
     const { call } = await connect(dbPath, configPath);
     const expected = resolveQuotaDeadline(
       loadQuotaResetConfig({ path: configPath }).claude!,
@@ -80,7 +80,7 @@ describe("schedule_task with deadline_kind quota_reset", () => {
     const { dbPath, configPath } = tmp();
     writeFileSync(
       configPath,
-      "EBB_QUOTA_RESET_CLAUDE=mon 10:00 UTC\nEBB_QUOTA_RESET_CODEX=fri 09:00 UTC\n",
+      "TIDEGAP_QUOTA_RESET_CLAUDE=mon 10:00 UTC\nTIDEGAP_QUOTA_RESET_CODEX=fri 09:00 UTC\n",
     );
     const { call } = await connect(dbPath, configPath);
     const result = await call("schedule_task", { prompt: "p", deadline_kind: "quota_reset" });
@@ -101,7 +101,7 @@ describe("schedule_task with deadline_kind quota_reset", () => {
 
   it("update_deadline turns a quota_reset task into an absolute one", async () => {
     const { dbPath, configPath } = tmp();
-    writeFileSync(configPath, "EBB_QUOTA_RESET_CLAUDE=mon 10:00 UTC\n");
+    writeFileSync(configPath, "TIDEGAP_QUOTA_RESET_CLAUDE=mon 10:00 UTC\n");
     const { call } = await connect(dbPath, configPath);
     await call("schedule_task", { prompt: "p", deadline_kind: "quota_reset" });
     const store = new TaskStore({ dbPath });
@@ -266,7 +266,7 @@ describe("ui v2: reply_task, cancel series, repeat and session id", () => {
 
   it("a quota_reset task is a one-off by default; repeat weekly opts in; cancel series ends it", async () => {
     const { dbPath, configPath } = tmp();
-    writeFileSync(configPath, "EBB_QUOTA_RESET_CLAUDE=mon 10:00 UTC\n");
+    writeFileSync(configPath, "TIDEGAP_QUOTA_RESET_CLAUDE=mon 10:00 UTC\n");
     const { call } = await connect(dbPath, configPath);
     await call("schedule_task", { prompt: "one-off", deadline_kind: "quota_reset", region: "DE" });
     const weekly = await call("schedule_task", {

@@ -18,6 +18,8 @@ import {
   OpenAIAdapter,
   osNotifyCommand,
   parseKeyValues,
+  resolveTidegapHome,
+  withTidegapKeys,
   prepareTick,
   resolveRegion,
   Scheduler,
@@ -40,10 +42,10 @@ export interface TickCommandOptions {
   once?: boolean;
   interval?: number;
   region?: string;
-  /** Override the secrets file path (tests). Defaults to ~/.config/ebb/env. */
+  /** Override the secrets file path (tests). Defaults to ~/.config/tidegap/env. */
   envFile?: string;
   /**
-   * Override the ~/.ebb-ai/config path (tests): carbon budget and quota
+   * Override the ~/.tidegap/config path (tests): carbon budget and quota
    * reset schedules are both read from it.
    */
   budgetConfig?: string;
@@ -67,11 +69,11 @@ const defaultSpawnNotify: NotifySpawner = (cmd, args, opts) => {
   child.unref();
 };
 
-/** `EBB_NOTIFY=0` (or false/off/no) in ~/.ebb-ai/config turns notifications off. */
+/** `TIDEGAP_NOTIFY=0` (or false/off/no; 0.17: `EBB_NOTIFY`) in ~/.tidegap/config turns notifications off. */
 export function notifyDisabledInConfig(path: string = carbonBudgetConfigPath()): boolean {
   try {
     if (!existsSync(path)) return false;
-    const v = parseKeyValues(readFileSync(path, "utf8")).EBB_NOTIFY;
+    const v = withTidegapKeys(parseKeyValues(readFileSync(path, "utf8"))).TIDEGAP_NOTIFY;
     return v !== undefined && /^(0|false|off|no)$/i.test(v.trim());
   } catch {
     return false;
@@ -125,7 +127,7 @@ export interface TickRunResult {
 
 /**
  * Default queue path. Matches the MCP server's persistence default
- * (`~/.ebb-ai/queue.db`, established in v0.7.1) so `tidegap tick`,
+ * (`~/.tidegap/queue.db`, established in v0.7.1) so `tidegap tick`,
  * `tidegap queue list`, `tidegap receipts list`, and `tidegap stats` all read
  * the same SQLite ledger the MCP server writes to. Prior versions
  * defaulted to `~/.ebb/queue.sqlite`, which silently diverged from
@@ -138,7 +140,7 @@ export interface TickRunResult {
  * read the old one.
  */
 export function defaultDbPath(): string {
-  const newPath = join(homedir(), ".ebb-ai", "queue.db");
+  const newPath = join(resolveTidegapHome(), "queue.db");
   const legacyPath = join(homedir(), ".ebb", "queue.sqlite");
   if (!existsSync(newPath) && existsSync(legacyPath)) return legacyPath;
   return newPath;
@@ -243,7 +245,7 @@ export async function runTickOnce(
     const missing = missingProviderKeysForPending(dbPath);
     const detail =
       missing.length > 0
-        ? `; pending tasks need ${missing.join(" / ")} — set them in ~/.config/ebb/env`
+        ? `; pending tasks need ${missing.join(" / ")} — set them in ~/.config/tidegap/env`
         : "";
     return {
       exitCode: 0,
@@ -255,8 +257,8 @@ export async function runTickOnce(
   // we do not have (e.g. OpenAI tasks queued but only ANTHROPIC set).
   const missingForPending = missingProviderKeysForPending(dbPath);
   // Aggregate carbon-budget alerts (ROADMAP item 4): read the local budget
-  // config (env wins over ~/.ebb-ai/config) and log any crossing prominently.
-  // Core no longer reads the environment, so the two EBB_CARBON_BUDGET_*
+  // config (env wins over ~/.tidegap/config) and log any crossing prominently.
+  // Core no longer reads the environment, so the two TIDEGAP_CARBON_BUDGET_*
   // variables are read here and passed in — same precedence as before.
   const carbonBudget = loadCarbonBudgetConfig({
     path: opts.budgetConfig,
@@ -305,7 +307,7 @@ export async function runTickOnce(
       msg +=
         `\n!! WARNING: pending tasks need ${missingForPending.join(" / ")} ` +
         `but that key is not set — those tasks cannot dispatch. ` +
-        `Add it to ~/.config/ebb/env.`;
+        `Add it to ~/.config/tidegap/env.`;
     }
     return { exitCode: result.failed > 0 ? 1 : 0, message: msg };
   } finally {

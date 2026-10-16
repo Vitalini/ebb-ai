@@ -58,7 +58,7 @@ describe("missing-provider-key warning", () => {
   };
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-tick-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-tick-"));
     dbPath = join(dir, "queue.db");
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
@@ -109,7 +109,7 @@ describe("missing-provider-key warning", () => {
     const r = await runTickOnce({ db: dbPath, envFile: join(dir, "no-env") });
     expect(r.exitCode).toBe(0);
     expect(r.message).toContain("ANTHROPIC_API_KEY");
-    expect(r.message).toMatch(/config\/ebb\/env/);
+    expect(r.message).toMatch(/config\/tidegap\/env/);
   });
 
   it("returns [] for a missing/unreadable db", () => {
@@ -123,7 +123,7 @@ describe("tick receipts use the region's grid feed", () => {
   const savedHost = process.env.OLLAMA_HOST;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-tick-feed-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-tick-feed-"));
     dbPath = join(dir, "queue.db");
     process.env.OLLAMA_HOST = "http://ollama.test";
     // One fetch stub answers both sides of the tick: the GB Carbon
@@ -230,7 +230,7 @@ describe("tidegap tick pre-tick step (quota sweep, last_tick_at)", () => {
     const prevReset = new Date(Math.floor((Date.now() - 3_600_000) / 60_000) * 60_000);
     const day = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][prevReset.getUTCDay()];
     const config = join(dir, "config");
-    writeFileSync(config, `EBB_QUOTA_RESET_CLAUDE=${day} ${prevReset.toISOString().slice(11, 16)} UTC\n`);
+    writeFileSync(config, `TIDEGAP_QUOTA_RESET_CLAUDE=${day} ${prevReset.toISOString().slice(11, 16)} UTC\n`);
     seed("claude", prevReset);
     seed("codex", prevReset);
 
@@ -255,7 +255,7 @@ describe("tidegap tick notifications", () => {
   const savedHost = process.env.OLLAMA_HOST;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-tick-notify-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-tick-notify-"));
     dbPath = join(dir, "queue.db");
     process.env.OLLAMA_HOST = "http://ollama.test";
     vi.stubGlobal("fetch", async (input: string | URL) => {
@@ -333,9 +333,9 @@ describe("tidegap tick notifications", () => {
     expect(calls).toHaveLength(0);
   });
 
-  it("EBB_NOTIFY=0 in the config posts nothing", async () => {
+  it("TIDEGAP_NOTIFY=0 in the config posts nothing", async () => {
     const config = join(dir, "config");
-    writeFileSync(config, "EBB_NOTIFY=0\n");
+    writeFileSync(config, "TIDEGAP_NOTIFY=0\n");
     const { result, calls } = run({ budgetConfig: config });
     await result;
     expect(calls).toHaveLength(0);
@@ -348,7 +348,7 @@ describe("tidegap tick notifications", () => {
     for (const c of calls) {
       expect(c.cmd).toBe("powershell");
       expect(c.opts.timeout).toBeGreaterThan(0);
-      expect(c.opts.env?.EBB_NOTIFY_TITLE).toMatch(/^Tidegap: (done|failed): title /);
+      expect(c.opts.env?.TIDEGAP_NOTIFY_TITLE).toMatch(/^Tidegap: (done|failed): title /);
       expect(c.opts.env?.PATH).toBe(process.env.PATH);
       expect(c.args.join(" ")).not.toContain("title ok-1");
     }

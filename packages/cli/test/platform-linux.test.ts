@@ -23,20 +23,20 @@ describe("rtcwakeCommand", () => {
 describe("systemdService", () => {
   it("renders a complete oneshot service unit", () => {
     const unit = systemdService({
-      ebbBinaryPath: "/usr/local/bin/ebb",
-      dbPath: "/home/test/.ebb/queue.sqlite",
-      logPath: "/home/test/.ebb/tick.log",
+      ebbBinaryPath: "/usr/local/bin/tidegap",
+      dbPath: "/home/test/.tidegap/queue.sqlite",
+      logPath: "/home/test/.tidegap/tick.log",
     });
     expect(unit).toContain("[Unit]");
     expect(unit).toContain("Description=Tidegap cron-tick drain");
     expect(unit).toContain("[Service]");
     expect(unit).toContain("Type=oneshot");
     expect(unit).toContain(
-      "ExecStart=/usr/local/bin/ebb tick --db /home/test/.ebb/queue.sqlite --once",
+      "ExecStart=/usr/local/bin/tidegap tick --db /home/test/.tidegap/queue.sqlite --once",
     );
-    expect(unit).toContain("EnvironmentFile=-%h/.config/ebb/env");
-    expect(unit).toContain("StandardOutput=append:/home/test/.ebb/tick.log");
-    expect(unit).toContain("StandardError=append:/home/test/.ebb/tick.log");
+    expect(unit).toContain("EnvironmentFile=-%h/.config/tidegap/env");
+    expect(unit).toContain("StandardOutput=append:/home/test/.tidegap/tick.log");
+    expect(unit).toContain("StandardError=append:/home/test/.tidegap/tick.log");
     expect(unit).toContain("[Install]");
     expect(unit).toContain("WantedBy=default.target");
   });
@@ -64,11 +64,11 @@ describe("systemdTimer", () => {
   it("renders a complete timer unit with OnUnitActiveSec", () => {
     const unit = systemdTimer({ tickIntervalSec: 300 });
     expect(unit).toContain("[Unit]");
-    expect(unit).toContain("Description=Run ebb-tick every 300 seconds");
+    expect(unit).toContain("Description=Run tidegap-tick every 300 seconds");
     expect(unit).toContain("[Timer]");
     expect(unit).toContain("OnBootSec=30s");
     expect(unit).toContain("OnUnitActiveSec=300s");
-    expect(unit).toContain("Unit=ebb-tick.service");
+    expect(unit).toContain("Unit=tidegap-tick.service");
     expect(unit).toContain("[Install]");
     expect(unit).toContain("WantedBy=timers.target");
   });

@@ -119,7 +119,7 @@ export function mockGridFeed(clock?: () => Date): GridFeed {
  * end-to-end without signing up.
  *
  * The key is always passed in by the host (CLI/MCP read
- * `EBB_ELECTRICITY_MAPS_API_KEY`; the OpenClaw plugin reads
+ * `TIDEGAP_ELECTRICITY_MAPS_API_KEY`; the OpenClaw plugin reads
  * `electricityMapsApiKey` from plugin config). This function never reads env.
  */
 export function electricityMapsFeed(apiKey?: string): GridFeed {
@@ -429,7 +429,7 @@ interface EiaFuelRow {
  * v2 Open Data API. Returns a synthesized hourly forecast from the last
  * 24 hours of realized fuel mix.
  *
- * The key is always passed in by the host (CLI/MCP read `EBB_EIA_API_KEY`;
+ * The key is always passed in by the host (CLI/MCP read `TIDEGAP_EIA_API_KEY`;
  * the OpenClaw plugin reads `eiaApiKey` from plugin config).
  */
 export function eiaFeed(apiKey?: string): GridFeed {
@@ -716,7 +716,7 @@ export function parseEntsoeXml(xml: string): EntsoeTimeSeries[] {
  * intensity, which is why realised A75 data + persistence is used instead.
  *
  * The token is always passed in by the host (CLI/MCP read
- * `EBB_ENTSOE_SECURITY_TOKEN`; the OpenClaw plugin reads
+ * `TIDEGAP_ENTSOE_SECURITY_TOKEN`; the OpenClaw plugin reads
  * `entsoeSecurityToken` from plugin config).
  */
 export function entsoeFeed(securityToken?: string): GridFeed {
@@ -1108,11 +1108,11 @@ export function multiSourceGridFeed(options: {
  * `eiaApiKey`, `entsoeSecurityToken`, `wattTimeUsername`, `wattTimePassword`).
  */
 export interface GridFeedCredentials {
-  /** Electricity Maps free-tier key. CLI/MCP env: `EBB_ELECTRICITY_MAPS_API_KEY`. */
+  /** Electricity Maps free-tier key. CLI/MCP env: `TIDEGAP_ELECTRICITY_MAPS_API_KEY`. */
   electricityMapsApiKey?: string;
-  /** US EIA v2 Open Data key. CLI/MCP env: `EBB_EIA_API_KEY`. */
+  /** US EIA v2 Open Data key. CLI/MCP env: `TIDEGAP_EIA_API_KEY`. */
   eiaApiKey?: string;
-  /** ENTSO-E Transparency Platform token. CLI/MCP env: `EBB_ENTSOE_SECURITY_TOKEN`. */
+  /** ENTSO-E Transparency Platform token. CLI/MCP env: `TIDEGAP_ENTSOE_SECURITY_TOKEN`. */
   entsoeSecurityToken?: string;
   /** WattTime account username. CLI/MCP env: `WATTTIME_USERNAME`. */
   wattTimeUsername?: string;

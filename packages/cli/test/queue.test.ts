@@ -139,7 +139,7 @@ describe("queue list / show / unread (task visibility)", () => {
 
   it("show labels a quota deadline and does not mark an unfinished task read", async () => {
     const config = join(dir, "config");
-    writeFileSync(config, "EBB_QUOTA_RESET_CLAUDE=mon 10:00 UTC\nEBB_QUOTA_MARGIN_H_CLAUDE=2\n");
+    writeFileSync(config, "TIDEGAP_QUOTA_RESET_CLAUDE=mon 10:00 UTC\nTIDEGAP_QUOTA_MARGIN_H_CLAUDE=2\n");
     const { rendered } = await runQueueShow("t-quota", { db, config });
     expect(rendered).toContain(
       "deadline: 2026-10-19T08:00:00.000Z (quota reset (claude), reset_at 2026-10-19T10:00:00.000Z, margin_h 2)",

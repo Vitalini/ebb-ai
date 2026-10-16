@@ -141,7 +141,7 @@ describe("loadCarbonBudgetConfig", () => {
 
   it("parses the KEY=VALUE config file", () => {
     const p = join(dir, "config");
-    writeFileSync(p, "# budget\nEBB_CARBON_BUDGET_G=500\nEBB_CARBON_BUDGET_WINDOW=weekly\n");
+    writeFileSync(p, "# budget\nTIDEGAP_CARBON_BUDGET_G=500\nTIDEGAP_CARBON_BUDGET_WINDOW=weekly\n");
     expect(loadCarbonBudgetConfig({ path: p, env: {} })).toEqual({
       windowKind: "weekly",
       thresholdG: 500,
@@ -150,25 +150,45 @@ describe("loadCarbonBudgetConfig", () => {
 
   it("defaults the window to daily", () => {
     const p = join(dir, "config");
-    writeFileSync(p, "EBB_CARBON_BUDGET_G=250\n");
+    writeFileSync(p, "TIDEGAP_CARBON_BUDGET_G=250\n");
     expect(loadCarbonBudgetConfig({ path: p, env: {} })?.windowKind).toBe("daily");
   });
 
   it("lets an env var override the file", () => {
     const p = join(dir, "config");
-    writeFileSync(p, "EBB_CARBON_BUDGET_G=500\nEBB_CARBON_BUDGET_WINDOW=weekly\n");
+    writeFileSync(p, "TIDEGAP_CARBON_BUDGET_G=500\nTIDEGAP_CARBON_BUDGET_WINDOW=weekly\n");
     const cfg = loadCarbonBudgetConfig({
       path: p,
-      env: { EBB_CARBON_BUDGET_G: "999", EBB_CARBON_BUDGET_WINDOW: "monthly" },
+      env: { TIDEGAP_CARBON_BUDGET_G: "999", TIDEGAP_CARBON_BUDGET_WINDOW: "monthly" },
     });
     expect(cfg).toEqual({ windowKind: "monthly", thresholdG: 999 });
   });
 
+  it("reads a 0.17 EBB_* key when its TIDEGAP_* twin is absent", () => {
+    const p = join(dir, "config");
+    writeFileSync(p, "EBB_CARBON_BUDGET_G=500\nEBB_CARBON_BUDGET_WINDOW=weekly\n");
+    expect(loadCarbonBudgetConfig({ path: p, env: {} })).toEqual({ windowKind: "weekly", thresholdG: 500 });
+  });
+
+  it("prefers the TIDEGAP_* key when both are in the file", () => {
+    const p = join(dir, "config");
+    writeFileSync(p, "EBB_CARBON_BUDGET_G=500\nTIDEGAP_CARBON_BUDGET_G=300\n");
+    expect(loadCarbonBudgetConfig({ path: p, env: {} })?.thresholdG).toBe(300);
+  });
+
+  it("accepts a host override under either name; TIDEGAP_* wins", () => {
+    const p = join(dir, "absent");
+    expect(loadCarbonBudgetConfig({ path: p, env: { EBB_CARBON_BUDGET_G: "40" } })?.thresholdG).toBe(40);
+    expect(
+      loadCarbonBudgetConfig({ path: p, env: { EBB_CARBON_BUDGET_G: "40", TIDEGAP_CARBON_BUDGET_G: "70" } })?.thresholdG,
+    ).toBe(70);
+  });
+
   it("disables on a non-positive or malformed threshold", () => {
     const p = join(dir, "config");
-    writeFileSync(p, "EBB_CARBON_BUDGET_G=0\n");
+    writeFileSync(p, "TIDEGAP_CARBON_BUDGET_G=0\n");
     expect(loadCarbonBudgetConfig({ path: p, env: {} })).toBeUndefined();
-    expect(loadCarbonBudgetConfig({ path: join(dir, "x"), env: { EBB_CARBON_BUDGET_G: "abc" } })).toBeUndefined();
+    expect(loadCarbonBudgetConfig({ path: join(dir, "x"), env: { TIDEGAP_CARBON_BUDGET_G: "abc" } })).toBeUndefined();
   });
 });
 

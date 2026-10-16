@@ -5,7 +5,7 @@
  * the page can ask the server to start one: the same `tidegap` binary the
  * install step resolves, spawned detached as `tidegap tick --daemon --interval
  * 60 --db <ledger>`, with stdout and stderr appended to
- * `~/.ebb-ai/logs/ui-tick.log` (directory 0700, file 0600). The child's
+ * `~/.tidegap/logs/ui-tick.log` (directory 0700, file 0600). The child's
  * pid, log path and start time are kept in ledger meta `ui_dispatcher`. A
  * start is refused (409) while that child is alive or while any other
  * ticker ticked within two intervals. The user stops it with `kill <pid>`.
@@ -18,10 +18,9 @@
 
 import { spawn } from "node:child_process";
 import { chmodSync, closeSync, fchmodSync, mkdirSync, openSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { LAST_TICK_META_KEY, type TaskStore } from "@tidegap/core";
+import { LAST_TICK_META_KEY, resolveTidegapHome, type TaskStore } from "@tidegap/core";
 
 import type { DaemonStatus } from "../platform/index.js";
 
@@ -44,7 +43,7 @@ export interface DispatcherOptions {
   /** The `tidegap` launcher (`[node, script]` or `[binary]`), from `resolveLauncher`. */
   launcher: string[];
   dbPath: string;
-  /** Default `~/.ebb-ai/logs`. */
+  /** Default `~/.tidegap/logs`. */
   logDir?: string;
   spawn?: Spawner;
   isAlive?: (pid: number) => boolean;
@@ -60,7 +59,7 @@ export interface DispatcherState {
 }
 
 export function defaultLogDir(): string {
-  return join(homedir(), ".ebb-ai", "logs");
+  return join(resolveTidegapHome(), "logs");
 }
 
 /** True when a process with `pid` exists (EPERM still means it exists). */

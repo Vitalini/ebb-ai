@@ -48,7 +48,7 @@
  * such tasks: a restart alone cannot recover bridge-only or chat-delivery
  * tasks; the first tool call in the new process does.
  *
- * Shares the SQLite ledger at ~/.ebb-ai/queue.db with the @tidegap/mcp MCP
+ * Shares the SQLite ledger at ~/.tidegap/queue.db with the @tidegap/mcp MCP
  * server and the @tidegap/cli CLI — a task deferred in OpenClaw shows up in
  * `ebb stats` and vice versa. Tool names match the MCP server surface.
  *
@@ -81,6 +81,7 @@ import {
   prepareTick,
   recommendWindow,
   resolveRegion,
+  resolveTidegapHome,
   Scheduler,
   stripControlChars,
   TaskStore,
@@ -138,7 +139,6 @@ import {
   type ReportFormat,
 } from "./delivery.js";
 
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { mkdirSync } from "node:fs";
 
@@ -289,7 +289,7 @@ type QueueRuntime = {
 let cachedQueueRuntime: QueueRuntime | undefined;
 
 function resolveDbPath(cfg: PluginConfig): string {
-  const path = cfg.dbPath ?? join(homedir(), ".ebb-ai", "queue.db");
+  const path = cfg.dbPath ?? join(resolveTidegapHome(), "queue.db");
   try {
     mkdirSync(dirname(path), { recursive: true });
   } catch {
@@ -322,10 +322,10 @@ function getQueueRuntime(config: PluginConfig): QueueRuntime {
     );
   }
 
-  // Aggregate carbon-budget alerts (ROADMAP item 4): the ~/.ebb-ai/config
+  // Aggregate carbon-budget alerts (ROADMAP item 4): the ~/.tidegap/config
   // FILE is still read by core, with the plugin's carbonBudgetG /
   // carbonBudgetWindow config fields taking precedence (they replaced the
-  // EBB_CARBON_BUDGET_G / EBB_CARBON_BUDGET_WINDOW environment variables).
+  // TIDEGAP_CARBON_BUDGET_G / TIDEGAP_CARBON_BUDGET_WINDOW environment variables).
   // When set, a crossing inside Scheduler.tick routes through the SAME
   // delivery machinery — chat by default via the captured gateway config —
   // and is logged to the gateway.
@@ -406,7 +406,7 @@ export async function runDispatchTick(
   // Shared pre-tick step (same as `ebb tick`): record last_tick_at and
   // re-resolve quota_reset tasks whose weekly reset already passed, so they
   // are rescheduled through the window picker instead of dispatched late.
-  // Quota schedules come from the ~/.ebb-ai/config FILE (no env reads).
+  // Quota schedules come from the ~/.tidegap/config FILE (no env reads).
   const preTickMessages = await prepareTick(scheduler, {
     quotaConfig: loadQuotaResetConfig(),
   });
@@ -566,7 +566,7 @@ function stopDispatcher(): void {
 /** Start the background dispatch loop — once per process. */
 function ensureDispatcher(config: PluginConfig): void {
   activeDispatchConfig = config;
-  // `disableStartupDispatch` (formerly EBB_DISABLE_STARTUP_DISPATCH=1) is a
+  // `disableStartupDispatch` (formerly TIDEGAP_DISABLE_STARTUP_DISPATCH=1) is a
   // plugin-config field, and plugin config only reaches this module once a
   // tool call supplies it — after the module-load bootstrap may already have
   // started the loop. So honour it here by STOPPING an already-running loop,
@@ -607,7 +607,7 @@ function ensureDispatcher(config: PluginConfig): void {
 // no-op once this has fired.
 //
 // OPT-OUT: `disableStartupDispatch: true` in plugin config (which replaced
-// `EBB_DISABLE_STARTUP_DISPATCH=1`) suppresses this — but note the ordering
+// `TIDEGAP_DISABLE_STARTUP_DISPATCH=1`) suppresses this — but note the ordering
 // limitation it inherits from the SDK: at module load NO config exists yet, so
 // the flag can only be honoured (a) when a caller passes it here directly —
 // how the test suite and embedders drive it — or (b) on the first tool call,
@@ -641,7 +641,7 @@ export function bootstrapDispatcherOnStartup(config: PluginConfig = {}): void {
  * at import — before any caller can pass `disableStartupDispatch`. This seam
  * lets an embedder (and the test suite, via `vitest` `setupFiles`) opt out
  * between the import and the deferred queue-open 1s later. It replaces the
- * `EBB_DISABLE_STARTUP_DISPATCH=1` environment variable for that purpose;
+ * `TIDEGAP_DISABLE_STARTUP_DISPATCH=1` environment variable for that purpose;
  * inside a gateway, prefer the `disableStartupDispatch` plugin-config field.
  */
 let startupDispatchSuppressed = false;

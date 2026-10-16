@@ -9,11 +9,11 @@
  * (machine asleep, daemon down) through the existing
  * `Scheduler.rescheduleIfPending` path. The window picker itself is unchanged.
  *
- * Config lives in `~/.ebb-ai/config` (KEY=VALUE, same file as the carbon
+ * Config lives in `~/.tidegap/config` (KEY=VALUE, same file as the carbon
  * budget):
  *
- *   EBB_QUOTA_RESET_CLAUDE=mon 10:00 Europe/Berlin
- *   EBB_QUOTA_MARGIN_H_CLAUDE=2
+ *   TIDEGAP_QUOTA_RESET_CLAUDE=mon 10:00 Europe/Berlin
+ *   TIDEGAP_QUOTA_MARGIN_H_CLAUDE=2
  *
  * The label after the prefix is free-form (lowercased on read). The time
  * zone is optional (system zone by default); the margin defaults to 2 hours
@@ -22,11 +22,11 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
-import { carbonBudgetConfigPath, parseKeyValues } from "./budget.js";
+import { carbonBudgetConfigPath, parseKeyValues, withTidegapKeys } from "./budget.js";
 import type { Scheduler } from "./scheduler.js";
 
-const RESET_PREFIX = "EBB_QUOTA_RESET_";
-const MARGIN_PREFIX = "EBB_QUOTA_MARGIN_H_";
+const RESET_PREFIX = "TIDEGAP_QUOTA_RESET_";
+const MARGIN_PREFIX = "TIDEGAP_QUOTA_MARGIN_H_";
 export const DEFAULT_QUOTA_MARGIN_H = 2;
 const MAX_MARGIN_H = 168;
 const HOUR_MS = 3_600_000;
@@ -58,7 +58,7 @@ export interface QuotaResetSchedule {
 export type QuotaResetConfig = Record<string, QuotaResetSchedule>;
 
 export interface LoadQuotaResetOptions {
-  /** Config file path. Defaults to `~/.ebb-ai/config`. */
+  /** Config file path. Defaults to `~/.tidegap/config`. */
   path?: string;
   /** Zone used when an entry names none. Defaults to the system zone. */
   defaultTimeZone?: string;
@@ -83,7 +83,7 @@ function parseWeekday(raw: string): number | undefined {
 }
 
 /**
- * Parse one `EBB_QUOTA_RESET_<LABEL>` value. Returns undefined when it is
+ * Parse one `TIDEGAP_QUOTA_RESET_<LABEL>` value. Returns undefined when it is
  * malformed (unknown weekday, bad time, unknown zone).
  */
 export function parseQuotaResetValue(
@@ -111,6 +111,7 @@ export function quotaResetConfigFromValues(
   defaultTimeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone,
 ): QuotaResetConfig {
   const out: QuotaResetConfig = {};
+  values = withTidegapKeys(values);
   for (const [key, value] of Object.entries(values)) {
     if (!key.startsWith(RESET_PREFIX)) continue;
     const suffix = key.slice(RESET_PREFIX.length);
@@ -129,7 +130,7 @@ export function quotaResetConfigFromValues(
 }
 
 /**
- * Read quota-reset schedules from `~/.ebb-ai/config` (or `opts.path`).
+ * Read quota-reset schedules from `~/.tidegap/config` (or `opts.path`).
  * Missing or unreadable file means no labels; never throws.
  */
 export function loadQuotaResetConfig(opts: LoadQuotaResetOptions = {}): QuotaResetConfig {
@@ -243,7 +244,7 @@ export function resolveQuotaProvider(
 ): ResolveQuotaProviderResult {
   const labels = Object.keys(config).sort();
   const hint =
-    "add EBB_QUOTA_RESET_<LABEL>=<weekday> <HH:MM> [<IANA zone>] to ~/.ebb-ai/config";
+    "add TIDEGAP_QUOTA_RESET_<LABEL>=<weekday> <HH:MM> [<IANA zone>] to ~/.tidegap/config";
   if (requested !== undefined && requested.trim() !== "") {
     const schedule = config[requested.trim().toLowerCase()];
     if (schedule) return { ok: true, schedule };

@@ -17,7 +17,7 @@ describe("windows honesty (P16)", () => {
     expect(t).toContain("schtasks /create");
     expect(t).toContain("index.js");
     expect(t).toContain("tick");
-    expect(t).not.toContain("/usr/local/bin/ebb");
+    expect(t).not.toContain("/usr/local/bin/tidegap");
     expect(t).not.toContain("planned for v0.5");
     // 300s → every 5 minutes.
     expect(t).toContain("/MO 5");

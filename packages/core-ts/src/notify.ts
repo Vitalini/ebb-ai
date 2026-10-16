@@ -25,8 +25,8 @@ export interface OsNotifyCommand {
 }
 
 /** Environment variable names the Windows script reads the text from. */
-export const WIN_NOTIFY_TITLE_VAR = "EBB_NOTIFY_TITLE";
-export const WIN_NOTIFY_BODY_VAR = "EBB_NOTIFY_BODY";
+export const WIN_NOTIFY_TITLE_VAR = "TIDEGAP_NOTIFY_TITLE";
+export const WIN_NOTIFY_BODY_VAR = "TIDEGAP_NOTIFY_BODY";
 
 /** Fixed AppleScript: the text arrives as `argv`, never as script source. */
 const MAC_NOTIFY_SCRIPT = [

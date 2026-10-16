@@ -20,13 +20,13 @@ const VARS = [
   "GEMINI_API_KEY",
   "GOOGLE_API_KEY",
   "OLLAMA_HOST",
-  "EBB_ELECTRICITY_MAPS_API_KEY",
-  "EBB_EIA_API_KEY",
-  "EBB_ENTSOE_SECURITY_TOKEN",
+  "TIDEGAP_ELECTRICITY_MAPS_API_KEY",
+  "TIDEGAP_EIA_API_KEY",
+  "TIDEGAP_ENTSOE_SECURITY_TOKEN",
   "WATTTIME_USERNAME",
   "WATTTIME_PASSWORD",
-  "EBB_CARBON_BUDGET_G",
-  "EBB_CARBON_BUDGET_WINDOW",
+  "TIDEGAP_CARBON_BUDGET_G",
+  "TIDEGAP_CARBON_BUDGET_WINDOW",
 ] as const;
 
 describe("@tidegap/mcp env boundary", () => {
@@ -52,13 +52,13 @@ describe("@tidegap/mcp env boundary", () => {
     process.env.OPENAI_API_KEY = "o";
     process.env.GEMINI_API_KEY = "g";
     process.env.OLLAMA_HOST = "http://ollama.test:11434";
-    process.env.EBB_ELECTRICITY_MAPS_API_KEY = "em";
-    process.env.EBB_EIA_API_KEY = "eia";
-    process.env.EBB_ENTSOE_SECURITY_TOKEN = "entsoe";
+    process.env.TIDEGAP_ELECTRICITY_MAPS_API_KEY = "em";
+    process.env.TIDEGAP_EIA_API_KEY = "eia";
+    process.env.TIDEGAP_ENTSOE_SECURITY_TOKEN = "entsoe";
     process.env.WATTTIME_USERNAME = "wt-user";
     process.env.WATTTIME_PASSWORD = "wt-pass";
-    process.env.EBB_CARBON_BUDGET_G = "1000";
-    process.env.EBB_CARBON_BUDGET_WINDOW = "monthly";
+    process.env.TIDEGAP_CARBON_BUDGET_G = "1000";
+    process.env.TIDEGAP_CARBON_BUDGET_WINDOW = "monthly";
 
     expect(readEnvCredentials()).toEqual({
       anthropicApiKey: "a",
@@ -73,8 +73,8 @@ describe("@tidegap/mcp env boundary", () => {
         wattTimePassword: "wt-pass",
       },
       carbonBudget: {
-        EBB_CARBON_BUDGET_G: "1000",
-        EBB_CARBON_BUDGET_WINDOW: "monthly",
+        TIDEGAP_CARBON_BUDGET_G: "1000",
+        TIDEGAP_CARBON_BUDGET_WINDOW: "monthly",
       },
     });
   });

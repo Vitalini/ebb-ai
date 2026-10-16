@@ -29,19 +29,19 @@ describe("launchdPlist", () => {
   it("renders a complete plist for laptop install", () => {
     const xml = launchdPlist({
       tickIntervalSec: 300,
-      ebbBinaryPath: "/usr/local/bin/ebb",
-      dbPath: "/Users/test/.ebb/queue.sqlite",
-      logPath: "/Users/test/.ebb/tick.log",
+      ebbBinaryPath: "/usr/local/bin/tidegap",
+      dbPath: "/Users/test/.tidegap/queue.sqlite",
+      logPath: "/Users/test/.tidegap/tick.log",
     });
     expect(xml).toContain("<key>Label</key>");
-    expect(xml).toContain("<string>com.ebb-ai.tick</string>");
-    expect(xml).toContain("<string>/usr/local/bin/ebb</string>");
+    expect(xml).toContain("<string>com.tidegap.tick</string>");
+    expect(xml).toContain("<string>/usr/local/bin/tidegap</string>");
     expect(xml).toContain("<string>tick</string>");
     expect(xml).toContain("<string>--once</string>");
     expect(xml).toContain("<integer>300</integer>");
     expect(xml).toContain("<true/>");
-    expect(xml).toContain("/Users/test/.ebb/queue.sqlite");
-    expect(xml).toContain("/Users/test/.ebb/tick.log");
+    expect(xml).toContain("/Users/test/.tidegap/queue.sqlite");
+    expect(xml).toContain("/Users/test/.tidegap/tick.log");
   });
 
   it("XML-escapes paths that contain & < > characters", () => {

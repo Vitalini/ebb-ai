@@ -309,7 +309,7 @@ export class TaskStore {
     // v0.11: enable WAL on disk-backed stores. WAL lifts SQLite's
     // single-writer-per-DB-file pessimism so the `tidegap tick` daemon and
     // an interactive process can hold separate `TaskStore` handles
-    // against `~/.ebb-ai/queue.db`. Writers can still collide briefly
+    // against `~/.tidegap/queue.db`. Writers can still collide briefly
     // (one writer at a time even under WAL), so busy_timeout makes a
     // colliding writer queue for up to 5s instead of throwing
     // SQLITE_BUSY immediately — node:sqlite defaults to 0ms,

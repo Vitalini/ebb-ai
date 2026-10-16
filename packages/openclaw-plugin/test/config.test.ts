@@ -85,9 +85,9 @@ describe("ebb OpenClaw plugin — configuration comes from PluginConfig", () => 
     "GOOGLE_API_KEY",
     "OLLAMA_HOST",
     "OLLAMA_MODELS",
-    "EBB_ELECTRICITY_MAPS_API_KEY",
-    "EBB_EIA_API_KEY",
-    "EBB_ENTSOE_SECURITY_TOKEN",
+    "TIDEGAP_ELECTRICITY_MAPS_API_KEY",
+    "TIDEGAP_EIA_API_KEY",
+    "TIDEGAP_ENTSOE_SECURITY_TOKEN",
     "WATTTIME_USERNAME",
     "WATTTIME_PASSWORD",
   ];
@@ -161,13 +161,13 @@ describe("ebb OpenClaw plugin — configuration comes from PluginConfig", () => 
   it("carbonBudgetOverrides maps the threshold + window onto core's option shape", () => {
     expect(carbonBudgetOverrides({})).toEqual({});
     expect(carbonBudgetOverrides({ carbonBudgetG: 500 })).toEqual({
-      EBB_CARBON_BUDGET_G: "500",
+      TIDEGAP_CARBON_BUDGET_G: "500",
     });
     expect(
       carbonBudgetOverrides({ carbonBudgetG: 500, carbonBudgetWindow: "weekly" }),
     ).toEqual({
-      EBB_CARBON_BUDGET_G: "500",
-      EBB_CARBON_BUDGET_WINDOW: "weekly",
+      TIDEGAP_CARBON_BUDGET_G: "500",
+      TIDEGAP_CARBON_BUDGET_WINDOW: "weekly",
     });
     // A non-finite threshold is dropped rather than passed through as "NaN".
     expect(carbonBudgetOverrides({ carbonBudgetG: Number.NaN })).toEqual({});

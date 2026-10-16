@@ -52,7 +52,7 @@ describe("tidegap stats — carbon budget block", () => {
   it("renders the budget block with used/threshold/percent when configured", async () => {
     seedCompleted(dbPath, "t-1", 30);
     seedCompleted(dbPath, "t-2", 45);
-    writeFileSync(cfgPath, "EBB_CARBON_BUDGET_G=100\nEBB_CARBON_BUDGET_WINDOW=daily\n");
+    writeFileSync(cfgPath, "TIDEGAP_CARBON_BUDGET_G=100\nTIDEGAP_CARBON_BUDGET_WINDOW=daily\n");
     const res = await runStats({ db: dbPath, budgetConfig: cfgPath });
     expect(res.budget).toBeDefined();
     expect(res.budget!.usedG).toBe(75);
@@ -67,7 +67,7 @@ describe("tidegap stats — carbon budget block", () => {
   it("flags OVER BUDGET once consumption crosses the threshold", async () => {
     seedCompleted(dbPath, "t-1", 80);
     seedCompleted(dbPath, "t-2", 40);
-    writeFileSync(cfgPath, "EBB_CARBON_BUDGET_G=100\n");
+    writeFileSync(cfgPath, "TIDEGAP_CARBON_BUDGET_G=100\n");
     const res = await runStats({ db: dbPath, budgetConfig: cfgPath });
     expect(res.budget!.exceeded).toBe(true);
     expect(res.rendered).toMatch(/OVER BUDGET/);
@@ -82,7 +82,7 @@ describe("tidegap stats — carbon budget block", () => {
 
   it("includes the budget in --json output", async () => {
     seedCompleted(dbPath, "t-1", 30);
-    writeFileSync(cfgPath, "EBB_CARBON_BUDGET_G=100\n");
+    writeFileSync(cfgPath, "TIDEGAP_CARBON_BUDGET_G=100\n");
     const res = await runStats({ db: dbPath, json: true, budgetConfig: cfgPath });
     const parsed = JSON.parse(res.rendered) as { budget?: { usedG: number } };
     expect(parsed.budget?.usedG).toBe(30);

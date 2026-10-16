@@ -253,7 +253,7 @@ export interface QueueShowOptions {
   json?: boolean;
   /** Default true: viewing a finished task marks it read. */
   markRead?: boolean;
-  /** Override the ~/.ebb-ai/config path (tests). */
+  /** Override the ~/.tidegap/config path (tests). */
   config?: string;
 }
 

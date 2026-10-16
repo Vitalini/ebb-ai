@@ -89,8 +89,8 @@ describe("loadOrCreateSigningKey", () => {
     expect(Buffer.from(kp.publicKeyBase64, "base64")).toHaveLength(32);
   });
 
-  it("defaults to ~/.ebb-ai/signing.key", () => {
-    expect(defaultSigningKeyPath()).toMatch(/[/\\]\.ebb-ai[/\\]signing\.key$/);
+  it("defaults to ~/.tidegap/signing.key", () => {
+    expect(defaultSigningKeyPath()).toMatch(/[/\\]\.tidegap[/\\]signing\.key$/);
   });
 });
 

@@ -146,7 +146,7 @@ export interface SchedulerOptions {
   /**
    * Ed25519 receipt-signing configuration. By default the scheduler
    * signs every receipt with a per-installation keypair at
-   * `~/.ebb-ai/signing.key` (lazily created on first dispatch). Pass:
+   * `~/.tidegap/signing.key` (lazily created on first dispatch). Pass:
    *   - `false` to disable signing entirely (receipts shipped without
    *     signature/signerPublicKey/signedAt fields — back to v0.10 shape).
    *   - `{ keyPath: "..." }` to override the keypair location (mostly

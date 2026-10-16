@@ -11,7 +11,7 @@
 //   node scripts/ui-seed.mjs --empty    an empty ledger (empty states)
 //   --db <path>                         write a NEW ledger here instead of a
 //                                       temp dir (refuses an existing file
-//                                       and anything under ~/.ebb-ai)
+//                                       and anything under ~/.tidegap)
 //   --port <n>                          port for --serve
 //
 // --serve runs the built CLI (`pnpm build` first) with HOME pointed at the
@@ -45,15 +45,18 @@ const option = (name) => {
 // where a running dispatcher would send them to a provider.
 if (option("--db")) {
   const target = resolve(option("--db"));
-  const ebbHome = resolve(homedir(), ".ebb-ai");
-  const rel = relative(ebbHome, target);
-  const insideEbbHome = rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
-  if (existsSync(target) || insideEbbHome) {
-    console.error(`ui-seed: refusing ${target}: --db must name a new file outside ${ebbHome}.`);
+  // ~/.tidegap, and the 0.17 ~/.ebb-ai (a link to it after the 0.18 move).
+  const homes = [resolve(homedir(), ".tidegap"), resolve(homedir(), ".ebb-ai")];
+  const inside = homes.some((h) => {
+    const rel = relative(h, target);
+    return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+  });
+  if (existsSync(target) || inside) {
+    console.error(`ui-seed: refusing ${target}: --db must name a new file outside ${homes.join(" and ")}.`);
     process.exit(1);
   }
 }
-const dir = mkdtempSync(join(tmpdir(), "ebb-ui-seed-"));
+const dir = mkdtempSync(join(tmpdir(), "tidegap-ui-seed-"));
 const dbPath = option("--db") ? resolve(option("--db")) : join(dir, "queue.db");
 mkdirSync(dirname(dbPath), { recursive: true });
 
@@ -299,9 +302,9 @@ if (!flag("--serve")) {
 }
 
 // Serve with a scrubbed environment: no provider or grid secrets, HOME in
-// the temp dir (no ~/.ebb-ai/.env, no installed daemon, logs stay here).
+// the temp dir (no ~/.tidegap/.env, no installed daemon, logs stay here).
 const env = Object.fromEntries(
-  Object.entries(process.env).filter(([k]) => !/API_KEY|TOKEN|SECRET|PASSWORD|WATTTIME|ELECTRICITY|EIA_|OLLAMA|EBB_/i.test(k)),
+  Object.entries(process.env).filter(([k]) => !/API_KEY|TOKEN|SECRET|PASSWORD|WATTTIME|ELECTRICITY|EIA_|OLLAMA|EBB_|TIDEGAP_/i.test(k)),
 );
 env.HOME = join(dir, "home");
 mkdirSync(env.HOME, { recursive: true });

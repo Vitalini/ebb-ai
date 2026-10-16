@@ -3,7 +3,7 @@
  * on a carbon receipt.
  *
  *   - From the local ledger:   `tidegap verify <task_id>` (looks up
- *     `~/.ebb-ai/queue.db`, or `--db` if set).
+ *     `~/.tidegap/queue.db`, or `--db` if set).
  *   - From a JSON receipt:     `tidegap verify --file ./receipt.json`.
  *
  * Exit code reflects the outcome so CI / batch jobs can branch:

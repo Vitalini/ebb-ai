@@ -80,7 +80,7 @@ def test_classify_thresholds() -> None:
 async def test_electricity_maps_without_key_falls_back_to_mock(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("EBB_ELECTRICITY_MAPS_API_KEY", raising=False)
+    monkeypatch.delenv("TIDEGAP_ELECTRICITY_MAPS_API_KEY", raising=False)
     feed = electricity_maps_feed()
     # The wrapper reports "mock" source because the fallback is the
     # mock feed — same behavior the TS port has.

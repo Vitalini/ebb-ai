@@ -95,6 +95,11 @@ export async function pmsetScheduleWake(
   });
 }
 
+/** launchd label of the tick agent; the plist file is `<label>.plist`. */
+export const LAUNCHD_LABEL = "com.tidegap.tick";
+/** The 0.17 label, detected so `tidegap install` can print its cleanup. */
+export const LEGACY_LAUNCHD_LABEL = "com.ebb-ai.tick";
+
 export interface LaunchdPlistOptions {
   tickIntervalSec: number;
   dbPath: string;
@@ -109,7 +114,7 @@ export interface LaunchdPlistOptions {
   launcher?: string[];
   /** Legacy single-binary launcher. Prefer `launcher`. */
   ebbBinaryPath?: string;
-  /** Absolute path to write stdout/stderr logs. Defaults to ~/.ebb/tick.log. */
+  /** Absolute path to write stdout/stderr logs. Defaults to ~/.tidegap/logs/tick.log. */
   logPath?: string;
   /** Optional env vars (e.g. ANTHROPIC_API_KEY) added to the plist. */
   env?: Record<string, string>;
@@ -124,11 +129,11 @@ export interface LaunchdPlistOptions {
  * first session.
  */
 export function launchdPlist(opts: LaunchdPlistOptions): string {
-  const logPath = opts.logPath ?? `${homeDir()}/.ebb/tick.log`;
+  const logPath = opts.logPath ?? `${homeDir()}/.tidegap/logs/tick.log`;
   const launcher =
     opts.launcher && opts.launcher.length > 0
       ? opts.launcher
-      : [opts.ebbBinaryPath ?? "ebb"];
+      : [opts.ebbBinaryPath ?? "tidegap"];
   const programArgs = [...launcher, "tick", "--db", opts.dbPath, "--once"];
   const argBlock = programArgs
     .map((a) => `    <string>${escapeXml(a)}</string>`)
@@ -149,7 +154,7 @@ export function launchdPlist(opts: LaunchdPlistOptions): string {
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.ebb-ai.tick</string>
+  <string>${LAUNCHD_LABEL}</string>
   <key>ProgramArguments</key>
   <array>
 ${argBlock}

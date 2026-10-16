@@ -3,7 +3,7 @@
  * dashboard and CLI surface.
  *
  * Inputs are TaskRecord rows read from a TaskStore (typically
- * `~/.ebb-ai/queue.db`). Output is pure data — no I/O. Renderers
+ * `~/.tidegap/queue.db`). Output is pure data — no I/O. Renderers
  * (CLI / dashboard) layer formatting on top.
  *
  * Scope (local-only): aggregates exactly what is stored on receipts

@@ -46,6 +46,7 @@ from ._data import (
     REGION_UTC_OFFSETS,
     SYNTHETIC_AMPLITUDE,
 )
+from ._env import env_value
 from .types import Band, GridForecast, GridForecastEntry, GridSource
 
 _log = logging.getLogger(__name__)
@@ -258,7 +259,7 @@ class _MockWithWarning(GridFeed):
     def __init__(
         self,
         message: str = (
-            "[tidegap/grid] no EBB_ELECTRICITY_MAPS_API_KEY set — using mock data"
+            "[tidegap/grid] no TIDEGAP_ELECTRICITY_MAPS_API_KEY set — using mock data"
         ),
     ) -> None:
         self._mock = _MockGridFeed()
@@ -279,7 +280,7 @@ def electricity_maps_feed(
 ) -> GridFeed:
     """Construct an Electricity Maps feed.
 
-    Reads the API key from the ``EBB_ELECTRICITY_MAPS_API_KEY``
+    Reads the API key from the ``TIDEGAP_ELECTRICITY_MAPS_API_KEY``
     environment variable if not passed explicitly. If no key is found,
     returns a mock-backed feed that warns once on first use — matching
     the TS implementation's deliberate fallback so the stack still runs
@@ -294,7 +295,7 @@ def electricity_maps_feed(
         one a degraded Electricity Maps edge can hang the scheduler
         indefinitely.
     """
-    key = api_key or os.environ.get("EBB_ELECTRICITY_MAPS_API_KEY")
+    key = api_key or env_value("ELECTRICITY_MAPS_API_KEY")
     if not key:
         return _MockWithWarning()
     return _ElectricityMapsFeed(key, timeout_s=timeout_s)
@@ -670,14 +671,14 @@ def eia_feed(
 ) -> GridFeed:
     """Construct an EIA fuel-mix persistence feed for US ISO/RTO zones.
 
-    Reads the key from ``EBB_EIA_API_KEY`` when not passed. With no key,
+    Reads the key from ``TIDEGAP_EIA_API_KEY`` when not passed. With no key,
     returns a mock-backed feed that warns once — matching the TS port's
     deliberate fallback so the stack still runs end-to-end.
     """
-    key = api_key or os.environ.get("EBB_EIA_API_KEY")
+    key = api_key or env_value("EIA_API_KEY")
     if not key:
         return _MockWithWarning(
-            "[tidegap/grid] no EBB_EIA_API_KEY set — "
+            "[tidegap/grid] no TIDEGAP_EIA_API_KEY set — "
             "using mock data for EIA-eligible zones"
         )
     return _EiaFeed(key, timeout_s=timeout_s)
@@ -966,14 +967,14 @@ def entsoe_feed(
 ) -> GridFeed:
     """Construct an ENTSO-E realised-generation persistence feed for EU zones.
 
-    Reads the token from ``EBB_ENTSOE_SECURITY_TOKEN`` when not passed.
+    Reads the token from ``TIDEGAP_ENTSOE_SECURITY_TOKEN`` when not passed.
     With no token, returns a mock-backed feed that warns once — matching
     the TS port's deliberate fallback so the stack still runs end-to-end.
     """
-    token = security_token or os.environ.get("EBB_ENTSOE_SECURITY_TOKEN")
+    token = security_token or env_value("ENTSOE_SECURITY_TOKEN")
     if not token:
         return _MockWithWarning(
-            "[tidegap/grid] no EBB_ENTSOE_SECURITY_TOKEN set — "
+            "[tidegap/grid] no TIDEGAP_ENTSOE_SECURITY_TOKEN set — "
             "using mock data for EU zones"
         )
     return _EntsoeFeed(token, timeout_s=timeout_s)
@@ -1241,10 +1242,10 @@ def build_default_grid_feed() -> GridFeed:
       - EIA-eligible US zones → WattTime marginal FORECAST when
         WATTTIME_USERNAME/PASSWORD are set (a real marginal forecast beats
         an hour-of-day EIA persistence heuristic), else EIA when
-        ``EBB_EIA_API_KEY`` is set
-      - EU zones → ENTSO-E when ``EBB_ENTSOE_SECURITY_TOKEN`` is set
+        ``TIDEGAP_EIA_API_KEY`` is set
+      - EU zones → ENTSO-E when ``TIDEGAP_ENTSOE_SECURITY_TOKEN`` is set
       - everything else → Electricity Maps when
-        ``EBB_ELECTRICITY_MAPS_API_KEY`` is set
+        ``TIDEGAP_ELECTRICITY_MAPS_API_KEY`` is set
       - any zone without a configured key → deterministic mock curve
 
     Each leaf feed already falls back to the mock on its own when its key

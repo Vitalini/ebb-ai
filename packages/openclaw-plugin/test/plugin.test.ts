@@ -1207,10 +1207,10 @@ describe("ebb OpenClaw plugin — task visibility (v0.17)", () => {
     const day = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][prevReset.getUTCDay()];
     const hhmm = prevReset.toISOString().slice(11, 16);
     const { mkdirSync } = await import("node:fs");
-    mkdirSync(join(tmp, ".ebb-ai"), { recursive: true });
+    mkdirSync(join(tmp, ".tidegap"), { recursive: true });
     writeFileSync(
-      join(tmp, ".ebb-ai", "config"),
-      `EBB_QUOTA_RESET_CLAUDE=${day} ${hhmm} UTC\nEBB_QUOTA_MARGIN_H_CLAUDE=2\n`,
+      join(tmp, ".tidegap", "config"),
+      `TIDEGAP_QUOTA_RESET_CLAUDE=${day} ${hhmm} UTC\nTIDEGAP_QUOTA_MARGIN_H_CLAUDE=2\n`,
     );
     const store = new TaskStore({ dbPath });
     store.upsert({

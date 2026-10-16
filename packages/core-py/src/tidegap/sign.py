@@ -61,6 +61,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
+from .paths import resolve_tidegap_home
+
 try:
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric import ed25519
@@ -110,8 +112,8 @@ class VerifyResult:
 
 
 def default_signing_key_path() -> Path:
-    """Default ``~/.ebb-ai/signing.key`` location."""
-    return Path.home() / ".ebb-ai" / "signing.key"
+    """Default ``~/.tidegap/signing.key`` location."""
+    return resolve_tidegap_home() / "signing.key"
 
 
 def _write_bytes_atomic(path: Path, data: bytes, mode: int | None = None) -> None:

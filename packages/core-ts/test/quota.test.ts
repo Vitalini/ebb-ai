@@ -94,9 +94,9 @@ describe("loadQuotaResetConfig", () => {
   it("parses labels, margins and zones; a missing zone uses the default", () => {
     const path = configFile(
       [
-        "EBB_QUOTA_RESET_CLAUDE=mon 10:00 Europe/Berlin",
-        "EBB_QUOTA_MARGIN_H_CLAUDE=4",
-        "EBB_QUOTA_RESET_CODEX=Friday 18:30",
+        "TIDEGAP_QUOTA_RESET_CLAUDE=mon 10:00 Europe/Berlin",
+        "TIDEGAP_QUOTA_MARGIN_H_CLAUDE=4",
+        "TIDEGAP_QUOTA_RESET_CODEX=Friday 18:30",
       ].join("\n"),
     );
     const config = loadQuotaResetConfig({ path, defaultTimeZone: "America/New_York" });
@@ -114,9 +114,9 @@ describe("loadQuotaResetConfig", () => {
   it("a malformed entry disables only that label", () => {
     const path = configFile(
       [
-        "EBB_QUOTA_RESET_CLAUDE=funday 25:00",
-        "EBB_QUOTA_RESET_CODEX=tue 09:00 UTC",
-        "EBB_QUOTA_RESET_BADZONE=tue 09:00 Mars/Olympus",
+        "TIDEGAP_QUOTA_RESET_CLAUDE=funday 25:00",
+        "TIDEGAP_QUOTA_RESET_CODEX=tue 09:00 UTC",
+        "TIDEGAP_QUOTA_RESET_BADZONE=tue 09:00 Mars/Olympus",
       ].join("\n"),
     );
     const config = loadQuotaResetConfig({ path });
@@ -125,9 +125,22 @@ describe("loadQuotaResetConfig", () => {
 
   it("rejects a margin above 168 hours", () => {
     const path = configFile(
-      "EBB_QUOTA_RESET_CLAUDE=mon 10:00 UTC\nEBB_QUOTA_MARGIN_H_CLAUDE=200\n",
+      "TIDEGAP_QUOTA_RESET_CLAUDE=mon 10:00 UTC\nTIDEGAP_QUOTA_MARGIN_H_CLAUDE=200\n",
     );
     expect(loadQuotaResetConfig({ path })).toEqual({});
+  });
+
+  it("reads 0.17 EBB_QUOTA_* keys; a TIDEGAP_* key wins per key", () => {
+    const old = loadQuotaResetConfig({
+      path: configFile("EBB_QUOTA_RESET_CLAUDE=mon 10:00 Europe/Berlin\nEBB_QUOTA_MARGIN_H_CLAUDE=4\n"),
+    });
+    expect(old.claude).toEqual({ ...BERLIN_MON_10, marginH: 4 });
+    const both = loadQuotaResetConfig({
+      path: configFile(
+        "EBB_QUOTA_RESET_CLAUDE=tue 09:00 UTC\nTIDEGAP_QUOTA_RESET_CLAUDE=mon 10:00 Europe/Berlin\nEBB_QUOTA_MARGIN_H_CLAUDE=4\n",
+      ),
+    });
+    expect(both.claude).toEqual({ ...BERLIN_MON_10, marginH: 4 });
   });
 
   it("a missing file means no labels", () => {

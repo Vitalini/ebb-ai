@@ -278,10 +278,10 @@ export function gridCredentials(config: PluginConfig): GridFeedCredentials {
 export function carbonBudgetOverrides(config: PluginConfig): CarbonBudgetEnv {
   const out: CarbonBudgetEnv = {};
   if (typeof config.carbonBudgetG === "number" && Number.isFinite(config.carbonBudgetG)) {
-    out.EBB_CARBON_BUDGET_G = String(config.carbonBudgetG);
+    out.TIDEGAP_CARBON_BUDGET_G = String(config.carbonBudgetG);
   }
   if (config.carbonBudgetWindow) {
-    out.EBB_CARBON_BUDGET_WINDOW = config.carbonBudgetWindow;
+    out.TIDEGAP_CARBON_BUDGET_WINDOW = config.carbonBudgetWindow;
   }
   return out;
 }
