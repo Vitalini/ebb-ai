@@ -1,4 +1,4 @@
-# ebb-ai release artefacts
+# Tidegap release artefacts
 
 Per-version "ready to share" bundles. Each subdirectory holds the
 release notes, rendered docs (PDF), diagrams (Mermaid source +
@@ -35,5 +35,5 @@ LaTeX engine):
 ```bash
 pandoc README.md -o docs/release/<version>/pdf/README.pdf \
   --pdf-engine=weasyprint \
-  --metadata title="ebb-ai · README"
+  --metadata title="Tidegap · README"
 ```
