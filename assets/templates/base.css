@@ -25,11 +25,8 @@ html, body {
   overflow: hidden;
 }
 
-.wordmark {
-  font-weight: 800;
-  letter-spacing: -0.035em;
-  line-height: 1;
-}
+/* The brand lockup (assets/brand/tidegap-logo-dark.svg), sized by width. */
+.logo svg { display: block; height: auto; }
 
 .tagline {
   font-weight: 500;

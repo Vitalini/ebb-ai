@@ -35,7 +35,7 @@ const PERIOD = 257;
 const AMPLITUDE = 51.5; // centreline, midline to crest
 const SLOPE_DEG = 56;
 const STROKE_LOCKUP = 20; // stroke / period ~ 0.078, as in the reference
-const STROKE_HEAVY = 41; // stroke / period ~ 0.16, for the mark and the icon
+const STROKE_HEAVY = 46; // stroke / period ~ 0.18, for the mark and the icon
 
 // Lockup layout, as fractions of the wave's outer width.
 const WORDMARK_WIDTH = 1.022;
@@ -203,7 +203,7 @@ function iconSvg() {
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Tidegap">`,
     HEADER,
     `<rect width="64" height="64" fill="${NAVY}"/>`,
-    waveSvg(heavyWave(44, 32, 32), "tg-icon", WHITE, TEAL),
+    waveSvg(heavyWave(48, 32, 32), "tg-icon", WHITE, TEAL),
     "</svg>",
     "",
   ].join("\n");

@@ -12,7 +12,7 @@
   padding: 64px;
 }
 .text { flex: 0 0 480px; }
-.wordmark { font-size: 104px; }
+.logo svg { width: 300px; }
 .tagline { margin-top: 32px; font-size: 38px; }
 .command { margin-top: 40px; padding: 14px 22px; font-size: 27px; }
 .figure { flex: 1 1 auto; }
@@ -22,7 +22,7 @@
 <body>
 <div class="frame">
   <div class="text">
-    <div class="wordmark">Tidegap</div>
+    <div class="logo">{{logo}}</div>
     <p class="tagline">Run non-urgent LLM tasks at the cleanest grid hour before your deadline.</p>
     <div class="command">npx -y @tidegap/mcp</div>
   </div>

@@ -1,11 +1,16 @@
 #!/usr/bin/env node
-// Render the repo and site images from HTML templates and one real forecast.
+// Render the repo and site images from HTML templates, one real forecast and
+// the brand SVGs that scripts/build-brand.mjs writes (`pnpm gen:images` runs
+// the generator first).
 //
 //   assets/social-preview.png     1280x640  GitHub social preview (manual upload)
 //   assets/readme-hero.png        1600x500  README hero
 //   apps/web/public/og-image.png  1200x630  site Open Graph / Twitter card
+//   assets/brand/tidegap-logo-{dark,light}.png   2x lockup, transparent
+//   apps/web/public/{apple-touch-icon,icon-192,icon-512}.png  icon tile
+//   apps/web/public/favicon.ico   16, 32, 48 px icon tile
 //
-// Inputs: assets/templates/*, this script, and
+// Inputs: assets/templates/*, this script, the brand SVGs listed in OUTPUTS and
 // docs/examples/2026-09-30-GB-tick/forecast.json. The chart is computed from
 // the data; every number on an image is backed by docs/claims.md row 31.
 //
@@ -20,11 +25,14 @@ import { join } from "node:path";
 import { createRequire } from "node:module";
 import { chromium } from "playwright-core";
 import {
+  CARD_LOGO,
   DATA_PATH,
   LOCK_PATH,
   OUTPUTS,
   ROOT,
   TEMPLATES_DIR,
+  brandRecord,
+  expectedSize,
   inputsSha256,
   pngSize,
   sha256,
@@ -145,43 +153,103 @@ async function launch() {
   }
 }
 
+// One SVG alone on a bare page, drawn at width x height.
+async function renderSvg(browser, source, { width, height, transparent = false }) {
+  const svg = readFileSync(join(ROOT, source), "utf8").replace(
+    /^<svg ([^>]*?)width="[\d.]+" height="[\d.]+"/,
+    `<svg $1width="${width}" height="${height}"`,
+  );
+  const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
+  await page.setContent(
+    `<!doctype html><html><head><style>html,body{margin:0;background:transparent}svg{display:block}</style></head><body>${svg}</body></html>`,
+    { waitUntil: "load" },
+  );
+  const png = await page.screenshot({ type: "png", omitBackground: transparent });
+  await page.close();
+  return png;
+}
+
+// PNG-in-ICO: 6-byte header, one 16-byte directory entry per image, then the PNGs.
+function packIco(pngs) {
+  const header = Buffer.alloc(6 + 16 * pngs.length);
+  header.writeUInt16LE(0, 0);
+  header.writeUInt16LE(1, 2);
+  header.writeUInt16LE(pngs.length, 4);
+  let offset = header.length;
+  pngs.forEach(({ size, png }, i) => {
+    const at = 6 + 16 * i;
+    header.writeUInt8(size >= 256 ? 0 : size, at);
+    header.writeUInt8(size >= 256 ? 0 : size, at + 1);
+    header.writeUInt16LE(1, at + 4); // colour planes
+    header.writeUInt16LE(32, at + 6); // bits per pixel
+    header.writeUInt32LE(png.length, at + 8);
+    header.writeUInt32LE(offset, at + 12);
+    offset += png.length;
+  });
+  return Buffer.concat([header, ...pngs.map(({ png }) => png)]);
+}
+
+async function renderCard(browser, data, css, logo, path, spec) {
+  const template = readFileSync(join(ROOT, TEMPLATES_DIR, spec.template), "utf8");
+  const html = template
+    .replace("{{css}}", css)
+    .replace("{{logo}}", logo)
+    .replace("{{chart}}", buildChart(data, CHARTS[path]))
+    .replace("{{caption}}", CAPTION);
+  const page = await browser.newPage({
+    viewport: { width: spec.width, height: spec.height },
+    deviceScaleFactor: 1,
+  });
+  await page.setContent(html, { waitUntil: "load" });
+  await page.evaluate(() => document.fonts.ready);
+  const png = await page.screenshot({ type: "png", omitBackground: false });
+  await page.close();
+  return png;
+}
+
 async function main() {
   const data = loadForecast();
   const css = readFileSync(join(ROOT, TEMPLATES_DIR, "base.css"), "utf8");
   const require = createRequire(import.meta.url);
   const playwrightCore = require("playwright-core/package.json").version;
 
+  const logo = readFileSync(join(ROOT, CARD_LOGO), "utf8");
+
   const browser = await launch();
   const outputs = {};
   try {
     for (const [path, spec] of Object.entries(OUTPUTS)) {
-      const template = readFileSync(join(ROOT, TEMPLATES_DIR, spec.template), "utf8");
-      const html = template
-        .replace("{{css}}", css)
-        .replace("{{chart}}", buildChart(data, CHARTS[path]))
-        .replace("{{caption}}", CAPTION);
-      const page = await browser.newPage({
-        viewport: { width: spec.width, height: spec.height },
-        deviceScaleFactor: 1,
-      });
-      await page.setContent(html, { waitUntil: "load" });
-      await page.evaluate(() => document.fonts.ready);
-      const png = await page.screenshot({ type: "png", omitBackground: false });
-      await page.close();
+      if (spec.kind === "ico") {
+        const pngs = [];
+        for (const size of spec.sizes) {
+          pngs.push({ size, png: await renderSvg(browser, spec.source, { width: size, height: size }) });
+        }
+        const ico = packIco(pngs);
+        writeFileSync(join(ROOT, path), ico);
+        outputs[path] = { sizes: spec.sizes, bytes: ico.length, sha256: sha256(ico) };
+        console.log(`${path}  ${spec.sizes.join(",")}  ${ico.length} bytes`);
+        continue;
+      }
 
+      const { width, height } = expectedSize(spec);
+      const png =
+        spec.kind === "card"
+          ? await renderCard(browser, data, css, logo, path, spec)
+          : await renderSvg(browser, spec.source, { width, height, transparent: spec.transparent });
       const size = pngSize(png);
-      if (size?.width !== spec.width || size?.height !== spec.height) {
+      if (size?.width !== width || size?.height !== height) {
         throw new Error(`render-images: ${path} rendered at ${size?.width}x${size?.height}`);
       }
       writeFileSync(join(ROOT, path), png);
-      outputs[path] = { width: spec.width, height: spec.height, bytes: png.length, sha256: sha256(png) };
-      console.log(`${path}  ${spec.width}x${spec.height}  ${png.length} bytes`);
+      outputs[path] = { width, height, bytes: png.length, sha256: sha256(png) };
+      console.log(`${path}  ${width}x${height}  ${png.length} bytes`);
     }
 
     const lock = {
       inputsSha256: inputsSha256(),
       renderer: { playwrightCore, chrome: browser.version(), platform: process.platform },
       outputs,
+      brand: brandRecord(),
     };
     writeFileSync(join(ROOT, LOCK_PATH), `${JSON.stringify(lock, null, 2)}\n`);
     console.log(`${LOCK_PATH}  written`);
