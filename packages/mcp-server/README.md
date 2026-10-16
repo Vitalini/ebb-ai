@@ -1,3 +1,5 @@
+<img src="https://www.tidegap.com/icon-192.png" alt="Tidegap" width="48" height="48">
+
 # @tidegap/mcp
 
 > Renamed from `@ebb-ai/mcp` in 0.18.0. Use the host config key `tidegap` and `npx -y @tidegap/mcp`; the `ebb-mcp` bin and `EBB_*` variables still work in 0.18 and stop in 0.19. See [Renamed from Ebb AI](https://github.com/tidegap/tidegap#renamed-from-ebb-ai).
