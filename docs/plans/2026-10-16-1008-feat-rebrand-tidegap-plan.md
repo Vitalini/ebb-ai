@@ -361,7 +361,7 @@ U1 to U7 in order, one commit each, on one branch. U4 renders images on the Mac 
 | `npx -y @ebb-ai/mcp` in a host config | Runs the shim, which runs `@tidegap/mcp` | KTD8 | switch to `npx -y @tidegap/mcp`, key `tidegap` |
 | Claude Code plugin `ebb-ai@ebb-ai` | No update path; marketplace and plugin names changed | none possible | `claude plugin uninstall ebb-ai`, `claude plugin marketplace remove ebb-ai`, `claude plugin marketplace add tidegap/tidegap`, `claude plugin install tidegap` |
 | Habit `/ebb-ai:defer`, tools `mcp__ebb-ai__*` | Gone after reinstall | none | use `/tidegap:*` |
-| OpenClaw `clawhub:@vitalini/ebb`, config `plugins.entries.ebb` | Old plugin stays on 0.17; new plugin has id `tidegap` | none possible (Scope Boundaries) | `openclaw plugins install clawhub:@vitalini/tidegap`, move the config block to `plugins.entries.tidegap`, remove the old plugin |
+| OpenClaw `clawhub:@vitalini/ebb`, config `plugins.entries.ebb` | `openclaw plugins update` brings the 0.17.1 pointer: no tools, one startup warning; new plugin has id `tidegap` | pointer release `compat/clawhub/ebb` (the config move is still manual) | `openclaw plugins install clawhub:@vitalini/tidegap`, move the config block to `plugins.entries.tidegap`, remove the old plugin |
 | `pip install ebb-ai`, `import ebb_ai` | Shim installs `tidegap`, import works with a warning | KTD8 | `pip install tidegap`, `import tidegap` |
 | Links to `github.com/Vitalini/ebb-ai` and `www.ebb-ai.com` | GitHub redirect; 301 to `www.tidegap.com` | runbook | none |
 

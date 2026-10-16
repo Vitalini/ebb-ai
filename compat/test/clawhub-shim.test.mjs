@@ -53,3 +53,16 @@ test("plugin entry accepts a 0.17 plugins.entries.ebb block and logs the pointer
   plugin.register(full.api);
   assert.deepEqual(full.warnings, [MESSAGE]);
 });
+
+test("entry matches the manifest, and a host without registrationMode still gets the warning", async () => {
+  const manifest = json("compat/clawhub/ebb/openclaw.plugin.json");
+  // A fresh module instance, so the once-guard from the test above does not apply.
+  const { default: plugin } = await import(`${pathToFileURL(join(shim, "dist", "index.js")).href}?fresh`);
+  assert.equal(plugin.name, manifest.name);
+  assert.equal(plugin.description, manifest.description);
+  assert.deepEqual(plugin.configSchema.jsonSchema, manifest.configSchema);
+
+  const legacy = fakeApi(undefined);
+  plugin.register(legacy.api);
+  assert.deepEqual(legacy.warnings, [MESSAGE]);
+});

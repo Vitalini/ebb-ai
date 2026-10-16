@@ -27,7 +27,7 @@ when it runs.
 | - | npm | Publish shims `@ebb-ai/{core,cli,mcp}` 0.17.1, then `npm deprecate` | https://www.npmjs.com/org/ebb-ai | not started | `compat/npm/*` |
 | - | PyPI | Publish shim `ebb-ai` 0.17.1 | https://pypi.org/project/ebb-ai/ | not started | `compat/pypi/ebb-ai` |
 | - | MCP Registry | Final `io.github.Vitalini/ebb-ai` 0.17.1 pointing at the new id; set old versions `deprecated` | https://registry.modelcontextprotocol.io | not started | Confirm the `mcp-publisher` status command |
-| - | ClawHub | Publish `@vitalini/tidegap` 0.18.0 (runtime id `tidegap` locks on first publish); point the old `@vitalini/ebb` description at it | https://clawhub.ai/plugins/@vitalini/tidegap | not started | Do not delete `@vitalini/ebb` |
+| - | ClawHub | Publish `@vitalini/tidegap` 0.18.0 (runtime id `tidegap` locks on first publish); point the old `@vitalini/ebb` description at it | https://clawhub.ai/plugins/@vitalini/tidegap | not started | Do not delete `@vitalini/ebb`. The old description changes only with a new version: see the `@vitalini/ebb` 0.17.1 pointer row |
 | - | Vercel | Reconnect git to `tidegap/tidegap`; add `tidegap.com` and `www.tidegap.com` (www primary); add `TIDEGAP_*` env vars | https://www.tidegap.com | not started | Before merge |
 | - | Vercel | `ebb-ai.com` and `www.ebb-ai.com` 301 to `https://www.tidegap.com`, path kept | https://www.ebb-ai.com | not started | After merge; keep the domain 12 months |
 | - | Google Search Console, Bing | Resubmit sitemap; change of address for the old property | https://search.google.com/search-console | not started | |
