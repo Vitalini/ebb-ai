@@ -6,7 +6,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "Tidegap · carbon-aware scheduling for AI compute",
+    default: "Tidegap — carbon-aware scheduling for AI workflows",
     template: "%s · Tidegap",
   },
   description:
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
   publisher: "Tidegap",
   category: "developer tools",
   openGraph: {
-    title: "Tidegap — Carbon-aware scheduling for agentic AI workflows",
+    title: "Tidegap — carbon-aware scheduling for AI workflows",
     description:
       "MCP server that defers non-urgent AI tasks to the cleanest grid window inside your deadline. Per-task carbon receipts, Anthropic + OpenAI Batch APIs, durable SQLite queue. Apache-2.0.",
     url: "https://www.tidegap.com",
@@ -53,7 +53,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Tidegap — Carbon-aware scheduling for agentic AI workflows",
+    title: "Tidegap — carbon-aware scheduling for AI workflows",
     description:
       "MCP server that defers non-urgent AI tasks to the cleanest grid window. 1,423 tests, 10 MCP tools, persistent SQLite queue. Apache-2.0.",
     images: ["/og-image.png"],

@@ -10,7 +10,7 @@ import { AgentPrompt } from "@/components/agent-prompt";
 import { VERSION } from "@/lib/version";
 
 export const metadata: Metadata = {
-  title: "Carbon-aware scheduling for AI workflows",
+  title: { absolute: "Tidegap — carbon-aware scheduling for AI workflows" },
   description:
     "Open-source MCP server that defers non-urgent AI tasks to the cleanest electricity-grid window inside your deadline. One-line install in Claude Code, Cursor, Claude Desktop, and any MCP host.",
   alternates: { canonical: "https://www.tidegap.com" },
