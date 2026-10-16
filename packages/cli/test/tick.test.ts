@@ -3,11 +3,35 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TaskStore } from "@tidegap/core";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as childProcess from "node:child_process";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   missingProviderKeysForPending,
   runTickOnce,
 } from "../src/commands/tick.js";
+
+// Every child_process entry point is a pass-through spy, so the suite can
+// prove that no tick path spawns a real process (a real notifier would post
+// on the developer's desktop).
+vi.mock("node:child_process", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:child_process")>();
+  return {
+    ...actual,
+    spawn: vi.fn(actual.spawn),
+    spawnSync: vi.fn(actual.spawnSync),
+    exec: vi.fn(actual.exec),
+    execFile: vi.fn(actual.execFile),
+    execFileSync: vi.fn(actual.execFileSync),
+    execSync: vi.fn(actual.execSync),
+    fork: vi.fn(actual.fork),
+  };
+});
+
+afterAll(() => {
+  for (const name of ["spawn", "spawnSync", "exec", "execFile", "execFileSync", "execSync", "fork"] as const) {
+    expect(vi.mocked(childProcess[name]), `child_process.${name} was called`).not.toHaveBeenCalled();
+  }
+});
 
 describe("tidegap tick", () => {
   const saved = {
@@ -339,6 +363,32 @@ describe("tidegap tick notifications", () => {
     const { result, calls } = run({ budgetConfig: config });
     await result;
     expect(calls).toHaveLength(0);
+  });
+
+  for (const name of ["TIDEGAP_NO_NOTIFY", "EBB_NO_NOTIFY"] as const) {
+    it(`${name}=1 in the environment posts nothing`, async () => {
+      const saved = { TIDEGAP_NO_NOTIFY: process.env.TIDEGAP_NO_NOTIFY, EBB_NO_NOTIFY: process.env.EBB_NO_NOTIFY };
+      delete process.env.TIDEGAP_NO_NOTIFY;
+      delete process.env.EBB_NO_NOTIFY;
+      process.env[name] = "1";
+      try {
+        const { result, calls } = run();
+        await result;
+        expect(calls).toHaveLength(0);
+      } finally {
+        for (const [k, v] of Object.entries(saved)) {
+          if (v === undefined) delete process.env[k];
+          else process.env[k] = v;
+        }
+      }
+    });
+  }
+
+  it("without an injected spawner, a test run spawns no notifier", async () => {
+    const { result } = run({ spawnNotify: undefined, platform: "darwin" });
+    const r = await result;
+    expect(r.message.split("\n")[0]).toBe("tick: 3 inspected, 2 dispatched, 1 failed");
+    // The suite-level afterAll asserts child_process was never called.
   });
 
   it("win32 passes the text through env vars with a timeout on the child", async () => {

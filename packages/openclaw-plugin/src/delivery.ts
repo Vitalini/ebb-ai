@@ -163,7 +163,7 @@ function loadSqlite(): SqliteCtor {
 /**
  * Where the delivery-preference store lives. Set from the plugin's
  * `deliveryStorePath` config field (which replaces the old
- * `TIDEGAP_DELIVERY_FILE` environment variable — this bundle reads no
+ * `EBB_DELIVERY_FILE` environment variable — this bundle reads no
  * environment variables at all). `undefined` ⇒ the default path.
  */
 let configuredStorePath: string | undefined;
@@ -407,10 +407,26 @@ function osNotifySupported(platform: NodeJS.Platform = osPlatform()): boolean {
 // Injectable spawn so tests can assert the exact binary + args and simulate a
 // missing binary without touching the real OS. Defaults to node's spawn.
 type SpawnFn = typeof spawn;
+let defaultSpawn: SpawnFn = spawn;
 let spawnImpl: SpawnFn = spawn;
+let osNotificationsDisabled = false;
+
+/** Turn the `os` delivery mode off or on (plugin config `disableOsNotifications`). */
+export function setOsNotificationsDisabled(disabled: boolean): void {
+  osNotificationsDisabled = disabled;
+}
+
+/**
+ * Replace the spawner that `__setSpawnForTest(undefined)` restores. The test
+ * setup installs a stub here so no test ever spawns a real notifier.
+ */
+export function __setDefaultSpawnForTest(fn: SpawnFn | undefined): void {
+  defaultSpawn = fn ?? spawn;
+  spawnImpl = defaultSpawn;
+}
 /** Test hook: override the spawn used by OS-notification delivery. */
 export function __setSpawnForTest(fn: SpawnFn | undefined): void {
-  spawnImpl = fn ?? spawn;
+  spawnImpl = fn ?? defaultSpawn;
 }
 
 /** Lightweight secret scrub for the notification body — the native surface is
@@ -511,6 +527,9 @@ function runNotifyCommand(
 }
 
 async function deliverOs(task: CompletedTask): Promise<DeliveryOutcome> {
+  if (osNotificationsDisabled) {
+    return { mode: "os", ok: false, detail: "os notifications are off (disableOsNotifications)" };
+  }
   const platform = osPlatform();
   const { title, body } = notificationContent(task);
   // The plugin reads no environment, so it cannot merge env vars into the

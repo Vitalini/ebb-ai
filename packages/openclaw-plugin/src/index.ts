@@ -132,6 +132,7 @@ import {
   scanDeliveryOptions,
   setDeliveryConfig,
   setDeliveryStorePath,
+  setOsNotificationsDisabled,
   telegramTarget,
   validateDeliveryConfig,
   type DeliveryConfig,
@@ -566,7 +567,8 @@ function stopDispatcher(): void {
 /** Start the background dispatch loop — once per process. */
 function ensureDispatcher(config: PluginConfig): void {
   activeDispatchConfig = config;
-  // `disableStartupDispatch` (formerly TIDEGAP_DISABLE_STARTUP_DISPATCH=1) is a
+  setOsNotificationsDisabled(config.disableOsNotifications === true);
+  // `disableStartupDispatch` (formerly EBB_DISABLE_STARTUP_DISPATCH=1) is a
   // plugin-config field, and plugin config only reaches this module once a
   // tool call supplies it — after the module-load bootstrap may already have
   // started the loop. So honour it here by STOPPING an already-running loop,
@@ -607,7 +609,7 @@ function ensureDispatcher(config: PluginConfig): void {
 // no-op once this has fired.
 //
 // OPT-OUT: `disableStartupDispatch: true` in plugin config (which replaced
-// `TIDEGAP_DISABLE_STARTUP_DISPATCH=1`) suppresses this — but note the ordering
+// `EBB_DISABLE_STARTUP_DISPATCH=1`) suppresses this — but note the ordering
 // limitation it inherits from the SDK: at module load NO config exists yet, so
 // the flag can only be honoured (a) when a caller passes it here directly —
 // how the test suite and embedders drive it — or (b) on the first tool call,
@@ -641,7 +643,7 @@ export function bootstrapDispatcherOnStartup(config: PluginConfig = {}): void {
  * at import — before any caller can pass `disableStartupDispatch`. This seam
  * lets an embedder (and the test suite, via `vitest` `setupFiles`) opt out
  * between the import and the deferred queue-open 1s later. It replaces the
- * `TIDEGAP_DISABLE_STARTUP_DISPATCH=1` environment variable for that purpose;
+ * `EBB_DISABLE_STARTUP_DISPATCH=1` environment variable for that purpose;
  * inside a gateway, prefer the `disableStartupDispatch` plugin-config field.
  */
 let startupDispatchSuppressed = false;

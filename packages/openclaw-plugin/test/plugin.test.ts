@@ -20,6 +20,7 @@ import {
 import {
   __setPuppeteerImportForTest,
   __setSpawnForTest,
+  setOsNotificationsDisabled,
   deliverResult,
   formatReport,
   getDeliveryConfig,
@@ -1058,6 +1059,26 @@ describe("Tidegap OpenClaw plugin — result delivery", () => {
       expect(outcomes[0].ok).toBe(true);
       expect(calls.length).toBe(1);
     } finally {
+      __setSpawnForTest(undefined);
+    }
+  });
+
+  it("deliverResult os mode spawns nothing when disableOsNotifications is on", async () => {
+    const calls: string[] = [];
+    __setSpawnForTest(((cmd: string) => {
+      calls.push(cmd);
+      const child = new EventEmitter();
+      queueMicrotask(() => child.emit("close", 0));
+      return child;
+    }) as never);
+    setOsNotificationsDisabled(true);
+    try {
+      const outcomes = await deliverResult(completedTask, { modes: ["os"] }, {});
+      expect(outcomes[0]).toMatchObject({ mode: "os", ok: false });
+      expect(outcomes[0].detail).toMatch(/disableOsNotifications/);
+      expect(calls).toEqual([]);
+    } finally {
+      setOsNotificationsDisabled(false);
       __setSpawnForTest(undefined);
     }
   });

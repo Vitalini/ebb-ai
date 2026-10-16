@@ -27,7 +27,7 @@ Proof: one real GB run, 2026-09-30 (`tidegap tick` + `tidegap verify`). Forecast
 ## Commands
 
 ```text
-tidegap tick           — drain due tasks via provider adapters; one OS notification per finished task (--no-notify)
+tidegap tick           — drain due tasks via provider adapters; one OS notification per finished task (--no-notify, or TIDEGAP_NO_NOTIFY=1)
 tidegap install        — wire up launchd (macOS) or print systemd / schtasks templates
 tidegap queue list     — print tasks (--unread, --kind absolute|quota_reset, --json, --hook)
 tidegap queue show     — print one task's prompt, result and receipt; marks it read

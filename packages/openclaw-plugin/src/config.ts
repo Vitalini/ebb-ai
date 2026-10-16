@@ -87,6 +87,8 @@ export type PluginConfig = {
   deliveryStorePath?: string;
   /** Was `EBB_DISABLE_STARTUP_DISPATCH=1`. */
   disableStartupDispatch?: boolean;
+  /** The plugin's `TIDEGAP_NO_NOTIFY`: no `os` delivery posts a notification. */
+  disableOsNotifications?: boolean;
 };
 
 /**
@@ -207,6 +209,12 @@ export const pluginConfigSchema = Type.Object(
       Type.Boolean({
         description:
           "Disable the background dispatch loop that drains due tasks every 60s. Replaces EBB_DISABLE_STARTUP_DISPATCH=1. Only for embedding contexts that drive dispatch by hand — with this on, scheduled tasks never run until a tool call triggers them.",
+      }),
+    ),
+    disableOsNotifications: Type.Optional(
+      Type.Boolean({
+        description:
+          "Never post a desktop notification for the os delivery mode; the result stays in the queue and the outcome records why. The plugin's counterpart of the TIDEGAP_NO_NOTIFY=1 environment variable that the tidegap CLI reads.",
       }),
     ),
   },

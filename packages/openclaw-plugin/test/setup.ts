@@ -17,3 +17,14 @@
 import { suppressStartupDispatch } from "../src/index.js";
 
 suppressStartupDispatch();
+
+// No test may post a real desktop notification: the `os` delivery mode spawns
+// through this stub unless a test installs its own spawner.
+import { EventEmitter } from "node:events";
+import { __setDefaultSpawnForTest } from "../src/delivery.js";
+
+__setDefaultSpawnForTest((() => {
+  const child = new EventEmitter();
+  queueMicrotask(() => child.emit("close", 0));
+  return child;
+}) as never);

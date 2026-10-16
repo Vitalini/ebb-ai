@@ -76,6 +76,7 @@ describe("tidegap CLI env boundary", () => {
         TIDEGAP_CARBON_BUDGET_G: "1000",
         TIDEGAP_CARBON_BUDGET_WINDOW: "weekly",
       },
+      noNotify: false,
     });
   });
 

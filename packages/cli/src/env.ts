@@ -43,6 +43,8 @@ export interface EnvCredentials extends ProviderCredentials {
   carbonBudget: CarbonBudgetEnv;
   /** `TIDEGAP_BINARY`: launcher override for `tidegap install`. */
   binary?: string;
+  /** `TIDEGAP_NO_NOTIFY=1` (or true/yes/on): `tidegap tick` posts no OS notification. */
+  noNotify: boolean;
 }
 
 /** Trim and collapse an empty string to `undefined`. */
@@ -118,6 +120,9 @@ export function readEnvCredentials(write: DeprecationWriter = writeOnce): EnvCre
       ),
     },
     binary: val(f.pick(process.env.TIDEGAP_BINARY, process.env.EBB_BINARY, "BINARY")),
+    noNotify: /^(1|true|yes|on)$/i.test(
+      val(f.pick(process.env.TIDEGAP_NO_NOTIFY, process.env.EBB_NO_NOTIFY, "NO_NOTIFY")) ?? "",
+    ),
   };
   f.report(write);
   return out;

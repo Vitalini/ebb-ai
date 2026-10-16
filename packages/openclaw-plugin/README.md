@@ -206,8 +206,9 @@ export these variables, keep exporting them and reference them as shown above.
 | `TIDEGAP_CARBON_BUDGET_G` | `carbonBudgetG` (a number, not a string) |
 | `TIDEGAP_CARBON_BUDGET_WINDOW` | `carbonBudgetWindow` |
 | `TIDEGAP_DEFAULT_REGION` | `defaultRegion` |
-| `TIDEGAP_DELIVERY_FILE` | `deliveryStorePath` |
-| `TIDEGAP_DISABLE_STARTUP_DISPATCH=1` | `disableStartupDispatch: true` |
+| `EBB_DELIVERY_FILE` | `deliveryStorePath` |
+| `EBB_DISABLE_STARTUP_DISPATCH=1` | `disableStartupDispatch: true` |
+| `TIDEGAP_NO_NOTIFY=1` (read by the CLI) | `disableOsNotifications: true` |
 
 Provider credentials are usually unnecessary: with the OpenClaw runtime LLM
 bridge captured (on the first tool call), deferred tasks dispatch through the

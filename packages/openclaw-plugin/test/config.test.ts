@@ -249,6 +249,7 @@ describe("Tidegap OpenClaw plugin — manifest matches the code's config schema"
       carbonBudgetWindow: "TIDEGAP_CARBON_BUDGET_WINDOW",
       deliveryStorePath: "EBB_DELIVERY_FILE",
       disableStartupDispatch: "EBB_DISABLE_STARTUP_DISPATCH",
+      disableOsNotifications: "TIDEGAP_NO_NOTIFY",
     };
     for (const [field, envVar] of Object.entries(replacements)) {
       const description = manifest.configSchema.properties[field]?.description ?? "";

@@ -62,7 +62,17 @@ export type NotifySpawner = (cmd: string, args: string[], opts: SpawnOptions) =>
 
 const NOTIFY_TIMEOUT_MS = 5_000;
 
+/**
+ * True under a test runner. A test that reaches the default spawner without
+ * injecting `spawnNotify` must not post a real notification on the
+ * developer's desktop.
+ */
+function underTest(): boolean {
+  return process.env.VITEST !== undefined || process.env.NODE_ENV === "test";
+}
+
 const defaultSpawnNotify: NotifySpawner = (cmd, args, opts) => {
+  if (underTest()) return;
   const child = spawn(cmd, args, opts);
   // A missing binary (no notify-send) or a failed toast is not a tick error.
   child.on("error", () => {});
@@ -291,7 +301,7 @@ export async function runTickOnce(
     // they are rescheduled through the window picker, not dispatched late.
     const preTick = await prepareTick(scheduler, { quotaConfig });
     const result = await scheduler.tick(adapters);
-    if (opts.notify !== false && !notifyDisabledInConfig(opts.budgetConfig)) {
+    if (opts.notify !== false && !env.noNotify && !notifyDisabledInConfig(opts.budgetConfig)) {
       notifyFinished(dbPath, result.results, opts);
     }
     let msg = `tick: ${result.inspected} inspected, ${result.dispatched} dispatched, ${result.failed} failed`;
