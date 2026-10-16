@@ -182,3 +182,26 @@ describe("tidegap install laptop helper script", () => {
     expect(r.helperContent).toContain(`"\${TIDEGAP[@]}"`);
   });
 });
+
+describe("tidegap install through the @ebb-ai/cli shim", () => {
+  it("warns that the unit would pin a script inside @ebb-ai/cli", async () => {
+    const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { tmpdir } = await import("node:os");
+    const { resolveLauncher } = await import("../src/commands/install.js");
+    const root = mkdtempSync(join(tmpdir(), "tidegap-shim-"));
+    const entry = join(root, "node_modules", "@ebb-ai", "cli", "node_modules", "@tidegap", "cli", "dist", "index.js");
+    mkdirSync(join(entry, ".."), { recursive: true });
+    writeFileSync(entry, "");
+    const saved = process.argv[1];
+    process.argv[1] = entry;
+    try {
+      const warnings: string[] = [];
+      resolveLauncher(undefined, warnings);
+      expect(warnings.some((w) => w.includes("@ebb-ai/cli") && w.includes("npm install -g @tidegap/cli"))).toBe(true);
+    } finally {
+      process.argv[1] = saved;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});

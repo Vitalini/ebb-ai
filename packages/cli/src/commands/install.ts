@@ -145,6 +145,14 @@ export function resolveLauncher(
       `Resolved tidegap entry ${script} does not exist — the daemon will fail to launch.`,
     );
   }
+  if (/[\\/]@ebb-ai[\\/]cli[\\/]/.test(script)) {
+    // Run through the @ebb-ai/cli 0.17.1 shim: the unit would pin a copy
+    // inside @ebb-ai/cli and break when that package is uninstalled.
+    warnings.push(
+      `The daemon would run ${script}, inside the deprecated @ebb-ai/cli package; it stops working after ` +
+        "`npm uninstall -g @ebb-ai/cli`. Run `npm install -g @tidegap/cli`, then `tidegap install` again.",
+    );
+  }
   return [node, script];
 }
 
