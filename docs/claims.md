@@ -6,6 +6,9 @@ Every quantitative claim found in `README.md`, `QUICKSTART.md`, `packages/*/READ
 and "docs: real ebb tick run on GB replaces the synthetic example"). Produced for the InfoQ
 article prep (brief item 3).
 
+Name: 2026-10-16 the project was renamed to Tidegap (trademark clearance); the old
+names redirect. Rows below keep the names used when they were audited.
+
 ## Legend
 
 - **Measured** — produced by a run, test, or direct code inspection in this repo,

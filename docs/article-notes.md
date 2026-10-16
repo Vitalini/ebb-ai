@@ -7,6 +7,9 @@ row, or the `docs/examples/2026-09-30-GB-tick/` run. Adoption numbers carry
 the date they were fetched. Anything not answerable from the sources listed
 below is written as "unknown" and repeated in "Needs Vitalii."
 
+Name: 2026-10-16 the project was renamed to Tidegap (trademark clearance); the old
+names redirect. History below keeps the names used at the time.
+
 ## Origin story (5 bullets)
 
 - The project starts as a single initial commit, "Tidegap v0.1 — carbon-aware
