@@ -263,6 +263,14 @@ describe("tidegap ui assets", () => {
     expect(html).not.toMatch(/https?:\/\//);
   });
 
+  it("the header carries the generated brand mark as inline, style-free SVG", () => {
+    const html = read("index.html");
+    const block = /<!-- brand-mark:start -->([\s\S]*?)<!-- brand-mark:end -->/.exec(html)?.[1];
+    expect(block).toBeDefined();
+    expect(block).toMatch(/^<svg [^>]*aria-hidden="true"/);
+    expect(block).not.toMatch(/style=|http/);
+  });
+
   it("no module loads anything remote or writes HTML from data", () => {
     for (const file of UI_MODULES) {
       const js = read(file);
