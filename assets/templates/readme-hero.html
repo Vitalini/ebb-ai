@@ -12,14 +12,15 @@
   padding: 56px 72px;
   border: 2px solid var(--rule);
 }
-.wordmark { flex: 0 0 auto; font-size: 120px; }
+.logo { flex: 0 0 auto; }
+.logo svg { width: 336px; }
 .figure { flex: 1 1 auto; }
 .caption { margin-top: 18px; font-size: 28px; }
 </style>
 </head>
 <body>
 <div class="frame">
-  <div class="wordmark">Tidegap</div>
+  <div class="logo">{{logo}}</div>
   <div class="figure">
     <div class="chart">{{chart}}</div>
     <p class="caption">{{caption}}</p>

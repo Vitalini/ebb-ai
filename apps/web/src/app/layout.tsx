@@ -34,6 +34,13 @@ export const metadata: Metadata = {
   creator: "Vitalii Borovyk",
   publisher: "Tidegap",
   category: "developer tools",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "16x16 32x32 48x48" },
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
+  },
   openGraph: {
     title: "Tidegap — carbon-aware scheduling for AI workflows",
     description:
@@ -44,7 +51,7 @@ export const metadata: Metadata = {
     type: "website",
     images: [
       {
-        url: "/og-image.png",
+        url: "/og-image.png?v=logo",
         width: 1200,
         height: 630,
         alt: "Run non-urgent LLM tasks at the cleanest grid hour before your deadline.",
@@ -56,7 +63,7 @@ export const metadata: Metadata = {
     title: "Tidegap — carbon-aware scheduling for AI workflows",
     description:
       "MCP server that defers non-urgent AI tasks to the cleanest grid window. 1,423 tests, 10 MCP tools, persistent SQLite queue. Apache-2.0.",
-    images: ["/og-image.png"],
+    images: ["/og-image.png?v=logo"],
   },
   robots: {
     index: true,

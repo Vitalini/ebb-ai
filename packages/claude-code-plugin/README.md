@@ -1,3 +1,5 @@
+<img src="https://www.tidegap.com/icon-192.png" alt="Tidegap" width="48" height="48">
+
 # Claude Code plugin — Tidegap
 
 A one-command install that turns any Claude Code session into a

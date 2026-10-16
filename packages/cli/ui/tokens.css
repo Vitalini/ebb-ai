@@ -14,6 +14,7 @@
   --accent: #1d6b4d;
   --accent-fg: #ffffff;
   --accent-soft: #e1efe7;
+  --brand-ink: #0c1017;
   --danger: #a8361f;
   --danger-soft: #f8e4de;
   --warn: #8a6200;
@@ -78,6 +79,7 @@
     --accent: #5cc796;
     --accent-fg: #0b1410;
     --accent-soft: #163024;
+    --brand-ink: #ffffff;
     --danger: #f08a74;
     --danger-soft: #3a1d17;
     --warn: #e3b341;

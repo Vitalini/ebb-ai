@@ -1,3 +1,5 @@
+<img src="https://www.tidegap.com/icon-192.png" alt="Tidegap" width="48" height="48">
+
 # @tidegap/core
 
 > Renamed from `@ebb-ai/core` in 0.18.0. See [Renamed from Ebb AI](https://github.com/tidegap/tidegap#renamed-from-ebb-ai).

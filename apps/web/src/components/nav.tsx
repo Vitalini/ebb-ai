@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Logo } from "@/components/logo";
 
 const LINKS: Array<{ href: string; label: string }> = [
   { href: "/map", label: "Map" },
@@ -11,17 +12,8 @@ export function Nav() {
   return (
     <header className="sticky top-0 z-20 border-b border-rule bg-bg/85 backdrop-blur-md">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
-        <Link
-          href="/"
-          className="flex shrink-0 items-center gap-2 whitespace-nowrap font-semibold tracking-tight"
-        >
-          <span
-            aria-hidden="true"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-accent font-mono text-base font-bold text-bg"
-          >
-            ~
-          </span>
-          <span className="text-fg">Tidegap</span>
+        <Link href="/" aria-label="Tidegap" className="flex shrink-0 items-center">
+          <Logo className="h-[18px] w-auto sm:h-[22px]" />
         </Link>
 
         <nav className="flex items-center gap-0.5 whitespace-nowrap text-xs sm:gap-1 sm:text-sm">

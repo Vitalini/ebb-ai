@@ -1,3 +1,5 @@
+<img src="https://www.tidegap.com/icon-192.png" alt="Tidegap" width="48" height="48">
+
 # Tidegap
 
 > Renamed from `ebb-ai` (import `ebb_ai`) in 0.18.0: `pip install tidegap`, `import tidegap`. See [Renamed from Ebb AI](https://github.com/tidegap/tidegap#renamed-from-ebb-ai).

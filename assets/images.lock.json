@@ -1,5 +1,5 @@
 {
-  "inputsSha256": "1f6cc46cd2df08e0d7925267c575c587c0435967adbd0c2e51b8e8c7358aed8d",
+  "inputsSha256": "12cf46953238af8172055914ed1861e7e5b526b1852540f7fc2284f482d3fd43",
   "renderer": {
     "playwrightCore": "1.63.0",
     "chrome": "155.0.8059.82",
@@ -9,20 +9,86 @@
     "assets/social-preview.png": {
       "width": 1280,
       "height": 640,
-      "bytes": 69813,
-      "sha256": "65349ced4c52399f41c8ae2bafbd94cd2c149bb2882336ad35c64b305c6a7f2a"
+      "bytes": 66955,
+      "sha256": "d2108f4194e6c45e8117fc57c4b078e9f6e8f9e47a5846ff6c4f63224b915b7f"
     },
     "assets/readme-hero.png": {
       "width": 1600,
       "height": 500,
-      "bytes": 45338,
-      "sha256": "b2cd93c1fe4d108d702890a812c42a9ac8c8f97ffeb0dbaa27d29875032dc9fc"
+      "bytes": 41581,
+      "sha256": "cfc5440b72e8b6b0db799a2ae647c5a24e38ead9a2fe9070fd60c4cd4f355f8b"
     },
     "apps/web/public/og-image.png": {
       "width": 1200,
       "height": 630,
-      "bytes": 65492,
-      "sha256": "e3d85678e61459c42926ec94a300050921c0e6e888b4e1adc78f0b34684f5b03"
+      "bytes": 64084,
+      "sha256": "95ad3e98abe9be93fd3aa79bad34636626aacfad932237806b3af18c3dd40adc"
+    },
+    "assets/brand/tidegap-logo-dark.png": {
+      "width": 840,
+      "height": 530,
+      "bytes": 12708,
+      "sha256": "57ae73faf6055e65cfb68273dc08aacd5ad078fa4e81d9193e0bb6d2bf7ee0a0"
+    },
+    "assets/brand/tidegap-logo-light.png": {
+      "width": 840,
+      "height": 530,
+      "bytes": 13138,
+      "sha256": "b04c3f78fb7da29932d72f0876b7504ef689ecb12b015e791ae7d42f35337bcf"
+    },
+    "apps/web/public/apple-touch-icon.png": {
+      "width": 180,
+      "height": 180,
+      "bytes": 1663,
+      "sha256": "4805e9ab534792f663db0a1ae047bde55dcd8653a889ed6316bee909d297ac14"
+    },
+    "apps/web/public/icon-192.png": {
+      "width": 192,
+      "height": 192,
+      "bytes": 1627,
+      "sha256": "3406fead76573a4945d7e63d82c69213211a5308b1665134c57c9252eabaf8cd"
+    },
+    "apps/web/public/icon-512.png": {
+      "width": 512,
+      "height": 512,
+      "bytes": 4406,
+      "sha256": "f7e08b849db6cefba52c825e3b1d76bf6b55b4ce75dab23584eafa4e0cd21bd8"
+    },
+    "apps/web/public/favicon.ico": {
+      "sizes": [
+        16,
+        32,
+        48
+      ],
+      "bytes": 1159,
+      "sha256": "c8777175b3967c1ec197200832029dcd4a748202002619d6115cfe14a052b544"
+    }
+  },
+  "brand": {
+    "inputsSha256": "d444d8e5cb2b7f5982c109ae3b4d19d2bc0dd1be4b72f7142b0a8295e1b04658",
+    "outputs": {
+      "assets/brand/tidegap-logo-dark.svg": {
+        "sha256": "39ea7bf52efd1a6251711deb854ec111e4daaf0195b2020e16e47204020b6116"
+      },
+      "assets/brand/tidegap-logo-light.svg": {
+        "sha256": "9c0a176b3b597676a7e39cfbbf9ff16d0795f8f121a21895e17ea09487bc602b"
+      },
+      "assets/brand/tidegap-mark.svg": {
+        "sha256": "7eb90173ac6dc9b881558a8991930c01763f87a3fdb4fecb0c48c467dd322e75"
+      },
+      "assets/brand/tidegap-icon.svg": {
+        "sha256": "30e1baedcbd4a1decff03534da6fa92aa5aa265f33f3b86c8558308dbdb70aad"
+      },
+      "apps/web/public/icon.svg": {
+        "sha256": "30e1baedcbd4a1decff03534da6fa92aa5aa265f33f3b86c8558308dbdb70aad"
+      },
+      "apps/web/src/lib/brand.generated.ts": {
+        "sha256": "f956fca2496f78aa190af431c9c12f7ebcb7a4de10ba1154ee488bf34026bd20"
+      }
+    },
+    "uiBlock": {
+      "path": "packages/cli/ui/index.html",
+      "sha256": "6324444da83a312a89e738a318b30e1204687974a2b7f34c09a92f49c78d1fcb"
     }
   }
 }

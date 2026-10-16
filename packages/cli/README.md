@@ -1,3 +1,5 @@
+<img src="https://www.tidegap.com/icon-192.png" alt="Tidegap" width="48" height="48">
+
 # @tidegap/cli
 
 > Renamed from `@ebb-ai/cli` in 0.18.0. The `ebb` command still works in 0.18 and prints one deprecation line; it is removed in 0.19. If npm reports `EEXIST` on install, run `npm uninstall -g @ebb-ai/cli` first. See [Renamed from Ebb AI](https://github.com/tidegap/tidegap#renamed-from-ebb-ai).

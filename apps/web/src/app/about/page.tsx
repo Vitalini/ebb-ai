@@ -15,7 +15,7 @@ export const metadata: Metadata = {
     type: "article",
     images: [
       {
-        url: "/og-image.png",
+        url: "/og-image.png?v=logo",
         width: 1200,
         height: 630,
         alt: "Run non-urgent LLM tasks at the cleanest grid hour before your deadline.",

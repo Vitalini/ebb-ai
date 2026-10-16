@@ -1,4 +1,9 @@
-<p align="center"><img src="assets/readme-hero.png" alt="Tidegap: GB grid carbon-intensity forecast from 2026-09-30, peak 183 and recommended hour 88 gCO2/kWh (forecast, projected, one run)" width="800"></p>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/tidegap-logo-dark.svg">
+    <img src="assets/brand/tidegap-logo-light.svg" alt="Tidegap" width="280">
+  </picture>
+</p>
 
 # Tidegap
 
@@ -60,6 +65,8 @@ Until 0.17 this project was Ebb AI (`@ebb-ai/*`, `ebb-ai` on PyPI, the `ebb` com
 | OpenClaw `clawhub:@vitalini/ebb`, config `plugins.entries.ebb` | The old plugin stays on 0.17; the new plugin id is `tidegap` | `openclaw plugins install clawhub:@vitalini/tidegap`, move your config block to `plugins.entries.tidegap`, remove the old plugin |
 | `pip install ebb-ai`, `import ebb_ai` | A 0.17.1 shim installs `tidegap`; the old import works with a warning | `pip install tidegap`, `import tidegap` |
 | Links to `github.com/Vitalini/ebb-ai` and `www.ebb-ai.com` | GitHub redirects; the site redirects to `www.tidegap.com` | Nothing |
+
+<p align="center"><img src="assets/readme-hero.png" alt="Tidegap: GB grid carbon-intensity forecast from 2026-09-30, peak 183 and recommended hour 88 gCO2/kWh (forecast, projected, one run)" width="800"></p>
 
 ## Why defer non-urgent AI work?
 

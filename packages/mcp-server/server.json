@@ -4,6 +4,10 @@
   "title": "Tidegap",
   "description": "Runs non-urgent LLM tasks at the cleanest grid hour before a deadline, via Batch APIs when allowed.",
   "websiteUrl": "https://www.tidegap.com",
+  "icons": [
+    { "src": "https://www.tidegap.com/icon-512.png", "mimeType": "image/png", "sizes": ["512x512"] },
+    { "src": "https://www.tidegap.com/icon.svg", "mimeType": "image/svg+xml", "sizes": ["any"] }
+  ],
   "repository": {
     "url": "https://github.com/tidegap/tidegap",
     "source": "github",

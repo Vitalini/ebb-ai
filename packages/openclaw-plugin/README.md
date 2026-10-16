@@ -1,3 +1,5 @@
+<img src="https://www.tidegap.com/icon-192.png" alt="Tidegap" width="48" height="48">
+
 # @vitalini/tidegap
 
 OpenClaw plugin that exposes Tidegap as native OpenClaw tools.

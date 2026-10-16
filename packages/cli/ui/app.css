@@ -62,9 +62,9 @@ kbd {
   font-size: var(--fs-lg); font-weight: var(--w-bold); letter-spacing: -0.01em;
 }
 .brand-mark {
-  width: 18px; height: 18px; border-radius: 50%;
-  background: var(--accent);
-  box-shadow: inset -5px -5px 0 0 var(--band-very-clean-bg);
+  flex: none;
+  width: 32px; height: 11px;
+  color: var(--brand-ink);
 }
 .tabs {
   display: flex; gap: 2px; padding: 3px;

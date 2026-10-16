@@ -50,6 +50,11 @@ jobs:
         run: pnpm --filter "@vitalini/tidegap" test
       # The @ebb-ai/* 0.17.1 shims run against the built @tidegap/* packages.
       - run: node --test compat/test/shims.test.mjs
+      # Regenerate the brand SVGs and snippets (needs opentype.js, so it runs
+      # here, not in the dependency-free data-ssot job) and fail on any diff.
+      # This proves the committed outputs come from the generator and font.
+      - if: matrix.node == '22'
+        run: pnpm gen:brand:check
 
   data-ssot:
     name: data SSOT drift check
