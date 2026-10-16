@@ -5,7 +5,7 @@
 //   - the vendored Poppins Medium font (assets/brand/fonts/), outlined to
 //     paths with opentype.js, so no output depends on an installed font.
 //
-// Outputs (all committed; `pnpm gen:images` runs this, then the renderer):
+// Outputs (all committed; scripts/render-images.mjs runs this before rendering):
 //   assets/brand/tidegap-logo-dark.svg    stacked lockup for dark backgrounds
 //   assets/brand/tidegap-logo-light.svg   stacked lockup for light backgrounds
 //   assets/brand/tidegap-mark.svg         heavy wave, 64x64, transparent

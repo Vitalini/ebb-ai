@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Render the repo and site images from HTML templates, one real forecast and
-// the brand SVGs that scripts/build-brand.mjs writes (`pnpm gen:images` runs
-// the generator first).
+// the brand SVGs that scripts/build-brand.mjs writes. It runs the generator
+// itself first, so the brand block it records always comes from a fresh run.
 //
 //   assets/social-preview.png     1280x640  GitHub social preview (manual upload)
 //   assets/readme-hero.png        1600x500  README hero
@@ -20,6 +20,7 @@
 // CI does not render, it runs scripts/check-images.mjs against the lock file
 // this script writes.
 
+import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createRequire } from "node:module";
@@ -208,6 +209,9 @@ async function renderCard(browser, data, css, logo, path, spec) {
 }
 
 async function main() {
+  // Regenerate the brand outputs before reading or hashing them; a lock
+  // recorded from hand-edited or stale brand files would pass the check.
+  execFileSync(process.execPath, [join(ROOT, "scripts/build-brand.mjs")], { stdio: "inherit" });
   const data = loadForecast();
   const css = readFileSync(join(ROOT, TEMPLATES_DIR, "base.css"), "utf8");
   const require = createRequire(import.meta.url);

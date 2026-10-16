@@ -51,8 +51,9 @@ Poppins Medium, from [google/fonts `ofl/poppins`](https://github.com/google/font
 ## Regenerate
 
 ```bash
-pnpm gen:images        # scripts/build-brand.mjs, then scripts/render-images.mjs
+pnpm gen:images        # scripts/render-images.mjs, which runs scripts/build-brand.mjs first
 pnpm gen:images:check  # drift check, also run in CI
+pnpm gen:brand:check   # regenerate the brand outputs and fail on any diff, also run in CI
 ```
 
 The wave geometry, stroke weights, tracking and layout are constants at the top of `scripts/build-brand.mjs`. `pnpm gen:brand` runs the generator alone; the drift check then fails until `pnpm gen:images` records the new outputs.
