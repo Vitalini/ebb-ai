@@ -24,6 +24,23 @@ export const LOCK_PATH = "assets/images.lock.json";
 export const TEMPLATES_DIR = "assets/templates";
 export const DATA_PATH = "docs/examples/2026-09-30-GB-tick/forecast.json";
 
+// Brand outputs written by scripts/build-brand.mjs.
+export const BRAND = {
+  script: "scripts/build-brand.mjs",
+  font: "assets/brand/fonts/Poppins-Medium.ttf",
+  svgs: {
+    logoDark: "assets/brand/tidegap-logo-dark.svg",
+    logoLight: "assets/brand/tidegap-logo-light.svg",
+    mark: "assets/brand/tidegap-mark.svg",
+    icon: "assets/brand/tidegap-icon.svg",
+    webIcon: "apps/web/public/icon.svg",
+  },
+  module: "apps/web/src/lib/brand.generated.ts",
+  uiHtml: "packages/cli/ui/index.html",
+  uiStart: "<!-- brand-mark:start -->",
+  uiEnd: "<!-- brand-mark:end -->",
+};
+
 export const OUTPUTS = {
   "assets/social-preview.png": { width: 1280, height: 640, template: "social-preview.html" },
   "assets/readme-hero.png": { width: 1600, height: 500, template: "readme-hero.html" },
