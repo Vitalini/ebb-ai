@@ -7,7 +7,11 @@ same ledger, so they must agree on where it lives.
 process that needs the directory moves the old one and leaves ``~/.ebb-ai``
 as a link to the new one, so a 0.17 process keeps reading the same ledger.
 
-- ``~/.ebb-ai`` absent, or already a link: use ``~/.tidegap``.
+- ``~/.ebb-ai`` absent, or a link (or Windows junction) to ``~/.tidegap``:
+  use ``~/.tidegap``.
+- ``~/.ebb-ai`` a link somewhere else (a user's own link): follow it and use
+  ``~/.ebb-ai``, with one line, unless ``~/.tidegap`` already holds a
+  ``queue.db`` or ``signing.key``.
 - ``~/.ebb-ai`` a real dir, ``~/.tidegap`` absent: rename, then link back.
 - ``~/.ebb-ai`` a real dir, ``~/.tidegap`` present without ``queue.db`` and
   ``signing.key``: move each entry in (directories merge), remove the empty
@@ -26,6 +30,7 @@ from __future__ import annotations
 import contextlib
 import errno
 import os
+import stat
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -46,6 +51,12 @@ class _Fs:
         os.rename(src, dst)
 
     def symlink(self, target: Path, link: Path) -> None:
+        if sys.platform == "win32":
+            # A junction needs no privilege, like the TS core's "junction" link.
+            import _winapi  # type: ignore[import-not-found]
+
+            _winapi.CreateJunction(str(target), str(link))
+            return
         os.symlink(target, link, target_is_directory=True)
 
     def rmdir(self, path: Path) -> None:
@@ -91,6 +102,26 @@ def _exists(path: Path) -> bool:
     return os.path.lexists(path)
 
 
+def _is_link(path: Path) -> bool:
+    """A symlink, or on Windows a junction (``Path.is_junction`` is 3.12+)."""
+    if path.is_symlink():
+        return True
+    if sys.platform != "win32":
+        return False
+    try:
+        tag = getattr(os.lstat(path), "st_reparse_tag", 0)
+    except OSError:
+        return False
+    return tag == getattr(stat, "IO_REPARSE_TAG_MOUNT_POINT", 0xA0000003)
+
+
+def _realpath(path: Path) -> Path | None:
+    try:
+        return path.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return None
+
+
 def _migrate(home: Path, fs: _Fs, warn: Callable[[str], None]) -> Path:
     legacy = home / LEGACY_HOME_DIR
     target = home / TIDEGAP_HOME_DIR
@@ -107,7 +138,22 @@ def _migrate(home: Path, fs: _Fs, warn: Callable[[str], None]) -> Path:
             return False
 
     for _ in range(_MAX_ATTEMPTS):
-        if not legacy.is_dir() or legacy.is_symlink():
+        if _is_link(legacy):
+            points = _realpath(legacy)
+            if points is None or points == _realpath(target):
+                return target
+            if any(_exists(target / name) for name in _DATA_FILES):
+                warn(
+                    f"tidegap: {legacy} links to {points} and {target} holds data; "
+                    f"using {target}. Move anything you need from {points} by hand."
+                )
+                return target
+            warn(
+                f"tidegap: {legacy} links to {points}, not to {target}; "
+                f"using {legacy}. Move it to {target} by hand."
+            )
+            return legacy
+        if not legacy.is_dir():
             return target
 
         if not _exists(target):
@@ -174,10 +220,11 @@ def _undo(fs: _Fs, done: list[tuple[Path, Path]]) -> None:
 
 
 def _restore_dirs(fs: _Fs, emptied: list[Path]) -> None:
-    """Recreate removed directories, parents first."""
+    """Recreate removed directories, parents first. Best effort."""
     for d in reversed(emptied):
         if not _exists(d):
-            fs.mkdir(d)
+            with contextlib.suppress(OSError):
+                fs.mkdir(d)
 
 
 def _plan_merge(src_dir: Path, dst_dir: Path) -> list[tuple[Path, Path]] | str:
@@ -188,9 +235,7 @@ def _plan_merge(src_dir: Path, dst_dir: Path) -> list[tuple[Path, Path]] | str:
         if not _exists(dst):
             out.append((src, dst))
             continue
-        both_dirs = (
-            src.is_dir() and not src.is_symlink() and dst.is_dir() and not dst.is_symlink()
-        )
+        both_dirs = src.is_dir() and not _is_link(src) and dst.is_dir() and not _is_link(dst)
         if both_dirs:
             inner = _plan_merge(src, dst)
             if isinstance(inner, str):
@@ -206,7 +251,7 @@ def _empty_dirs(path: Path) -> list[Path]:
     out: list[Path] = []
     for entry in sorted(os.listdir(path)):
         sub = path / entry
-        if sub.is_dir() and not sub.is_symlink():
+        if sub.is_dir() and not _is_link(sub):
             out.extend(_empty_dirs(sub))
     out.append(path)
     return out

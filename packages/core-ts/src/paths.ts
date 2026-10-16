@@ -9,7 +9,10 @@
  *
  * Rules, decided by the state of `~/.ebb-ai` (0.18 code may create
  * `~/.tidegap` first, for example the daemon log dir):
- *   - `~/.ebb-ai` absent, or already a link: use `~/.tidegap`.
+ *   - `~/.ebb-ai` absent, or a link to `~/.tidegap`: use `~/.tidegap`.
+ *   - `~/.ebb-ai` a link somewhere else (a user's own link, for example to
+ *     another disk): follow it and use `~/.ebb-ai`, with one line, unless
+ *     `~/.tidegap` already holds a queue.db or signing.key.
  *   - `~/.ebb-ai` a real dir, `~/.tidegap` absent: rename, then link back.
  *   - `~/.ebb-ai` a real dir, `~/.tidegap` present without queue.db and
  *     signing.key: move each entry in (directories merge), remove the empty
@@ -44,6 +47,7 @@ export interface HomeFs {
   rmdirSync(path: string): void;
   mkdirSync(path: string): void;
   symlinkSync(target: string, path: string, type?: "dir" | "junction"): void;
+  realpathSync(path: string): string;
 }
 
 export interface ResolveHomeOptions {
@@ -64,6 +68,7 @@ const realFs: HomeFs = {
   rmdirSync: (p) => nodeFs.rmdirSync(p),
   mkdirSync: (p) => nodeFs.mkdirSync(p),
   symlinkSync: (t, p, type) => nodeFs.symlinkSync(t, p, type),
+  realpathSync: (p) => nodeFs.realpathSync(p),
 };
 
 const DATA_FILES = ["queue.db", "signing.key"];
@@ -116,6 +121,25 @@ function lstat(fs: HomeFs, path: string): nodeFs.Stats | undefined {
   }
 }
 
+function realpath(fs: HomeFs, path: string): string | undefined {
+  try {
+    return fs.realpathSync(path);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Recreate directories a merge removed, parents first. Best effort. */
+function restoreDirs(fs: HomeFs, emptied: string[]): void {
+  for (const dir of [...emptied].reverse()) {
+    try {
+      if (!lstat(fs, dir)) fs.mkdirSync(dir);
+    } catch {
+      // The warning that follows names both directories.
+    }
+  }
+}
+
 function migrate(home: string, fs: HomeFs, warn: (l: string) => void, platform: NodeJS.Platform): string {
   const legacy = join(home, LEGACY_HOME_DIR);
   const target = join(home, TIDEGAP_HOME_DIR);
@@ -134,7 +158,18 @@ function migrate(home: string, fs: HomeFs, warn: (l: string) => void, platform: 
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const old = lstat(fs, legacy);
-    if (!old || old.isSymbolicLink() || !old.isDirectory()) return target;
+    if (old?.isSymbolicLink()) {
+      // Junctions on Windows report as links too.
+      const points = realpath(fs, legacy);
+      if (!points || points === realpath(fs, target)) return target;
+      if (DATA_FILES.some((f) => lstat(fs, join(target, f)))) {
+        warn(`tidegap: ${legacy} links to ${points} and ${target} holds data; using ${target}. Move anything you need from ${points} by hand.`);
+        return target;
+      }
+      warn(`tidegap: ${legacy} links to ${points}, not to ${target}; using ${legacy}. Move it to ${target} by hand.`);
+      return legacy;
+    }
+    if (!old || !old.isDirectory()) return target;
 
     if (!lstat(fs, target)) {
       try {
@@ -185,16 +220,12 @@ function migrate(home: string, fs: HomeFs, warn: (l: string) => void, platform: 
       for (const dir of emptied) fs.rmdirSync(dir);
     } catch (err) {
       // Something new appeared in ~/.ebb-ai meanwhile: put everything back.
-      for (const dir of [...emptied].reverse()) {
-        if (!lstat(fs, dir)) fs.mkdirSync(dir);
-      }
+      restoreDirs(fs, emptied);
       undo();
       return inPlace(errCode(err) ?? String(err));
     }
     if (link()) return target;
-    for (const dir of [...emptied].reverse()) {
-      if (!lstat(fs, dir)) fs.mkdirSync(dir);
-    }
+    restoreDirs(fs, emptied);
     undo();
     return inPlace("cannot create the link");
   }

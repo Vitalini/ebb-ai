@@ -158,6 +158,63 @@ describe("resolveTidegapHome", () => {
     expect(warnings).toHaveLength(1);
   });
 
+  it("~/.ebb-ai is a user's link to another dir: follows it, moves nothing, one warning", () => {
+    const elsewhere = join(home, "data-elsewhere");
+    mkdirSync(elsewhere);
+    writeFileSync(join(elsewhere, "queue.db"), "Q");
+    fs.symlinkSync(elsewhere, legacy(), "dir");
+    expect(resolveTidegapHome({ home, warn })).toBe(legacy());
+    expect(readFileSync(join(legacy(), "queue.db"), "utf8")).toBe("Q");
+    expect(readlinkSync(legacy())).toBe(elsewhere);
+    expect(fs.existsSync(target())).toBe(false);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(elsewhere);
+  });
+
+  it("~/.ebb-ai links elsewhere and ~/.tidegap holds data: ~/.tidegap wins, one warning", () => {
+    const elsewhere = join(home, "data-elsewhere");
+    mkdirSync(elsewhere);
+    fs.symlinkSync(elsewhere, legacy(), "dir");
+    mkdirSync(target());
+    writeFileSync(join(target(), "signing.key"), "K");
+    expect(resolveTidegapHome({ home, warn })).toBe(target());
+    expect(warnings).toHaveLength(1);
+  });
+
+  it("a dangling ~/.ebb-ai link: returns ~/.tidegap silently", () => {
+    fs.symlinkSync(join(home, "gone"), legacy(), "dir");
+    expect(resolveTidegapHome({ home, warn })).toBe(target());
+    expect(warnings).toEqual([]);
+  });
+
+  it("rollback cannot recreate a removed dir: still returns ~/.ebb-ai with a warning, never throws", () => {
+    seedLegacy({ "queue.db": "Q" });
+    mkdirSync(join(target(), "logs"), { recursive: true });
+    const broken: Partial<HomeFs> = {
+      symlinkSync: () => {
+        throw Object.assign(new Error("no links"), { code: "EPERM" });
+      },
+      mkdirSync: () => {
+        throw Object.assign(new Error("denied"), { code: "EACCES" });
+      },
+    };
+    expect(() => resolveTidegapHome({ home, warn, fs: broken })).not.toThrow();
+    expect(warnings.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("win32: the back-link is a junction", () => {
+    seedLegacy({ "queue.db": "Q" });
+    const types: Array<string | undefined> = [];
+    const recording: Partial<HomeFs> = {
+      symlinkSync: (t, p, type) => {
+        types.push(type);
+        fs.symlinkSync(t, p, "dir");
+      },
+    };
+    expect(resolveTidegapHome({ home, warn, fs: recording, platform: "win32" })).toBe(target());
+    expect(types).toEqual(["junction"]);
+  });
+
   it("the queue opens with its rows after the move, from both paths", () => {
     mkdirSync(legacy());
     const before = new TaskStore({ dbPath: join(legacy(), "queue.db") });

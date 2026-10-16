@@ -127,3 +127,88 @@ def test_link_failure_moves_data_back(home: Path) -> None:
     assert (home / ".ebb-ai" / "queue.db").read_text() == "Q"
     assert not (home / ".tidegap").exists()
     assert len(warnings) == 1
+
+
+def test_file_in_both_uses_legacy_in_place(home: Path) -> None:
+    seed_legacy(home, {"queue.db": "Q", "config": "OLD"})
+    (home / ".tidegap").mkdir()
+    (home / ".tidegap" / "config").write_text("NEW")
+    warnings: list[str] = []
+    assert resolve(home, warnings) == home / ".ebb-ai"
+    assert (home / ".ebb-ai" / "queue.db").read_text() == "Q"
+    assert (home / ".tidegap" / "config").read_text() == "NEW"
+    assert len(warnings) == 1
+
+
+def test_merge_then_link_failure_moves_entries_back(home: Path) -> None:
+    seed_legacy(home, {"queue.db": "Q"})
+    (home / ".tidegap" / "logs").mkdir(parents=True)
+    warnings: list[str] = []
+    assert resolve(home, warnings, _NoLinkFs()) == home / ".ebb-ai"
+    assert (home / ".ebb-ai" / "queue.db").read_text() == "Q"
+    assert not (home / ".tidegap" / "queue.db").exists()
+    assert (home / ".tidegap" / "logs").is_dir()
+    assert len(warnings) == 1
+
+
+def test_user_link_elsewhere_is_followed(home: Path) -> None:
+    home.mkdir()
+    elsewhere = home / "data-elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "queue.db").write_text("Q")
+    os.symlink(elsewhere, home / ".ebb-ai", target_is_directory=True)
+    warnings: list[str] = []
+    assert resolve(home, warnings) == home / ".ebb-ai"
+    assert (home / ".ebb-ai" / "queue.db").read_text() == "Q"
+    assert not (home / ".tidegap").exists()
+    assert len(warnings) == 1 and str(elsewhere) in warnings[0]
+
+
+def test_user_link_elsewhere_and_target_data_uses_target(home: Path) -> None:
+    home.mkdir()
+    elsewhere = home / "data-elsewhere"
+    elsewhere.mkdir()
+    os.symlink(elsewhere, home / ".ebb-ai", target_is_directory=True)
+    (home / ".tidegap").mkdir()
+    (home / ".tidegap" / "signing.key").write_text("K")
+    warnings: list[str] = []
+    assert resolve(home, warnings) == home / ".tidegap"
+    assert len(warnings) == 1
+
+
+def test_dangling_link_returns_target_silently(home: Path) -> None:
+    home.mkdir()
+    os.symlink(home / "gone", home / ".ebb-ai", target_is_directory=True)
+    warnings: list[str] = []
+    assert resolve(home, warnings) == home / ".tidegap"
+    assert warnings == []
+
+
+class _NoLinkNoMkdirFs(_NoLinkFs):
+    def mkdir(self, path: Path) -> None:
+        raise OSError(errno.EACCES, "denied")
+
+
+def test_rollback_mkdir_failure_never_raises(home: Path) -> None:
+    seed_legacy(home, {"queue.db": "Q"})
+    (home / ".tidegap" / "logs").mkdir(parents=True)
+    warnings: list[str] = []
+    resolve(home, warnings, _NoLinkNoMkdirFs())
+    assert len(warnings) >= 1
+
+
+def _resolve_in_child(home: str) -> str:
+    return str(resolve_tidegap_home(Path(home), fs=_Fs(), warn=lambda _line: None))
+
+
+def test_concurrent_first_runs_agree_and_keep_data(home: Path) -> None:
+    import multiprocessing
+
+    seed_legacy(home, {"queue.db": "Q", "signing.key": "K"})
+    ctx = multiprocessing.get_context("spawn")
+    with ctx.Pool(4) as pool:
+        results = pool.map(_resolve_in_child, [str(home)] * 8)
+    assert set(results) == {str(home / ".tidegap")}
+    assert (home / ".tidegap" / "queue.db").read_text() == "Q"
+    assert (home / ".tidegap" / "signing.key").read_text() == "K"
+    assert (home / ".ebb-ai").is_symlink()
