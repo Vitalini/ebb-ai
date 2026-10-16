@@ -16,7 +16,7 @@ manifests pick the shims up.
 
 These directories sit outside the pnpm workspace and outside
 `scripts/check-versions.mjs`; `pnpm build` and `pnpm test` never touch them.
-Check them with `node --test compat/test` after `pnpm build` (the test links
+Check them with `node --test compat/test/shims.test.mjs` after `pnpm build` (the test links
 the workspace `@tidegap/*` packages into a temp `node_modules`).
 
 Publish them only after `@tidegap/*` 0.18.0 and PyPI `tidegap` 0.18.0 are

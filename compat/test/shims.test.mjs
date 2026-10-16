@@ -1,5 +1,5 @@
 // Tests for the @ebb-ai/* 0.17.1 npm shims and the ebb-ai PyPI shim.
-// Run after `pnpm build`: node --test compat/test
+// Run after `pnpm build`: node --test compat/test/shims.test.mjs
 //
 // The shims are copied into a temp node_modules next to symlinks to the
 // built workspace @tidegap/* packages, which is the layout npm produces.
