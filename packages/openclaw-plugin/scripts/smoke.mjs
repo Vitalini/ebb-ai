@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * Dispatcher smoke test for @vitalini/ebb.
+ * Dispatcher smoke test for @vitalini/tidegap.
  *
  * Schedules a provider-call task, forces its window into the past, runs
  * one Scheduler.tick with a stub adapter, and confirms the task does NOT
  * stay `scheduled` after it is due. Also checks cross-instance cancel.
  *
  * Exercises @tidegap/core through Node's built-in node:sqlite — there is
- * no better-sqlite3 build step. Run with: `pnpm --filter @vitalini/ebb smoke`.
+ * no better-sqlite3 build step. Run with: `pnpm --filter @vitalini/tidegap smoke`.
  */
 
 import { mkdtempSync, rmSync } from "node:fs";

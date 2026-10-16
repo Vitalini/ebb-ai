@@ -224,12 +224,12 @@ describe("tidegap queue list --hook (Claude Code SessionStart)", () => {
       }
     ).hooks.SessionStart[0]!.hooks[0]!;
 
-    function runHook(stub: string | null): { status: number | null; stdout: string } {
+    function runHook(stub: string | null, name = "tidegap"): { status: number | null; stdout: string } {
       const bin = join(dir, "bin");
       mkdirSync(bin, { recursive: true });
       if (stub !== null) {
-        writeFileSync(join(bin, "ebb"), `#!/bin/sh\n${stub}\n`);
-        chmodSync(join(bin, "ebb"), 0o755);
+        writeFileSync(join(bin, name), `#!/bin/sh\n${stub}\n`);
+        chmodSync(join(bin, name), 0o755);
       }
       const r = spawnSync("/bin/sh", ["-c", command.command], {
         env: { PATH: `${bin}:/usr/bin:/bin` },
@@ -242,12 +242,16 @@ describe("tidegap queue list --hook (Claude Code SessionStart)", () => {
       expect(command.type).toBe("command");
     });
 
-    it("stays silent with exit 0 when ebb is not installed", () => {
+    it("stays silent with exit 0 when neither tidegap nor ebb is installed", () => {
       expect(runHook(null)).toEqual({ status: 0, stdout: "" });
     });
 
     it("stays silent with exit 0 when an older ebb rejects --hook", () => {
-      expect(runHook(`echo "error: unknown option '--hook'" >&2; exit 1`)).toEqual({ status: 0, stdout: "" });
+      expect(runHook(`echo "error: unknown option '--hook'" >&2; exit 1`, "ebb")).toEqual({ status: 0, stdout: "" });
+    });
+
+    it("falls back to the 0.17 ebb command when tidegap is absent", () => {
+      expect(runHook(`echo "1 unread task via $0"`, "ebb").stdout).toMatch(/via .*\/ebb\n$/);
     });
 
     it("passes the CLI line through", () => {

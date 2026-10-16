@@ -84,6 +84,7 @@ describe("stdio server with only EBB_DB_PATH", () => {
     const first = stdout.split("\n")[0]!;
     const msg = JSON.parse(first) as { id: number; result: { serverInfo: { name: string } } };
     expect(msg.id).toBe(1);
+    expect(msg.result.serverInfo.name).toBe("tidegap");
     expect(stderr).toContain("EBB_DB_PATH -> TIDEGAP_DB_PATH");
     expect(stderr).toContain(`db=${dbPath}`);
     expect(existsSync(dbPath)).toBe(true);

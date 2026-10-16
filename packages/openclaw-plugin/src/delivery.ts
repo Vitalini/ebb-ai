@@ -328,7 +328,7 @@ export function formatReport(
 ): string {
   const text = resultText(task);
   const meta = receiptLine(task);
-  const title = "ebb-ai — deferred task complete";
+  const title = "Tidegap — deferred task complete";
 
   if (format === "json") {
     return JSON.stringify(
@@ -380,7 +380,7 @@ export function formatChatMessage(task: CompletedTask): string {
   const text = resultText(task);
   const meta = receiptLine(task);
   const body = text.length > 3500 ? `${text.slice(0, 3500)}\n…(truncated)` : text;
-  return `✅ ebb-ai — deferred task complete\ntask ${task.taskId} · ${meta}\n\n${body}`;
+  return `✅ Tidegap — deferred task complete\ntask ${task.taskId} · ${meta}\n\n${body}`;
 }
 
 // ── Delivery execution ──────────────────────────────────────────────────────
@@ -454,12 +454,12 @@ export function notificationContent(task: CompletedTask): {
     .trim();
   const short = preview.length > 140 ? `${preview.slice(0, 140)}…` : preview;
   return {
-    title: `ebb-ai — task ${task.taskId} complete`,
+    title: `Tidegap — task ${task.taskId} complete`,
     body: `${short}\n${carbonGrams(task)}`,
   };
 }
 
-// The per-platform command builder lives in core (shared with `ebb tick`);
+// The per-platform command builder lives in core (shared with `tidegap tick`);
 // re-exported here so existing imports keep working.
 export { osNotifyCommand };
 
@@ -536,7 +536,7 @@ async function deliverWebhook(
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        source: "ebb-ai",
+        source: "tidegap",
         task_id: task.taskId,
         status: task.status,
         completed_at: task.completedAt ?? null,
@@ -611,7 +611,7 @@ export function __setPuppeteerImportForTest(
 const PUPPETEER_INSTALL_HINT =
   "pdf delivery needs the optional 'puppeteer' package, which is not installed. " +
   "Install it where the gateway loaded the plugin, then restart the gateway: " +
-  "`cd ~/.openclaw/extensions/ebb && npm install puppeteer`. " +
+  "`cd ~/.openclaw/extensions/tidegap && npm install puppeteer`. " +
   "The report was kept in the queue.";
 
 function isModuleNotFound(err: unknown): boolean {
@@ -780,7 +780,7 @@ export async function deliverResult(
 /** A compact chat/Telegram message for a crossed carbon budget. */
 export function formatCarbonAlertMessage(alert: CarbonAlert): string {
   return (
-    `⚠ ebb-ai — ${alert.windowKind} carbon budget crossed\n` +
+    `⚠ Tidegap — ${alert.windowKind} carbon budget crossed\n` +
     `${alert.actualG} gCO2e used this window vs ${alert.thresholdG} g threshold\n` +
     `crossed by task ${alert.taskIdThatCrossed} · window since ${alert.windowStart}`
   );
@@ -813,7 +813,7 @@ export async function deliverCarbonAlert(
         const res = await fetch(config.webhookUrl, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ source: "ebb-ai", kind: "carbon_budget_alert", alert }),
+          body: JSON.stringify({ source: "tidegap", kind: "carbon_budget_alert", alert }),
         });
         outcomes.push({
           mode,

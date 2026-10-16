@@ -78,9 +78,9 @@ describe("runDispatchTick fires a carbon-budget alert on crossing", () => {
   let tmp: string;
   let dbPath: string;
   // Tiny threshold so a single dispatched task crosses it. The threshold now
-  // comes from PLUGIN CONFIG (the EBB_CARBON_BUDGET_* environment variables
+  // comes from PLUGIN CONFIG (the TIDEGAP_CARBON_BUDGET_* environment variables
   // configure the CLI and MCP server, not the plugin), and plugin config
-  // overrides the ~/.ebb-ai/config file — so the test never touches the real
+  // overrides the ~/.tidegap/config file — so the test never touches the real
   // config and never touches the environment.
   let config: { dbPath: string; carbonBudgetG: number; carbonBudgetWindow: "daily" };
 

@@ -1,6 +1,6 @@
 {
-  "id": "ebb",
-  "name": "ebb-ai — carbon-aware deferral",
+  "id": "tidegap",
+  "name": "Tidegap — carbon-aware deferral",
   "description": "Auto-defer \"do it later\" tasks to the cleanest electricity-grid hour inside the deadline.",
   "activation": {
     "onStartup": true
@@ -10,23 +10,23 @@
     "properties": {
       "dbPath": {
         "type": "string",
-        "description": "Override the SQLite queue path. Defaults to ~/.ebb-ai/queue.db (shared with the @ebb-ai/mcp server and @ebb-ai/cli)."
+        "description": "Override the SQLite queue path. Defaults to ~/.tidegap/queue.db (shared with the @tidegap/mcp server and @tidegap/cli)."
       },
       "defaultRegion": {
         "type": "string",
-        "description": "Default electricity-grid region when a tool call omits one. Examples: GB, US-CAL-CISO, US-TEX-ERCO, US-NE-ISNE, US-MIDA-PJM, FR, DE. When unset, ebb-ai guesses from the host machine's timezone (London→GB, Paris→FR, Berlin→DE, US Pacific→US-CAL-CISO, US Eastern→US-MIDA-PJM) and otherwise falls back to GB. Set this explicitly for precise control. (Replaces the EBB_DEFAULT_REGION environment variable, which still configures the ebb CLI and @ebb-ai/mcp server.)"
+        "description": "Default electricity-grid region when a tool call omits one. Examples: GB, US-CAL-CISO, US-TEX-ERCO, US-NE-ISNE, US-MIDA-PJM, FR, DE. When unset, Tidegap guesses from the host machine's timezone (London→GB, Paris→FR, Berlin→DE, US Pacific→US-CAL-CISO, US Eastern→US-MIDA-PJM) and otherwise falls back to GB. Set this explicitly for precise control. (Replaces the TIDEGAP_DEFAULT_REGION environment variable (EBB_DEFAULT_REGION before 0.18), which still configures the ebb CLI and @tidegap/mcp server.)"
       },
       "electricityMapsApiKey": {
         "type": "string",
-        "description": "Electricity Maps free-tier API key, used for every grid zone without a more specific feed. Replaces the EBB_ELECTRICITY_MAPS_API_KEY environment variable — the plugin reads no environment variables. Accepts the ${EBB_ELECTRICITY_MAPS_API_KEY} secret shorthand. Unset ⇒ those zones fall back to synthetic (mock) grid data."
+        "description": "Electricity Maps free-tier API key, used for every grid zone without a more specific feed. Replaces the TIDEGAP_ELECTRICITY_MAPS_API_KEY environment variable (EBB_ELECTRICITY_MAPS_API_KEY before 0.18) — the plugin reads no environment variables. Accepts the ${TIDEGAP_ELECTRICITY_MAPS_API_KEY} secret shorthand. Unset ⇒ those zones fall back to synthetic (mock) grid data."
       },
       "eiaApiKey": {
         "type": "string",
-        "description": "US EIA v2 Open Data API key, used for the major US ISO/RTO zones. Replaces the EBB_EIA_API_KEY environment variable. Accepts the ${EBB_EIA_API_KEY} secret shorthand. Unset ⇒ US zones fall back to synthetic (mock) grid data."
+        "description": "US EIA v2 Open Data API key, used for the major US ISO/RTO zones. Replaces the TIDEGAP_EIA_API_KEY environment variable (EBB_EIA_API_KEY before 0.18). Accepts the ${TIDEGAP_EIA_API_KEY} secret shorthand. Unset ⇒ US zones fall back to synthetic (mock) grid data."
       },
       "entsoeSecurityToken": {
         "type": "string",
-        "description": "ENTSO-E Transparency Platform security token, used for the EU bidding zones (FR, DE, ES, IT, NL). Replaces the EBB_ENTSOE_SECURITY_TOKEN environment variable. Accepts the ${EBB_ENTSOE_SECURITY_TOKEN} secret shorthand. Unset ⇒ EU zones fall back to synthetic (mock) grid data."
+        "description": "ENTSO-E Transparency Platform security token, used for the EU bidding zones (FR, DE, ES, IT, NL). Replaces the TIDEGAP_ENTSOE_SECURITY_TOKEN environment variable (EBB_ENTSOE_SECURITY_TOKEN before 0.18). Accepts the ${TIDEGAP_ENTSOE_SECURITY_TOKEN} secret shorthand. Unset ⇒ EU zones fall back to synthetic (mock) grid data."
       },
       "wattTimeUsername": {
         "type": "string",
@@ -62,7 +62,7 @@
       },
       "carbonBudgetG": {
         "type": "number",
-        "description": "Aggregate carbon budget in grams CO2e. Crossing it fires a one-shot alert through the configured delivery channel. Replaces the EBB_CARBON_BUDGET_G environment variable. Takes precedence over the same key in the ~/.ebb-ai/config file, which is still read.",
+        "description": "Aggregate carbon budget in grams CO2e. Crossing it fires a one-shot alert through the configured delivery channel. Replaces the TIDEGAP_CARBON_BUDGET_G environment variable (EBB_CARBON_BUDGET_G before 0.18). Takes precedence over the same key in the ~/.tidegap/config file, which is still read.",
         "exclusiveMinimum": 0
       },
       "carbonBudgetWindow": {
@@ -80,11 +80,11 @@
             "const": "monthly"
           }
         ],
-        "description": "Rolling window the carbon budget is scoped to. Defaults to daily. Replaces the EBB_CARBON_BUDGET_WINDOW environment variable."
+        "description": "Rolling window the carbon budget is scoped to. Defaults to daily. Replaces the TIDEGAP_CARBON_BUDGET_WINDOW environment variable (EBB_CARBON_BUDGET_WINDOW before 0.18)."
       },
       "deliveryStorePath": {
         "type": "string",
-        "description": "Override the SQLite file holding per-task delivery preferences and outcomes. Defaults to ~/.ebb-ai/delivery.db. Replaces the EBB_DELIVERY_FILE environment variable."
+        "description": "Override the SQLite file holding per-task delivery preferences and outcomes. Defaults to ~/.tidegap/delivery.db. Replaces the EBB_DELIVERY_FILE environment variable."
       },
       "disableStartupDispatch": {
         "type": "boolean",

@@ -17,7 +17,7 @@
  *     `execute(params, config, …)` argument;
  *   - the manifest's declared config surface matches the TypeBox schema.
  *
- * Environment variables still configure the `ebb` CLI and the `@tidegap/mcp`
+ * Environment variables still configure the `tidegap` CLI and the `@tidegap/mcp`
  * server — separate hosts, unchanged behaviour.
  */
 
@@ -54,7 +54,7 @@ function walk(dir: string): string[] {
 // Built by concatenation so this file does not match the pattern it searches.
 const ENV_READ = "process" + "." + "env";
 
-describe("ebb OpenClaw plugin — zero environment reads", () => {
+describe("Tidegap OpenClaw plugin — zero environment reads", () => {
   it("no source file reads the ambient environment", () => {
     const offenders = walk(SRC).filter((f) =>
       readFileSync(f, "utf8").includes(ENV_READ),
@@ -76,7 +76,7 @@ describe("ebb OpenClaw plugin — zero environment reads", () => {
   });
 });
 
-describe("ebb OpenClaw plugin — configuration comes from PluginConfig", () => {
+describe("Tidegap OpenClaw plugin — configuration comes from PluginConfig", () => {
   const savedEnv = new Map<string, string | undefined>();
   const LEAKY = [
     "ANTHROPIC_API_KEY",
@@ -174,8 +174,8 @@ describe("ebb OpenClaw plugin — configuration comes from PluginConfig", () => 
   });
 });
 
-describe("ebb OpenClaw plugin — config recovered from the gateway config", () => {
-  it("reads plugins.entries.ebb.config out of a captured gateway config", () => {
+describe("Tidegap OpenClaw plugin — config recovered from the gateway config", () => {
+  it("reads plugins.entries.tidegap.config out of a captured gateway config", () => {
     const gateway = {
       channels: { telegram: {} },
       plugins: {
@@ -212,7 +212,7 @@ describe("ebb OpenClaw plugin — config recovered from the gateway config", () 
   });
 });
 
-describe("ebb OpenClaw plugin — manifest matches the code's config schema", () => {
+describe("Tidegap OpenClaw plugin — manifest matches the code's config schema", () => {
   const manifest = JSON.parse(
     readFileSync(join(PKG, "openclaw.plugin.json"), "utf8"),
   ) as {
@@ -233,10 +233,10 @@ describe("ebb OpenClaw plugin — manifest matches the code's config schema", ()
   it("every field that replaces an environment variable names it in its description", () => {
     // The migration must be discoverable straight from the gateway UI.
     const replacements: Record<string, string> = {
-      defaultRegion: "EBB_DEFAULT_REGION",
-      electricityMapsApiKey: "EBB_ELECTRICITY_MAPS_API_KEY",
-      eiaApiKey: "EBB_EIA_API_KEY",
-      entsoeSecurityToken: "EBB_ENTSOE_SECURITY_TOKEN",
+      defaultRegion: "TIDEGAP_DEFAULT_REGION",
+      electricityMapsApiKey: "TIDEGAP_ELECTRICITY_MAPS_API_KEY",
+      eiaApiKey: "TIDEGAP_EIA_API_KEY",
+      entsoeSecurityToken: "TIDEGAP_ENTSOE_SECURITY_TOKEN",
       wattTimeUsername: "WATTTIME_USERNAME",
       wattTimePassword: "WATTTIME_PASSWORD",
       anthropicApiKey: "ANTHROPIC_API_KEY",
@@ -245,8 +245,8 @@ describe("ebb OpenClaw plugin — manifest matches the code's config schema", ()
       googleApiKey: "GOOGLE_API_KEY",
       ollamaHost: "OLLAMA_HOST",
       ollamaModels: "OLLAMA_MODELS",
-      carbonBudgetG: "EBB_CARBON_BUDGET_G",
-      carbonBudgetWindow: "EBB_CARBON_BUDGET_WINDOW",
+      carbonBudgetG: "TIDEGAP_CARBON_BUDGET_G",
+      carbonBudgetWindow: "TIDEGAP_CARBON_BUDGET_WINDOW",
       deliveryStorePath: "EBB_DELIVERY_FILE",
       disableStartupDispatch: "EBB_DISABLE_STARTUP_DISPATCH",
     };

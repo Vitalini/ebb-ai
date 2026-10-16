@@ -1,18 +1,18 @@
 ---
-name: ebb-ai
-description: Auto-defer "do it later" / "by tomorrow" / "tonight" / "overnight" / "by EOD" / "when you have a moment" / "remind me to" / "queue this up" / "no rush" / "not urgent" tasks. Route through /ebb-ai:defer (slash command) or schedule_task (MCP tool) so the LLM dispatch fires at the cleanest electricity-grid hour inside the deadline — lower carbon, Anthropic/OpenAI Batch APIs (50% of sync list price, projected) when the deadline allows. Skip deferral when the user is actively waiting (interactive coding, live chat, debugging).
+name: tidegap
+description: Auto-defer "do it later" / "by tomorrow" / "tonight" / "overnight" / "by EOD" / "when you have a moment" / "remind me to" / "queue this up" / "no rush" / "not urgent" tasks. Route through /tidegap:defer (slash command) or schedule_task (MCP tool) so the LLM dispatch fires at the cleanest electricity-grid hour inside the deadline — lower carbon, Anthropic/OpenAI Batch APIs (50% of sync list price, projected) when the deadline allows. Skip deferral when the user is actively waiting (interactive coding, live chat, debugging).
 ---
 
-# Carbon-aware coding with ebb-ai
+# Carbon-aware coding with Tidegap
 
-When the user has a task that can wait, route it through ebb-ai instead of
+When the user has a task that can wait, route it through Tidegap instead of
 dispatching synchronously. Grid carbon intensity swings substantially over a
 single day as the generation mix shifts, so a few hours of delay can move a
 deferrable LLM call into a cleaner hour. The saving depends on region and day:
 in one GB run on 2026-09-30 the forecast peak was 183 gCO2/kWh and the
 recommended window 88 gCO2/kWh (about 52 % lower, for that run only; forecast,
-projected — see https://github.com/Vitalini/ebb-ai/blob/main/docs/claims.md).
-For tasks deferred more than 24 hours, ebb-ai can route through the provider
+projected — see https://github.com/tidegap/tidegap/blob/main/docs/claims.md).
+For tasks deferred more than 24 hours, Tidegap can route through the provider
 Batch APIs (50% of sync list price, projected) when the deadline allows.
 
 ## When to defer
@@ -37,7 +37,7 @@ Defer when **all** of these are true:
 
 ## How to defer
 
-Use the **`/ebb-ai:defer`** slash command — that is its sole purpose. Pass:
+Use the **`/tidegap:defer`** slash command — that is its sole purpose. Pass:
 
 - The full task prompt (verbatim or summarised — the user's intent).
 - `--by <duration>` matching what the user said. If they said "tomorrow",
@@ -50,13 +50,13 @@ Use the **`/ebb-ai:defer`** slash command — that is its sole purpose. Pass:
   ("every week", "each reset"). Default `none`: a one-off, also for
   `--by quota-reset`.
 
-The command passes this session's id (`origin_session_id`), so `ebb ui`
-and `ebb queue show` print `cd <cwd> && claude --resume <id>` for the task.
+The command passes this session's id (`origin_session_id`), so `tidegap ui`
+and `tidegap queue show` print `cd <cwd> && claude --resume <id>` for the task.
 
 The command will return immediately with a `task_id`, the scheduled time, and
 the projected carbon. You do **not** need to dispatch the task yourself.
 
-As of v0.7.1 the MCP server persists tasks to `~/.ebb-ai/queue.db` by
+As of v0.7.1 the MCP server persists tasks to `~/.tidegap/queue.db` by
 default — queued tasks survive Claude Code restarts and are shared
 across MCP hosts.
 
@@ -64,23 +64,23 @@ across MCP hosts.
 
 | Command | Purpose |
 |---|---|
-| `/ebb-ai:defer <task> --by <when>` | Queue a deferrable LLM task |
-| `/ebb-ai:plan <task> --by <when>` | Preview the chosen window, no commit |
-| `/ebb-ai:check [<id>\|--all]` | List or detail of queued tasks |
-| `/ebb-ai:cancel <id> \| --all` | Remove a task (or all queued/scheduled) |
-| `/ebb-ai:expedite <id>` | Run now, bypass the carbon window |
-| `/ebb-ai:reschedule <id> --by <new>` | Change the deadline, re-score |
-| `/ebb-ai:retry <id>` | Re-dispatch a failed task |
-| `/ebb-ai:grid <zone>` | Just look at the grid, no task involved |
+| `/tidegap:defer <task> --by <when>` | Queue a deferrable LLM task |
+| `/tidegap:plan <task> --by <when>` | Preview the chosen window, no commit |
+| `/tidegap:check [<id>\|--all]` | List or detail of queued tasks |
+| `/tidegap:cancel <id> \| --all` | Remove a task (or all queued/scheduled) |
+| `/tidegap:expedite <id>` | Run now, bypass the carbon window |
+| `/tidegap:reschedule <id> --by <new>` | Change the deadline, re-score |
+| `/tidegap:retry <id>` | Re-dispatch a failed task |
+| `/tidegap:grid <zone>` | Just look at the grid, no task involved |
 
-For "should I defer this?" or "when would be best?" — use **`/ebb-ai:plan`**,
+For "should I defer this?" or "when would be best?" — use **`/tidegap:plan`**,
 which returns the same window math without enqueueing. Commit with
-`/ebb-ai:defer` only after the plan looks right.
+`/tidegap:defer` only after the plan looks right.
 
 ## Reading the receipt
 
 When the user later asks "is that thing done?" or "where's my translation?",
-use **`/ebb-ai:check`**. The receipt includes:
+use **`/tidegap:check`**. The receipt includes:
 
 - `scheduled_for` vs `completed_at` — did it dispatch on time?
 - `estimated_carbon_g` vs `actual_carbon_g` (+ `delta_pct`) — how good was
@@ -98,27 +98,27 @@ it up.
 
 ## When dispatch isn't happening
 
-Deferred tasks live in `~/.ebb-ai/queue.db` (or the user's
-`EBB_DB_PATH`). The MCP server only **queues** — it doesn't run a
-clock. Actual dispatch needs the **`ebb tick` daemon**:
+Deferred tasks live in `~/.tidegap/queue.db` (or the user's
+`TIDEGAP_DB_PATH`). The MCP server only **queues** — it doesn't run a
+clock. Actual dispatch needs the **`tidegap tick` daemon**:
 
 ```bash
-npm install -g @ebb-ai/cli
-ebb install      # registers launchd (macOS) / systemd (Linux) cron-tick
+npm install -g @tidegap/cli
+tidegap install      # registers launchd (macOS) / systemd (Linux) cron-tick
 ```
 
 If the user reports that a task "never ran", first look at the queue:
-`ebb queue list` shows whether tasks are accumulating without
-dispatching, and `ebb stats` shows the dispatch history. The most
+`tidegap queue list` shows whether tasks are accumulating without
+dispatching, and `tidegap stats` shows the dispatch history. The most
 common bug at v0.7.1 is "plugin installed, daemon not installed —
-tasks accumulate but never fire"; the fix is `ebb install` (or a
-manual `ebb tick --once`).
+tasks accumulate but never fire"; the fix is `tidegap install` (or a
+manual `tidegap tick --once`).
 
 ## Anti-patterns to avoid
 
 - Don't ask the user "should we defer this?" — read their language and decide.
   If they said "no rush", you defer. If they said "right now", you don't.
-- Don't fall back to a synchronous call when `/ebb-ai:defer` would have
+- Don't fall back to a synchronous call when `/tidegap:defer` would have
   worked. The whole point is to use the scheduler.
 - Don't invent regions. If unsure, use the default and tell the user what
   you used so they can correct it.
@@ -129,5 +129,5 @@ manual `ebb tick --once`).
 ## Inspecting the grid
 
 If the user asks **what** the grid looks like (not to defer, just to read):
-use **`/ebb-ai:grid <zone>`**. That returns current intensity, the cleanest
+use **`/tidegap:grid <zone>`**. That returns current intensity, the cleanest
 hour, the dirtiest hour, and a recommendation.

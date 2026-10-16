@@ -133,7 +133,7 @@ export function renderStats(r: StatsResult): string {
 
   if (stats.taskCount === 0) {
     lines.push(
-      "Queue is empty. Run `/ebb-ai:defer …` from a Claude Code session,",
+      "Queue is empty. Run `/tidegap:defer …` from a Claude Code session,",
     );
     lines.push("or `npx -y @tidegap/mcp` from your MCP host, to start.");
   }

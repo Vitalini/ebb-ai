@@ -2,7 +2,7 @@
  * The plugin's ONLY configuration surface.
  *
  * ── Why this file exists ────────────────────────────────────────────────────
- * The published `@vitalini/ebb` bundle must contain **zero** environment-variable
+ * The published `@vitalini/tidegap` bundle must contain **zero** environment-variable
  * reads. ClawHub's ClawScan flags `suspicious.env_credential_access` on any
  * ambient-environment read inside a bundle that also makes network calls — even
  * a non-secret numeric threshold — so "read it narrowly, by name" is not enough;
@@ -10,7 +10,7 @@
  *
  * They are. Everything the plugin used to take from the environment now arrives
  * as OpenClaw plugin config: the object declared by `openclaw.plugin.json`'s
- * `configSchema`, stored at `plugins.entries.ebb.config` in the gateway config,
+ * `configSchema`, stored at `plugins.entries.tidegap.config` in the gateway config,
  * and handed to every tool as the second argument of `execute(params, config,
  * context)`. `@tidegap/core` is likewise environment-pure, so nothing downstream
  * reaches for the environment either.
@@ -21,14 +21,14 @@
  * are declared in the manifest's `configContracts.secretInputs.paths`), so a
  * user who already exports the old variables can keep doing exactly that:
  *
- *   "plugins": { "entries": { "ebb": { "config": {
+ *   "plugins": { "entries": { "tidegap": { "config": {
  *       "anthropicApiKey": "${ANTHROPIC_API_KEY}",
- *       "eiaApiKey":       "${EBB_EIA_API_KEY}"
+ *       "eiaApiKey":       "${TIDEGAP_EIA_API_KEY}"
  *   } } } }
  *
  * The gateway reads the environment; the plugin never does.
  *
- * Environment variables still configure the `ebb` CLI and the `@tidegap/mcp`
+ * Environment variables still configure the `tidegap` CLI and the `@tidegap/mcp`
  * server — those are separate hosts with their own entry points, and their
  * behaviour is unchanged.
  */
@@ -38,24 +38,24 @@ import { Type } from "typebox";
 import type { CarbonBudgetEnv, GridFeedCredentials } from "@tidegap/core";
 
 /** The plugin id — also the key under `plugins.entries` in the gateway config. */
-export const PLUGIN_ID = "ebb";
+export const PLUGIN_ID = "tidegap";
 
 /**
  * Everything the plugin can be configured with. Mirrors the `configSchema`
  * below one-for-one (and therefore `openclaw.plugin.json`).
  */
 export type PluginConfig = {
-  /** Override the SQLite queue path. Was: none (always ~/.ebb-ai/queue.db). */
+  /** Override the SQLite queue path. Was: none (always ~/.tidegap/queue.db). */
   dbPath?: string;
-  /** Default grid region. Was: `EBB_DEFAULT_REGION` on the CLI/MCP hosts. */
+  /** Default grid region. Was: `TIDEGAP_DEFAULT_REGION` on the CLI/MCP hosts. */
   defaultRegion?: string;
 
   // ── Grid-feed credentials ────────────────────────────────────────────────
-  /** Was `EBB_ELECTRICITY_MAPS_API_KEY`. */
+  /** Env var on the CLI/MCP hosts: `TIDEGAP_ELECTRICITY_MAPS_API_KEY`. */
   electricityMapsApiKey?: string;
-  /** Was `EBB_EIA_API_KEY`. */
+  /** Env var on the CLI/MCP hosts: `TIDEGAP_EIA_API_KEY`. */
   eiaApiKey?: string;
-  /** Was `EBB_ENTSOE_SECURITY_TOKEN`. */
+  /** Env var on the CLI/MCP hosts: `TIDEGAP_ENTSOE_SECURITY_TOKEN`. */
   entsoeSecurityToken?: string;
   /** Was `WATTTIME_USERNAME`. */
   wattTimeUsername?: string;
@@ -77,9 +77,9 @@ export type PluginConfig = {
   ollamaModels?: string;
 
   // ── Aggregate carbon budget ──────────────────────────────────────────────
-  /** Was `EBB_CARBON_BUDGET_G`. */
+  /** Env var on the CLI/MCP hosts: `TIDEGAP_CARBON_BUDGET_G`. */
   carbonBudgetG?: number;
-  /** Was `EBB_CARBON_BUDGET_WINDOW`. */
+  /** Env var on the CLI/MCP hosts: `TIDEGAP_CARBON_BUDGET_WINDOW`. */
   carbonBudgetWindow?: "daily" | "weekly" | "monthly";
 
   // ── Delivery + lifecycle ─────────────────────────────────────────────────
@@ -102,32 +102,32 @@ export const pluginConfigSchema = Type.Object(
     dbPath: Type.Optional(
       Type.String({
         description:
-          "Override the SQLite queue path. Defaults to ~/.ebb-ai/queue.db (shared with the @tidegap/mcp server and @tidegap/cli).",
+          "Override the SQLite queue path. Defaults to ~/.tidegap/queue.db (shared with the @tidegap/mcp server and @tidegap/cli).",
       }),
     ),
     defaultRegion: Type.Optional(
       Type.String({
         description:
-          "Default electricity-grid region when a tool call omits one. Examples: GB, US-CAL-CISO, US-TEX-ERCO, US-NE-ISNE, US-MIDA-PJM, FR, DE. When unset, ebb-ai guesses from the host machine's timezone (London→GB, Paris→FR, Berlin→DE, US Pacific→US-CAL-CISO, US Eastern→US-MIDA-PJM) and otherwise falls back to GB. Set this explicitly for precise control. (Replaces the EBB_DEFAULT_REGION environment variable, which still configures the ebb CLI and @tidegap/mcp server.)",
+          "Default electricity-grid region when a tool call omits one. Examples: GB, US-CAL-CISO, US-TEX-ERCO, US-NE-ISNE, US-MIDA-PJM, FR, DE. When unset, Tidegap guesses from the host machine's timezone (London→GB, Paris→FR, Berlin→DE, US Pacific→US-CAL-CISO, US Eastern→US-MIDA-PJM) and otherwise falls back to GB. Set this explicitly for precise control. (Replaces the TIDEGAP_DEFAULT_REGION environment variable (EBB_DEFAULT_REGION before 0.18), which still configures the ebb CLI and @tidegap/mcp server.)",
       }),
     ),
 
     electricityMapsApiKey: Type.Optional(
       Type.String({
         description:
-          "Electricity Maps free-tier API key, used for every grid zone without a more specific feed. Replaces the EBB_ELECTRICITY_MAPS_API_KEY environment variable — the plugin reads no environment variables. Accepts the ${EBB_ELECTRICITY_MAPS_API_KEY} secret shorthand. Unset ⇒ those zones fall back to synthetic (mock) grid data.",
+          "Electricity Maps free-tier API key, used for every grid zone without a more specific feed. Replaces the TIDEGAP_ELECTRICITY_MAPS_API_KEY environment variable (EBB_ELECTRICITY_MAPS_API_KEY before 0.18) — the plugin reads no environment variables. Accepts the ${TIDEGAP_ELECTRICITY_MAPS_API_KEY} secret shorthand. Unset ⇒ those zones fall back to synthetic (mock) grid data.",
       }),
     ),
     eiaApiKey: Type.Optional(
       Type.String({
         description:
-          "US EIA v2 Open Data API key, used for the major US ISO/RTO zones. Replaces the EBB_EIA_API_KEY environment variable. Accepts the ${EBB_EIA_API_KEY} secret shorthand. Unset ⇒ US zones fall back to synthetic (mock) grid data.",
+          "US EIA v2 Open Data API key, used for the major US ISO/RTO zones. Replaces the TIDEGAP_EIA_API_KEY environment variable (EBB_EIA_API_KEY before 0.18). Accepts the ${TIDEGAP_EIA_API_KEY} secret shorthand. Unset ⇒ US zones fall back to synthetic (mock) grid data.",
       }),
     ),
     entsoeSecurityToken: Type.Optional(
       Type.String({
         description:
-          "ENTSO-E Transparency Platform security token, used for the EU bidding zones (FR, DE, ES, IT, NL). Replaces the EBB_ENTSOE_SECURITY_TOKEN environment variable. Accepts the ${EBB_ENTSOE_SECURITY_TOKEN} secret shorthand. Unset ⇒ EU zones fall back to synthetic (mock) grid data.",
+          "ENTSO-E Transparency Platform security token, used for the EU bidding zones (FR, DE, ES, IT, NL). Replaces the TIDEGAP_ENTSOE_SECURITY_TOKEN environment variable (EBB_ENTSOE_SECURITY_TOKEN before 0.18). Accepts the ${TIDEGAP_ENTSOE_SECURITY_TOKEN} secret shorthand. Unset ⇒ EU zones fall back to synthetic (mock) grid data.",
       }),
     ),
     wattTimeUsername: Type.Optional(
@@ -183,7 +183,7 @@ export const pluginConfigSchema = Type.Object(
     carbonBudgetG: Type.Optional(
       Type.Number({
         description:
-          "Aggregate carbon budget in grams CO2e. Crossing it fires a one-shot alert through the configured delivery channel. Replaces the EBB_CARBON_BUDGET_G environment variable. Takes precedence over the same key in the ~/.ebb-ai/config file, which is still read.",
+          "Aggregate carbon budget in grams CO2e. Crossing it fires a one-shot alert through the configured delivery channel. Replaces the TIDEGAP_CARBON_BUDGET_G environment variable (EBB_CARBON_BUDGET_G before 0.18). Takes precedence over the same key in the ~/.tidegap/config file, which is still read.",
         exclusiveMinimum: 0,
       }),
     ),
@@ -192,7 +192,7 @@ export const pluginConfigSchema = Type.Object(
         [Type.Literal("daily"), Type.Literal("weekly"), Type.Literal("monthly")],
         {
           description:
-            "Rolling window the carbon budget is scoped to. Defaults to daily. Replaces the EBB_CARBON_BUDGET_WINDOW environment variable.",
+            "Rolling window the carbon budget is scoped to. Defaults to daily. Replaces the TIDEGAP_CARBON_BUDGET_WINDOW environment variable (EBB_CARBON_BUDGET_WINDOW before 0.18).",
         },
       ),
     ),
@@ -200,7 +200,7 @@ export const pluginConfigSchema = Type.Object(
     deliveryStorePath: Type.Optional(
       Type.String({
         description:
-          "Override the SQLite file holding per-task delivery preferences and outcomes. Defaults to ~/.ebb-ai/delivery.db. Replaces the EBB_DELIVERY_FILE environment variable.",
+          "Override the SQLite file holding per-task delivery preferences and outcomes. Defaults to ~/.tidegap/delivery.db. Replaces the EBB_DELIVERY_FILE environment variable.",
       }),
     ),
     disableStartupDispatch: Type.Optional(
@@ -231,7 +231,7 @@ export function mergeConfig(
 
 /**
  * Dig this plugin's own settings out of a captured OpenClaw gateway config
- * (`api.config`), which nests them at `plugins.entries.ebb.config`.
+ * (`api.config`), which nests them at `plugins.entries.tidegap.config`.
  *
  * `defineToolPlugin` exposes no init/activate hook, so at gateway boot the
  * plugin has no config at all — the background dispatcher and the startup
@@ -272,7 +272,7 @@ export function gridCredentials(config: PluginConfig): GridFeedCredentials {
  * Carbon-budget overrides for `@tidegap/core`'s `loadCarbonBudgetConfig`, whose
  * option shape is still keyed by the historical variable NAMES (the CLI and
  * MCP server pass the real environment values there). Passing `{}` — the
- * "nothing configured" case — leaves `~/.ebb-ai/config` in sole charge, which
+ * "nothing configured" case — leaves `~/.tidegap/config` in sole charge, which
  * is exactly the old behaviour with no variables exported.
  */
 export function carbonBudgetOverrides(config: PluginConfig): CarbonBudgetEnv {

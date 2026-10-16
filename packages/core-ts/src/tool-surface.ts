@@ -1,6 +1,6 @@
 /**
- * Canonical tool surface — the single source of truth for the ebb-ai tool
- * definitions that BOTH the @tidegap/mcp MCP server and the @vitalini/ebb
+ * Canonical tool surface — the single source of truth for the Tidegap tool
+ * definitions that BOTH the @tidegap/mcp MCP server and the @vitalini/tidegap
  * OpenClaw plugin expose.
  *
  * Before this module the two hosts hand-authored their tool lists
@@ -301,11 +301,11 @@ export const TOOL_SURFACE: readonly CanonicalToolDef[] = [
           "Grid-region override (Electricity Maps zone code such as 'US-CAL-CISO'). Defaults to the host's configured region, else a host-timezone guess, else GB.",
       }),
       carbonBudgetParam,
-      // The EBB_DEFAULT_MODEL override is read only by the MCP server, so the
+      // The TIDEGAP_DEFAULT_MODEL override is read only by the MCP server, so the
       // sentence naming it is MCP-only; OpenClaw gets the plain defaults.
       modelParam({
         hosts: ["mcp"],
-        description: scheduleModelDescription(" (EBB_DEFAULT_MODEL overrides it)"),
+        description: scheduleModelDescription(" (TIDEGAP_DEFAULT_MODEL overrides it)"),
       }),
       modelParam({
         hosts: ["openclaw"],
@@ -329,7 +329,7 @@ export const TOOL_SURFACE: readonly CanonicalToolDef[] = [
         optional: true,
         hosts: ["mcp"],
         description:
-          "If true (default), persist a provider_call task body that `ebb tick` (CLI) or scheduler.tick (library) can dispatch. Set to false only to enqueue a placeholder prompt without a dispatchable body (legacy in-memory mode).",
+          "If true (default), persist a provider_call task body that `tidegap tick` (CLI) or scheduler.tick (library) can dispatch. Set to false only to enqueue a placeholder prompt without a dispatchable body (legacy in-memory mode).",
       },
       {
         name: "output_path",
@@ -337,7 +337,7 @@ export const TOOL_SURFACE: readonly CanonicalToolDef[] = [
         optional: true,
         hosts: ["mcp"],
         description:
-          "Optional absolute file path. When the task completes, ebb-ai writes { taskId, result, receipt } as JSON to this path.",
+          "Optional absolute file path. When the task completes, Tidegap writes { taskId, result, receipt } as JSON to this path.",
       },
       {
         name: "redact_in_receipt",
@@ -363,7 +363,7 @@ export const TOOL_SURFACE: readonly CanonicalToolDef[] = [
         optional: true,
         hosts: ["mcp"],
         description:
-          "How the deadline is chosen. 'absolute' (default): use 'deadline'. 'quota_reset': run before the next weekly subscription-quota reset, minus a safety margin, as configured in ~/.ebb-ai/config (EBB_QUOTA_RESET_<LABEL>=<weekday> <HH:MM> [<IANA zone>], optional EBB_QUOTA_MARGIN_H_<LABEL>=<hours>, default 2). Use it when the user says 'before my weekly limit resets' or similar. A deadline more than 24 hours away can route the task through the provider Batch API.",
+          "How the deadline is chosen. 'absolute' (default): use 'deadline'. 'quota_reset': run before the next weekly subscription-quota reset, minus a safety margin, as configured in ~/.tidegap/config (TIDEGAP_QUOTA_RESET_<LABEL>=<weekday> <HH:MM> [<IANA zone>], optional TIDEGAP_QUOTA_MARGIN_H_<LABEL>=<hours>, default 2). Use it when the user says 'before my weekly limit resets' or similar. A deadline more than 24 hours away can route the task through the provider Batch API.",
       },
       {
         name: "quota_provider",
@@ -401,7 +401,7 @@ export const TOOL_SURFACE: readonly CanonicalToolDef[] = [
     name: "check_queue_status",
     hosts: ["mcp", "openclaw"],
     description:
-      "Report on the ebb-ai task queue. With no arguments, returns a summary of all known tasks (including tasks persisted by previous sessions — the queue survives host restarts). With task_id, returns full detail for one task, including its title, prompt, result and any carbon receipt (estimated vs actual grams, grid_source, energy_source); viewing a completed or failed task marks it read. Never changes a task's status.",
+      "Report on the Tidegap task queue. With no arguments, returns a summary of all known tasks (including tasks persisted by previous sessions — the queue survives host restarts). With task_id, returns full detail for one task, including its title, prompt, result and any carbon receipt (estimated vs actual grams, grid_source, energy_source); viewing a completed or failed task marks it read. Never changes a task's status.",
     params: [
       {
         name: "task_id",
@@ -493,7 +493,7 @@ export const TOOL_SURFACE: readonly CanonicalToolDef[] = [
     name: "set_delivery",
     hosts: ["openclaw"],
     description:
-      "Set or change how a scheduled task's result is delivered when it completes. Call this right after schedule_task, once you have ASKED the user how they want the result. The user may pick several modes. Modes: chat (their active OpenClaw chat), telegram, webhook (needs webhook_url), file (needs file_path; format md/html/txt/json/pdf), queue (no push — retrievable via check_queue_status), os (a native desktop notification on the gateway host). PRIVACY BOUNDARY — queue is the only mode that transmits nothing (the result stays in the local ledger; read it back with check_queue_status). chat delivers through the gateway's configured chat channel, which on a Telegram-backed gateway is the SAME Telegram Bot API path as the telegram mode — do not describe chat to the user as staying inside OpenClaw. telegram sends the FULL result to a third-party service, webhook POSTs the FULL result to whatever URL is supplied (ebb does not restrict or inspect that destination), and file writes it to any path on the gateway host. Never pick telegram, webhook or file on the user's behalf: confirm the destination with them first, and for sensitive tasks prefer queue. Default if the user is unsure: chat.",
+      "Set or change how a scheduled task's result is delivered when it completes. Call this right after schedule_task, once you have ASKED the user how they want the result. The user may pick several modes. Modes: chat (their active OpenClaw chat), telegram, webhook (needs webhook_url), file (needs file_path; format md/html/txt/json/pdf), queue (no push — retrievable via check_queue_status), os (a native desktop notification on the gateway host). PRIVACY BOUNDARY — queue is the only mode that transmits nothing (the result stays in the local ledger; read it back with check_queue_status). chat delivers through the gateway's configured chat channel, which on a Telegram-backed gateway is the SAME Telegram Bot API path as the telegram mode — do not describe chat to the user as staying inside OpenClaw. telegram sends the FULL result to a third-party service, webhook POSTs the FULL result to whatever URL is supplied (Tidegap does not restrict or inspect that destination), and file writes it to any path on the gateway host. Never pick telegram, webhook or file on the user's behalf: confirm the destination with them first, and for sensitive tasks prefer queue. Default if the user is unsure: chat.",
     params: [
       { ...taskIdRequired, description: "The id returned by schedule_task." },
       { ...deliverParam(false), description: "One or more delivery modes the user chose." },

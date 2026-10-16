@@ -419,7 +419,7 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
     dbPath === undefined || dbPath === ":memory:" ? "(in-memory)" : dbPath;
 
   const server = new Server(
-    { name: "tidegap-mcp", version: SERVER_VERSION },
+    { name: "tidegap", version: SERVER_VERSION },
     { capabilities: { tools: {} } },
   );
 

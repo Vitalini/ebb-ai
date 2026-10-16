@@ -59,17 +59,17 @@ function deadlineISO(hoursAhead = 24): string {
   return new Date(Date.now() + hoursAhead * 60 * 60 * 1000).toISOString();
 }
 
-describe("ebb OpenClaw plugin — registration", () => {
-  it("loads as a tool plugin with id 'ebb'", () => {
-    expect(ebbPlugin.id).toBe("ebb");
-    expect(ebbPlugin.name).toMatch(/ebb-ai/);
+describe("Tidegap OpenClaw plugin — registration", () => {
+  it("loads as a tool plugin with id 'tidegap'", () => {
+    expect(ebbPlugin.id).toBe("tidegap");
+    expect(ebbPlugin.name).toMatch(/Tidegap/);
   });
 
-  it("registers the eleven tools, MCP-style names with no ebb_ prefix", () => {
+  it("registers the eleven tools, MCP-style names with no tidegap_ or ebb_ prefix", () => {
     const names = ebbPlugin.tools.map((t) => t.name).sort();
     expect(names).toEqual([...TOOL_NAMES].sort());
     for (const t of ebbPlugin.tools) {
-      expect(t.name).not.toMatch(/^ebb_/);
+      expect(t.name).not.toMatch(/^(tidegap|ebb)_/);
     }
   });
 
@@ -82,7 +82,7 @@ describe("ebb OpenClaw plugin — registration", () => {
   });
 });
 
-describe("ebb OpenClaw plugin — tool execution", () => {
+describe("Tidegap OpenClaw plugin — tool execution", () => {
   let tmp: string;
   let dbPath: string;
   let scheduledId: string;
@@ -116,7 +116,7 @@ describe("ebb OpenClaw plugin — tool execution", () => {
 
   it("schedule_task persists a task and reports region_source", async () => {
     const res = (await tool("schedule_task").execute(
-      { prompt: "ebb plugin test task", deadline: deadlineISO(), region: "GB" },
+      { prompt: "tidegap plugin test task", deadline: deadlineISO(), region: "GB" },
       { dbPath },
     )) as {
       task_id: string;
@@ -369,7 +369,7 @@ describe("ebb OpenClaw plugin — tool execution", () => {
   });
 });
 
-describe("ebb OpenClaw plugin — reply_task and series (ui v2)", () => {
+describe("Tidegap OpenClaw plugin — reply_task and series (ui v2)", () => {
   let tmp: string;
   let dbPath: string;
 
@@ -440,7 +440,7 @@ describe("ebb OpenClaw plugin — reply_task and series (ui v2)", () => {
   });
 });
 
-describe("ebb OpenClaw plugin — dispatch adapters", () => {
+describe("Tidegap OpenClaw plugin — dispatch adapters", () => {
   beforeEach(() => setLlmBridgeForTest(undefined));
 
   it("buildAdapters is empty when no provider credentials are configured", () => {
@@ -489,12 +489,12 @@ describe("ebb OpenClaw plugin — dispatch adapters", () => {
   });
 });
 
-describe("ebb OpenClaw plugin — grid feed is built from plugin config", () => {
+describe("Tidegap OpenClaw plugin — grid feed is built from plugin config", () => {
   it("get_grid_forecast uses the eiaApiKey from plugin config, never the environment", async () => {
-    // EBB_EIA_API_KEY is exported but must be ignored; the eiaApiKey config
+    // TIDEGAP_EIA_API_KEY is exported but must be ignored; the eiaApiKey config
     // field is what reaches the EIA endpoint.
-    const savedEnv = process.env.EBB_EIA_API_KEY;
-    process.env.EBB_EIA_API_KEY = "leaked-env-key";
+    const savedEnv = process.env.TIDEGAP_EIA_API_KEY;
+    process.env.TIDEGAP_EIA_API_KEY = "leaked-env-key";
     const realFetch = globalThis.fetch;
     const urls: string[] = [];
     globalThis.fetch = (async (url: string) => {
@@ -513,8 +513,8 @@ describe("ebb OpenClaw plugin — grid feed is built from plugin config", () => 
       expect(urls.some((u) => u.includes("leaked-env-key"))).toBe(false);
     } finally {
       globalThis.fetch = realFetch;
-      if (savedEnv === undefined) delete process.env.EBB_EIA_API_KEY;
-      else process.env.EBB_EIA_API_KEY = savedEnv;
+      if (savedEnv === undefined) delete process.env.TIDEGAP_EIA_API_KEY;
+      else process.env.TIDEGAP_EIA_API_KEY = savedEnv;
     }
   });
 
@@ -527,7 +527,7 @@ describe("ebb OpenClaw plugin — grid feed is built from plugin config", () => 
   });
 });
 
-describe("ebb OpenClaw plugin — provider inference", () => {
+describe("Tidegap OpenClaw plugin — provider inference", () => {
   beforeEach(() => setLlmBridgeForTest(undefined));
 
   it("infers openai from gpt-* and o<n>* models, anthropic from claude-*", () => {
@@ -588,7 +588,7 @@ describe("ebb OpenClaw plugin — provider inference", () => {
   });
 });
 
-describe("ebb OpenClaw plugin — schedule_task provider param", () => {
+describe("Tidegap OpenClaw plugin — schedule_task provider param", () => {
   let tmp: string;
   let dbPath: string;
 
@@ -754,7 +754,7 @@ describe("ebb OpenClaw plugin — schedule_task provider param", () => {
   });
 });
 
-describe("ebb OpenClaw plugin — submitted-status rendering", () => {
+describe("Tidegap OpenClaw plugin — submitted-status rendering", () => {
   let tmp: string;
   let dbPath: string;
 
@@ -828,7 +828,7 @@ describe("ebb OpenClaw plugin — submitted-status rendering", () => {
   });
 });
 
-describe("ebb OpenClaw plugin — runDispatchTick skips provider-less tasks", () => {
+describe("Tidegap OpenClaw plugin — runDispatchTick skips provider-less tasks", () => {
   let tmp: string;
   let dbPath: string;
 
@@ -875,7 +875,7 @@ describe("ebb OpenClaw plugin — runDispatchTick skips provider-less tasks", ()
   });
 });
 
-describe("ebb OpenClaw plugin — startup dispatcher bootstrap", () => {
+describe("Tidegap OpenClaw plugin — startup dispatcher bootstrap", () => {
   it("bootstrapDispatcherOnStartup is exported and idempotent, and honours the disable flag", () => {
     // The suite's setup file calls suppressStartupDispatch(), so the
     // module-load call's deferred queue-open is a no-op. Calling it directly
@@ -889,7 +889,7 @@ describe("ebb OpenClaw plugin — startup dispatcher bootstrap", () => {
   });
 });
 
-describe("ebb OpenClaw plugin — result delivery", () => {
+describe("Tidegap OpenClaw plugin — result delivery", () => {
   const completedTask = {
     taskId: "t-deliver",
     status: "completed",
@@ -1008,7 +1008,7 @@ describe("ebb OpenClaw plugin — result delivery", () => {
   });
 
   it("osNotifyCommand builds the correct binary + args per platform", () => {
-    const title = "ebb-ai — task t-1 complete";
+    const title = "Tidegap — task t-1 complete";
     const body = 'line "one"\n42 gCO2e';
 
     const mac = osNotifyCommand("darwin", title, body)!;
@@ -1147,7 +1147,7 @@ describe("ebb OpenClaw plugin — result delivery", () => {
     try {
       const outcomes = await deliverResult(
         completedTask,
-        { modes: ["file"], filePath: "/tmp/ebb-should-not-exist.pdf", format: "pdf" },
+        { modes: ["file"], filePath: "/tmp/tidegap-should-not-exist.pdf", format: "pdf" },
         {},
       );
       expect(outcomes[0].mode).toBe("file");
@@ -1161,7 +1161,7 @@ describe("ebb OpenClaw plugin — result delivery", () => {
   });
 });
 
-describe("ebb OpenClaw plugin — task visibility (v0.17)", () => {
+describe("Tidegap OpenClaw plugin — task visibility (v0.17)", () => {
   let tmp: string;
   let dbPath: string;
   let savedHome: string | undefined;
@@ -1169,7 +1169,7 @@ describe("ebb OpenClaw plugin — task visibility (v0.17)", () => {
   beforeAll(() => {
     tmp = mkdtempSync(join(tmpdir(), "ebb-visibility-test-"));
     dbPath = join(tmp, "queue.db");
-    // The pre-tick quota sweep reads ~/.ebb-ai/config; point HOME at a
+    // The pre-tick quota sweep reads ~/.tidegap/config; point HOME at a
     // temp dir so the test controls that file.
     savedHome = process.env.HOME;
     process.env.HOME = tmp;

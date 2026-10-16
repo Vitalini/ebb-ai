@@ -1,8 +1,8 @@
 ---
-description: Check status of deferred ebb-ai tasks
+description: Check status of deferred Tidegap tasks
 ---
 
-Check the status of one or all ebb-ai deferred tasks.
+Check the status of one or all Tidegap deferred tasks.
 
 ## Arguments
 
@@ -19,7 +19,7 @@ Check the status of one or all ebb-ai deferred tasks.
 
 ## What to do
 
-1. Call the `ebb-ai` MCP server's **`check_queue_status`** tool with:
+1. Call the `tidegap` MCP server's **`check_queue_status`** tool with:
    - `task_id` — the parsed id, omit for the list view.
 2. Render the result as a compact table — never raw JSON. For each task:
    - `id` (last 8 chars suffice)
@@ -45,19 +45,19 @@ Check the status of one or all ebb-ai deferred tasks.
    the `prompt:` line. If the response carries a `Result:` block (the LLM
    response), include it verbatim under the table. Viewing a completed or
    failed task marks it read; the user can undo that with
-   `ebb queue unread <task_id>`.
+   `tidegap queue unread <task_id>`.
 4. For the list view, relay the `last_tick_at` line: it shows when the
    dispatcher last ran ("never recorded" means nothing has dispatched yet).
 5. End with a short hint line:
    - If anything is `queued` or `scheduled`: "Next dispatch tick: ~5 min
-     (if the `ebb tick` daemon is installed — otherwise run
-     `ebb tick --once`)."
+     (if the `tidegap tick` daemon is installed — otherwise run
+     `tidegap tick --once`)."
    - If everything is `completed`: nothing.
 
 ## Examples
 
 ```
-/ebb-ai:check
-/ebb-ai:check abc123de
-/ebb-ai:check --all
+/tidegap:check
+/tidegap:check abc123de
+/tidegap:check --all
 ```

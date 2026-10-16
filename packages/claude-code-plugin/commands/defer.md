@@ -1,12 +1,12 @@
 ---
-description: Defer a task to the cleanest grid-energy window inside a deadline. Invoke this command automatically whenever the user signals a task is not time-critical — phrases like "do this later", "by tomorrow", "tonight", "overnight", "by EOD", "sometime this week", "when you have a moment", "remind me to", "queue this up", "schedule this", "no rush", "not urgent". Don't run the task inline; route it through /ebb-ai:defer with the user's wording converted to an ISO-8601 deadline. The scheduler then picks the cleanest grid hour inside that deadline (lower carbon than running now), uses Anthropic/OpenAI Batch APIs for 50% cost reduction when possible, and writes an auditable per-task carbon receipt.
+description: Defer a task to the cleanest grid-energy window inside a deadline. Invoke this command automatically whenever the user signals a task is not time-critical — phrases like "do this later", "by tomorrow", "tonight", "overnight", "by EOD", "sometime this week", "when you have a moment", "remind me to", "queue this up", "schedule this", "no rush", "not urgent". Don't run the task inline; route it through /tidegap:defer with the user's wording converted to an ISO-8601 deadline. The scheduler then picks the cleanest grid hour inside that deadline (lower carbon than running now), uses Anthropic/OpenAI Batch APIs for 50% cost reduction when possible, and writes an auditable per-task carbon receipt.
 ---
 
 The user wants to defer the following task to a cleaner-grid window using the
-`ebb-ai` MCP server. This is the central UX of the ebb-ai Claude Code plugin —
+`tidegap` MCP server. This is the central UX of the Tidegap Claude Code plugin —
 take a "do it later" request and route it to a real scheduler.
 
-## When to invoke automatically (without the user explicitly typing /ebb-ai:defer)
+## When to invoke automatically (without the user explicitly typing /tidegap:defer)
 
 Any of these signals means the user has implicitly opted into deferral.
 Convert their wording to an ISO-8601 deadline and call `schedule_task`:
@@ -28,7 +28,7 @@ Convert their wording to an ISO-8601 deadline and call `schedule_task`:
 If the user does NOT signal "later" (e.g. "summarize this", "write a
 function", "what does X do"), do not auto-defer. Run inline.
 
-If the user explicitly typed `/ebb-ai:defer ...`, follow the explicit
+If the user explicitly typed `/tidegap:defer ...`, follow the explicit
 args. The auto-invocation above is for the unprompted case only.
 
 ## Arguments
@@ -46,7 +46,7 @@ Parse `$ARGUMENTS` into:
   means "before the next weekly subscription-quota reset": pass
   `deadline_kind: "quota_reset"` (and `quota_provider: "<label>"` when a label
   is named) and no `deadline`. The server resolves the deadline from
-  `EBB_QUOTA_RESET_<LABEL>` in `~/.ebb-ai/config`; if it answers that no
+  `TIDEGAP_QUOTA_RESET_<LABEL>` in `~/.tidegap/config`; if it answers that no
   quota reset is configured, relay its message.
 - **`--title <text>`** — optional short title. Default: the first line of
   the prompt.
@@ -55,21 +55,21 @@ Parse `$ARGUMENTS` into:
   `CarbonBudgetExceededError`.
 - **`--region <zone>`** — optional Electricity Maps zone code (e.g.
   `US-CAL-CISO`, `GB`, `FR`). **Default: omit the field** — the server
-  resolves its own default (`EBB_DEFAULT_REGION` if configured, otherwise a
+  resolves its own default (`TIDEGAP_DEFAULT_REGION` if configured, otherwise a
   guess from the host machine's timezone, falling back to `GB`). The
   `region` line in the tool response tells you what it picked; relay that
   to the user.
 - **`--model <name>`** — optional vendor model id (e.g.
   `claude-sonnet-5`). Without it the server uses the chosen provider's
   default: `claude-sonnet-5` for `anthropic` (overridable with
-  `EBB_DEFAULT_MODEL`), `gpt-6-sol` for `openai`. The `model` line in the
+  `TIDEGAP_DEFAULT_MODEL`), `gpt-6-sol` for `openai`. The `model` line in the
   tool response shows what it picked.
 - **`--output <abs-path>`** — optional absolute file path. When the
-  task completes, ebb-ai writes `{ taskId, result, receipt }` as JSON
+  task completes, Tidegap writes `{ taskId, result, receipt }` as JSON
   to this path. Useful if the user wants the result to land in an
   inbox folder (so `tail -f` or a file-watcher surfaces it) rather
-  than polling `/ebb-ai:check` by hand. Recommend
-  `~/.ebb-ai/inbox/<task_id>.json` when the user is unsure where to
+  than polling `/tidegap:check` by hand. Recommend
+  `~/.tidegap/inbox/<task_id>.json` when the user is unsure where to
   put it.
 - **`--provider <anthropic|openai>`** — optional. Default `anthropic`.
 - **`--repeat <none|daily|weekly>`** — optional. Default `none`: the task
@@ -77,7 +77,7 @@ Parse `$ARGUMENTS` into:
   occurrence each time one finishes (each occurrence is one provider call).
   `--by quota-reset --repeat weekly` repeats before every weekly reset
   (pass `repeat: "quota_reset"` for that case so it follows the reset
-  exactly). Stop a series with `/ebb-ai:cancel <task_id>` and say "stop the
+  exactly). Stop a series with `/tidegap:cancel <task_id>` and say "stop the
   series" (`cancel_task` with `series: true`).
 
 ## What to do
@@ -85,7 +85,7 @@ Parse `$ARGUMENTS` into:
 1. Convert `--by` to an absolute ISO-8601 deadline (`now + duration` if a
    duration, otherwise the parsed timestamp). Validate it is in the future.
    For `--by quota-reset[:<label>]` skip this step.
-2. Call the `ebb-ai` MCP server's **`schedule_task`** tool with:
+2. Call the `tidegap` MCP server's **`schedule_task`** tool with:
    - `prompt` — the parsed user prompt
    - `deadline` — the ISO-8601 deadline you computed (omit for quota reset)
    - `deadline_kind` — `"quota_reset"` for `--by quota-reset`, otherwise omit
@@ -108,7 +108,7 @@ Parse `$ARGUMENTS` into:
 3. After the tool returns, report back in this exact shape. Every field
    below is present verbatim in the tool response — do not invent numbers
    the response does not carry (e.g. savings % or band; those come from
-   `recommend_window` / `/ebb-ai:plan`, not from `schedule_task`):
+   `recommend_window` / `/tidegap:plan`, not from `schedule_task`):
 
    ```
    Deferred ✓
@@ -122,13 +122,13 @@ Parse `$ARGUMENTS` into:
      persisted to   <persisted_to>
      repeat         <repeat line, only when the response has one>
      resume         <resume line, only when the response has one>
-     check status   /ebb-ai:check <task_id>
-     cancel         /ebb-ai:cancel <task_id>
+     check status   /tidegap:check <task_id>
+     cancel         /tidegap:cancel <task_id>
    ```
 
    If the response contains the "SYNTHETIC (mock) grid data" warning
    (`grid_source: mock`), repeat it prominently — the carbon numbers are
-   illustrative, not measured. If the tool response mentions `ebb tick`/
+   illustrative, not measured. If the tool response mentions `tidegap tick`/
    daemon, surface that warning verbatim to the user — they need to know
    whether the task will actually dispatch or just sit in the queue.
 
@@ -137,19 +137,19 @@ Parse `$ARGUMENTS` into:
    window inside the deadline, and ask if they want to relax `--budget` or
    extend `--by`.
 
-5. Do **not** dispatch the task synchronously. The whole point of `/ebb-ai:defer`
-   is to hand off to the ebb-ai scheduler. If the user wanted a sync call, they
+5. Do **not** dispatch the task synchronously. The whole point of `/tidegap:defer`
+   is to hand off to the Tidegap scheduler. If the user wanted a sync call, they
    would have just made one.
 
 ## Examples
 
 ```
-/ebb-ai:defer summarize today's GitHub notifications --by 4h
-/ebb-ai:defer translate the README to Russian --by 24h --budget 0.5 --region GB
-/ebb-ai:defer regenerate the test fixtures --by 2026-05-15T08:00:00Z --model claude-haiku-4-5
-/ebb-ai:defer overnight log triage --by 8h --region US-MIDA-PJM --output ~/.ebb-ai/inbox/log-triage.json
-/ebb-ai:defer refactor the test helpers --by quota-reset:claude
-/ebb-ai:defer check my weekly limit list --by quota-reset --repeat weekly
+/tidegap:defer summarize today's GitHub notifications --by 4h
+/tidegap:defer translate the README to Russian --by 24h --budget 0.5 --region GB
+/tidegap:defer regenerate the test fixtures --by 2026-05-15T08:00:00Z --model claude-haiku-4-5
+/tidegap:defer overnight log triage --by 8h --region US-MIDA-PJM --output ~/.tidegap/inbox/log-triage.json
+/tidegap:defer refactor the test helpers --by quota-reset:claude
+/tidegap:defer check my weekly limit list --by quota-reset --repeat weekly
 ```
 
 Only this command carries the session id. A model that calls the
@@ -158,10 +158,10 @@ session id, so that task has no resume line.
 
 ## Related commands
 
-- `/ebb-ai:check [<task_id>]` — list / get status of deferred tasks
-- `/ebb-ai:plan <task> --by <when>` — preview window without committing
-- `/ebb-ai:cancel <task_id>` — drop a queued/scheduled task
-- `/ebb-ai:expedite <task_id>` — run now, bypass the carbon window
-- `/ebb-ai:reschedule <task_id> --by <new>` — change the deadline
-- `/ebb-ai:retry <task_id>` — re-dispatch a failed task
-- `/ebb-ai:grid <zone>` — look at the grid, no task involved
+- `/tidegap:check [<task_id>]` — list / get status of deferred tasks
+- `/tidegap:plan <task> --by <when>` — preview window without committing
+- `/tidegap:cancel <task_id>` — drop a queued/scheduled task
+- `/tidegap:expedite <task_id>` — run now, bypass the carbon window
+- `/tidegap:reschedule <task_id> --by <new>` — change the deadline
+- `/tidegap:retry <task_id>` — re-dispatch a failed task
+- `/tidegap:grid <zone>` — look at the grid, no task involved

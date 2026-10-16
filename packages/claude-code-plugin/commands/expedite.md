@@ -1,8 +1,8 @@
 ---
-description: Dispatch a deferred ebb-ai task immediately, bypassing its scheduled window
+description: Dispatch a deferred Tidegap task immediately, bypassing its scheduled window
 ---
 
-Run a deferred ebb-ai task right now instead of waiting for the cleanest
+Run a deferred Tidegap task right now instead of waiting for the cleanest
 grid window the scheduler picked. The resulting receipt is tagged
 `intensitySource=expedited` so it's clear the dispatch decision was
 caller-overridden rather than scheduler-chosen.
@@ -13,7 +13,7 @@ Use this when:
 - You're debugging a task and want to see it run end-to-end.
 
 Do **not** use this just because the user is impatient — the whole
-point of `/ebb-ai:defer` is to defer. If they want sync calls, they
+point of `/tidegap:defer` is to defer. If they want sync calls, they
 shouldn't have deferred.
 
 ## Arguments
@@ -25,11 +25,11 @@ Expected: a single `task_id`. If empty, list candidates first via
 
 ## What to do
 
-1. Call the `ebb-ai` MCP server's **`expedite_task`** tool with `task_id`.
+1. Call the `tidegap` MCP server's **`expedite_task`** tool with `task_id`.
 2. Report the resulting status and any error (that is all the tool
    returns: `status` plus an `error` line on failure).
 3. To show the user the actual LLM response and the carbon receipt, follow
-   up with `/ebb-ai:check <task_id>` — the detail view carries the
+   up with `/tidegap:check <task_id>` — the detail view carries the
    `Result:` block once the dispatch completed.
 4. Remind the user that this dispatch bypassed the carbon-aware window —
    the receipt's `intensity_source` will read `expedited`.
@@ -37,10 +37,10 @@ Expected: a single `task_id`. If empty, list candidates first via
 If the tool fails with "no provider API key set", tell the user that
 expedite requires `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY`) in the MCP
 server's env config — and that without a key, the only path is to wait
-for the `ebb tick` daemon (if configured) to dispatch normally.
+for the `tidegap tick` daemon (if configured) to dispatch normally.
 
 ## Examples
 
 ```
-/ebb-ai:expedite 7f3a2b9e
+/tidegap:expedite 7f3a2b9e
 ```

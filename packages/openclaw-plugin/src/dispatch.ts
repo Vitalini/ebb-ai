@@ -124,7 +124,7 @@ function bridgeAdapter(provider: "anthropic" | "openai"): DispatchAdapter {
       options?: DispatchOptions,
     ): Promise<DispatchResult> {
       if (!bridgeComplete) {
-        throw new Error("ebb-ai: the OpenClaw runtime LLM bridge is not available");
+        throw new Error("Tidegap: the OpenClaw runtime LLM bridge is not available");
       }
       // Deliberately DO NOT pass `model`. OpenClaw treats any `model` on a
       // plugin LLM completion as a model-override and rejects it unless the
@@ -140,7 +140,7 @@ function bridgeAdapter(provider: "anthropic" | "openai"): DispatchAdapter {
           ? { temperature: options.temperature }
           : {}),
         ...(options?.system ? { systemPrompt: options.system } : {}),
-        purpose: "ebb-ai deferred task dispatch",
+        purpose: "Tidegap deferred task dispatch",
       });
       return {
         text: result.text,

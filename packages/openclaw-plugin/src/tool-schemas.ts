@@ -1,5 +1,5 @@
 /**
- * OpenClaw-side renderer for the canonical ebb-ai tool surface.
+ * OpenClaw-side renderer for the canonical Tidegap tool surface.
  *
  * The names, descriptions, parameter sets and requiredness live in
  * @tidegap/core's tool-surface module — the single source of truth shared

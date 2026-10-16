@@ -26,7 +26,7 @@
  *     OLLAMA_HOST, TIDEGAP_EIA_API_KEY, TIDEGAP_ELECTRICITY_MAPS_API_KEY,
  *     TIDEGAP_ENTSOE_SECURITY_TOKEN, WATTTIME_USERNAME / WATTTIME_PASSWORD,
  *     TIDEGAP_CARBON_BUDGET_*) at their own entry points.
- *   - the OpenClaw plugin (`@vitalini/ebb`) → reads its OpenClaw plugin
+ *   - the OpenClaw plugin (`@vitalini/tidegap`) → reads its OpenClaw plugin
  *     config and reads no environment variables at all, so the published
  *     bundle contains zero ambient-environment accesses.
  *

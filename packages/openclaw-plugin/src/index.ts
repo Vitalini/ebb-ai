@@ -1,11 +1,11 @@
 /**
- * ebb-ai OpenClaw plugin — auto-defer "do it later" tasks to the cleanest
+ * Tidegap OpenClaw plugin — auto-defer "do it later" tasks to the cleanest
  * electricity-grid hour. Native OpenClaw tool plugin built with
  * `defineToolPlugin`, which registers the tools so they reach agent
  * sessions.
  *
- * Verify a build with `openclaw plugins inspect ebb --runtime --json` — it
- * lists every tool. Note: plain `openclaw plugins inspect ebb` reports
+ * Verify a build with `openclaw plugins inspect tidegap --runtime --json` — it
+ * lists every tool. Note: plain `openclaw plugins inspect tidegap` reports
  * `Shape: non-capability` for tool plugins in OpenClaw 2026.5.18; that is
  * the expected label for this plugin kind, not an error.
  *
@@ -19,14 +19,14 @@
  * This bundle reads ZERO environment variables. Everything — grid-feed
  * credentials, provider credentials, the carbon-budget threshold, the
  * delivery-store path, the startup opt-out — comes from OpenClaw plugin
- * config (`plugins.entries.ebb.config`), declared in `./config.ts` and
+ * config (`plugins.entries.tidegap.config`), declared in `./config.ts` and
  * mirrored into `openclaw.plugin.json`. `@tidegap/core` is environment-pure for
  * the same reason. Each config field's description names the environment
  * variable it replaces, and the credential fields accept OpenClaw's
  * `${ENV_VAR}` secret shorthand, so a user who exports the old variables can
  * keep doing so — the GATEWAY reads them, not this plugin.
  *
- * (The `ebb` CLI and the `@tidegap/mcp` server are separate hosts and still
+ * (The `tidegap` CLI and the `@tidegap/mcp` server are separate hosts and still
  * read those environment variables directly; their behaviour is unchanged.)
  *
  * Startup / restart behaviour (important — read before relying on the
@@ -50,7 +50,7 @@
  *
  * Shares the SQLite ledger at ~/.tidegap/queue.db with the @tidegap/mcp MCP
  * server and the @tidegap/cli CLI — a task deferred in OpenClaw shows up in
- * `ebb stats` and vice versa. Tool names match the MCP server surface.
+ * `tidegap stats` and vice versa. Tool names match the MCP server surface.
  *
  * Tools:
  *   - schedule_task       — queue a task at the cleanest hour
@@ -96,7 +96,7 @@ import {
 import { openclawToolParameters } from "./tool-schemas.js";
 
 /** The canonical description for a tool, from the shared surface (audit §2.2). */
-/** Longest reply text accepted by reply_task (same cap as MCP and `ebb ui`). */
+/** Longest reply text accepted by reply_task (same cap as MCP and `tidegap ui`). */
 const REPLY_MAX_CHARS = 32_000;
 
 function toolDescription(name: string): string {
@@ -233,7 +233,7 @@ function withEffectiveConfig(
 // OpenClaw hands each tool its own config as the second argument of `execute`.
 // The background dispatcher and the startup bootstrap have no such argument,
 // so they fall back to this plugin's block inside the captured gateway config
-// (`api.config` → `plugins.entries.ebb.config`) once a tool call has captured
+// (`api.config` → `plugins.entries.tidegap.config`) once a tool call has captured
 // it. The explicit argument always wins.
 //
 // This is the plugin's ONLY configuration source. Nothing here reads the
@@ -315,7 +315,7 @@ function getQueueRuntime(config: PluginConfig): QueueRuntime {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(
-      `ebb-ai: could not open the task queue at ${dbPath} (${msg}). The queue ` +
+      `Tidegap: could not open the task queue at ${dbPath} (${msg}). The queue ` +
         `uses Node's built-in node:sqlite — make sure the OpenClaw gateway runs ` +
         `on Node 22.5 or newer. (recommend_window and get_grid_forecast work ` +
         `without the queue.)`,
@@ -367,7 +367,7 @@ function getQueueRuntime(config: PluginConfig): QueueRuntime {
 // hard limitation: at boot only the direct-API-key path can dispatch — tasks
 // whose only route is the OpenClaw runtime bridge, and any chat/telegram
 // delivery, need the first tool call of the fresh process to capture the
-// bridge and the gateway config. (The CLI's `ebb tick` is the other
+// bridge and the gateway config. (The CLI's `tidegap tick` is the other
 // dispatcher, for non-gateway setups.)
 
 const DISPATCH_INTERVAL_MS = 60_000;
@@ -403,7 +403,7 @@ export async function runDispatchTick(
   // plugin block from the captured gateway config when one is available.
   const cfg = effectiveConfig(config);
   const { scheduler, store } = getQueueRuntime(cfg);
-  // Shared pre-tick step (same as `ebb tick`): record last_tick_at and
+  // Shared pre-tick step (same as `tidegap tick`): record last_tick_at and
   // re-resolve quota_reset tasks whose weekly reset already passed, so they
   // are rescheduled through the window picker instead of dispatched late.
   // Quota schedules come from the ~/.tidegap/config FILE (no env reads).
@@ -655,8 +655,8 @@ export function suppressStartupDispatch(suppressed = true): void {
 bootstrapDispatcherOnStartup();
 
 export default defineToolPlugin({
-  id: "ebb",
-  name: "ebb-ai — carbon-aware deferral",
+  id: "tidegap",
+  name: "Tidegap — carbon-aware deferral",
   description:
     'Auto-defer "do it later" tasks to the cleanest electricity-grid hour inside the deadline.',
   // Every setting lives in ./config.ts, which is also the source of truth for
@@ -730,8 +730,8 @@ export default defineToolPlugin({
             throw new Error(
               `schedule_task rejected: this task would dispatch via provider "${provider}" ` +
                 `(${providerInferred ? `inferred from model "${model}"` : "explicitly requested"}), ` +
-                `but the ebb plugin's "${keyName}" config field is not set on the gateway. ` +
-                `Set it in plugins.entries.ebb.config and retry, or choose a ` +
+                `but the tidegap plugin's "${keyName}" config field is not set on the gateway. ` +
+                `Set it in plugins.entries.tidegap.config and retry, or choose a ` +
                 `provider whose credential is configured (${[...providers].join(", ") || "none"}).`,
             );
           }
@@ -871,7 +871,7 @@ export default defineToolPlugin({
     // ── check_queue_status ────────────────────────────────────────────────
     tool({
       name: "check_queue_status",
-      label: "Check ebb-ai queue status",
+      label: "Check Tidegap queue status",
       description: toolDescription("check_queue_status"),
       parameters: openclawToolParameters("check_queue_status"),
       async execute(
@@ -886,7 +886,7 @@ export default defineToolPlugin({
           const task = tasks.find((t) => t.taskId === params.task_id);
           if (!task) {
             throw new Error(
-              `No ebb-ai task found with id ${params.task_id}. ` +
+              `No Tidegap task found with id ${params.task_id}. ` +
                 "Call this tool with no arguments to list every task.",
             );
           }
@@ -918,7 +918,7 @@ export default defineToolPlugin({
         }
         return {
           total: tasks.length,
-          // When a ticker last ran (this loop or `ebb tick`), v0.17.
+          // When a ticker last ran (this loop or `tidegap tick`), v0.17.
           last_tick_at: scheduler.lastTickAt() ?? null,
           tasks: tasks.map((t) => ({
             task_id: t.taskId,
@@ -938,7 +938,7 @@ export default defineToolPlugin({
     // ── cancel_task ───────────────────────────────────────────────────────
     tool({
       name: "cancel_task",
-      label: "Cancel an ebb-ai task",
+      label: "Cancel an Tidegap task",
       description: toolDescription("cancel_task"),
       parameters: openclawToolParameters("cancel_task"),
       async execute(
