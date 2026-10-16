@@ -206,7 +206,7 @@ describe("Scheduler.previewProviderCall", () => {
 describe("Receipt redaction + output_path", () => {
   let dir: string;
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-v05-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-v05-"));
   });
   afterEach(() => {
     rmSync(dir, { recursive: true, force: true });
@@ -339,7 +339,7 @@ describe("retryWithBackoff (integration)", () => {
 describe("TaskStore.claimScheduled (row-level claim)", () => {
   let dir: string;
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-claim-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-claim-"));
   });
   afterEach(() => {
     rmSync(dir, { recursive: true, force: true });

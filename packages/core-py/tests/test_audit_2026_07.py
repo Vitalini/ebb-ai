@@ -997,7 +997,7 @@ def test_default_patterns_are_vendor_shaped() -> None:
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX permission bits")
 async def test_ledger_chmod_0600_dir_0700(tmp_path: Path) -> None:
-    dirpath = tmp_path / "ebb-home"
+    dirpath = tmp_path / "tidegap-home"
     dirpath.mkdir()
     db = dirpath / "queue.sqlite"
     async with Scheduler(feed=mock_grid_feed(), db_path=str(db)):

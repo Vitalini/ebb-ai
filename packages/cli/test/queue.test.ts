@@ -45,7 +45,7 @@ describe("queue list / show / unread (task visibility)", () => {
   let db: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-cli-queue-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-cli-queue-"));
     db = join(dir, "queue.db");
     const store = new TaskStore({ dbPath: db });
     store.upsert({
@@ -172,7 +172,7 @@ describe("tidegap queue list --hook (Claude Code SessionStart)", () => {
   let db: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-hook-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-hook-"));
     db = join(dir, "queue.db");
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
@@ -294,7 +294,7 @@ describe("queue write commands (ui v2)", () => {
   const feed = mockGridFeed();
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-cli-write-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-cli-write-"));
     db = join(dir, "queue.db");
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
@@ -364,7 +364,7 @@ describe("queue write commands (ui v2)", () => {
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
       await expect(
-        buildProgram().parseAsync(["node", "ebb", "queue", "run-now", "gone", "--db", db]),
+        buildProgram().parseAsync(["node", "tidegap", "queue", "run-now", "gone", "--db", db]),
       ).rejects.toThrow("exit 1");
       expect(err.mock.calls.flat().join(" ")).toMatch(/runNow: task gone is cancelled/);
     } finally {

@@ -28,7 +28,7 @@ const HOSTS: Host[] = [
     label: "Claude Code (plugin)",
     group: "agent",
     desc: "Adds eight /tidegap:* slash commands plus auto-wires the MCP server.",
-    command: "/plugin marketplace add tidegap/tidegap\n/plugin install Tidegap",
+    command: "/plugin marketplace add tidegap/tidegap\n/plugin install tidegap",
     lang: "bash",
     followup:
       "Restart your session. Then call: /tidegap:defer \"summarize this\" --by tomorrow 6pm",
@@ -169,7 +169,7 @@ const HOSTS: Host[] = [
     label: "Python library",
     group: "lib",
     desc: "Use Tidegap directly as a Python library — no MCP host needed.",
-    command: "pip install Tidegap",
+    command: "pip install tidegap",
     lang: "bash",
     followup:
       "from tidegap import Scheduler; s = Scheduler(); await s.schedule(...). Same API as the TypeScript core.",

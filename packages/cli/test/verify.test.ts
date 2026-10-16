@@ -25,7 +25,7 @@ describe("runVerify --file", () => {
   let dir: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-verify-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-verify-"));
   });
   afterEach(() => {
     rmSync(dir, { recursive: true, force: true });

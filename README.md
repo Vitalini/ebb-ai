@@ -1,27 +1,27 @@
-<p align="center"><img src="assets/readme-hero.png" alt="Ebb AI: GB grid carbon-intensity forecast from 2026-09-30, peak 183 and recommended hour 88 gCO2/kWh (forecast, projected, one run)" width="800"></p>
+<p align="center"><img src="assets/readme-hero.png" alt="Tidegap: GB grid carbon-intensity forecast from 2026-09-30, peak 183 and recommended hour 88 gCO2/kWh (forecast, projected, one run)" width="800"></p>
 
-# Ebb AI
+# Tidegap
 
 **Run non-urgent LLM tasks at the cleanest grid hour before your deadline.**
 
-Ebb AI takes the LLM tasks your agent does not need right now, runs them at the lowest-carbon grid hour before a deadline you set, and sends them through the provider Batch API when the deadline allows.
+Tidegap takes the LLM tasks your agent does not need right now, runs them at the lowest-carbon grid hour before a deadline you set, and sends them through the provider Batch API when the deadline allows.
 
 - Picks the dispatch hour from a live 72-hour grid carbon-intensity forecast: 5 real-data feeds, 31 regions (measured, counted in code).
 - Routes work with a deadline over 24 hours through the Anthropic and OpenAI Batch APIs, at 50 % of the sync list price (projected, provider list price).
-- Writes a signed carbon receipt per task to a local SQLite ledger. `ebb verify` checks it offline.
+- Writes a signed carbon receipt per task to a local SQLite ledger. `tidegap verify` checks it offline.
 
-[![npm](https://img.shields.io/npm/v/%40ebb-ai%2Fcore?label=npm)](https://www.npmjs.com/package/@ebb-ai/core) [![PyPI](https://img.shields.io/pypi/v/ebb-ai)](https://pypi.org/project/ebb-ai/) [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-5eead4)](./LICENSE) [![Glama](https://glama.ai/mcp/servers/Vitalini/ebb-ai/badges/score.svg)](https://glama.ai/mcp/servers/Vitalini/ebb-ai)
+[![npm](https://img.shields.io/npm/v/%40tidegap%2Fcore?label=npm)](https://www.npmjs.com/package/@tidegap/core) [![PyPI](https://img.shields.io/pypi/v/tidegap)](https://pypi.org/project/tidegap/) [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-5eead4)](./LICENSE) [![Glama](https://glama.ai/mcp/servers/tidegap/tidegap/badges/score.svg)](https://glama.ai/mcp/servers/tidegap/tidegap)
 
 ```bash
-npm install @ebb-ai/core                                  # TypeScript / Node
-pip install "ebb-ai[anthropic,openai,signing]"            # Python 3.11+
-claude plugin marketplace add Vitalini/ebb-ai && claude plugin install ebb-ai   # Claude Code
-npx -y @ebb-ai/mcp                                        # any other MCP host
+npm install @tidegap/core                                  # TypeScript / Node
+pip install "tidegap[anthropic,openai,signing]"            # Python 3.11+
+claude plugin marketplace add tidegap/tidegap && claude plugin install tidegap   # Claude Code
+npx -y @tidegap/mcp                                        # any other MCP host
 ```
 
 ```ts
 // save as plan.mjs, run: node plan.mjs   (GB uses the free UK feed, no API key)
-import { recommendWindow, ukCarbonIntensityFeed } from "@ebb-ai/core";
+import { recommendWindow, ukCarbonIntensityFeed } from "@tidegap/core";
 const deadline = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
 const plan = await recommendWindow({ region: "GB", deadline }, { feed: ukCarbonIntensityFeed(), rng: () => 0 });
 console.log(plan.scheduledFor, plan.intensityGCo2PerKwh, plan.band);
@@ -30,18 +30,36 @@ console.log(plan.scheduledFor, plan.intensityGCo2PerKwh, plan.band);
 
 ```python
 import asyncio; from datetime import datetime, timedelta, timezone
-from ebb_ai import recommend_window, uk_carbon_intensity_feed
+from tidegap import recommend_window, uk_carbon_intensity_feed
 deadline = datetime.now(timezone.utc) + timedelta(hours=24)
 plan = asyncio.run(recommend_window(region="GB", deadline=deadline, feed=uk_carbon_intensity_feed(), rng=lambda: 0))
 print(plan.scheduled_for, plan.intensity_g_co2_per_kwh, plan.band)
 # 2026-10-16T11:00:00.000Z 66 very_clean   (forecast value on 2026-10-15; yours will differ)
 ```
 
-Without `rng`, ebb-ai picks at random among the cleanest band of near-equal hours, so repeated runs spread load and can return different hours; an `rng` that returns 0 gives the strict minimum.
+Without `rng`, Tidegap picks at random among the cleanest band of near-equal hours, so repeated runs spread load and can return different hours; an `rng` that returns 0 gives the strict minimum.
 
 **Proof:** one real run (GB, 2026-09-30, live National Grid ESO forecast). Forecast peak 183 gCO2/kWh, recommended window 88 gCO2/kWh: about 52 % lower, for this run only (forecast, projected). The test task had a 5-minute deadline, so it ran at once; its signed receipt records 158 gCO2/kWh (measured). [Raw output and reproducer](docs/examples/2026-09-30-GB-tick/) · [every number and its source](docs/claims.md)
 
-**In an agent:** in Claude Code, `/ebb-ai:defer "Summarize today's notifications" --by 4h`. In any other MCP host, the agent calls `recommend_window` and `schedule_task` (10 MCP tools, 13 hosts — [host configs](https://www.ebb-ai.com/docs#install)).
+**In an agent:** in Claude Code, `/tidegap:defer "Summarize today's notifications" --by 4h`. In any other MCP host, the agent calls `recommend_window` and `schedule_task` (10 MCP tools, 13 hosts — [host configs](https://www.tidegap.com/docs#install)).
+
+## Renamed from Ebb AI
+
+Until 0.17 this project was Ebb AI (`@ebb-ai/*`, `ebb-ai` on PyPI, the `ebb` command). 0.18.0 renames it to Tidegap, because "Ebb" conflicts with an existing software trademark. Your queue, receipts, signing key and daemon keep working. The old names still work for one release (0.18) and stop in 0.19.
+
+| What you have from 0.17 | What happens on 0.18 | What you do |
+|---|---|---|
+| Ledger, key and config in `~/.ebb-ai/` | The first 0.18 process moves them to `~/.tidegap/` and leaves `~/.ebb-ai` as a link | Nothing |
+| `EBB_*` variables (shell, MCP host config, Vercel) | Still read when the `TIDEGAP_*` name is unset; one deprecation line on stderr | Rename them to `TIDEGAP_*` before 0.19 |
+| `EBB_*` keys in `~/.tidegap/config` | Still read; a `TIDEGAP_*` key wins | Rename the keys before 0.19 |
+| Secrets in `~/.config/ebb/env` | Still read; `tidegap install` copies them to `~/.config/tidegap/env` | Nothing |
+| Daemon `com.ebb-ai.tick` / `ebb-tick.timer` | Keeps running while `@ebb-ai/cli` is installed | `npm i -g @tidegap/cli` (uninstall `@ebb-ai/cli` first if npm reports `EEXIST`), `tidegap install`, run the unload commands it prints, then `npm uninstall -g @ebb-ai/cli` |
+| `ebb <command>` | Still works with `@tidegap/cli`; prints one deprecation line | Use `tidegap <command>` |
+| `npx -y @ebb-ai/mcp` in a host config | Runs a 0.17.1 shim that starts `@tidegap/mcp` | Switch to `npx -y @tidegap/mcp` under the key `tidegap` (tools become `mcp__tidegap__*`) |
+| Claude Code plugin `ebb-ai@ebb-ai`, `/ebb-ai:*` commands | No in-place update: the marketplace and plugin names changed | `claude plugin uninstall ebb-ai`, `claude plugin marketplace remove ebb-ai`, `claude plugin marketplace add tidegap/tidegap`, `claude plugin install tidegap`; then use `/tidegap:*` |
+| OpenClaw `clawhub:@vitalini/ebb`, config `plugins.entries.ebb` | The old plugin stays on 0.17; the new plugin id is `tidegap` | `openclaw plugins install clawhub:@vitalini/tidegap`, move your config block to `plugins.entries.tidegap`, remove the old plugin |
+| `pip install ebb-ai`, `import ebb_ai` | A 0.17.1 shim installs `tidegap`; the old import works with a warning | `pip install tidegap`, `import tidegap` |
+| Links to `github.com/Vitalini/ebb-ai` and `www.ebb-ai.com` | GitHub redirects; the site redirects to `www.tidegap.com` | Nothing |
 
 ## Why defer non-urgent AI work?
 
@@ -50,7 +68,7 @@ grid load by 2028 ([DOE 2024](https://www.energy.gov/eere/buildings/articles/202
 Most agent workload that lands on that load is *deferrable* (overnight
 summaries, batch analyses, scheduled compliance scans, multi-step
 report generation) — agent code just dispatches it synchronously by
-default. `ebb-ai` makes the choice automatic. Four parallel wins:
+default. `tidegap` makes the choice automatic. Four parallel wins:
 
 1. **Lighter on the grid.** Spreads load away from peak hours, which is
    what ISOs and grid operators want from large compute users.
@@ -69,9 +87,9 @@ default. `ebb-ai` makes the choice automatic. Four parallel wins:
    coefficients (Patterson 2021, Luccioni 2024, Hugging Face AI Energy
    Score) so receipts reflect what the agent actually ran — not a flat
    placeholder. v0.11+ signs every receipt with Ed25519 so consumers can
-   verify them offline via `ebb verify` (B2B ESG export path).
+   verify them offline via `tidegap verify` (B2B ESG export path).
 
-`ebb-ai` is the same code that would have fired a sync LLM call —
+`tidegap` is the same code that would have fired a sync LLM call —
 now deferred to the cleanest, cheapest, fastest hour inside the
 deadline. Apache-2.0.
 
@@ -90,10 +108,10 @@ recommendWindow({ region: "GB", model: "llama3.2:1b", ... }):
   "intensityGCo2PerKwh": 88,
   "band": "very_clean",
 
-$ ebb tick --db <temp> --region GB
+$ tidegap tick --db <temp> --region GB
 tick: 1 inspected, 1 dispatched, 0 failed
 
-$ ebb verify t-ef2354ee-eff0-431c-b11e-6edfcb8299b0 --db <temp>
+$ tidegap verify t-ef2354ee-eff0-431c-b11e-6edfcb8299b0 --db <temp>
 ✓ VALID
 intensity_g_kwh   158
 grid_source       ukCarbonIntensity
@@ -110,7 +128,7 @@ signer_public_key tTpsWuAS52easY0sgqz5E42aen7tdE5otdfLN6F+kxg=
 158 gCO2/kWh the receipt records at dispatch is the measured value. See
 [docs/claims.md](docs/claims.md).)*
 
-Price: not available for this run. ebb has no electricity-price feed, and
+Price: not available for this run. Tidegap has no electricity-price feed, and
 its sync vs Batch list-price comparison needs at least two candidate models;
 this run used one unpriced local Ollama model.
 
@@ -121,11 +139,11 @@ Windsurf, OpenClaw, OpenAI Codex CLI, Pi). The agent asks
 — or doesn't.
 
 > **Status:** v0.17.0 (this release) · 2026-10-15 · published on npm and PyPI
-> · `@ebb-ai/{core,mcp,cli}` on npm under the
-> `@ebb-ai` org; `ebb-ai` on PyPI; `@vitalini/ebb` OpenClaw
-> plugin on ClawHub (`openclaw plugins install clawhub:@vitalini/ebb`),
+> · `@tidegap/{core,mcp,cli}` on npm under the
+> `@tidegap` org; `tidegap` on PyPI; `@vitalini/tidegap` OpenClaw
+> plugin on ClawHub (`openclaw plugins install clawhub:@vitalini/tidegap`),
 > not npm, and shares the queue. **One-command Claude Code plugin**
-> via `/plugin marketplace add Vitalini/ebb-ai && /plugin install ebb-ai`.
+> via `/plugin marketplace add tidegap/tidegap && /plugin install tidegap`.
 > **Five real-data grid feeds** across **31 regions** (NA/EU/APAC)
 > — measured against the code, see [docs/claims.md](docs/claims.md):
 > UK National Grid ESO Carbon Intensity API (GB, free no key),
@@ -138,8 +156,8 @@ Windsurf, OpenClaw, OpenAI Codex CLI, Pi). The agent asks
 > with each catalogue refresh; Patterson 2021,
 > Luccioni 2024, HF AI Energy Score) replace the v0.1–v0.9 flat
 > placeholder. **v0.11:** Ed25519-signed carbon receipts (offline
-> verifiable via `ebb verify`) plus WAL multi-writer SQLite so
-> `ebb tick` and the MCP server can share `~/.ebb-ai/queue.db`.
+> verifiable via `tidegap verify`) plus WAL multi-writer SQLite so
+> `tidegap tick` and the MCP server can share `~/.tidegap/queue.db`.
 > **v0.12 ("trust repairs"):** Batch API routing is real — deferrable
 > tasks (deadline > 24h) are submitted to the provider's Batch API and
 > polled to completion (`submitted` status), instead of the previous
@@ -147,12 +165,12 @@ Windsurf, OpenClaw, OpenAI Codex CLI, Pi). The agent asks
 > source — synthetic mock is disclosed, not silently signed) and the
 > energy-coefficient confidence tier; Python- and TS-signed receipts
 > verify in either language (one canonical signing form, JCS numbers);
-> daemons installed by `ebb install` actually dispatch (real
-> node/script paths, `~/.config/ebb/env` secrets); hardened ledger
+> daemons installed by `tidegap install` actually dispatch (real
+> node/script paths, `~/.config/tidegap/env` secrets); hardened ledger
 > (0600, redacted `body_json`); honest feed labeling
 > (forecast vs persistence). Anthropic + OpenAI Batch adapters, Python
 > port at parity, live dashboard, `recommend_window` planning endpoint,
-> always-on `ebb tick` CLI with macOS launchd + Linux systemd +
+> always-on `tidegap tick` CLI with macOS launchd + Linux systemd +
 > pmset/rtcwake wake events, full control surface (`cancel_task` /
 > `expedite_task` / `update_deadline` / `retry_task` / `cancel_all`),
 > receipt redaction, file output, retry-with-backoff. **1,355 tests
@@ -160,16 +178,16 @@ Windsurf, OpenClaw, OpenAI Codex CLI, Pi). The agent asks
 > across 5 packages and 2 languages. See [QUICKSTART.md](./QUICKSTART.md).
 
 [![Tests](https://img.shields.io/badge/tests-1355%20passing-22c55e)](#tests)
-[![MCP tools](https://img.shields.io/badge/MCP-10%20tools-5eead4)](https://www.ebb-ai.com/docs)
-[![Hosts](https://img.shields.io/badge/MCP%20hosts-13-5eead4)](https://www.ebb-ai.com/docs#install)
-[![Website](https://img.shields.io/badge/website-ebb--ai.com-5eead4)](https://www.ebb-ai.com)
+[![MCP tools](https://img.shields.io/badge/MCP-10%20tools-5eead4)](https://www.tidegap.com/docs)
+[![Hosts](https://img.shields.io/badge/MCP%20hosts-13-5eead4)](https://www.tidegap.com/docs#install)
+[![Website](https://img.shields.io/badge/website-tidegap.com-5eead4)](https://www.tidegap.com)
 
 ### Live demo
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FVitalini%2Febb-ai&root-directory=apps%2Fdashboard&project-name=ebb-ai-dashboard&repository-name=ebb-ai-dashboard)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ftidegap%2Ftidegap&root-directory=apps%2Fdashboard&project-name=tidegap-dashboard&repository-name=tidegap-dashboard)
 
 Or visit the maintainer-hosted dashboard at
-**[ebb-ai.com](https://ebb-ai.com)** to see live grid-load and
+**[www.tidegap.com](https://www.tidegap.com)** to see live grid-load and
 carbon-intensity forecasts across 31 grid regions (NA / EU / APAC —
 CAISO, ERCOT, ISO-NE, PJM, Great Britain, France, Germany, and more)
 and to try the best-window planner without installing anything.
@@ -197,7 +215,7 @@ Three things follow:
   discount (projected, provider list price)** for tasks that can wait
   up to 24 hours. Almost no agent
   code uses them, because the choice has to be made at the call site.
-  `ebb-ai` makes the choice automatic — and routes deadline-tolerant
+  `tidegap` makes the choice automatic — and routes deadline-tolerant
   work through the cheaper path.
 - **Grid load.** Data-center AI compute is concentrated in a few
   US regions (PJM Mid-Atlantic / Virginia, ERCOT Texas, CAISO
@@ -210,11 +228,11 @@ Three things follow:
 - **Carbon, as a measurable side effect.** Grid carbon intensity
   swings substantially over a single day as generation mix shifts.
   The same dispatch decision that saves cost and smooths load also
-  emits less CO₂. `ebb-ai` writes an
+  emits less CO₂. `tidegap` writes an
   auditable receipt for every dispatch — useful for ESG reporting,
   cost-accounting, and upcoming compute-disclosure regulations.
 
-`ebb-ai` automates the choice for any task that is not "answer me
+`tidegap` automates the choice for any task that is not "answer me
 right now."
 
 ---
@@ -223,24 +241,24 @@ right now."
 
 | Package | Purpose |
 |---|---|
-| `@ebb-ai/core` | TypeScript core library. `defer()` API, `AnthropicAdapter`, `OpenAIAdapter`, `GeminiAdapter`, `OllamaAdapter`, opt-in SQLite-backed durable queue, per-model energy coefficients (`estimateEnergyKwh`, `MODEL_ENERGY_COEFFICIENTS`). |
-| `@ebb-ai/mcp` | Model Context Protocol server. Drop-in for Claude Desktop, Claude Code, OpenClaw, Cursor. |
-| `ebb-ai` (Python) | Python 3.11+ port. `asyncio` scheduler, `aiosqlite` persistence, Anthropic + OpenAI + Gemini + Ollama adapters, mirrored `ebb_ai.energy` module. |
-| `apps/web` | Next.js 15 website at https://www.ebb-ai.com — install picker (13 hosts), live carbon-intensity map, best-window planner, docs. |
-| `packages/claude-code-plugin` | Claude Code plugin tree (8 `/ebb-ai:*` slash commands + auto-invocation skill + MCP wiring). |
-| `packages/openclaw-plugin` | OpenClaw plugin (`@vitalini/ebb-ai` on ClawHub). Native OpenClaw tools mirroring the MCP surface. |
+| `@tidegap/core` | TypeScript core library. `defer()` API, `AnthropicAdapter`, `OpenAIAdapter`, `GeminiAdapter`, `OllamaAdapter`, opt-in SQLite-backed durable queue, per-model energy coefficients (`estimateEnergyKwh`, `MODEL_ENERGY_COEFFICIENTS`). |
+| `@tidegap/mcp` | Model Context Protocol server. Drop-in for Claude Desktop, Claude Code, OpenClaw, Cursor. |
+| `tidegap` (Python) | Python 3.11+ port. `asyncio` scheduler, `aiosqlite` persistence, Anthropic + OpenAI + Gemini + Ollama adapters, mirrored `tidegap.energy` module. |
+| `apps/web` | Next.js 15 website at https://www.tidegap.com — install picker (13 hosts), live carbon-intensity map, best-window planner, docs. |
+| `packages/claude-code-plugin` | Claude Code plugin tree (8 `/tidegap:*` slash commands + auto-invocation skill + MCP wiring). |
+| `packages/openclaw-plugin` | OpenClaw plugin (`@vitalini/tidegap-ai` on ClawHub). Native OpenClaw tools mirroring the MCP surface. |
 | `docs/spec` | Upstream MCP spec proposal for `priority`, `deadline`, `carbon_budget` fields. |
 
 ---
 
 ## Architecture
 
-![ebb-ai architecture diagram](./docs/release/v0.7.1/diagrams/architecture.png)
+![Tidegap architecture diagram](./docs/release/v0.7.1/diagrams/architecture.png)
 
 The MCP server is a thin stdio process the agent host (Claude Code,
 Claude Desktop, Cursor, Cline, Zed, OpenClaw) spawns. It enqueues
-work to a SQLite-backed queue at `~/.ebb-ai/queue.db`; an off-process
-`ebb tick` daemon (launchd / systemd / cron) reads scheduled rows
+work to a SQLite-backed queue at `~/.tidegap/queue.db`; an off-process
+`tidegap tick` daemon (launchd / systemd / cron) reads scheduled rows
 and dispatches them to the LLM provider at the chosen window. The
 grid feed is a side-channel — the router picks per-zone between four
 real-data sources before falling back to mock.
@@ -254,31 +272,31 @@ real-data sources before falling back to mock.
 ### As a Claude Code plugin (one-command install)
 
 ```bash
-claude plugin marketplace add Vitalini/ebb-ai
-claude plugin install ebb-ai
+claude plugin marketplace add tidegap/tidegap
+claude plugin install tidegap
 ```
 
-That ships eight slash commands (`/ebb-ai:defer`, `/ebb-ai:plan`,
-`/ebb-ai:check`, `/ebb-ai:cancel`, `/ebb-ai:expedite`, `/ebb-ai:reschedule`,
-`/ebb-ai:retry`, `/ebb-ai:grid`), an `ebb-ai` skill, and auto-wires the
-`@ebb-ai/mcp` MCP server. Full plugin reference: **[`packages/claude-code-plugin/README.md`](./packages/claude-code-plugin/README.md)**.
+That ships eight slash commands (`/tidegap:defer`, `/tidegap:plan`,
+`/tidegap:check`, `/tidegap:cancel`, `/tidegap:expedite`, `/tidegap:reschedule`,
+`/tidegap:retry`, `/tidegap:grid`), an `tidegap` skill, and auto-wires the
+`@tidegap/mcp` MCP server. Full plugin reference: **[`packages/claude-code-plugin/README.md`](./packages/claude-code-plugin/README.md)**.
 
 ```
-> /ebb-ai:defer "Summarize today's GitHub notifications" --by 4h
+> /tidegap:defer "Summarize today's GitHub notifications" --by 4h
 Deferred ✓ scheduled for 22:15 UTC (cleanest window inside the deadline)
 
-> /ebb-ai:check
+> /tidegap:check
 2 tasks queued · oldest in 1h · cleanest at 03:00 UTC
 ```
 
-Full command surface: `/ebb-ai:{defer, plan, check, cancel, expedite,
-reschedule, retry, grid}`. Tasks persist to `~/.ebb-ai/queue.db` and
+Full command surface: `/tidegap:{defer, plan, check, cancel, expedite,
+reschedule, retry, grid}`. Tasks persist to `~/.tidegap/queue.db` and
 survive Claude Code restarts.
 
 ### As an MCP server (Claude Desktop / Cursor / Cline / Zed)
 
 ```bash
-npm install -g @ebb-ai/mcp     # or run via npx -y @ebb-ai/mcp
+npm install -g @tidegap/mcp     # or run via npx -y @tidegap/mcp
 ```
 
 Then add to Claude Desktop's MCP config
@@ -288,13 +306,13 @@ macOS):
 ```json
 {
   "mcpServers": {
-    "ebb-ai": {
+    "tidegap": {
       "command": "npx",
-      "args": ["-y", "@ebb-ai/mcp"],
+      "args": ["-y", "@tidegap/mcp"],
       "env": {
-        "EBB_ELECTRICITY_MAPS_API_KEY": "optional; falls back to mock data without it. GB is always live via the free UK Carbon Intensity API.",
-        "EBB_EIA_API_KEY": "optional; US ISO fuel-mix (average) intensity.",
-        "EBB_ENTSOE_SECURITY_TOKEN": "optional; EU zone intensity.",
+        "TIDEGAP_ELECTRICITY_MAPS_API_KEY": "optional; falls back to mock data without it. GB is always live via the free UK Carbon Intensity API.",
+        "TIDEGAP_EIA_API_KEY": "optional; US ISO fuel-mix (average) intensity.",
+        "TIDEGAP_ENTSOE_SECURITY_TOKEN": "optional; EU zone intensity.",
         "WATTTIME_USERNAME": "optional; with WATTTIME_PASSWORD, enables WattTime v3 marginal-emissions forecasts for US ISOs (takes precedence over EIA where covered).",
         "WATTTIME_PASSWORD": "optional; pairs with WATTTIME_USERNAME."
       }
@@ -323,7 +341,7 @@ The MCP server exposes ten tools to the agent (measured, `toolsForHost("mcp")` i
 ### As a library
 
 ```typescript
-import { defer } from "@ebb-ai/core";
+import { defer } from "@tidegap/core";
 
 const result = await defer(
   () => anthropic.messages.create({ /* … */ }),
@@ -338,9 +356,9 @@ const result = await defer(
 ### With a provider adapter and the Batch API (v0.2)
 
 ```typescript
-import { Scheduler, AnthropicAdapter } from "@ebb-ai/core";
+import { Scheduler, AnthropicAdapter } from "@tidegap/core";
 
-const scheduler = new Scheduler({ dbPath: "/var/lib/ebb/queue.sqlite" });
+const scheduler = new Scheduler({ dbPath: "/var/lib/tidegap/queue.sqlite" });
 const adapter = new AnthropicAdapter();
 
 await scheduler.defer(
@@ -361,14 +379,14 @@ adapter.
 ### Python
 
 ```bash
-pip install "ebb-ai[anthropic,openai,signing]"
+pip install "tidegap[anthropic,openai,signing]"
 ```
 
 From a clone, see [Install (development)](#install-development).
 
 ```python
 import asyncio
-from ebb_ai import defer
+from tidegap import defer
 
 asyncio.run(defer(
     lambda: do_work(),
@@ -378,15 +396,15 @@ asyncio.run(defer(
 ))
 ```
 
-### Your queue: `ebb ui`, notifications, session line
+### Your queue: `tidegap ui`, notifications, session line
 
 ```bash
-ebb ui                      # opens the local task page in your browser
-ebb queue list --unread     # the same inbox in the terminal
-ebb queue show <id>         # one task: prompt, result, receipt
+tidegap ui                      # opens the local task page in your browser
+tidegap queue list --unread     # the same inbox in the terminal
+tidegap queue show <id>         # one task: prompt, result, receipt
 ```
 
-`ebb ui` serves a local task manager. **Agenda** (the default) lists pending
+`tidegap ui` serves a local task manager. **Agenda** (the default) lists pending
 tasks by day with the carbon band of each run hour; overdue tasks and unread
 failures sit in "Needs attention". **Journal** lists finished tasks with
 status, provider and kind filters. **Timeline** shows the forecast curve with
@@ -396,35 +414,35 @@ the session that queued it. From the page you can cancel (with a 5 s Undo),
 reschedule, move a task to another day (drag it onto a day, or use the
 move-to list), run it now, reply, mark it read or unread, stop a series, and
 start a dispatcher when none is running. Actions change the ledger; tasks
-still run on the dispatcher's next tick (`ebb tick`), and the page shows when
+still run on the dispatcher's next tick (`tidegap tick`), and the page shows when
 that last ran. It listens on 127.0.0.1 only, and every API request needs
 a random token that is printed once with the link and changes on every start.
 
-`ebb tick` posts a desktop notification for each task that completes or
+`tidegap tick` posts a desktop notification for each task that completes or
 fails (macOS, Linux with `notify-send`, Windows). Turn it off with
-`ebb tick --no-notify` or `EBB_NOTIFY=0` in `~/.ebb-ai/config`. The Claude
+`tidegap tick --no-notify` or `TIDEGAP_NOTIFY=0` in `~/.tidegap/config`. The Claude
 Code plugin adds one line at session start when finished tasks are unread.
 
 ### Dashboard
 
 ```bash
-pnpm --filter @ebb-ai/web dev
+pnpm --filter @tidegap/web dev
 # → http://localhost:3000
 ```
 
 Pages: live carbon-intensity map (31 regions, NA/EU/APAC — measured,
 see [docs/claims.md](docs/claims.md)), 72-hour forecast charts,
 best-window planner, and a queue explainer (`/queue`). The site never
-sees your queue; open your own with `ebb ui` (below).
+sees your queue; open your own with `tidegap ui` (below).
 
 **Grid data sources** (per zone, falls back to mock on failure):
 
 > **Where do the keys go?** The environment variables in the `Auth` column
-> configure the **hosts** — the `ebb` CLI, the `@ebb-ai/mcp` server, and this
+> configure the **hosts** — the `tidegap` CLI, the `@tidegap/mcp` server, and this
 > dashboard. Each host reads them at its own entry point and injects them into
-> `@ebb-ai/core`, which is environment-pure and reads nothing ambient.
-> The **`@vitalini/ebb` OpenClaw plugin reads no environment variables at all**:
-> configure it under `plugins.entries.ebb.config` in your gateway config, using
+> `@tidegap/core`, which is environment-pure and reads nothing ambient.
+> The **`@vitalini/tidegap` OpenClaw plugin reads no environment variables at all**:
+> configure it under `plugins.entries.tidegap.config` in your gateway config, using
 > `eiaApiKey`, `entsoeSecurityToken`, `electricityMapsApiKey`,
 > `wattTimeUsername` / `wattTimePassword` (plus `anthropicApiKey`,
 > `openaiApiKey`, `geminiApiKey` / `googleApiKey`, `ollamaHost`,
@@ -437,9 +455,9 @@ sees your queue; open your own with `ebb ui` (below).
 |---|---|---|---|
 | `GB` | [UK National Grid ESO Carbon Intensity API](https://carbonintensity.org.uk/) | None | Real 48h forecast, always on |
 | `US-CAL-CISO`, `US-TEX-ERCO`, `US-NE-ISNE`, `US-NY-NYIS`, `US-MIDA-PJM`, `US-MIDW-MISO` | [WattTime v3](https://watttime.org/) marginal (co2_moer) | Free account (`WATTTIME_USERNAME` + `WATTTIME_PASSWORD`) | **Marginal**-emissions FORECAST (lbs/MWh → gCO2/kWh). Takes precedence over EIA where covered; falls through to EIA on any error. Signal disclosed as `signalType: "marginal"` on forecasts/receipts |
-| `US-CAL-CISO`, `US-TEX-ERCO`, `US-NE-ISNE`, `US-MIDA-PJM` (+`US-NY-NYIS`, `US-MIDW-MISO`) | [US EIA Open Data](https://www.eia.gov/opendata/) | Free API key (`EBB_EIA_API_KEY`) | Hourly fuel-mix → carbon intensity via IPCC AR5 factors (average signal; used when WattTime is unconfigured) |
-| `FR`, `DE` (plus `ES`, `IT`, `NL` opt-in) | [ENTSO-E Transparency Platform](https://transparency.entsoe.eu/) | Free token (`EBB_ENTSOE_SECURITY_TOKEN`) | Realised generation by type → carbon intensity |
-| any zone (universal fallback) | [Electricity Maps](https://www.electricitymaps.com/) free-tier | `EBB_ELECTRICITY_MAPS_API_KEY` | Used when zone-specific source missing |
+| `US-CAL-CISO`, `US-TEX-ERCO`, `US-NE-ISNE`, `US-MIDA-PJM` (+`US-NY-NYIS`, `US-MIDW-MISO`) | [US EIA Open Data](https://www.eia.gov/opendata/) | Free API key (`TIDEGAP_EIA_API_KEY`) | Hourly fuel-mix → carbon intensity via IPCC AR5 factors (average signal; used when WattTime is unconfigured) |
+| `FR`, `DE` (plus `ES`, `IT`, `NL` opt-in) | [ENTSO-E Transparency Platform](https://transparency.entsoe.eu/) | Free token (`TIDEGAP_ENTSOE_SECURITY_TOKEN`) | Realised generation by type → carbon intensity |
+| any zone (universal fallback) | [Electricity Maps](https://www.electricitymaps.com/) free-tier | `TIDEGAP_ELECTRICITY_MAPS_API_KEY` | Used when zone-specific source missing |
 | anything else | Deterministic mock curve | None | Used when no key set or upstream fails |
 
 WattTime v3 uses granular sub-BA region codes; only `US-CAL-CISO →
@@ -456,7 +474,7 @@ function in `packages/core-ts/src/grid.ts` — open a PR.
 ```bash
 # from the repo root
 pnpm install        # installs all workspace packages
-pnpm build          # builds @ebb-ai/core and @ebb-ai/mcp
+pnpm build          # builds @tidegap/core and @tidegap/mcp
 pnpm test           # runs vitest across packages
 ```
 

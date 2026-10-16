@@ -36,7 +36,7 @@ file.
 
 ```text
 /plugin marketplace add tidegap/tidegap
-/plugin install Tidegap
+/plugin install tidegap
 ```
 
 Restart the session. Eight `/tidegap:*` slash commands and the MCP

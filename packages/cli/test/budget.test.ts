@@ -41,7 +41,7 @@ describe("tidegap stats — carbon budget block", () => {
   let cfgPath: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-stats-budget-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-stats-budget-"));
     dbPath = join(dir, "queue.db");
     cfgPath = join(dir, "config");
   });

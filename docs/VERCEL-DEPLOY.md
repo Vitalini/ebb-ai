@@ -1,6 +1,6 @@
 # Vercel Deployment Guide
 
-`ebb-ai.com` is hosted on Vercel from `apps/web`. The dashboard
+`www.tidegap.com` is hosted on Vercel from `apps/web`. The dashboard
 runs end-to-end out of the box on the deterministic mock grid feed.
 To unlock live carbon-intensity data for more than just GB, three
 environment variables need to be added in the Vercel project settings.
@@ -10,9 +10,9 @@ environment variables need to be added in the Vercel project settings.
 | Region | Source | Key required? |
 |---|---|---|
 | `GB` | UK National Grid ESO Carbon Intensity API | **No.** Always live. |
-| `US-CAL-CISO`, `US-TEX-ERCO`, `US-NE-ISNE`, `US-MIDA-PJM`, `US-NY-NYIS`, `US-MIDW-MISO` | U.S. Energy Information Administration (EIA) | `EBB_EIA_API_KEY` |
-| `FR`, `DE`, `ES`, `IT`, `NL` | European Network of Transmission System Operators for Electricity (ENTSO-E) | `EBB_ENTSOE_SECURITY_TOKEN` |
-| Anything else | Electricity Maps free tier | `EBB_ELECTRICITY_MAPS_API_KEY` |
+| `US-CAL-CISO`, `US-TEX-ERCO`, `US-NE-ISNE`, `US-MIDA-PJM`, `US-NY-NYIS`, `US-MIDW-MISO` | U.S. Energy Information Administration (EIA) | `TIDEGAP_EIA_API_KEY` |
+| `FR`, `DE`, `ES`, `IT`, `NL` | European Network of Transmission System Operators for Electricity (ENTSO-E) | `TIDEGAP_ENTSOE_SECURITY_TOKEN` |
+| Anything else | Electricity Maps free tier | `TIDEGAP_ELECTRICITY_MAPS_API_KEY` |
 
 Without these keys, the corresponding regions silently fall back to
 the deterministic mock curve (and the dashboard region card displays
@@ -45,7 +45,7 @@ the `mock feed` badge).
 
 1. Open the Vercel project: <https://vercel.com/vitalini/ebb-ai/settings/environment-variables>
 2. For each of the three variables:
-   - **Key:** the name from the table above (e.g. `EBB_EIA_API_KEY`).
+   - **Key:** the name from the table above (e.g. `TIDEGAP_EIA_API_KEY`).
    - **Value:** the secret from the step above.
    - **Environments:** check **Production**, **Preview**, **Development**
      (all three — the dashboard's `apps/web/src/lib/grid.ts`
@@ -56,7 +56,7 @@ the `mock feed` badge).
    <https://vercel.com/vitalini/ebb-ai/deployments> and click the
    three-dot menu on the latest deployment → **Redeploy**.
 
-After the redeploy completes, every region card on `ebb-ai.com`
+After the redeploy completes, every region card on `www.tidegap.com`
 should show its source as `eia`, `entsoe`, or `electricityMaps`
 instead of `mock`.
 
@@ -64,9 +64,9 @@ instead of `mock`.
 
 ```bash
 # Each of these should return source: <provider-name>, not "mock".
-curl -s https://www.ebb-ai.com/api/grid/US-CAL-CISO | jq '.source'
-curl -s https://www.ebb-ai.com/api/grid/FR          | jq '.source'
-curl -s https://www.ebb-ai.com/api/grid/GB          | jq '.source'  # already live without any key
+curl -s https://www.tidegap.com/api/grid/US-CAL-CISO | jq '.source'
+curl -s https://www.tidegap.com/api/grid/FR          | jq '.source'
+curl -s https://www.tidegap.com/api/grid/GB          | jq '.source'  # already live without any key
 ```
 
 ## Local development

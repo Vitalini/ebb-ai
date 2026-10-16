@@ -13,7 +13,7 @@ import {
   paramsForHost,
   toolsForHost,
 } from "@tidegap/core";
-import ebbPlugin from "../src/index.js";
+import tidegapPlugin from "../src/index.js";
 
 /** Extract the { properties, required } shape from a TypeBox object schema. */
 function shapeOf(parameters: unknown): {
@@ -32,14 +32,14 @@ function shapeOf(parameters: unknown): {
 
 describe("OpenClaw tools are derived from the shared surface (§2.2)", () => {
   it("registers exactly the shared surface's openclaw tools", () => {
-    expect(ebbPlugin.tools.map((t) => t.name).sort()).toEqual(
+    expect(tidegapPlugin.tools.map((t) => t.name).sort()).toEqual(
       toolsForHost("openclaw").map((d) => d.name).sort(),
     );
   });
 
   it("every registered tool matches its shared descriptor (desc/params/required)", () => {
     for (const def of toolsForHost("openclaw")) {
-      const tool = ebbPlugin.tools.find((t) => t.name === def.name);
+      const tool = tidegapPlugin.tools.find((t) => t.name === def.name);
       expect(tool, `tool ${def.name} not registered`).toBeTruthy();
 
       // description comes verbatim from the shared surface.

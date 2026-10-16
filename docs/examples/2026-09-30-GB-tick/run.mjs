@@ -1,6 +1,6 @@
-// Drives the parts of the run the `ebb` CLI has no subcommand for:
+// Drives the parts of the run the `tidegap` CLI has no subcommand for:
 // fetch the live GB forecast, ask recommendWindow() for a 72h window,
-// and enqueue one Ollama provider call that `ebb tick` then dispatches.
+// and enqueue one Ollama provider call that `tidegap tick` then dispatches.
 // Usage: node run.mjs <queue-db> <forecast-json-out>
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -34,7 +34,7 @@ console.log(`\nrecommendWindow({ region: "${REGION}", model: "${MODEL}", deadlin
 console.log(JSON.stringify(plan, null, 2));
 
 // 3. Enqueue one real call with a 5-minute deadline (MCP `schedule_task`),
-//    so `ebb tick` dispatches it now and signs a receipt.
+//    so `tidegap tick` dispatches it now and signs a receipt.
 const scheduler = new Scheduler({ dbPath, defaultRegion: REGION, feed });
 const record = await scheduler.enqueueProviderCall(
   {

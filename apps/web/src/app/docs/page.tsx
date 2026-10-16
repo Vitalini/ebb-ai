@@ -334,7 +334,7 @@ const result = verifyReceipt(signed);
         <div className="rounded-md border border-rule bg-bg-card p-4 font-mono text-xs leading-relaxed text-fg-muted">
           <p className="mb-2 text-fg">Library (Python — opt-in)</p>
           <pre className="overflow-x-auto whitespace-pre text-fg">
-{`# pip install "Tidegap[signing]"   (pulls in the cryptography library)
+{`# pip install "tidegap[signing]"   (pulls in the cryptography library)
 
 from tidegap import (
     sign_receipt, verify_receipt,

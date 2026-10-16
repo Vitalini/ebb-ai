@@ -40,7 +40,7 @@ describe("tidegap tick", () => {
   });
 
   it("exits 0 with a clear message when no adapters are configured", async () => {
-    const r = await runTickOnce({ db: ":memory:", envFile: "/nonexistent/ebb/env" });
+    const r = await runTickOnce({ db: ":memory:", envFile: "/nonexistent/tidegap/env" });
     expect(r.exitCode).toBe(0);
     expect(r.message).toMatch(/no adapters configured/i);
   });
@@ -196,7 +196,7 @@ describe("tidegap tick pre-tick step (quota sweep, last_tick_at)", () => {
   const savedOllama = process.env.OLLAMA_HOST;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-cli-quota-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-cli-quota-"));
     db = join(dir, "queue.db");
     // An adapter must exist for the tick to run. The seeded tasks use the
     // anthropic provider, which has no adapter here, so even a task the
@@ -234,7 +234,7 @@ describe("tidegap tick pre-tick step (quota sweep, last_tick_at)", () => {
     seed("claude", prevReset);
     seed("codex", prevReset);
 
-    const r = await runTickOnce({ db, envFile: "/nonexistent/ebb/env", budgetConfig: config });
+    const r = await runTickOnce({ db, envFile: "/nonexistent/tidegap/env", budgetConfig: config });
     expect(r.message).toMatch(/quota reset \(claude\) passed for quota-claude/);
     expect(r.message).toMatch(/"codex" is not configured/);
 

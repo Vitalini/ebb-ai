@@ -7,7 +7,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { mockGridFeed, Scheduler, TaskStore } from "@tidegap/core";
 
-import ebbPlugin, {
+import tidegapPlugin, {
   bootstrapDispatcherOnStartup,
   runDispatchTick,
 } from "../src/index.js";
@@ -49,7 +49,7 @@ const TOOL_NAMES = [
 ];
 
 function tool(name: string): StubResolvedTool {
-  const found = ebbPlugin.tools.find((t) => t.name === name);
+  const found = tidegapPlugin.tools.find((t) => t.name === name);
   if (!found) throw new Error(`tool ${name} is not registered`);
   return found;
 }
@@ -61,20 +61,20 @@ function deadlineISO(hoursAhead = 24): string {
 
 describe("Tidegap OpenClaw plugin — registration", () => {
   it("loads as a tool plugin with id 'tidegap'", () => {
-    expect(ebbPlugin.id).toBe("tidegap");
-    expect(ebbPlugin.name).toMatch(/Tidegap/);
+    expect(tidegapPlugin.id).toBe("tidegap");
+    expect(tidegapPlugin.name).toMatch(/Tidegap/);
   });
 
   it("registers the eleven tools, MCP-style names with no tidegap_ or ebb_ prefix", () => {
-    const names = ebbPlugin.tools.map((t) => t.name).sort();
+    const names = tidegapPlugin.tools.map((t) => t.name).sort();
     expect(names).toEqual([...TOOL_NAMES].sort());
-    for (const t of ebbPlugin.tools) {
+    for (const t of tidegapPlugin.tools) {
       expect(t.name).not.toMatch(/^(tidegap|ebb)_/);
     }
   });
 
   it("gives every tool a label, a description and a parameters schema", () => {
-    for (const t of ebbPlugin.tools) {
+    for (const t of tidegapPlugin.tools) {
       expect(t.label.length).toBeGreaterThan(0);
       expect(t.description.length).toBeGreaterThan(20);
       expect(t.parameters).toBeTruthy();
@@ -88,7 +88,7 @@ describe("Tidegap OpenClaw plugin — tool execution", () => {
   let scheduledId: string;
 
   beforeAll(() => {
-    tmp = mkdtempSync(join(tmpdir(), "ebb-plugin-test-"));
+    tmp = mkdtempSync(join(tmpdir(), "tidegap-plugin-test-"));
     dbPath = join(tmp, "queue.db");
   });
 
@@ -374,7 +374,7 @@ describe("Tidegap OpenClaw plugin — reply_task and series (ui v2)", () => {
   let dbPath: string;
 
   beforeAll(() => {
-    tmp = mkdtempSync(join(tmpdir(), "ebb-plugin-v2-"));
+    tmp = mkdtempSync(join(tmpdir(), "tidegap-plugin-v2-"));
     dbPath = join(tmp, "queue.db");
   });
 
@@ -593,7 +593,7 @@ describe("Tidegap OpenClaw plugin — schedule_task provider param", () => {
   let dbPath: string;
 
   beforeAll(() => {
-    tmp = mkdtempSync(join(tmpdir(), "ebb-provider-test-"));
+    tmp = mkdtempSync(join(tmpdir(), "tidegap-provider-test-"));
     dbPath = join(tmp, "queue.db");
   });
   afterAll(() => rmSync(tmp, { recursive: true, force: true }));
@@ -759,7 +759,7 @@ describe("Tidegap OpenClaw plugin — submitted-status rendering", () => {
   let dbPath: string;
 
   beforeAll(() => {
-    tmp = mkdtempSync(join(tmpdir(), "ebb-submitted-test-"));
+    tmp = mkdtempSync(join(tmpdir(), "tidegap-submitted-test-"));
     dbPath = join(tmp, "queue.db");
   });
   afterAll(() => rmSync(tmp, { recursive: true, force: true }));
@@ -833,7 +833,7 @@ describe("Tidegap OpenClaw plugin — runDispatchTick skips provider-less tasks"
   let dbPath: string;
 
   beforeAll(() => {
-    tmp = mkdtempSync(join(tmpdir(), "ebb-skip-test-"));
+    tmp = mkdtempSync(join(tmpdir(), "tidegap-skip-test-"));
     dbPath = join(tmp, "queue.db");
   });
   afterAll(() => rmSync(tmp, { recursive: true, force: true }));
@@ -936,7 +936,7 @@ describe("Tidegap OpenClaw plugin — result delivery", () => {
   });
 
   it("deliverResult writes a file and POSTs a webhook", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "ebb-deliver-"));
+    const dir = mkdtempSync(join(tmpdir(), "tidegap-deliver-"));
     const filePath = join(dir, "report.md");
     let posted: { task_id?: string } | undefined;
     const realFetch = globalThis.fetch;
@@ -965,7 +965,7 @@ describe("Tidegap OpenClaw plugin — result delivery", () => {
   });
 
   it("setDeliveryConfig / getDeliveryConfig round-trip via the sidecar", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "ebb-sidecar-"));
+    const dir = mkdtempSync(join(tmpdir(), "tidegap-sidecar-"));
     setDeliveryStorePath(join(dir, "delivery.db"));
     try {
       await setDeliveryConfig("t-z", { modes: ["chat", "file"], filePath: "/tmp/r.md" });
@@ -979,7 +979,7 @@ describe("Tidegap OpenClaw plugin — result delivery", () => {
   });
 
   it("recordDeliveryOutcomes persists per-mode outcomes for later audit", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "ebb-outcomes-"));
+    const dir = mkdtempSync(join(tmpdir(), "tidegap-outcomes-"));
     setDeliveryStorePath(join(dir, "delivery.db"));
     try {
       await recordDeliveryOutcomes("t-o", { modes: ["chat", "webhook"] }, [
@@ -1085,7 +1085,7 @@ describe("Tidegap OpenClaw plugin — result delivery", () => {
   // ── PDF delivery (ROADMAP item 8) ──────────────────────────────────────────
 
   it("deliverResult pdf renders the HTML report via a stubbed puppeteer", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "ebb-pdf-"));
+    const dir = mkdtempSync(join(tmpdir(), "tidegap-pdf-"));
     const filePath = join(dir, "report.pdf");
     let setContentHtml: string | undefined;
     const pdfCalls: Array<{ path?: string }> = [];
@@ -1167,7 +1167,7 @@ describe("Tidegap OpenClaw plugin — task visibility (v0.17)", () => {
   let savedHome: string | undefined;
 
   beforeAll(() => {
-    tmp = mkdtempSync(join(tmpdir(), "ebb-visibility-test-"));
+    tmp = mkdtempSync(join(tmpdir(), "tidegap-visibility-test-"));
     dbPath = join(tmp, "queue.db");
     // The pre-tick quota sweep reads ~/.tidegap/config; point HOME at a
     // temp dir so the test controls that file.

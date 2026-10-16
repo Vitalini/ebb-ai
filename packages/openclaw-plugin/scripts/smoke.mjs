@@ -16,7 +16,7 @@ import { join } from "node:path";
 
 import { mockGridFeed, Scheduler, TaskStore } from "@tidegap/core";
 
-const tmp = mkdtempSync(join(tmpdir(), "ebb-smoke-"));
+const tmp = mkdtempSync(join(tmpdir(), "tidegap-smoke-"));
 const dbPath = join(tmp, "queue.db");
 
 function fail(msg) {

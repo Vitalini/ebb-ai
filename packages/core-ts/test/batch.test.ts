@@ -289,7 +289,7 @@ describe("Batch API routing (§0.1)", () => {
   });
 
   it("two racing ticks on the same DB complete a submitted row exactly once", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "ebb-batch-"));
+    const dir = mkdtempSync(join(tmpdir(), "tidegap-batch-"));
     const dbPath = join(dir, "queue.db");
     const s1 = new Scheduler({ feed: mockGridFeed(), dbPath });
     const adapter = makeBatchAdapter();
@@ -326,7 +326,7 @@ describe("Batch API routing (§0.1)", () => {
         close(): void;
       };
     };
-    const dir = mkdtempSync(join(tmpdir(), "ebb-batch-xl-"));
+    const dir = mkdtempSync(join(tmpdir(), "tidegap-batch-xl-"));
     const dbPath = join(dir, "queue.db");
     const raw = new DatabaseSync(dbPath);
     raw.exec(`

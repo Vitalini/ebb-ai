@@ -39,7 +39,7 @@ const BERLIN_MON_10: QuotaResetSchedule = {
 let dir: string;
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), "ebb-quota-"));
+  dir = mkdtempSync(join(tmpdir(), "tidegap-quota-"));
 });
 afterEach(() => {
   vi.useRealTimers();

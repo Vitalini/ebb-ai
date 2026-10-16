@@ -53,7 +53,7 @@ describe("tidegap ui server", () => {
   let probe: ReturnType<typeof daemonStatus>;
 
   beforeEach(async () => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-ui-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-ui-"));
     dbPath = join(dir, "queue.db");
     assetDir = join(dir, "ui");
     mkdirSync(assetDir);
@@ -331,7 +331,7 @@ describe("tidegap ui assets", () => {
   });
 
   it("the real asset directory is served", async () => {
-    const tmp = mkdtempSync(join(tmpdir(), "ebb-ui-assets-"));
+    const tmp = mkdtempSync(join(tmpdir(), "tidegap-ui-assets-"));
     const ui = await startUiServer({
       token: TOKEN,
       dbPath: join(tmp, "queue.db"),
@@ -372,7 +372,7 @@ describe("tidegap ui internals", () => {
   });
 
   it("caches the forecast so change events do not spend provider quota", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "ebb-ui-fc-"));
+    const dir = mkdtempSync(join(tmpdir(), "tidegap-ui-fc-"));
     const store = new TaskStore({ dbPath: join(dir, "queue.db") });
     const inner = mockGridFeed();
     let calls = 0;

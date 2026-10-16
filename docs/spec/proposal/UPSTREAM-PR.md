@@ -27,7 +27,7 @@ When deferral is available (Anthropic Message Batches API, OpenAI Batch API, AWS
 - **Provider-specific extensions** carried in `arguments` or `_meta`. Doesn't compose across hosts.
 - **Out-of-band scheduling layers** that wrap MCP without speaking it. Loses the protocol's interop benefit.
 
-This proposal adds the smallest viable surface to fix that: three optional fields, all already present in working server implementations (`@ebb-ai/mcp`, see § Companion implementation below).
+This proposal adds the smallest viable surface to fix that: three optional fields, all already present in working server implementations (`@tidegap/mcp`, see § Companion implementation below).
 
 ### Specification changes
 
@@ -75,11 +75,11 @@ Including these would balloon the PR; both can be added incrementally once the t
 
 ### Companion implementation
 
-A reference server implementing the proposed fields ships today: [`@ebb-ai/mcp@0.11.0`](https://www.npmjs.com/package/@ebb-ai/mcp) (Apache-2.0). It exposes a `schedule_task` tool that accepts `deadline` and `carbon_budget_g`, backed by a multi-source grid feed (UK Carbon Intensity, EIA, ENTSO-E, Electricity Maps; 31 zones across NA / EU / APAC), per-model energy coefficients (Patterson 2021, Luccioni 2024, HF AI Energy Score), Ed25519-signed receipts (`ebb verify`), and a WAL-enabled persistent SQLite queue (`~/.ebb-ai/queue.db`). Source: <https://github.com/Vitalini/ebb-ai>.
+A reference server implementing the proposed fields ships today: [`@tidegap/mcp@0.11.0`](https://www.npmjs.com/package/@tidegap/mcp) (Apache-2.0). It exposes a `schedule_task` tool that accepts `deadline` and `carbon_budget_g`, backed by a multi-source grid feed (UK Carbon Intensity, EIA, ENTSO-E, Electricity Maps; 31 zones across NA / EU / APAC), per-model energy coefficients (Patterson 2021, Luccioni 2024, HF AI Energy Score), Ed25519-signed receipts (`tidegap verify`), and a WAL-enabled persistent SQLite queue (`~/.tidegap/queue.db`). Source: <https://github.com/tidegap/tidegap>.
 
 The server has 1,355 passing automated tests (874 TS + 481 Python), including an even-distribution simulation (10,000 synthetic deferred tasks across 7 monitored grid zones) that empirically verifies the scheduler does *not* create a new peak at the global cleanest hour — the chosen-hour distribution sits at ~11 % maximum concentration with randomised tie-break + per-region phase, well below the 24-bucket uniform floor of 4.2 %.
 
-The fields proposed here are exactly the fields `@ebb-ai/mcp` already accepts; merging this proposal would make `@ebb-ai/mcp` a conforming implementation of the standard rather than a provider-specific extension.
+The fields proposed here are exactly the fields `@tidegap/mcp` already accepts; merging this proposal would make `@tidegap/mcp` a conforming implementation of the standard rather than a provider-specific extension.
 
 ### Out of scope
 
@@ -105,7 +105,7 @@ If maintainers want a spec-level conformance test added to `modelcontextprotocol
 2. Approval for naming (`priority`, `deadline`, `carbon_budget` — happy to bikeshed to `scheduling.{priority,deadline,carbonBudget}` if a nested object is preferred).
 3. Approval for the carbon-budget error code (`-32000`) or a different code from the user-defined range.
 
-I'm available for review iteration. Reference implementation is shippable today; if this lands, I will update `@ebb-ai/mcp` to consume the new field names from the spec verbatim (rename `carbon_budget_g` → `carbon_budget` per the spec).
+I'm available for review iteration. Reference implementation is shippable today; if this lands, I will update `@tidegap/mcp` to consume the new field names from the spec verbatim (rename `carbon_budget_g` → `carbon_budget` per the spec).
 
 ---
 
@@ -189,7 +189,7 @@ be met inside deadline"` rather than silently dispatching to a
 window that exceeds the budget.
 
 A reference implementation honouring all three fields is available
-at [`@ebb-ai/mcp`](https://www.npmjs.com/package/@ebb-ai/mcp).
+at [`@tidegap/mcp`](https://www.npmjs.com/package/@tidegap/mcp).
 ```
 
 ### B.3 Changelog entry
@@ -225,6 +225,6 @@ When opening:
 
 After merging:
 
-- [ ] Bump `@ebb-ai/mcp` to consume the new field names verbatim. Rename `carbon_budget_g` → `carbon_budget` per the spec.
-- [ ] Publish a new `@ebb-ai/mcp` minor (current: 0.11.0) as a conforming implementation.
+- [ ] Bump `@tidegap/mcp` to consume the new field names verbatim. Rename `carbon_budget_g` → `carbon_budget` per the spec.
+- [ ] Publish a new `@tidegap/mcp` minor (current: 0.11.0) as a conforming implementation.
 - [ ] Update the project's spec-engagement log with the merged PR URL.

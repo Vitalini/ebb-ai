@@ -1,14 +1,14 @@
-# ebb-ai in Cursor
+# Tidegap in Cursor
 
 [Cursor](https://cursor.com) speaks the Model Context Protocol natively
-since v0.45. Wiring ebb-ai in is a one-file change.
+since v0.45. Wiring Tidegap in is a one-file change.
 
 ## 1. Build the MCP server
 
 ```bash
-cd /path/to/ebb-ai
+cd /path/to/tidegap
 pnpm install
-pnpm --filter @ebb-ai/mcp build
+pnpm --filter @tidegap/mcp build
 ```
 
 This produces `packages/mcp-server/dist/server.js`.
@@ -20,11 +20,11 @@ Edit `~/.cursor/mcp.json` (create it if it doesn't exist):
 ```json
 {
   "mcpServers": {
-    "ebb-ai": {
+    "tidegap": {
       "command": "node",
-      "args": ["/absolute/path/to/ebb-ai/packages/mcp-server/dist/server.js"],
+      "args": ["/absolute/path/to/tidegap/packages/mcp-server/dist/server.js"],
       "env": {
-        "EBB_ELECTRICITY_MAPS_API_KEY": "optional — falls back to mock data"
+        "TIDEGAP_ELECTRICITY_MAPS_API_KEY": "optional — falls back to mock data"
       }
     }
   }
@@ -32,7 +32,7 @@ Edit `~/.cursor/mcp.json` (create it if it doesn't exist):
 ```
 
 Restart Cursor. Open the **MCP** panel under Settings → Features →
-Model Context Protocol. You should see `ebb-ai` listed with three tools:
+Model Context Protocol. You should see `tidegap` listed with three tools:
 
 - `get_grid_forecast` — N-hour carbon-intensity forecast for a region.
 - `schedule_task` — queue a prompt for the cleanest in-deadline window.
@@ -52,9 +52,9 @@ get back a `task_id`, and surface it to you.
 
 - The MCP server is stdio-based — Cursor manages its lifecycle. When
   Cursor quits, the server quits. Long-deferred tasks (overnight) do
-  not survive Cursor restart in v0.2. The `ebb tick` always-on
+  not survive Cursor restart in v0.2. The `tidegap tick` always-on
   daemon planned for v0.3 closes this gap.
-- The same `ebb-ai/mcp` binary works for Claude Desktop, Claude Code,
+- The same `@tidegap/mcp` binary works for Claude Desktop, Claude Code,
   OpenClaw, and OpenAI Codex CLI. The only differences are the
   config-file path and whether your host launches MCP servers from
   TOML or JSON.

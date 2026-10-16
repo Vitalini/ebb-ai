@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install ebb-ai as an MCP server in OpenClaw.
+# Install Tidegap as an MCP server in OpenClaw.
 #
 # Assumes:
 #   - This script is run from anywhere; it discovers the repo via its
@@ -17,43 +17,43 @@ SERVER_ENTRY="${REPO_ROOT}/packages/mcp-server/dist/server.js"
 OC_CONFIG_DIR="${HOME}/.openclaw"
 OC_CONFIG_FILE="${OC_CONFIG_DIR}/mcp.json"
 
-echo "[ebb-ai] repo: ${REPO_ROOT}"
+echo "[tidegap] repo: ${REPO_ROOT}"
 
 if [ ! -f "${REPO_ROOT}/package.json" ]; then
-  echo "[ebb-ai] FATAL: cannot locate repo root (expected package.json at ${REPO_ROOT})" >&2
+  echo "[tidegap] FATAL: cannot locate repo root (expected package.json at ${REPO_ROOT})" >&2
   exit 1
 fi
 
-echo "[ebb-ai] installing workspace deps…"
+echo "[tidegap] installing workspace deps…"
 (cd "${REPO_ROOT}" && pnpm install --frozen-lockfile)
 
-echo "[ebb-ai] building MCP server…"
-(cd "${REPO_ROOT}" && pnpm --filter @ebb-ai/core build)
-(cd "${REPO_ROOT}" && pnpm --filter @ebb-ai/mcp build)
+echo "[tidegap] building MCP server…"
+(cd "${REPO_ROOT}" && pnpm --filter @tidegap/core build)
+(cd "${REPO_ROOT}" && pnpm --filter @tidegap/mcp build)
 
 if [ ! -f "${SERVER_ENTRY}" ]; then
-  echo "[ebb-ai] FATAL: server entry not found at ${SERVER_ENTRY}" >&2
+  echo "[tidegap] FATAL: server entry not found at ${SERVER_ENTRY}" >&2
   exit 1
 fi
 
 mkdir -p "${OC_CONFIG_DIR}"
 
 if [ ! -f "${OC_CONFIG_FILE}" ]; then
-  echo "[ebb-ai] creating new OpenClaw MCP config at ${OC_CONFIG_FILE}"
+  echo "[tidegap] creating new OpenClaw MCP config at ${OC_CONFIG_FILE}"
   cat > "${OC_CONFIG_FILE}" <<EOF
 {
   "mcpServers": {
-    "ebb-ai": {
+    "tidegap": {
       "command": "node",
       "args": ["${SERVER_ENTRY}"],
       "env": {
-        "EBB_DEFAULT_REGION": "US-CAL-CISO"
+        "TIDEGAP_DEFAULT_REGION": "US-CAL-CISO"
       }
     }
   }
 }
 EOF
-  echo "[ebb-ai] done. restart OpenClaw to pick up the new MCP server."
+  echo "[tidegap] done. restart OpenClaw to pick up the new MCP server."
   exit 0
 fi
 
@@ -61,19 +61,19 @@ fi
 if command -v jq >/dev/null 2>&1; then
   TMP="$(mktemp)"
   jq --arg cmd "node" --arg arg "${SERVER_ENTRY}" \
-     '.mcpServers."ebb-ai" = { "command": $cmd, "args": [$arg], "env": { "EBB_DEFAULT_REGION": "US-CAL-CISO" } }' \
+     '.mcpServers."tidegap" = { "command": $cmd, "args": [$arg], "env": { "TIDEGAP_DEFAULT_REGION": "US-CAL-CISO" } }' \
      "${OC_CONFIG_FILE}" > "${TMP}"
   mv "${TMP}" "${OC_CONFIG_FILE}"
-  echo "[ebb-ai] merged into ${OC_CONFIG_FILE}. restart OpenClaw."
+  echo "[tidegap] merged into ${OC_CONFIG_FILE}. restart OpenClaw."
 else
-  echo "[ebb-ai] WARNING: jq not installed — cannot safely merge into existing ${OC_CONFIG_FILE}." >&2
-  echo "[ebb-ai] Please add this block to mcpServers manually:" >&2
+  echo "[tidegap] WARNING: jq not installed — cannot safely merge into existing ${OC_CONFIG_FILE}." >&2
+  echo "[tidegap] Please add this block to mcpServers manually:" >&2
   cat >&2 <<EOF
-    "ebb-ai": {
+    "tidegap": {
       "command": "node",
       "args": ["${SERVER_ENTRY}"],
       "env": {
-        "EBB_DEFAULT_REGION": "US-CAL-CISO"
+        "TIDEGAP_DEFAULT_REGION": "US-CAL-CISO"
       }
     }
 EOF

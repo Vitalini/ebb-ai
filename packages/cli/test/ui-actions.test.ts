@@ -57,7 +57,7 @@ describe("tidegap ui write API", () => {
   let feedCalls: number;
 
   beforeEach(async () => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-ui-actions-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-ui-actions-"));
     dbPath = join(dir, "queue.db");
     const assetDir = join(dir, "ui");
     mkdirSync(assetDir);

@@ -43,7 +43,7 @@ describe("systemdService", () => {
 
   it("emits Environment= lines when env is supplied", () => {
     const unit = systemdService({
-      ebbBinaryPath: "/usr/bin/ebb",
+      ebbBinaryPath: "/usr/bin/tidegap",
       dbPath: "/tmp/q.sqlite",
       env: { ANTHROPIC_API_KEY: "sk-test", FOO: "bar" },
     });
@@ -53,7 +53,7 @@ describe("systemdService", () => {
 
   it("omits Environment= lines when env is not supplied", () => {
     const unit = systemdService({
-      ebbBinaryPath: "/usr/bin/ebb",
+      ebbBinaryPath: "/usr/bin/tidegap",
       dbPath: "/tmp/q.sqlite",
     });
     expect(unit).not.toMatch(/^Environment=/m);

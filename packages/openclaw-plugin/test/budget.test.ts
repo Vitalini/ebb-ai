@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TaskStore, windowBounds, type CarbonAlert } from "@tidegap/core";
 
-import ebbPlugin, { runDispatchTick } from "../src/index.js";
+import tidegapPlugin, { runDispatchTick } from "../src/index.js";
 import {
   deliverCarbonAlert,
   formatCarbonAlertMessage,
@@ -21,7 +21,7 @@ import {
 import type { StubResolvedTool } from "./stub-tool-plugin.js";
 
 function tool(name: string): StubResolvedTool {
-  const found = ebbPlugin.tools.find((t) => t.name === name);
+  const found = tidegapPlugin.tools.find((t) => t.name === name);
   if (!found) throw new Error(`tool ${name} is not registered`);
   return found;
 }
@@ -61,7 +61,7 @@ describe("carbon-alert delivery helpers", () => {
   });
 
   it("file mode writes the alert to disk", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "ebb-alert-file-"));
+    const dir = mkdtempSync(join(tmpdir(), "tidegap-alert-file-"));
     const filePath = join(dir, "alert.txt");
     const outcomes = await deliverCarbonAlert(ALERT, undefined, {
       modes: ["file"],
@@ -85,7 +85,7 @@ describe("runDispatchTick fires a carbon-budget alert on crossing", () => {
   let config: { dbPath: string; carbonBudgetG: number; carbonBudgetWindow: "daily" };
 
   beforeEach(() => {
-    tmp = mkdtempSync(join(tmpdir(), "ebb-plugin-budget-"));
+    tmp = mkdtempSync(join(tmpdir(), "tidegap-plugin-budget-"));
     dbPath = join(tmp, "queue.db");
     config = { dbPath, carbonBudgetG: 0.0001, carbonBudgetWindow: "daily" };
   });

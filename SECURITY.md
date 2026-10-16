@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Security fixes apply to the latest minor release on `main`. ebb-ai is
+Security fixes apply to the latest minor release on `main`. Tidegap is
 pre-1.0; please always upgrade to the latest tag before reporting.
 
 | Version | Supported |
@@ -16,7 +16,7 @@ pre-1.0; please always upgrade to the latest tag before reporting.
 
 Use the repository's private **Security Advisory** submission form:
 
-> https://github.com/Vitalini/ebb-ai/security/advisories/new
+> https://github.com/tidegap/tidegap/security/advisories/new
 
 Include:
 
@@ -34,17 +34,17 @@ ship a fix within 7 days.
 
 In scope:
 
-- The `@ebb-ai/core`, `@ebb-ai/mcp`, `@ebb-ai/cli` packages.
-- The `ebb_ai` Python package.
+- The `@tidegap/core`, `@tidegap/mcp`, `@tidegap/cli` packages.
+- The `tidegap` Python package.
 - The `apps/web` Next.js app.
 
 Out of scope:
 
 - Vulnerabilities in upstream dependencies — please report those to
-  their respective maintainers. ebb-ai does not run a separate
+  their respective maintainers. Tidegap does not run a separate
   triage queue for third-party CVEs.
 - Issues in your own deployment configuration (e.g. forgotten API
-  keys, misconfigured launchd plist, weak sudo policy) — ebb-ai's
+  keys, misconfigured launchd plist, weak sudo policy) — Tidegap's
   defaults are documented as conservative; deployment is the
   operator's responsibility.
 

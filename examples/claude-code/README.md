@@ -1,4 +1,4 @@
-# ebb-ai for Claude Code
+# Tidegap for Claude Code
 
 Drop-in MCP integration that lets Claude Code defer expensive coding
 tasks to the cleanest grid window — long codebase analyses, large
@@ -17,17 +17,17 @@ to "answer me at breakfast" is irrelevant.
 2. Register the server with Claude Code's CLI:
 
    ```bash
-   claude mcp add ebb-ai -- node /ABSOLUTE/PATH/TO/ebb-ai/packages/mcp-server/dist/server.js
+   claude mcp add tidegap -- node /ABSOLUTE/PATH/TO/tidegap/packages/mcp-server/dist/server.js
    ```
 
    To pass environment variables (Electricity Maps API key, default
    region):
 
    ```bash
-   claude mcp add ebb-ai \
-     -e EBB_ELECTRICITY_MAPS_API_KEY=YOUR_KEY \
-     -e EBB_DEFAULT_REGION=US-CAL-CISO \
-     -- node /ABSOLUTE/PATH/TO/ebb-ai/packages/mcp-server/dist/server.js
+   claude mcp add tidegap \
+     -e TIDEGAP_ELECTRICITY_MAPS_API_KEY=YOUR_KEY \
+     -e TIDEGAP_DEFAULT_REGION=US-CAL-CISO \
+     -- node /ABSOLUTE/PATH/TO/tidegap/packages/mcp-server/dist/server.js
    ```
 
    `claude mcp add` writes the entry into `~/.claude.json`'s
@@ -40,10 +40,10 @@ to "answer me at breakfast" is irrelevant.
    /mcp
    ```
 
-   You should see `ebb-ai` listed. Then:
+   You should see `tidegap` listed. Then:
 
    ```
-   Use ebb-ai to tell me the cleanest hour in the next 12 hours for US-CAL-CISO.
+   Use Tidegap to tell me the cleanest hour in the next 12 hours for US-CAL-CISO.
    ```
 
    Claude Code should call `get_grid_forecast(region="US-CAL-CISO", hours=12)`
@@ -57,13 +57,13 @@ For reference, the result of `claude mcp add` looks like this in your
 ```json
 {
   "mcpServers": {
-    "ebb-ai": {
+    "tidegap": {
       "command": "node",
       "args": [
-        "/ABSOLUTE/PATH/TO/ebb-ai/packages/mcp-server/dist/server.js"
+        "/ABSOLUTE/PATH/TO/tidegap/packages/mcp-server/dist/server.js"
       ],
       "env": {
-        "EBB_DEFAULT_REGION": "US-CAL-CISO"
+        "TIDEGAP_DEFAULT_REGION": "US-CAL-CISO"
       }
     }
   }
@@ -83,7 +83,7 @@ description: Defer this task to the cleanest grid window before the supplied dea
 arg: deadline (ISO-8601 timestamp)
 ---
 
-Call `mcp__ebb-ai__schedule_task` with the current conversation's last
+Call `mcp__tidegap__schedule_task` with the current conversation's last
 non-trivial instruction as the `prompt`, the user-supplied `$ARGS` as
 the `deadline` (validate it is ISO-8601 and in the future), and
 `US-CAL-CISO` as the default region unless the user specified
@@ -95,18 +95,18 @@ goes back to work on something else.
 
 ## Suggested permissions
 
-If you frequently use ebb-ai, allow its read-only tools without
+If you frequently use Tidegap, allow its read-only tools without
 prompts. Add to `~/.claude/settings.json`:
 
 ```json
 {
   "permissions": {
     "allow": [
-      "mcp__ebb-ai__get_grid_forecast",
-      "mcp__ebb-ai__check_queue_status"
+      "mcp__tidegap__get_grid_forecast",
+      "mcp__tidegap__check_queue_status"
     ],
     "ask": [
-      "mcp__ebb-ai__schedule_task"
+      "mcp__tidegap__schedule_task"
     ]
   }
 }

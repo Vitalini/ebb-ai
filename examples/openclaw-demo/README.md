@@ -11,5 +11,5 @@ directory contains:
 
 - `SKILL.md` — the OpenClaw skill metadata, trigger phrases, and
   workflow patterns.
-- `scripts/install.sh` — one-shot installer that wires `@ebb-ai/mcp`
+- `scripts/install.sh` — one-shot installer that wires `@tidegap/mcp`
   into `~/.openclaw/mcp.json`.

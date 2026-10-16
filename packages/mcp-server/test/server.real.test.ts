@@ -59,7 +59,7 @@ async function connect(deps: Parameters<typeof createEbbServer>[0] = {}) {
 }
 
 function tmpDb(): { dir: string; dbPath: string } {
-  const dir = mkdtempSync(join(tmpdir(), "ebb-mcp-test-"));
+  const dir = mkdtempSync(join(tmpdir(), "tidegap-mcp-test-"));
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
   return { dir, dbPath: join(dir, "queue.db") };
 }

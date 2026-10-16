@@ -2,7 +2,7 @@
 
 ## Our pledge
 
-We as members, contributors, and maintainers of ebb-ai pledge to
+We as members, contributors, and maintainers of Tidegap pledge to
 make participation in our community a harassment-free experience for
 everyone, regardless of age, body size, visible or invisible
 disability, ethnicity, sex characteristics, gender identity and

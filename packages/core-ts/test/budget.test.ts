@@ -129,7 +129,7 @@ describe("carbonBudgetStatus", () => {
 describe("loadCarbonBudgetConfig", () => {
   let dir: string;
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-budget-cfg-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-budget-cfg-"));
   });
   afterEach(() => {
     rmSync(dir, { recursive: true, force: true });
@@ -208,7 +208,7 @@ describe("TaskStore carbon-budget markers", () => {
   });
 
   it("shares the marker across two handles on the same file (multi-process)", () => {
-    const dir = mkdtempSync(join(tmpdir(), "ebb-budget-mp-"));
+    const dir = mkdtempSync(join(tmpdir(), "tidegap-budget-mp-"));
     const dbPath = join(dir, "queue.db");
     const a = new TaskStore({ dbPath });
     const b = new TaskStore({ dbPath });
@@ -237,7 +237,7 @@ describe("Scheduler carbon-budget alert hook", () => {
   let dir: string;
   let dbPath: string;
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-budget-sched-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-budget-sched-"));
     dbPath = join(dir, "queue.db");
   });
   afterEach(() => {

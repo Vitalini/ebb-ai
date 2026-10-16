@@ -25,7 +25,7 @@ afterEach(() => {
 });
 
 function tmp(): { dbPath: string; configPath: string } {
-  const dir = mkdtempSync(join(tmpdir(), "ebb-mcp-visibility-"));
+  const dir = mkdtempSync(join(tmpdir(), "tidegap-mcp-visibility-"));
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
   return { dbPath: join(dir, "queue.db"), configPath: join(dir, "config") };
 }

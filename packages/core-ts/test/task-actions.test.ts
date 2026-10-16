@@ -70,7 +70,7 @@ describe("task actions (ui v2)", () => {
   }
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-actions-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-actions-"));
     dbPath = join(dir, "queue.db");
   });
 

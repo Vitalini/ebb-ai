@@ -9,11 +9,11 @@
 ### Claude Code (one line)
 
 ```
-/plugin marketplace add Vitalini/ebb-ai
-/plugin install ebb-ai
+/plugin marketplace add tidegap/tidegap
+/plugin install tidegap
 ```
 
-Auto-wires the MCP server and adds eight `/ebb-ai:*` slash commands.
+Auto-wires the MCP server and adds eight `/tidegap:*` slash commands.
 
 ### Cursor · Claude Desktop · any other MCP host
 
@@ -22,9 +22,9 @@ Add the MCP server to your host's config:
 ```json
 {
   "mcpServers": {
-    "ebb-ai": {
+    "tidegap": {
       "command": "npx",
-      "args": ["-y", "@ebb-ai/mcp"]
+      "args": ["-y", "@tidegap/mcp"]
     }
   }
 }
@@ -33,23 +33,23 @@ Add the MCP server to your host's config:
 Locations:
 - **Claude Desktop:** `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) · `%APPDATA%\Claude\claude_desktop_config.json` (Windows)
 - **Cursor:** `~/.cursor/mcp.json` or Settings → MCP
-- **Cline / Windsurf / Zed / Continue / Goose / OpenClaw:** see the host-specific snippets at <https://www.ebb-ai.com/#install>
+- **Cline / Windsurf / Zed / Continue / Goose / OpenClaw:** see the host-specific snippets at <https://www.tidegap.com/#install>
 
 ### Python library (no MCP)
 
 ```bash
-pip install ebb-ai
+pip install tidegap
 ```
 
-Use the `ebb_ai.Scheduler` API directly.
+Use the `tidegap.Scheduler` API directly.
 
 ### TypeScript / Node library (no MCP)
 
 ```bash
-pnpm add @ebb-ai/core
+pnpm add @tidegap/core
 ```
 
-Import `createScheduler`, `recommendWindow`, `TaskStore` from `@ebb-ai/core`.
+Import `createScheduler`, `recommendWindow`, `TaskStore` from `@tidegap/core`.
 
 ---
 
@@ -69,7 +69,7 @@ the cleanest electricity-grid hour inside the deadline. You get a
 Equivalent explicit form:
 
 ```
-/ebb-ai:defer "summarize my GitHub notifications" --by tomorrow 6pm
+/tidegap:defer "summarize my GitHub notifications" --by tomorrow 6pm
 ```
 
 ---
@@ -80,13 +80,13 @@ The MCP server **queues** tasks but doesn't run a clock. To actually
 dispatch at the chosen window, install the CLI's tick daemon once:
 
 ```bash
-npm install -g @ebb-ai/cli
-ebb install      # registers launchd (macOS) or systemd (Linux) cron
-ebb status       # confirm the tick is wired
+npm install -g @tidegap/cli
+tidegap install      # registers launchd (macOS) or systemd (Linux) cron
+tidegap status       # confirm the tick is wired
 ```
 
 Without the daemon, tasks sit queued; you can dispatch manually with
-`ebb tick --once`.
+`tidegap tick --once`.
 
 ---
 
@@ -96,31 +96,31 @@ GB is always live via UK National Grid ESO with no API key. To unlock
 live data for the US and EU regions, set any of:
 
 ```bash
-export EBB_EIA_API_KEY="..."              # US ISOs (free at eia.gov)
-export EBB_ENTSOE_SECURITY_TOKEN="..."    # Europe (free at transparency.entsoe.eu)
-export EBB_ELECTRICITY_MAPS_API_KEY="..." # universal fallback (free at electricitymaps.com)
+export TIDEGAP_EIA_API_KEY="..."              # US ISOs (free at eia.gov)
+export TIDEGAP_ENTSOE_SECURITY_TOKEN="..."    # Europe (free at transparency.entsoe.eu)
+export TIDEGAP_ELECTRICITY_MAPS_API_KEY="..." # universal fallback (free at electricitymaps.com)
 ```
 
-Without any of these, ebb-ai uses a deterministic mock curve so the
+Without any of these, Tidegap uses a deterministic mock curve so the
 stack still works end-to-end (useful for demos and CI).
 
 ---
 
 ## Where to go next
 
-- **Live carbon map + planner:** <https://www.ebb-ai.com/>
-- **Full docs (all 8 commands + 10 MCP tools + install matrix):** <https://www.ebb-ai.com/docs>
-- **Why it exists:** <https://www.ebb-ai.com/about>
-- **Architecture:** <https://www.ebb-ai.com/architecture>
-- **Source / issues / CHANGELOG:** <https://github.com/Vitalini/ebb-ai>
+- **Live carbon map + planner:** <https://www.tidegap.com/>
+- **Full docs (all 8 commands + 10 MCP tools + install matrix):** <https://www.tidegap.com/docs>
+- **Why it exists:** <https://www.tidegap.com/about>
+- **Architecture:** <https://www.tidegap.com/architecture>
+- **Source / issues / CHANGELOG:** <https://github.com/tidegap/tidegap>
 
 ---
 
-## Developer setup (only if hacking on ebb-ai itself)
+## Developer setup (only if hacking on Tidegap itself)
 
 ```bash
-git clone https://github.com/Vitalini/ebb-ai
-cd ebb-ai
+git clone https://github.com/tidegap/tidegap
+cd Tidegap
 pnpm install
 pnpm -r build       # build every package in the workspace
 pnpm -r test        # full TS + Python suite (current count: README.md badge)
@@ -132,7 +132,7 @@ Python port.
 Then:
 
 ```bash
-pnpm --filter @ebb-ai/web dev   # local dashboard at :3000
+pnpm --filter @tidegap/web dev   # local dashboard at :3000
 ```
 
 See `apps/web/README.md` for dashboard-specific details.

@@ -1,8 +1,8 @@
-# Marketing Channels — ebb-ai
+# Marketing Channels — Tidegap
 
 Which channels we've used / will use, what each one is good for, and the
 operator's note on each. Companion to `marketing-templates.md` in the
-ebb-ai skill (which has the actual copy templates).
+Tidegap skill (which has the actual copy templates).
 
 ## Launch sequence (do these in order)
 
@@ -14,7 +14,7 @@ ebb-ai skill (which has the actual copy templates).
 3. **MCP directory submissions** (form-based, low effort) — gets the
    project in front of MCP host users. *Not started.*
 4. **llms.txt + robots.txt for AI bots** (zero-cost) — assistants
-   recommend ebb-ai when users ask. *Deployed 2026-05-19.*
+   recommend Tidegap when users ask. *Deployed 2026-05-19.*
 5. **Show HN** (one-shot, narrow window) — best done when there's a
    real metric to lead with. *Hold until v0.9 leaderboard ships, or
    sooner if a research result emerges.*
@@ -23,7 +23,7 @@ ebb-ai skill (which has the actual copy templates).
 7. **Reddit (r/MachineLearning, r/sustainability)** (hostile to launches)
    — only post once we have a *technical* angle to lead with. *Hold.*
 8. **dev.to article** (long-form, evergreen) — useful for searchable
-   long-tail "how to do X with ebb-ai" content. *After Show HN.*
+   long-tail "how to do X with Tidegap" content. *After Show HN.*
 
 ## Per-channel notes
 
@@ -39,7 +39,7 @@ substrate (typescript, python).
 Etiquette:
 - One-line entry, alphabetically inserted, matches the list's existing
   format exactly.
-- PR title: `Add ebb-ai — <one-line>`.
+- PR title: `Add Tidegap — <one-line>`.
 - PR body: the entry line + 2-3 sentence justification.
 - Never @-mention maintainers, never bump the PR.
 - If the list has a CONTRIBUTING.md, follow it literally. If you skip
@@ -57,15 +57,15 @@ Each directory has its own format. Check the homepage for "Submit" or
 - Project name
 - One-line description (use the llms.txt summary)
 - GitHub repo URL
-- Live site URL (https://www.ebb-ai.com)
+- Live site URL (https://www.tidegap.com)
 - Categories / tags
 
-mcp-get.com may auto-detect `@ebb-ai/mcp` from npm — check before
+mcp-get.com may auto-detect `@tidegap/mcp` from npm — check before
 submitting manually.
 
 ### Show HN
 
-- Title: `Show HN: ebb-ai – carbon-aware scheduler for agentic AI workflows`
+- Title: `Show HN: Tidegap – carbon-aware scheduler for agentic AI workflows`
 - Best posting time: Tue / Wed / Thu, 09:00-12:00 ET. Avoid Fri (queue
   rolls into the weekend with low traffic).
 - Read the comments. Reply to top-level comments within 30 min of

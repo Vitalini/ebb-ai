@@ -31,7 +31,7 @@ describe("parseEnvFile", () => {
 describe("ensureEnvFile", () => {
   let dir: string;
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-env-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-env-"));
   });
   afterEach(() => {
     rmSync(dir, { recursive: true, force: true });
@@ -65,7 +65,7 @@ describe("loadEnvFileIntoProcess", () => {
   let dir: string;
   const KEY = "TIDEGAP_TEST_LOAD_KEY";
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-env-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-env-"));
     delete process.env[KEY];
   });
   afterEach(() => {

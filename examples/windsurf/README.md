@@ -1,4 +1,4 @@
-# ebb-ai in Windsurf
+# Tidegap in Windsurf
 
 [Windsurf](https://codeium.com/windsurf) by Codeium supports MCP from
 Cascade since the v0.62 wave.
@@ -6,9 +6,9 @@ Cascade since the v0.62 wave.
 ## 1. Build the MCP server
 
 ```bash
-cd /path/to/ebb-ai
+cd /path/to/tidegap
 pnpm install
-pnpm --filter @ebb-ai/mcp build
+pnpm --filter @tidegap/mcp build
 ```
 
 ## 2. Register the server in Windsurf
@@ -24,11 +24,11 @@ directly:
 ```json
 {
   "mcpServers": {
-    "ebb-ai": {
+    "tidegap": {
       "command": "node",
-      "args": ["/absolute/path/to/ebb-ai/packages/mcp-server/dist/server.js"],
+      "args": ["/absolute/path/to/tidegap/packages/mcp-server/dist/server.js"],
       "env": {
-        "EBB_ELECTRICITY_MAPS_API_KEY": "optional"
+        "TIDEGAP_ELECTRICITY_MAPS_API_KEY": "optional"
       }
     }
   }
@@ -36,7 +36,7 @@ directly:
 ```
 
 Hit the refresh icon next to *MCP Servers* in Cascade. The four
-ebb-ai tools appear under *Available Tools*.
+Tidegap tools appear under *Available Tools*.
 
 ## 3. Use it
 
@@ -54,7 +54,7 @@ return the planned ISO timestamp + task id.
   path above is stale, open Settings → Cascade → "Open MCP Config" and
   let Windsurf show you the live path.
 - Same MCP server binary as every other host. No Windsurf-specific
-  code on the ebb-ai side.
+  code on the Tidegap side.
 
 See also: [examples/cursor](../cursor/) ·
 [examples/cline](../cline/) ·

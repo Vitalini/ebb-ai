@@ -20,7 +20,7 @@ npx -y @tidegap/mcp
 In Claude Code:
 ```
 /plugin marketplace add tidegap/tidegap
-/plugin install Tidegap
+/plugin install tidegap
 ```
 
 After install, an agent can call:

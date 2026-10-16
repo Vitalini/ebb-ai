@@ -181,7 +181,7 @@ describe("Scheduler.enqueueProviderCall task-visibility fields", () => {
   let dbPath: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ebb-history-"));
+    dir = mkdtempSync(join(tmpdir(), "tidegap-history-"));
     dbPath = join(dir, "queue.db");
   });
   afterEach(() => {

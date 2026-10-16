@@ -1,11 +1,11 @@
 ---
-name: ebb-ai
+name: tidegap
 description: Carbon-aware scheduling of AI tasks. Use this skill when the user asks to defer, schedule, or queue an AI task ("run this overnight", "do it when the grid is clean", "wait until off-peak"). Also use when the user explicitly asks about grid carbon intensity, AI energy cost, or wants a CO₂ receipt for a task they're about to run. Triggers on "defer", "schedule", "overnight", "off-peak", "carbon", "energy", "grid", "emissions", "CO2", "когда дешевле", "ночью", "сетка", "выбросы".
 ---
 
-# ebb-ai — Carbon-aware scheduling
+# Tidegap — Carbon-aware scheduling
 
-This skill connects OpenClaw to a local `@ebb-ai/mcp` server that
+This skill connects OpenClaw to a local `@tidegap/mcp` server that
 schedules AI tasks to run during the cleanest available electricity-grid
 window inside a user-supplied deadline.
 
@@ -34,24 +34,24 @@ Do **not** invoke this skill for:
 
 ## Prerequisites
 
-The `@ebb-ai/mcp` server must be registered as an MCP server in
+The `@tidegap/mcp` server must be registered as an MCP server in
 OpenClaw. See `scripts/install.sh` for a one-shot installer that does
 this. Manual install:
 
 1. Build the server:
    ```bash
-   cd /path/to/ebb-ai && pnpm install && pnpm build
+   cd /path/to/tidegap && pnpm install && pnpm build
    ```
 2. Add to `~/.openclaw/mcp.json`:
    ```json
    {
      "mcpServers": {
-       "ebb-ai": {
+       "tidegap": {
          "command": "node",
-         "args": ["/abs/path/to/ebb-ai/packages/mcp-server/dist/server.js"],
+         "args": ["/abs/path/to/tidegap/packages/mcp-server/dist/server.js"],
          "env": {
-           "EBB_ELECTRICITY_MAPS_API_KEY": "optional",
-           "EBB_DEFAULT_REGION": "US-CAL-CISO"
+           "TIDEGAP_ELECTRICITY_MAPS_API_KEY": "optional",
+           "TIDEGAP_DEFAULT_REGION": "US-CAL-CISO"
          }
        }
      }
@@ -80,7 +80,7 @@ Region codes follow the Electricity Maps convention. Common ones:
 
 If the user doesn't specify a region, ask once. Default fallback is the
 server-configured default (typically `US-CAL-CISO` in our environment,
-or whatever `EBB_DEFAULT_REGION` is set to).
+or whatever `TIDEGAP_DEFAULT_REGION` is set to).
 
 ### `schedule_task(prompt, deadline, model?, region?, carbon_budget_g?)`
 

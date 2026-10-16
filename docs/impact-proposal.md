@@ -11,7 +11,7 @@ avoided, regions — and recommends one. No code changes accompany it.
 comment states the reason directly:
 
 > "No synthetic data. The site doesn't have access to your local SQLite
-> ledger (`~/.ebb-ai/queue.db`); this page explains where your numbers
+> ledger (`~/.tidegap/queue.db`); this page explains where your numbers
 > live, how to read them, and what the schema looks like."
 > — `apps/web/src/app/stats/page.tsx:1-11`
 
@@ -40,7 +40,7 @@ every place this claim appears as part of "done," not an afterthought.
 ## 2. What data exists today to build from
 
 **Local ledger.** Every dispatched task writes one row to a SQLite
-`tasks` table at `~/.ebb-ai/queue.db` (schema in
+`tasks` table at `~/.tidegap/queue.db` (schema in
 `packages/core-ts/src/storage/sqlite.ts:58-76`): `task_id`, `status`,
 `enqueued_at`, `scheduled_for`, `completed_at`, `region`,
 `carbon_budget_g`, `result_json`, `error`, `receipt_json`,
@@ -65,13 +65,13 @@ the ledger or the receipt. Section 5 treats this as an open gap, not
 something this proposal can paper over.
 
 **Signing.** Every receipt is Ed25519-signed by default
-(`packages/core-ts/src/sign.ts`). Keys live at `~/.ebb-ai/signing.key`
-(0600) and `~/.ebb-ai/signing.key.pub` (0644), generated lazily on first
+(`packages/core-ts/src/sign.ts`). Keys live at `~/.tidegap/signing.key`
+(0600) and `~/.tidegap/signing.key.pub` (0644), generated lazily on first
 use (`sign.ts:92-94`, `loadOrCreateSigningKey` at `sign.ts:118-152`).
 `signerPublicKey` is bundled on every signed receipt so a verifier needs
 no out-of-band key distribution (`types.ts:172-178`). The module's own
 header comment is explicit about the trust boundary this proposal must
-not cross: **"The keys are NEVER sent anywhere by ebb-ai itself."**
+not cross: **"The keys are NEVER sent anywhere by Tidegap itself."**
 (`sign.ts:28`). No field anywhere in `packages/core-ts/src` identifies a
 physical machine (no MAC address, no hardware id, no install id); the
 closest thing to a stable identifier is the signing keypair itself,
@@ -98,9 +98,9 @@ uncertainty sources.
 **Config precedent.** The one existing opt-in-style local setting
 (carbon budget alerts) is resolved by
 `packages/core-ts/src/budget.ts:275-297`: a `KEY=VALUE` file at
-`~/.ebb-ai/config` (path from `carbonBudgetConfigPath`,
+`~/.tidegap/config` (path from `carbonBudgetConfigPath`,
 `budget.ts:79-81`), with host-supplied environment overrides taking
-precedence (`EBB_CARBON_BUDGET_G`, `EBB_CARBON_BUDGET_WINDOW`) — the
+precedence (`TIDEGAP_CARBON_BUDGET_G`, `TIDEGAP_CARBON_BUDGET_WINDOW`) — the
 CLI/MCP/OpenClaw hosts read the ambient environment and pass it in;
 `packages/core-ts` itself never reads `process.env` (`budget.ts:236-241`,
 matching the `[0.15.0]` "No ambient state" theme, `CHANGELOG.md` → `[0.15.0]` "Theme" line, currently line 143).
@@ -144,7 +144,7 @@ flagged as unresolved:
 2. **Don't reuse the receipt-signing key for telemetry.** `sign.ts:28`
    states as a design guarantee that the signing keypair is never sent
    anywhere. v09 already reached the same conclusion independently — it
-   proposes a **separate** keypair at `~/.ebb-ai/telemetry.key`
+   proposes a **separate** keypair at `~/.tidegap/telemetry.key`
    (`v09-leaderboard.md:103-115`), rotatable without touching receipt
    integrity. This proposal keeps that separation; an opt-in aggregate
    must not fold the telemetry identity and the receipt-integrity
@@ -159,11 +159,11 @@ Everything else below assumes Design C.
 ### Opt-in mechanism
 
 Follow the exact precedent in Section 2 ("Config precedent"): a new
-`KEY=VALUE` entry in the existing `~/.ebb-ai/config` file (same file
+`KEY=VALUE` entry in the existing `~/.tidegap/config` file (same file
 `carbonBudgetConfigPath()` already reads,
-`packages/core-ts/src/budget.ts:79-81`), e.g. `EBB_IMPACT_AGGREGATE_OPT_IN=1`,
+`packages/core-ts/src/budget.ts:79-81`), e.g. `TIDEGAP_IMPACT_AGGREGATE_OPT_IN=1`,
 with the same precedence rule: a host-supplied environment override
-(`EBB_IMPACT_AGGREGATE_OPT_IN`) wins over the file, and `packages/core-ts`
+(`TIDEGAP_IMPACT_AGGREGATE_OPT_IN`) wins over the file, and `packages/core-ts`
 itself stays environment-pure — the CLI, MCP server, and OpenClaw plugin
 each read their own ambient environment/config and pass the value in, the
 same way `readEnvCredentials()` does today for the carbon budget
@@ -173,7 +173,7 @@ opts a user in implicitly; this must stay explicit per-installation.
 ### Transport and retention
 
 One signed row per (region, calendar month), submitted once the month
-closes (or on a manual `ebb stats --submit-aggregate`-style command; the
+closes (or on a manual `tidegap stats --submit-aggregate`-style command; the
 exact trigger is an implementation decision, not fixed here). Payload
 per row, following `v09-leaderboard.md:75-87`'s shape but without
 per-event timestamps or a rank-bearing identifier:
@@ -297,7 +297,7 @@ Stays refused, unconditionally:
 - Any individual task-level data surfaced publicly.
 - Any bucket below the K threshold, shown as a number (it rolls up
   instead, per Section 5).
-- Reading a user's local `~/.ebb-ai/queue.db` from the site directly —
+- Reading a user's local `~/.tidegap/queue.db` from the site directly —
   the site still has no access to it; only the user's own opted-in,
   already-aggregated upload reaches the backend.
 
