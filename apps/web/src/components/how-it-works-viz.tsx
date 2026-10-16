@@ -2,7 +2,7 @@
  * How it works — the signature animated infographic.
  *
  * A deferrable AI task lands on the dirty PEAK of the grid's 24-hour
- * carbon curve. ebb-ai rides it down the curve — the "ebb" — into the
+ * carbon curve. Tidegap rides it down the curve — the low tide — into the
  * clean overnight TROUGH and dispatches it there. From the dispatch
  * point four energy streams fan out, glowing particles flowing along
  * each, and the four wins light up together: carbon, cost, latency,
@@ -65,7 +65,7 @@ export function HowItWorksViz() {
         </h2>
         <p className="max-w-2xl text-sm leading-relaxed text-fg-muted">
           A task arrives while the grid is at peak — dirty, strained,
-          expensive. ebb-ai rides it down the carbon curve and dispatches it
+          expensive. Tidegap rides it down the carbon curve and dispatches it
           at the clean off-peak trough. From that one dispatch, four wins
           flow out at once — carbon, cost, latency and grid load — because
           they all track the same thing: grid demand.
@@ -76,7 +76,7 @@ export function HowItWorksViz() {
       <div className="overflow-hidden rounded-xl border border-rule bg-[#0a0e13]">
         <svg
           role="img"
-          aria-label="A deferrable AI task arrives at the dirty peak of the grid's 24-hour carbon-intensity curve. ebb-ai rides it down to the clean overnight trough and dispatches it there. Four energy streams then flow out to four wins — lower carbon, lower cost, lower latency, lower grid load."
+          aria-label="A deferrable AI task arrives at the dirty peak of the grid's 24-hour carbon-intensity curve. Tidegap rides it down to the clean overnight trough and dispatches it there. Four energy streams then flow out to four wins — lower carbon, lower cost, lower latency, lower grid load."
           viewBox="0 0 880 330"
           xmlns="http://www.w3.org/2000/svg"
           className="ebb-viz w-full"
@@ -409,7 +409,7 @@ export function HowItWorksViz() {
         figures vary per region per day. Cost and grid-load figures are
         labelled projected/simulated above; sources in{" "}
         <a
-          href="https://github.com/Vitalini/ebb-ai/blob/main/docs/claims.md"
+          href="https://github.com/tidegap/tidegap/blob/main/docs/claims.md"
           target="_blank"
           rel="noreferrer"
           className="text-accent hover:underline"

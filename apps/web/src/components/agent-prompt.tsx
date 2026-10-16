@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 
-const PROMPT = `Please install ebb-ai — open-source carbon-aware MCP scheduler, Apache-2.0.
+const PROMPT = `Please install Tidegap — open-source carbon-aware MCP scheduler, Apache-2.0.
 
-Instructions: https://www.ebb-ai.com/install.md
+Instructions: https://www.tidegap.com/install.md
 
 Read that file, then run the install path for whichever host
 you're in and confirm it worked.`;

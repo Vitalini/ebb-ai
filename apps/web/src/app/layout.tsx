@@ -6,14 +6,14 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "Ebb AI · carbon-aware scheduling for AI compute",
-    template: "%s · Ebb AI",
+    default: "Tidegap · carbon-aware scheduling for AI compute",
+    template: "%s · Tidegap",
   },
   description:
     "Open-source MCP server and CLI that defer non-urgent AI tasks to the cleanest electricity-grid window inside your deadline. Live carbon-intensity map of grid regions across North America, Europe and Asia-Pacific. Apache-2.0.",
-  metadataBase: new URL("https://www.ebb-ai.com"),
+  metadataBase: new URL("https://www.tidegap.com"),
   alternates: {
-    canonical: "https://www.ebb-ai.com",
+    canonical: "https://www.tidegap.com",
   },
   keywords: [
     "carbon-aware scheduling",
@@ -28,18 +28,18 @@ export const metadata: Metadata = {
     "green AI",
     "sustainable AI",
     "carbon-aware computing",
-    "ebb-ai",
+    "tidegap",
   ],
   authors: [{ name: "Vitalii Borovyk", url: "https://github.com/Vitalini" }],
   creator: "Vitalii Borovyk",
-  publisher: "Ebb AI",
+  publisher: "Tidegap",
   category: "developer tools",
   openGraph: {
-    title: "Ebb AI — Carbon-aware scheduling for agentic AI workflows",
+    title: "Tidegap — Carbon-aware scheduling for agentic AI workflows",
     description:
       "MCP server that defers non-urgent AI tasks to the cleanest grid window inside your deadline. Per-task carbon receipts, Anthropic + OpenAI Batch APIs, durable SQLite queue. Apache-2.0.",
-    url: "https://www.ebb-ai.com",
-    siteName: "Ebb AI",
+    url: "https://www.tidegap.com",
+    siteName: "Tidegap",
     locale: "en_US",
     type: "website",
     images: [
@@ -53,7 +53,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Ebb AI — Carbon-aware scheduling for agentic AI workflows",
+    title: "Tidegap — Carbon-aware scheduling for agentic AI workflows",
     description:
       "MCP server that defers non-urgent AI tasks to the cleanest grid window. 1,355 tests, 10 MCP tools, persistent SQLite queue. Apache-2.0.",
     images: ["/og-image.png"],
@@ -79,9 +79,9 @@ const jsonLd = {
   "@graph": [
     {
       "@type": "SoftwareApplication",
-      "@id": "https://www.ebb-ai.com/#software",
-      name: "Ebb AI",
-      url: "https://www.ebb-ai.com",
+      "@id": "https://www.tidegap.com/#software",
+      name: "Tidegap",
+      url: "https://www.tidegap.com",
       description:
         "Open-source carbon-aware scheduler for agentic AI workflows. Defers non-urgent LLM calls to the cleanest electricity-grid window inside a deadline via the Model Context Protocol.",
       applicationCategory: "DeveloperApplication",
@@ -94,18 +94,18 @@ const jsonLd = {
         name: "Vitalii Borovyk",
         url: "https://github.com/Vitalini",
       },
-      codeRepository: "https://github.com/Vitalini/ebb-ai",
+      codeRepository: "https://github.com/tidegap/tidegap",
       keywords:
         "carbon-aware scheduling, MCP, Model Context Protocol, Claude Code plugin, grid carbon intensity, sustainable AI",
     },
     {
       "@type": "WebSite",
-      "@id": "https://www.ebb-ai.com/#website",
-      url: "https://www.ebb-ai.com",
-      name: "Ebb AI",
+      "@id": "https://www.tidegap.com/#website",
+      url: "https://www.tidegap.com",
+      name: "Tidegap",
       description:
         "Carbon-aware scheduling for agentic AI workflows. Live electricity-grid carbon-intensity map for major LLM-provider regions.",
-      publisher: { "@id": "https://www.ebb-ai.com/#software" },
+      publisher: { "@id": "https://www.tidegap.com/#software" },
       inLanguage: "en-US",
     },
   ],

@@ -10,7 +10,7 @@
 // the data; every number on an image is backed by docs/claims.md row 31.
 //
 // Renderer: playwright-core driving the installed Google Chrome
-// (`channel: "chrome"`), or the browser at EBB_CHROME_PATH. Fonts are the
+// (`channel: "chrome"`), or the browser at TIDEGAP_CHROME_PATH. Fonts are the
 // site's system stacks, so output bytes depend on the OS and the Chrome build;
 // CI does not render, it runs scripts/check-images.mjs against the lock file
 // this script writes.
@@ -57,7 +57,7 @@ function loadForecast() {
   const min = Math.min(...points.map((point) => point.value));
   // Same rule as packages/core-ts/src/select-window.ts: the clean band is every
   // entry within max(cheapest x 0.15, 30) of the cheapest. Re-implemented here
-  // so this script needs no build of @ebb-ai/core.
+  // so this script needs no build of @tidegap/core.
   const ceiling = min + Math.max(min * 0.15, 30);
   const bandIdx = points.flatMap((point, i) => (point.value <= ceiling ? [i] : []));
   const recIdx = points.findIndex((point) => point.at === RECOMMENDED_AT);
@@ -134,11 +134,11 @@ async function launch() {
   try {
     return await chromium.launch({ channel: "chrome" });
   } catch (channelError) {
-    const path = process.env.EBB_CHROME_PATH;
+    const path = process.env.TIDEGAP_CHROME_PATH;
     if (path) return chromium.launch({ executablePath: path });
     throw new Error(
       "render-images: cannot launch Google Chrome (channel \"chrome\"). Install Google Chrome, " +
-        "or set EBB_CHROME_PATH to a Chrome/Chromium binary " +
+        "or set TIDEGAP_CHROME_PATH to a Chrome/Chromium binary " +
         "(for example after `npx playwright-core install chromium`).\n" +
         channelError.message,
     );

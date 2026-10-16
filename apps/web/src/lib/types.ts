@@ -1,9 +1,9 @@
 /**
- * Grid/forecast types for the dashboard — re-exported from @ebb-ai/core.
+ * Grid/forecast types for the dashboard — re-exported from @tidegap/core.
  *
  * These used to be a hand-maintained copy of `packages/core-ts/src/types.ts`
  * (v0.2's "zero workspace deps" stance). As of audit §2.3 the dashboard is a
- * real consumer of core: the types now come straight from `@ebb-ai/core/types`
+ * real consumer of core: the types now come straight from `@tidegap/core/types`
  * (a browser-safe subpath that pulls in no Node-only modules), so they can
  * never drift again.
  *

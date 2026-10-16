@@ -1,18 +1,18 @@
-# Install ebb-ai
+# Install Tidegap
 
 > **What this is.** Plain-text install instructions for the
-> open-source ebb-ai MCP server (Apache-2.0). Safe to read end to end
+> open-source Tidegap MCP server (Apache-2.0). Safe to read end to end
 > before running anything.
 >
-> - Project: <https://github.com/Vitalini/ebb-ai>
-> - Site: <https://www.ebb-ai.com>
+> - Project: <https://github.com/tidegap/tidegap>
+> - Site: <https://www.tidegap.com>
 > - License: Apache-2.0
 
-ebb-ai is a Model Context Protocol (MCP) server. It defers
+Tidegap is a Model Context Protocol (MCP) server. It defers
 non-urgent AI tasks to the cleanest hour of the electricity grid
 inside a deadline. It does **not** require an account, never sends
-data to ebb-ai's authors, and stores everything in a local SQLite
-file at `~/.ebb-ai/queue.db`.
+data to Tidegap's authors, and stores everything in a local SQLite
+file at `~/.tidegap/queue.db`.
 
 ---
 
@@ -24,7 +24,7 @@ agent gains ten new tools (`schedule_task`, `recommend_window`,
 `cancel_all`, `update_deadline`, `expedite_task`, `retry_task`,
 `reply_task`).
 
-The MCP server binary is `@ebb-ai/mcp`, run via `npx`. No global
+The MCP server binary is `@tidegap/mcp`, run via `npx`. No global
 install, no system changes outside the agent host's own config
 file.
 
@@ -35,17 +35,17 @@ file.
 ### Claude Code
 
 ```text
-/plugin marketplace add Vitalini/ebb-ai
-/plugin install ebb-ai
+/plugin marketplace add tidegap/tidegap
+/plugin install Tidegap
 ```
 
-Restart the session. Eight `/ebb-ai:*` slash commands and the MCP
+Restart the session. Eight `/tidegap:*` slash commands and the MCP
 server are wired automatically.
 
 ### OpenClaw
 
 ```text
-openclaw plugins install clawhub:@vitalini/ebb
+openclaw plugins install clawhub:@vitalini/tidegap
 ```
 
 The plugin self-registers on startup; no config edit needed.
@@ -58,9 +58,9 @@ differs per host:
 ```json
 {
   "mcpServers": {
-    "ebb-ai": {
+    "tidegap": {
       "command": "npx",
-      "args": ["-y", "@ebb-ai/mcp"]
+      "args": ["-y", "@tidegap/mcp"]
     }
   }
 }
@@ -109,10 +109,10 @@ If the agent sees the response, the install is done.
 The agent can now run:
 
 ```text
-/ebb-ai:defer "summarize today's commits" --by tomorrow 6pm
+/tidegap:defer "summarize today's commits" --by tomorrow 6pm
 ```
 
 (or call `schedule_task` directly) and the task lands at the
 cleanest grid hour inside the deadline.
 
-Full docs and tool reference: <https://www.ebb-ai.com/docs>
+Full docs and tool reference: <https://www.tidegap.com/docs>

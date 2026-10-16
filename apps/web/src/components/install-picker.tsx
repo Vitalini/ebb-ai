@@ -17,8 +17,8 @@ const HOSTS: Host[] = [
     id: "mcp",
     label: "MCP server (generic)",
     group: "mcp",
-    desc: "Universal — add ebb-mcp to any host that speaks Model Context Protocol.",
-    command: "npx -y @ebb-ai/mcp",
+    desc: "Universal — add tidegap-mcp to any host that speaks Model Context Protocol.",
+    command: "npx -y @tidegap/mcp",
     lang: "bash",
     followup:
       "Wire this into your host's MCP config (the snippets for specific hosts are in the dropdown).",
@@ -27,11 +27,11 @@ const HOSTS: Host[] = [
     id: "claude-code",
     label: "Claude Code (plugin)",
     group: "agent",
-    desc: "Adds eight /ebb-ai:* slash commands plus auto-wires the MCP server.",
-    command: "/plugin marketplace add Vitalini/ebb-ai\n/plugin install ebb-ai",
+    desc: "Adds eight /tidegap:* slash commands plus auto-wires the MCP server.",
+    command: "/plugin marketplace add tidegap/tidegap\n/plugin install Tidegap",
     lang: "bash",
     followup:
-      "Restart your session. Then call: /ebb-ai:defer \"summarize this\" --by tomorrow 6pm",
+      "Restart your session. Then call: /tidegap:defer \"summarize this\" --by tomorrow 6pm",
   },
   {
     id: "claude-desktop",
@@ -40,14 +40,14 @@ const HOSTS: Host[] = [
     desc: "Edit ~/Library/Application Support/Claude/claude_desktop_config.json (macOS) or %APPDATA%\\Claude\\claude_desktop_config.json (Windows).",
     command: `{
   "mcpServers": {
-    "ebb-ai": {
+    "tidegap": {
       "command": "npx",
-      "args": ["-y", "@ebb-ai/mcp"]
+      "args": ["-y", "@tidegap/mcp"]
     }
   }
 }`,
     lang: "json",
-    followup: "Restart Claude Desktop. ebb-ai tools available in any chat.",
+    followup: "Restart Claude Desktop. Tidegap tools available in any chat.",
   },
   {
     id: "cursor",
@@ -56,14 +56,14 @@ const HOSTS: Host[] = [
     desc: "Settings → MCP → Add new MCP server. Or edit ~/.cursor/mcp.json directly.",
     command: `{
   "mcpServers": {
-    "ebb-ai": {
+    "tidegap": {
       "command": "npx",
-      "args": ["-y", "@ebb-ai/mcp"]
+      "args": ["-y", "@tidegap/mcp"]
     }
   }
 }`,
     lang: "json",
-    followup: "Reload Cursor — ebb-ai shows up in the MCP servers list.",
+    followup: "Reload Cursor — Tidegap shows up in the MCP servers list.",
   },
   {
     id: "windsurf",
@@ -72,9 +72,9 @@ const HOSTS: Host[] = [
     desc: "Edit ~/.codeium/windsurf/mcp_config.json.",
     command: `{
   "mcpServers": {
-    "ebb-ai": {
+    "tidegap": {
       "command": "npx",
-      "args": ["-y", "@ebb-ai/mcp"]
+      "args": ["-y", "@tidegap/mcp"]
     }
   }
 }`,
@@ -87,11 +87,11 @@ const HOSTS: Host[] = [
     group: "ide",
     desc: "Add to ~/.continue/config.yaml under mcpServers.",
     command: `mcpServers:
-  - name: ebb-ai
+  - name: Tidegap
     command: npx
     args:
       - -y
-      - "@ebb-ai/mcp"`,
+      - "@tidegap/mcp"`,
     lang: "yaml",
     followup: "Reload the Continue panel.",
   },
@@ -102,15 +102,15 @@ const HOSTS: Host[] = [
     desc: "Cline → Settings (gear) → MCP Servers → Edit MCP Settings.",
     command: `{
   "mcpServers": {
-    "ebb-ai": {
+    "tidegap": {
       "command": "npx",
-      "args": ["-y", "@ebb-ai/mcp"],
+      "args": ["-y", "@tidegap/mcp"],
       "disabled": false
     }
   }
 }`,
     lang: "json",
-    followup: "Reload Cline. ebb-ai tools appear in Cline's tool list.",
+    followup: "Reload Cline. Tidegap tools appear in Cline's tool list.",
   },
   {
     id: "zed",
@@ -118,10 +118,10 @@ const HOSTS: Host[] = [
     group: "ide",
     desc: "In Zed settings.json, add a context_servers entry.",
     command: `"context_servers": {
-  "ebb-ai": {
+  "tidegap": {
     "command": {
       "path": "npx",
-      "args": ["-y", "@ebb-ai/mcp"]
+      "args": ["-y", "@tidegap/mcp"]
     }
   }
 }`,
@@ -133,17 +133,17 @@ const HOSTS: Host[] = [
     label: "Goose (Block)",
     group: "agent",
     desc: "goose configure → Add Extension → Command-line.",
-    command: "npx -y @ebb-ai/mcp",
+    command: "npx -y @tidegap/mcp",
     lang: "bash",
     followup:
-      "When asked for an Extension Name, enter ebb-ai. Then: goose session.",
+      "When asked for an Extension Name, enter Tidegap. Then: goose session.",
   },
   {
     id: "openclaw",
     label: "OpenClaw (plugin via ClawHub)",
     group: "agent",
-    desc: "Native OpenClaw plugin that registers eleven ebb-ai tools (schedule_task, recommend_window, check_queue_status, cancel_task, get_grid_forecast, update_deadline, cancel_all, set_delivery, expedite_task, retry_task, reply_task). Page: https://clawhub.ai/plugins/@vitalini/ebb",
-    command: "openclaw plugins install clawhub:@vitalini/ebb",
+    desc: "Native OpenClaw plugin that registers eleven Tidegap tools (schedule_task, recommend_window, check_queue_status, cancel_task, get_grid_forecast, update_deadline, cancel_all, set_delivery, expedite_task, retry_task, reply_task). Page: https://clawhub.ai/plugins/@vitalini/tidegap",
+    command: "openclaw plugins install clawhub:@vitalini/tidegap",
     lang: "bash",
     followup:
       'Restart the OpenClaw gateway. Then say "do this later" / "by tomorrow" / "overnight" in any session — schedule_task fires automatically.',
@@ -152,37 +152,37 @@ const HOSTS: Host[] = [
     id: "mcphost-cli",
     label: "mcphost / mcp-cli",
     group: "agent",
-    desc: "Generic command-line MCP host. Add ebb-ai to your hosts config.",
+    desc: "Generic command-line MCP host. Add Tidegap to your hosts config.",
     command: `{
   "mcpServers": {
-    "ebb-ai": {
+    "tidegap": {
       "command": "npx",
-      "args": ["-y", "@ebb-ai/mcp"]
+      "args": ["-y", "@tidegap/mcp"]
     }
   }
 }`,
     lang: "json",
-    followup: "mcphost --config <your-config>.json or mcp-cli with --server ebb-ai.",
+    followup: "mcphost --config <your-config>.json or mcp-cli with --server Tidegap.",
   },
   {
     id: "python-lib",
     label: "Python library",
     group: "lib",
-    desc: "Use ebb-ai directly as a Python library — no MCP host needed.",
-    command: "pip install ebb-ai",
+    desc: "Use Tidegap directly as a Python library — no MCP host needed.",
+    command: "pip install Tidegap",
     lang: "bash",
     followup:
-      "from ebb_ai import Scheduler; s = Scheduler(); await s.schedule(...). Same API as the TypeScript core.",
+      "from tidegap import Scheduler; s = Scheduler(); await s.schedule(...). Same API as the TypeScript core.",
   },
   {
     id: "node-lib",
     label: "TypeScript / Node library (no MCP)",
     group: "lib",
-    desc: "Use @ebb-ai/core directly as an npm dependency.",
-    command: "pnpm add @ebb-ai/core   # or npm install / yarn add",
+    desc: "Use @tidegap/core directly as an npm dependency.",
+    command: "pnpm add @tidegap/core   # or npm install / yarn add",
     lang: "bash",
     followup:
-      "import { createScheduler } from '@ebb-ai/core'. Same scheduler shape, no MCP wrapper.",
+      "import { createScheduler } from '@tidegap/core'. Same scheduler shape, no MCP wrapper.",
   },
 ];
 

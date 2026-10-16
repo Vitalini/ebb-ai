@@ -13,7 +13,7 @@ const config: NextConfig = {
   // Pretty-URL rewrites for the static-site pages bundled under `public/`.
   // Visitors get /architecture, /docs, /roadmap instead of the .html
   // variants. Filed under "polish #3" in v0.8.x — closes the 404 on
-  // www.ebb-ai.com that the global test pass found.
+  // www.tidegap.com that the global test pass found.
   async rewrites() {
     return [
       // /docs is now a real Next.js route.

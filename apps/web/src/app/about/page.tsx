@@ -5,13 +5,13 @@ import { VERSION } from "@/lib/version";
 export const metadata: Metadata = {
   title: "About",
   description:
-    "Ebb AI is an open-source carbon-aware scheduler for agentic AI workflows. It defers non-urgent LLM calls to the cleanest electricity-grid window inside your deadline, with per-task carbon receipts and full audit log.",
-  alternates: { canonical: "https://www.ebb-ai.com/about" },
+    "Tidegap is an open-source carbon-aware scheduler for agentic AI workflows. It defers non-urgent LLM calls to the cleanest electricity-grid window inside your deadline, with per-task carbon receipts and full audit log.",
+  alternates: { canonical: "https://www.tidegap.com/about" },
   openGraph: {
-    title: "About Ebb AI",
+    title: "About Tidegap",
     description:
       "Why a carbon-aware scheduler for LLM workflows exists, who it's for, and how it actually moves the needle.",
-    url: "https://www.ebb-ai.com/about",
+    url: "https://www.tidegap.com/about",
     type: "article",
     images: [
       {
@@ -33,7 +33,7 @@ export default function AboutPage() {
           Smarter scheduling for AI workloads.
         </h1>
         <p className="text-lg leading-relaxed text-fg-muted">
-          Ebb AI is an open-source MCP scheduler. Give it any LLM task with a
+          Tidegap is an open-source MCP scheduler. Give it any LLM task with a
           deadline, and it routes the dispatch to off-peak hours — when the
           electricity grid is less loaded, providers&apos; APIs are cheaper and
           faster, and per-task carbon is lower. A single shift with four
@@ -58,14 +58,14 @@ export default function AboutPage() {
           ), driven primarily by AI compute. Today, agent code dispatches
           synchronously by default — every &quot;summarize this overnight&quot;
           and &quot;analyze by Friday&quot; request piles onto peak hours.
-          Ebb AI automates the deferral: a huge fraction of agent work
+          Tidegap automates the deferral: a huge fraction of agent work
           (nightly digests, evaluator sweeps, batch enrichment, long-horizon
           research) doesn&apos;t need to run right now and shouldn&apos;t.
         </p>
         <p className="leading-relaxed text-fg-muted">
           <strong className="text-fg">Cost.</strong> Anthropic and OpenAI
           Batch APIs are priced 50 % below their sync siblings (projected,
-          provider list price) in exchange for a 24-hour SLA. Ebb AI
+          provider list price) in exchange for a 24-hour SLA. Tidegap
           auto-routes through Batch when the deadline allows. The same
           prompt, half the bill.
         </p>
@@ -84,14 +84,14 @@ export default function AboutPage() {
           solar / wind / hydro come on- and off-line (simulated, from the
           mock diurnal curve&apos;s per-region floor/amplitude model — see{" "}
           <a
-            href="https://github.com/Vitalini/ebb-ai/blob/main/docs/claims.md"
+            href="https://github.com/tidegap/tidegap/blob/main/docs/claims.md"
             target="_blank"
             rel="noreferrer"
             className="text-accent hover:underline"
           >
             docs/claims.md
           </a>
-          ). Ebb AI writes a per-task carbon receipt against the actual
+          ). Tidegap writes a per-task carbon receipt against the actual
           grid intensity at the moment of dispatch — auditable, region-aware,
           reproducible from the persistent SQLite ledger.
         </p>
@@ -103,12 +103,12 @@ export default function AboutPage() {
           <li>
             Your agent (Claude Code, Claude Desktop, Cursor, Windsurf,
             Continue, Cline, Zed, Goose, OpenClaw, or any MCP host) calls
-            one of Ebb AI&apos;s ten MCP tools — for example,{" "}
+            one of Tidegap&apos;s ten MCP tools — for example,{" "}
             <code className="rounded bg-bg-elev px-1 font-mono text-sm">schedule_task</code>{" "}
             with a prompt, region, and deadline.
           </li>
           <li>
-            Ebb AI fetches the live carbon-intensity forecast for that
+            Tidegap fetches the live carbon-intensity forecast for that
             region — UK National Grid ESO (key-less), U.S. EIA, ENTSO-E
             for Europe, or Electricity Maps as universal fallback.
           </li>
@@ -121,9 +121,9 @@ export default function AboutPage() {
           </li>
           <li>
             The task is persisted to a local SQLite queue at{" "}
-            <code className="rounded bg-bg-elev px-1 font-mono text-sm">~/.ebb-ai/queue.db</code>
+            <code className="rounded bg-bg-elev px-1 font-mono text-sm">~/.tidegap/queue.db</code>
             . When the chosen hour arrives, the{" "}
-            <code className="rounded bg-bg-elev px-1 font-mono text-sm">ebb tick</code>{" "}
+            <code className="rounded bg-bg-elev px-1 font-mono text-sm">tidegap tick</code>{" "}
             daemon dispatches via the provider&apos;s Batch API
             (50 % discount on the bill, same answer) when the deadline
             allows.
@@ -132,7 +132,7 @@ export default function AboutPage() {
             A carbon receipt is written: timestamp, region, exact intensity
             used for scoring, tokens in/out, dollar cost vs peak.
             Inspectable via{" "}
-            <code className="rounded bg-bg-elev px-1 font-mono text-sm">ebb stats</code>{" "}
+            <code className="rounded bg-bg-elev px-1 font-mono text-sm">tidegap stats</code>{" "}
             on the CLI. The Claude Code plugin, the OpenClaw plugin, the
             MCP server, and the CLI all read and write this same file —
             defer in one host, check in another.
@@ -152,7 +152,7 @@ export default function AboutPage() {
           <li>
             <strong className="text-fg">Compute infrastructure operators</strong>{" "}
             — anyone managing inference fleets where grid load and off-peak
-            capacity shape provisioning decisions. Ebb AI gives them per-task
+            capacity shape provisioning decisions. Tidegap gives them per-task
             telemetry about when their tasks actually run.
           </li>
           <li>
@@ -172,11 +172,11 @@ export default function AboutPage() {
             ledger makes longitudinal study cheap.
           </li>
           <li>
-            <strong className="text-fg">MCP host implementers</strong> — Ebb AI
+            <strong className="text-fg">MCP host implementers</strong> — Tidegap
             is a reference implementation of load-aware scheduling extensions to
             the Model Context Protocol; the{" "}
             <a
-              href="https://github.com/Vitalini/ebb-ai/blob/main/docs/spec/proposal/UPSTREAM-PR.md"
+              href="https://github.com/tidegap/tidegap/blob/main/docs/spec/proposal/UPSTREAM-PR.md"
               target="_blank"
               rel="noreferrer"
               className="text-accent hover:underline"
@@ -231,7 +231,7 @@ export default function AboutPage() {
             </p>
           </Link>
           <a
-            href="https://clawhub.ai/plugins/@vitalini/ebb"
+            href="https://clawhub.ai/plugins/@vitalini/tidegap"
             target="_blank"
             rel="noreferrer"
             className="rounded-md border border-rule bg-bg-card p-4 transition-colors hover:border-accent/40 hover:bg-accent/5"
@@ -239,15 +239,15 @@ export default function AboutPage() {
             <p className="font-mono text-xs uppercase tracking-wider text-accent">
               openclaw
             </p>
-            <p className="mt-1 font-semibold text-fg">@vitalini/ebb on ClawHub</p>
+            <p className="mt-1 font-semibold text-fg">@vitalini/tidegap on ClawHub</p>
             <p className="mt-1 text-sm text-fg-muted">
               Native OpenClaw plugin. Install with{" "}
               <code className="font-mono">openclaw plugins install
-              clawhub:@vitalini/ebb</code>.
+              clawhub:@vitalini/tidegap</code>.
             </p>
           </a>
           <a
-            href="https://github.com/Vitalini/ebb-ai"
+            href="https://github.com/tidegap/tidegap"
             target="_blank"
             rel="noreferrer"
             className="rounded-md border border-rule bg-bg-card p-4 transition-colors hover:border-accent/40 hover:bg-accent/5"
@@ -285,7 +285,7 @@ export default function AboutPage() {
           monitored grid zones with a 10.6 % max-bucket concentration
           (simulated, test asserts &lt;20 %; see{" "}
           <a
-            href="https://github.com/Vitalini/ebb-ai/blob/main/docs/claims.md"
+            href="https://github.com/tidegap/tidegap/blob/main/docs/claims.md"
             target="_blank"
             rel="noreferrer"
             className="text-accent hover:underline"
@@ -301,7 +301,7 @@ export default function AboutPage() {
           Luccioni 2024, Hugging Face AI Energy Score) instead of a flat
           placeholder; as of v0.11, receipts are Ed25519-signed and verifiable
           offline with{" "}
-          <code className="rounded bg-bg-elev px-1 font-mono text-sm">ebb verify</code>.
+          <code className="rounded bg-bg-elev px-1 font-mono text-sm">tidegap verify</code>.
         </p>
         <p className="leading-relaxed text-fg-muted">
           The public surface is still pre-1.0: API shapes can change in minor
@@ -326,12 +326,12 @@ export default function AboutPage() {
           </a>{" "}
           (independent, open-source). Issues, PRs, and feature requests:{" "}
           <a
-            href="https://github.com/Vitalini/ebb-ai/issues"
+            href="https://github.com/tidegap/tidegap/issues"
             target="_blank"
             rel="noreferrer"
             className="text-accent hover:underline"
           >
-            github.com/Vitalini/ebb-ai/issues
+            github.com/tidegap/tidegap/issues
           </a>
           .
         </p>

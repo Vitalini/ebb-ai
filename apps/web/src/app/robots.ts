@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-// Explicitly allow the major AI crawlers so ebb-ai shows up when an
+// Explicitly allow the major AI crawlers so Tidegap shows up when an
 // assistant searches for "carbon-aware MCP scheduler" or similar. The
 // site has no user-private data; the only thing worth blocking is the
 // /api/ surface (which is rate-limited and read-only but isn't useful
@@ -30,7 +30,7 @@ export default function robots(): MetadataRoute.Robots {
       { userAgent: "*", allow: "/", disallow: ["/api/"] },
       ...AI_BOTS.map((ua) => ({ userAgent: ua, allow: "/" })),
     ],
-    sitemap: "https://www.ebb-ai.com/sitemap.xml",
-    host: "https://www.ebb-ai.com",
+    sitemap: "https://www.tidegap.com/sitemap.xml",
+    host: "https://www.tidegap.com",
   };
 }
