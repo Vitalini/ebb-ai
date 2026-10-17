@@ -2,8 +2,8 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSyn
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ProviderRefusalError } from "@tidegap/core";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { ProviderDeferError, ProviderRefusalError } from "@tidegap/core";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ClaudeCodeAdapter, type ClaudeCodeAdapterOptions } from "../src/providers/claude-code.js";
 
 const FAKE = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "fake-claude", "claude");
@@ -181,11 +181,76 @@ describe("ClaudeCodeAdapter", () => {
     expect(err).not.toHaveProperty("status");
   });
 
-  it("fails a usage-limit run with its text and API status in the message", async () => {
-    const err = await failure(adapter("limit").dispatch("default", "hi"));
-    expect(err.message).toContain("usage limit reached");
-    expect(err.message).toContain("429");
-    expect(err).not.toHaveProperty("status");
+  describe("usage-limit result: ProviderDeferError (KTD13)", () => {
+    const NOW = new Date("2026-10-17T12:00:00.000Z");
+    let tz: string | undefined;
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(NOW);
+      tz = process.env.TZ;
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+      if (tz === undefined) delete process.env.TZ;
+      else process.env.TZ = tz;
+    });
+    const resolver = (at: string, exhausted: boolean) => async () => ({ at: new Date(at), exhausted });
+
+    it("an exhausted window: retryAt is the host's reset, named in the message", async () => {
+      const err = await failure(
+        adapter("limit", { resetTarget: resolver("2026-10-17T18:00:00.000Z", true) }).dispatch("default", "hi"),
+      );
+      expect(err).toBeInstanceOf(ProviderDeferError);
+      expect((err as ProviderDeferError).retryAt.toISOString()).toBe("2026-10-17T18:00:00.000Z");
+      expect(err.message).toMatch(/^claude-code: .*usage limit reached.*deferred until 2026-10-17T18:00:00.000Z/);
+      expect(err).not.toHaveProperty("status");
+    });
+
+    it("nothing exhausted: the text's 7pm (Europe/Kyiv) wins over the host's reset", async () => {
+      const err = (await failure(
+        adapter("limit", { resetTarget: resolver("2026-10-17T16:30:00.000Z", false) }).dispatch("default", "hi"),
+      )) as ProviderDeferError;
+      expect(err.retryAt.toISOString()).toBe("2026-10-17T16:00:00.000Z");
+    });
+
+    it("the scoped window of the task's model is passed through the resolver", async () => {
+      const seen: string[] = [];
+      const err = (await failure(
+        adapter("limit", {
+          resetTarget: async (model) => (seen.push(model), { at: new Date("2026-10-19T18:00:00.000Z"), exhausted: model === "fable" }),
+        }).dispatch("fable", "hi"),
+      )) as ProviderDeferError;
+      expect(seen).toEqual(["fable"]);
+      expect(err.retryAt.toISOString()).toBe("2026-10-19T18:00:00.000Z");
+    });
+
+    it.each(["UTC", "America/Los_Angeles"])("no target: the text's zone is used under TZ=%s", async (zone) => {
+      process.env.TZ = zone;
+      const err = (await failure(adapter("limit", { resetTarget: async () => undefined }).dispatch("default", "hi"))) as ProviderDeferError;
+      expect(err.retryAt.toISOString()).toBe("2026-10-17T16:00:00.000Z");
+    });
+
+    it("the epoch form", async () => {
+      const err = (await failure(adapter("limit-epoch").dispatch("default", "hi"))) as ProviderDeferError;
+      expect(err.retryAt.toISOString()).toBe("2026-10-17T16:00:00.000Z");
+    });
+
+    it("unparseable text and no target: now + 60 min", async () => {
+      const err = (await failure(adapter("limit-bare").dispatch("default", "hi"))) as ProviderDeferError;
+      expect(err.retryAt.toISOString()).toBe("2026-10-17T13:00:00.000Z");
+    });
+
+    it("a time 1 min ahead is raised to now + 5 min", async () => {
+      const err = (await failure(
+        adapter("limit", { resetTarget: resolver("2026-10-17T12:01:00.000Z", true) }).dispatch("default", "hi"),
+      )) as ProviderDeferError;
+      expect(err.retryAt.toISOString()).toBe("2026-10-17T12:05:00.000Z");
+    });
+
+    it("a logged-out result still fails (no defer)", async () => {
+      const err = await failure(adapter("logged-out", { resetTarget: resolver("2026-10-17T18:00:00.000Z", true) }).dispatch("default", "hi"));
+      expect(err).not.toBeInstanceOf(ProviderDeferError);
+    });
   });
 
   it("fails an exhausted budget with the subtype", async () => {
