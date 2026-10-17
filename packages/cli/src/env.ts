@@ -45,6 +45,8 @@ export interface EnvCredentials extends ProviderCredentials {
   binary?: string;
   /** `TIDEGAP_NO_NOTIFY=1` (or true/yes/on): `tidegap tick` posts no OS notification. */
   noNotify: boolean;
+  /** `TIDEGAP_DEFAULT_MODEL`: Anthropic model for tasks queued without one (`tidegap ui` quick add). */
+  defaultModel?: string;
 }
 
 /** Trim and collapse an empty string to `undefined`. */
@@ -123,6 +125,7 @@ export function readEnvCredentials(write: DeprecationWriter = writeOnce): EnvCre
     noNotify: /^(1|true|yes|on)$/i.test(
       val(f.pick(process.env.TIDEGAP_NO_NOTIFY, process.env.EBB_NO_NOTIFY, "NO_NOTIFY")) ?? "",
     ),
+    defaultModel: val(f.pick(process.env.TIDEGAP_DEFAULT_MODEL, process.env.EBB_DEFAULT_MODEL, "DEFAULT_MODEL")),
   };
   f.report(write);
   return out;

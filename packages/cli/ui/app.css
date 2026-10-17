@@ -578,6 +578,12 @@ body.dragging .day-head[data-drop-day] { outline: 1px dashed var(--fg-muted); ou
 .radio-label { font-weight: var(--w-medium); }
 .radio-hint { color: var(--fg-muted); font-size: var(--fs-sm); line-height: var(--lh-sm); }
 .field-row { display: flex; gap: var(--sp-3); }
+.app-list { list-style: none; margin: 0 0 var(--sp-4); padding: 0; }
+.app-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-3); padding: var(--sp-2) 0; border-bottom: 1px solid var(--line); }
+.app-name { flex: 1 1 auto; font-weight: var(--w-medium); overflow-wrap: anywhere; }
+.app-meta { color: var(--fg-muted); font-size: var(--fs-sm); }
+.token-box { margin: 0 0 var(--sp-4); }
+.token-field { flex: 1; min-width: 0; font-family: var(--mono); }
 .field { display: flex; flex: 1; flex-direction: column; gap: var(--sp-1); }
 .field-label { color: var(--fg-muted); font-size: var(--fs-xs); font-weight: var(--w-medium); text-transform: uppercase; letter-spacing: 0.04em; }
 .form-error { margin: var(--sp-3) 0 0; color: var(--danger); font-size: var(--fs-sm); }

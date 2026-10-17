@@ -11,12 +11,14 @@
  *   tidegap stats          local-only personal-impact summary
  *   tidegap register-wake  schedule a macOS wake event 30s before a task
  *   tidegap ui             local task page (timeline, inbox, detail, actions) on 127.0.0.1
+ *   tidegap clients        add, list or revoke the tokens of the extension and Mac app
  */
 
 import { createRequire } from "node:module";
 import { basename } from "node:path";
 import { stripControlChars } from "@tidegap/core";
 import { Command } from "commander";
+import { runClientsAdd, runClientsList, runClientsRevoke } from "./commands/clients.js";
 import { runInstall, type InstallMode } from "./commands/install.js";
 import {
   runQueueCancel,
@@ -324,7 +326,7 @@ export function buildProgram(): Command {
     .command("ui")
     .description("Open the local task page: timeline, inbox, task detail, actions (127.0.0.1 only; never dispatches)")
     .option("--db <path>", "SQLite queue path", undefined)
-    .option("--port <port>", "Port on 127.0.0.1 (default: a free port)", (v) => parseInt(v, 10), 0)
+    .option("--port <port>", "Port on 127.0.0.1 (default: 47821, or a free port when it is taken; 0: any free port)", (v) => parseInt(v, 10))
     .option("--region <code>", "Region for the forecast curve", undefined)
     .option("--no-open", "Print the URL without opening a browser")
     .action(async (opts: { db?: string; port?: number; region?: string; open?: boolean }) => {
@@ -334,6 +336,7 @@ export function buildProgram(): Command {
           port: opts.port,
           region: opts.region,
           open: opts.open !== false,
+          cliVersion: CLI_VERSION,
         });
         process.exit(code);
       } catch (err) {
@@ -342,6 +345,39 @@ export function buildProgram(): Command {
         process.exit(1);
       }
     });
+
+  /** Run one clients command: print its output, or the error and exit 1. */
+  const clientsCommand = (run: () => string) => {
+    try {
+      // eslint-disable-next-line no-console
+      console.log(run());
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error((err as Error).message);
+      process.exit(1);
+    }
+  };
+  const clients = program
+    .command("clients")
+    .description("Manage the long-lived tokens of the browser extension and the Mac app (tidegap ui)");
+  clients
+    .command("add")
+    .description("Mint a client token; it is printed once")
+    .requiredOption("--name <name>", "A name to recognise the client by")
+    .requiredOption("--kind <kind>", "extension | macos")
+    .option("--json", "Print {client_id, token} as JSON")
+    .action((opts: { name: string; kind: string; json?: boolean }) =>
+      clientsCommand(() => runClientsAdd({ name: opts.name, kind: opts.kind, json: opts.json === true })),
+    );
+  clients
+    .command("list")
+    .description("List client ids, kinds, names and creation times (never tokens)")
+    .option("--json", "Emit JSON")
+    .action((opts: { json?: boolean }) => clientsCommand(() => runClientsList({ json: opts.json === true })));
+  clients
+    .command("revoke <id>")
+    .description("Remove a client; its token stops working at once")
+    .action((id: string) => clientsCommand(() => runClientsRevoke(id)));
 
   return program;
 }

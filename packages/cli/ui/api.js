@@ -108,4 +108,7 @@ export const api = {
   read: (id) => post(tasksPath(id, "read")),
   unread: (id) => post(tasksPath(id, "unread")),
   startDispatcher: () => post("/api/dispatcher/start"),
+  clients: () => get("/api/clients"),
+  addClient: (client) => post("/api/clients", client),
+  revokeClient: (id) => post(`/api/clients/${enc(id)}/revoke`),
 };
