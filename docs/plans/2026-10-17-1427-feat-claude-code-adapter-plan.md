@@ -79,6 +79,7 @@ Every provider adapter today calls a vendor API with a key (`packages/cli/src/co
 
 - MCP `expedite_task` / `retry_task` dispatch in the MCP server process, whose `buildAdapters` (`packages/mcp-server/src/server.ts`) has no `claude-code` adapter. With an API key set, expediting a `claude-code` task fails it with "no adapter configured for provider claude-code". Without a key, the existing gate rejects the expedite and leaves the task alone. Follow-up: share the host adapter builder, or reject `claude-code` expedites with "runs on the next tick".
 - `apps/web` docs page provider list.
+- Requeue instead of fail on a "not logged in" or usage-limit result: a scheduler-level "environment unavailable" outcome that the due sweep treats as a skip (decided 2026-10-17: this PR fails the task with the reason, KTD7).
 
 ---
 
@@ -329,7 +330,7 @@ Post-release launchd check. The `env -i` run reproduces launchd's PATH, but not 
 
 ## Open Questions
 
-- Non-blocking, for Vitalii: should a usage-limit or "not logged in" result requeue the task instead of failing it? The plan follows the brief: fail once, with the reason (KTD7). The cost is that once the subscription limit runs out, every task that comes due before the reset fails for good and needs `retry_task`. A requeue would need a new scheduler-level "environment unavailable" outcome that the due sweep treats as a skip. That change touches `scheduler.ts` and would grow this PR. If wanted, it fits a follow-up PR.
+- Resolved 2026-10-17: fail with the reason in this PR; requeue is a follow-up (Deferred to Follow-Up Work). Original question: should a usage-limit or "not logged in" result requeue the task instead of failing it? The plan follows the brief: fail once, with the reason (KTD7). The cost is that once the subscription limit runs out, every task that comes due before the reset fails for good and needs `retry_task`. A requeue would need a new scheduler-level "environment unavailable" outcome that the due sweep treats as a skip. That change touches `scheduler.ts` and would grow this PR. If wanted, it fits a follow-up PR.
 
 ## Risks & Dependencies
 

@@ -383,6 +383,59 @@ scheduler runs in-memory as in v0.1. The Anthropic and OpenAI SDKs are
 peer dependencies — install them only if you use the corresponding
 adapter.
 
+### Run through your Claude Code subscription
+
+`tidegap tick` can run tasks through the local `claude` CLI. It uses your Claude Code login, so you need no API key.
+
+**Requirements.** Install Claude Code and log in once (`claude`, then `/login`) as the user who runs the tick daemon. If a task fails with an "unknown option" message, update Claude Code.
+
+**Which tasks use it.**
+
+- A task with `provider: "claude-code"` always runs through Claude Code. `schedule_task` (MCP) and quick add in `tidegap ui` accept this provider. The OpenClaw plugin does not.
+- An `anthropic` task runs through Claude Code when `ANTHROPIC_API_KEY` is not set. When the key is set, it uses the Anthropic API as before.
+- `openai`, `gemini` and `ollama` tasks never run through Claude Code. When the tick finds Claude Code and one of these tasks is due without its key, the task fails with "no adapter configured" and does not wait.
+
+**How the tick finds `claude`.** First `TIDEGAP_CLAUDE_BIN`, then each directory on `PATH`, then `~/.local/bin`, `~/.claude/local`, `/opt/homebrew/bin` and `/usr/local/bin`. On macOS, as a last step, it asks your login shell (`zsh -ilc 'command -v claude'`). It does this only when a pending task needs Claude Code. This step finds `claude` under launchd, whose `PATH` does not include `~/.local/bin`.
+
+**What a run can do.** The tick runs:
+
+```bash
+claude -p --output-format json --tools "" --permission-mode dontAsk \
+  --max-budget-usd 1 --safe-mode --strict-mcp-config --no-session-persistence \
+  [--model <model>] [--system-prompt-file <file>]
+```
+
+- The prompt goes on stdin, so it does not show in `ps`.
+- `--tools ""` removes all built-in tools. The model cannot read files, run commands or use the web.
+- `--safe-mode` and `--strict-mcp-config` turn off your CLAUDE.md, skills, plugins, hooks and MCP servers.
+- The run happens in a new temporary directory, never in your repository, and the tick deletes the directory after the run.
+- `--no-session-persistence` keeps these runs out of your Claude Code session history.
+- The child process does not get `ANTHROPIC_API_KEY`, so it always uses your subscription login.
+- A run that takes more than 10 minutes is stopped, and the task fails.
+
+**Model.** The tick passes the task's `model` to `--model` when it is a `claude-*` id or one of `opus`, `sonnet`, `haiku`, `fable`, `opusplan` (optionally with `[1m]`). Otherwise Claude Code uses its own default. A `claude-code` task queued without a model gets `"default"`. The receipt records the model that Claude Code reports. `maxTokens` and `temperature` have no effect, because the CLI has no flags for them.
+
+**Settings** (environment or `~/.config/tidegap/env`):
+
+| Variable | Effect |
+|---|---|
+| `TIDEGAP_CLAUDE_BIN` | Path of the `claude` binary. Skips the lookup. |
+| `TIDEGAP_CLAUDE_CODE=0` | Do not look for Claude Code (`false`, `off` and `no` also work). |
+| `TIDEGAP_CLAUDE_CODE_MAX_BUDGET_USD` | `--max-budget-usd` cap per run. Default `1`. An invalid value falls back to `1` with a warning. |
+
+**Cost and quota.** Tasks use the same Claude Code quota as your interactive sessions. A night of queued tasks can use up the limit you expect to have in the morning. Claude Code's list-price estimate for each run is in `tidegap queue show <id> --raw` (`total_cost_usd`, next to `session_id`). Your subscription is not billed per run. The budget cap uses this estimate.
+
+**Carbon receipt.** The receipt has provider `claude-code`. Its token count includes the system prompt that Claude Code adds to each run (about 3k tokens) when Claude Code writes it to the prompt cache. Cache reads are not counted. Thus a receipt can show more tokens than an API call with the same prompt.
+
+**Failures.** A failed run fails the task once, with no retry. The error names the cause:
+
+- `claude` not found or not executable: install Claude Code or set `TIDEGAP_CLAUDE_BIN`.
+- "Not logged in": run `claude` once as this user and complete `/login`.
+- Usage limit: Claude Code's message, which includes the reset time. Use `retry_task` after the reset.
+- Budget cap: `error_max_budget_usd`.
+- Timeout: "timed out after 600s".
+- Any other exit: the exit code and the end of stderr.
+
 ### Python
 
 ```bash
