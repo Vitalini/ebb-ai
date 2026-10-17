@@ -189,7 +189,7 @@ jobs:
             packages/openclaw-plugin/LICENSE
           if-no-files-found: error
 
-      # Same install as the clawhub job: the committed lockfile, no scripts.
+      # Same command as the clawhub job: the committed lockfile, no scripts.
       - name: Install ClawHub CLI
         working-directory: .github/release-tools/clawhub
         run: npm ci --ignore-scripts --no-audit --no-fund

@@ -109,11 +109,12 @@ describe("parseEntsoeXml (A75 fixture)", () => {
     expect(ms).toBeLessThan(1000);
   });
 
+  const period = (start: string, qty: number) =>
+    `<Period><timeInterval><start>${start}</start></timeInterval>` +
+    `<resolution>PT60M</resolution>` +
+    `<Point><position>1</position><quantity>${qty}</quantity></Point></Period>`;
+
   it("a stray unclosed <Period> drops only itself", () => {
-    const period = (start: string, qty: number) =>
-      `<Period><timeInterval><start>${start}</start></timeInterval>` +
-      `<resolution>PT60M</resolution>` +
-      `<Point><position>1</position><quantity>${qty}</quantity></Point></Period>`;
     const xml =
       `<TimeSeries><psrType>B14</psrType>${period("2026-05-13T10:00Z", 5)}<Period>stray</TimeSeries>` +
       `<TimeSeries><psrType>B05</psrType>${period("2026-05-13T11:00Z", 7)}</TimeSeries>`;
@@ -131,6 +132,45 @@ describe("parseEntsoeXml (A75 fixture)", () => {
         ],
       },
     ]);
+  });
+
+  // Pins the lazy-regex semantics the scan replaced: each open pairs with
+  // the nearest close after it, and the first match wins.
+  it("an unclosed <TimeSeries> pairs with the next close; the first psrType wins", () => {
+    const xml =
+      `<TimeSeries><psrType>B01</psrType>` +
+      `<TimeSeries><psrType>B14</psrType>${period("2026-05-13T10:00Z", 5)}</TimeSeries>`;
+    expect(parseEntsoeXml(xml)).toEqual([
+      {
+        psrType: "B01",
+        periods: [
+          { start: "2026-05-13T10:00Z", resolutionMin: 60, points: [{ position: 1, quantity: 5 }] },
+        ],
+      },
+    ]);
+  });
+
+  it("an unclosed <Period> before a valid one merges into a single period", () => {
+    const xml =
+      `<TimeSeries><psrType>B14</psrType><Period>stray${period("2026-05-13T10:00Z", 5)}</TimeSeries>`;
+    expect(parseEntsoeXml(xml)).toEqual([
+      {
+        psrType: "B14",
+        periods: [
+          { start: "2026-05-13T10:00Z", resolutionMin: 60, points: [{ position: 1, quantity: 5 }] },
+        ],
+      },
+    ]);
+  });
+
+  it("an Acknowledgement reports the first <text>, empty when it is empty", () => {
+    const ack = (body: string) => `<Acknowledgement_MarketDocument><Reason>${body}</Reason>`;
+    expect(() => parseEntsoeXml(ack("<text> first </text><text>second</text>"))).toThrow(
+      /Acknowledgement document: first$/,
+    );
+    expect(() => parseEntsoeXml(ack("<text></text><text>second</text>"))).toThrow(
+      /Acknowledgement document: $/,
+    );
   });
 });
 

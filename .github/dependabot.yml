@@ -33,7 +33,8 @@ updates:
         patterns: ["*"]
 
   # ClawHub CLI for release.yml (lockfile under .github/release-tools). The
-  # cooldown keeps a just-published transitive release out of the OIDC job.
+  # cooldown delays clawhub itself, not the transitive versions a regenerated
+  # lock pulls in: read the lockfile diff before merge (CONTRIBUTING).
   - package-ecosystem: npm
     directory: "/.github/release-tools/clawhub"
     schedule:

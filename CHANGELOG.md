@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- **Release tools are pinned.** The ClawHub CLI installs from a committed lockfile (`.github/release-tools/clawhub`) with `npm ci --ignore-scripts`, and `mcp-publisher` runs only after its SHA-256 matches the value in `scripts/install-mcp-publisher.sh`. Every action in `release.yml` and `mcp-registry.yml` is pinned to a commit SHA. No package resolved at run time runs in a job that holds an OIDC publish token.
+- **Release tools are pinned.** The ClawHub CLI installs from a committed lockfile (`.github/release-tools/clawhub`) with `npm ci --ignore-scripts`, and `mcp-publisher` runs only after its SHA-256 matches the value in `scripts/install-mcp-publisher.sh`. Every action in `release.yml` and `mcp-registry.yml` is pinned to a commit SHA. Still resolved at run time in jobs that hold an OIDC publish token: npm's own `npm@11.19.1` install in the npm job, the Node 24 patch release, and the container image of the PyPI publish action.
 - **The ENTSO-E parser runs in linear time on hostile input.** `parseEntsoeXml` (TS) and `parse_entsoe_xml` (Python) cut `<text>`, `<TimeSeries>` and `<Period>` blocks with a plain scan instead of lazy regexes, so unclosed tags in the feed text no longer cost quadratic time. Results on valid documents are unchanged.
 - **Lint and build tooling dependencies updated** by pnpm overrides: `brace-expansion` 1.1.21, `js-yaml` 4.3.2, `source-map-js` 1.2.2. None of them ships in a published package.
 
