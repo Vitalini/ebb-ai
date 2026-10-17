@@ -1,5 +1,5 @@
 import { api } from "../lib/api.js";
-import { ext, isFirefox } from "../lib/browser.js";
+import { ext, needsHostGrant } from "../lib/browser.js";
 import { connectionPatch, loadSettings, parsePort, saveSettings } from "../lib/settings.js";
 
 const HOST_ACCESS = { origins: ["http://127.0.0.1/*"] };
@@ -42,7 +42,7 @@ async function save(hostAccess) {
 async function test() {
   const values = formValues();
   if (values.port === null) return show("Port must be a number from 1 to 65535.", true);
-  if (isFirefox() && !(await ext.permissions.contains(HOST_ACCESS))) {
+  if (needsHostGrant() && !(await ext.permissions.contains(HOST_ACCESS))) {
     return show("Access to 127.0.0.1 is not granted yet. Click Save and allow it.", true);
   }
   $("test").disabled = true;
@@ -61,11 +61,13 @@ async function init() {
   $("token").value = s.token;
   $("notify-finished").checked = s.notify.finished;
   $("notify-window").checked = s.notify.cleanWindow;
+  // Safari has no notifications API; the Tidegap Mac app sends them there.
+  if (!ext.notifications) $("notifications").hidden = true;
   $("form").addEventListener("submit", (e) => {
     e.preventDefault();
-    // First, before any await: Firefox grants host access only from a user
-    // gesture, and MV3 Firefox does not grant it at install (KTD9). Chrome
-    // granted it at install, so this resolves true there.
+    // First, before any await: Firefox and Safari grant host access only from
+    // a user gesture, not at install (KTD9). Chrome granted it at install, so
+    // this resolves true there.
     const hostAccess = ext.permissions.request(HOST_ACCESS);
     save(hostAccess);
   });

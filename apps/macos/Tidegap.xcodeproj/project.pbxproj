@@ -8,11 +8,42 @@
 
 /* Begin PBXBuildFile section */
 		7D1A00000000000000000101 /* TidegapKit in Frameworks */ = {isa = PBXBuildFile; productRef = 7D1A00000000000000000102 /* TidegapKit */; };
+		7D1A00000000000000000103 /* Tidegap Safari Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 7D1A00000000000000000203 /* Tidegap Safari Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		7D1A00000000000000000104 /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D1A00000000000000000205 /* SafariWebExtensionHandler.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		7D1A00000000000000000A01 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7D1A00000000000000000701 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7D1A00000000000000000611;
+			remoteInfo = "Tidegap Safari Extension";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		7D1A00000000000000000404 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				7D1A00000000000000000103 /* Tidegap Safari Extension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		7D1A00000000000000000201 /* Tidegap.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Tidegap.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7D1A00000000000000000202 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
+		7D1A00000000000000000203 /* Tidegap Safari Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Tidegap Safari Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		7D1A00000000000000000204 /* SafariExtension.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = SafariExtension.xcconfig; sourceTree = "<group>"; };
+		7D1A00000000000000000205 /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
+		7D1A00000000000000000206 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		7D1A00000000000000000207 /* SafariExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SafariExtension.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -35,6 +66,17 @@
 			path = Tidegap;
 			sourceTree = "<group>";
 		};
+		7D1A00000000000000000303 /* Resources */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			explicitFolders = (
+				icons,
+				lib,
+				options,
+				popup,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -46,6 +88,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7D1A00000000000000000412 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -54,6 +103,7 @@
 			children = (
 				7D1A00000000000000000503 /* Config */,
 				7D1A00000000000000000301 /* Tidegap */,
+				7D1A00000000000000000504 /* SafariExtension */,
 				7D1A00000000000000000502 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -62,6 +112,7 @@
 			isa = PBXGroup;
 			children = (
 				7D1A00000000000000000201 /* Tidegap.app */,
+				7D1A00000000000000000203 /* Tidegap Safari Extension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -70,8 +121,20 @@
 			isa = PBXGroup;
 			children = (
 				7D1A00000000000000000202 /* Base.xcconfig */,
+				7D1A00000000000000000204 /* SafariExtension.xcconfig */,
 			);
 			path = Config;
+			sourceTree = "<group>";
+		};
+		7D1A00000000000000000504 /* SafariExtension */ = {
+			isa = PBXGroup;
+			children = (
+				7D1A00000000000000000205 /* SafariWebExtensionHandler.swift */,
+				7D1A00000000000000000206 /* Info.plist */,
+				7D1A00000000000000000207 /* SafariExtension.entitlements */,
+				7D1A00000000000000000303 /* Resources */,
+			);
+			path = SafariExtension;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -84,10 +147,12 @@
 				7D1A00000000000000000401 /* Sources */,
 				7D1A00000000000000000402 /* Frameworks */,
 				7D1A00000000000000000403 /* Resources */,
+				7D1A00000000000000000404 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				7D1A00000000000000000B01 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				7D1A00000000000000000301 /* Tidegap */,
@@ -100,6 +165,26 @@
 			productReference = 7D1A00000000000000000201 /* Tidegap.app */;
 			productType = "com.apple.product-type.application";
 		};
+		7D1A00000000000000000611 /* Tidegap Safari Extension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7D1A00000000000000000803 /* Build configuration list for PBXNativeTarget "Tidegap Safari Extension" */;
+			buildPhases = (
+				7D1A00000000000000000411 /* Sources */,
+				7D1A00000000000000000412 /* Frameworks */,
+				7D1A00000000000000000413 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				7D1A00000000000000000303 /* Resources */,
+			);
+			name = "Tidegap Safari Extension";
+			productName = "Tidegap Safari Extension";
+			productReference = 7D1A00000000000000000203 /* Tidegap Safari Extension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -111,6 +196,9 @@
 				LastUpgradeCheck = 1600;
 				TargetAttributes = {
 					7D1A00000000000000000601 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+					7D1A00000000000000000611 = {
 						CreatedOnToolsVersion = 16.0;
 					};
 				};
@@ -133,12 +221,20 @@
 			projectRoot = "";
 			targets = (
 				7D1A00000000000000000601 /* Tidegap */,
+				7D1A00000000000000000611 /* Tidegap Safari Extension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		7D1A00000000000000000403 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7D1A00000000000000000413 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -155,7 +251,23 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7D1A00000000000000000411 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7D1A00000000000000000104 /* SafariWebExtensionHandler.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		7D1A00000000000000000B01 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7D1A00000000000000000611 /* Tidegap Safari Extension */;
+			targetProxy = 7D1A00000000000000000A01 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		7D1A00000000000000000811 /* Debug */ = {
@@ -199,6 +311,20 @@
 			};
 			name = Release;
 		};
+		7D1A00000000000000000831 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 7D1A00000000000000000204 /* SafariExtension.xcconfig */;
+			buildSettings = {
+			};
+			name = Debug;
+		};
+		7D1A00000000000000000832 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 7D1A00000000000000000204 /* SafariExtension.xcconfig */;
+			buildSettings = {
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -216,6 +342,15 @@
 			buildConfigurations = (
 				7D1A00000000000000000821 /* Debug */,
 				7D1A00000000000000000822 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7D1A00000000000000000803 /* Build configuration list for PBXNativeTarget "Tidegap Safari Extension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7D1A00000000000000000831 /* Debug */,
+				7D1A00000000000000000832 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

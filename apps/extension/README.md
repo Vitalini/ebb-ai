@@ -1,6 +1,6 @@
 # Tidegap browser extension
 
-Your Tidegap queue and the next clean grid window in the browser toolbar. One extension for Chrome, Edge and Firefox. It talks only to `tidegap ui` on this computer (`http://127.0.0.1`), with a client token you paste once.
+Your Tidegap queue and the next clean grid window in the browser toolbar. One extension for Chrome, Edge, Firefox and Safari. It talks only to `tidegap ui` on this computer (`http://127.0.0.1`), with a client token you paste once.
 
 - **Badge:** `?` not paired, `off` tidegap ui is not running, the active task count, `now` during a clean window, or the time to the next one (`45m`, `5h`).
 - **Popup:** the active tasks, the clean window, and a quick-add form (prompt plus a 6 h / 24 h / 3 days deadline).
@@ -12,7 +12,7 @@ The API contract is `docs/spec/ui-client-api.md`.
 
 ```sh
 pnpm install
-pnpm --filter @tidegap/extension build    # dist/chrome, dist/firefox and a zip each
+pnpm --filter @tidegap/extension build    # dist/chrome, dist/firefox, dist/safari and a zip each
 pnpm --filter @tidegap/extension test
 pnpm --filter @tidegap/extension lint     # addons-linter on dist/firefox
 ```
@@ -25,11 +25,13 @@ The version follows `packages/core-ts/package.json`.
 
 **Firefox.** Open `about:debugging#/runtime/this-firefox`, click "Load Temporary Add-on…" and pick `apps/extension/dist/firefox/manifest.json`. A temporary add-on is removed when Firefox quits.
 
+**Safari.** The `safari` build ships inside Tidegap for Mac; see "Safari extension" in `apps/macos/README.md`. Safari has no extension notifications; the Mac app sends them.
+
 ## Pair
 
 1. Run `tidegap ui` (0.19 or later). It listens on port 47821 unless that port is taken.
 2. Get a client token: "Connect an app" in the tidegap ui page, or `tidegap clients add --name browser --kind extension`.
-3. Open the extension options, paste the token, check the port, and click Save. Firefox asks for access to 127.0.0.1 here; allow it.
+3. Open the extension options, paste the token, check the port, and click Save. Firefox and Safari ask for access to 127.0.0.1 here; allow it.
 4. Click "Test connection". It says "Connected" and the active task count.
 
 Revoke the token in the page's "Connected apps" panel or with `tidegap clients revoke <id>`. The badge then shows `?`.

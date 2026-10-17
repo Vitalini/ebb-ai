@@ -106,6 +106,11 @@ export function browserNotifications(ext) {
   };
 }
 
+/** The channels this browser supports: none in Safari, which has no notifications API. */
+export function notificationChannels(ext) {
+  return ext.notifications ? [browserNotifications(ext)] : [];
+}
+
 /**
  * Send the events the settings allow to every channel. A failing channel does
  * not stop the others.

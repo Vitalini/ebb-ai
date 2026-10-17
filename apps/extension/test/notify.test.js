@@ -1,7 +1,7 @@
 process.env.TZ = "UTC";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { browserNotifications, dispatch, finishedEvents, planWindowAlarm, toNotification, windowEvent } from "../src/lib/notify.js";
+import { browserNotifications, dispatch, notificationChannels, finishedEvents, planWindowAlarm, toNotification, windowEvent } from "../src/lib/notify.js";
 
 const NOW = Date.parse("2026-10-17T09:00:00.000Z");
 const iso = (h) => new Date(NOW + h * 3_600_000).toISOString();
@@ -111,5 +111,18 @@ describe("notification text", () => {
     assert.doesNotMatch(short.title, /[\u0000-\u001f\u007f]/);
     const w = toNotification({ kind: "clean_window", window: win(0), region: "FR" });
     assert.equal(w.message, "The grid in FR is clean until 12:00. A good time for queued work.");
+  });
+});
+
+describe("notification channels", () => {
+  it("without a notifications API (Safari) there are no channels and dispatch sends nothing", async () => {
+    const channels = notificationChannels({ runtime: { getURL: (p) => p } });
+    assert.deepEqual(channels, []);
+    await dispatch([{ kind: "task_finished", task: task("a") }], channels, ALL);
+  });
+
+  it("with a notifications API there is one browser channel", () => {
+    const channels = notificationChannels({ notifications: { create: async () => {} }, runtime: { getURL: (p) => p } });
+    assert.deepEqual(channels.map((c) => c.name), ["browser"]);
   });
 });

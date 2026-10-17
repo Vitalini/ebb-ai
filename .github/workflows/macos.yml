@@ -31,6 +31,10 @@ jobs:
         working-directory: apps/macos
     steps:
       - uses: actions/checkout@v7
+      # build.sh builds the extension's safari target for the embedded Safari Web Extension.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
       - run: xcodebuild -version && swift --version
       - name: TidegapKit tests
         run: swift test --package-path TidegapKit
