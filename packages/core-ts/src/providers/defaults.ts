@@ -14,4 +14,6 @@ export const DEFAULT_MODEL_BY_PROVIDER: Readonly<Record<ProviderName, string>> =
     openai: "gpt-6-sol",
     gemini: "gemini-3.8-flash",
     ollama: "llama3.1",
+    // Claude Code picks its own default model; the adapter omits --model.
+    "claude-code": "default",
   });

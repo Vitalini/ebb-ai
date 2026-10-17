@@ -322,10 +322,12 @@ export interface TaskRecord<T = unknown> {
 /**
  * The providers a task can be dispatched through. `anthropic` and `openai`
  * are batch-capable (Batch APIs); `gemini` and `ollama` are sync-only (see
- * their adapters for why). Adding a value here is backward-compatible —
- * existing callers keep working.
+ * their adapters for why). `claude-code` is sync-only too: the `tidegap`
+ * CLI host runs it through the local Claude Code login, and core ships no
+ * adapter for it. Adding a value here is backward-compatible — existing
+ * callers keep working.
  */
-export type ProviderName = "anthropic" | "openai" | "gemini" | "ollama";
+export type ProviderName = "anthropic" | "openai" | "gemini" | "ollama" | "claude-code";
 
 /**
  * JSON-serializable provider-call body. Persisted in the SQLite ledger as

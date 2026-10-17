@@ -127,14 +127,28 @@ const carbonBudgetParam: ToolParam = {
     "Optional hard cap on estimated grams CO2-equivalent for this task. Windows above the cap are dropped before the cleanest is chosen; if none inside the deadline meets the cap the task fails rather than dispatching to a dirty window.",
 };
 
-const providerParam: ToolParam = {
-  name: "provider",
-  kind: "enum",
-  values: ["anthropic", "openai", "gemini", "ollama"],
-  optional: true,
-  description:
-    "Which provider to dispatch this task through: 'anthropic', 'openai', 'gemini', or 'ollama' (local). Defaults to 'anthropic'. 'anthropic' and 'openai' can auto-route through a 50%-cheaper Batch API when the deadline allows; 'gemini' and 'ollama' always dispatch synchronously.",
-};
+// `claude-code` runs only in `tidegap tick` (the CLI host spawns the local
+// Claude Code CLI), so it is offered on MCP and not on OpenClaw.
+const providerParams: ToolParam[] = [
+  {
+    name: "provider",
+    kind: "enum",
+    hosts: ["mcp"],
+    values: ["anthropic", "openai", "gemini", "ollama", "claude-code"],
+    optional: true,
+    description:
+      "Which provider to dispatch this task through: 'anthropic', 'openai', 'gemini', 'ollama' (local), or 'claude-code' (runs through the local Claude Code login on the next `tidegap tick`, no API key, no tools). Defaults to 'anthropic'. 'anthropic' and 'openai' can auto-route through a 50%-cheaper Batch API when the deadline allows; 'gemini', 'ollama' and 'claude-code' always dispatch synchronously.",
+  },
+  {
+    name: "provider",
+    kind: "enum",
+    hosts: ["openclaw"],
+    values: ["anthropic", "openai", "gemini", "ollama"],
+    optional: true,
+    description:
+      "Which provider to dispatch this task through: 'anthropic', 'openai', 'gemini', or 'ollama' (local). Defaults to 'anthropic'. 'anthropic' and 'openai' can auto-route through a 50%-cheaper Batch API when the deadline allows; 'gemini' and 'ollama' always dispatch synchronously.",
+  },
+];
 
 const candidatesParam: ToolParam = {
   name: "candidates",
@@ -311,7 +325,7 @@ export const TOOL_SURFACE: readonly CanonicalToolDef[] = [
         hosts: ["openclaw"],
         description: scheduleModelDescription(""),
       }),
-      providerParam,
+      ...providerParams,
       candidatesParam,
       routeWeightsParam,
       // ── MCP-only parameters ──

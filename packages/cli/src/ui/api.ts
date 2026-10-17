@@ -392,7 +392,7 @@ function replyAction(ctx: ApiContext, taskId: string, body: Body): Promise<ApiRe
 
 /** Longest quick-add title and model id, in characters. */
 export const QUICK_ADD_TITLE_MAX = 200;
-const QUICK_ADD_PROVIDERS: readonly ProviderName[] = ["anthropic", "openai", "gemini", "ollama"];
+const QUICK_ADD_PROVIDERS: readonly ProviderName[] = ["anthropic", "openai", "gemini", "ollama", "claude-code"];
 const DAY_DEFAULT_MS = 24 * 3_600_000;
 
 /**

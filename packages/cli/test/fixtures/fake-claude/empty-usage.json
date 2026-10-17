@@ -1,0 +1,1 @@
+{"type":"result","subtype":"success","is_error":false,"result":"OK","stop_reason":"end_turn","session_id":"s-empty","total_cost_usd":0,"usage":{"input_tokens":3,"output_tokens":5},"modelUsage":{}}

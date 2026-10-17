@@ -48,6 +48,21 @@ export interface EnvCredentials extends ProviderCredentials {
   noNotify: boolean;
   /** `TIDEGAP_DEFAULT_MODEL`: Anthropic model for tasks queued without one (`tidegap ui` quick add). */
   defaultModel?: string;
+  /** `TIDEGAP_CLAUDE_BIN`: explicit path of the `claude` binary for the claude-code adapter. */
+  claudeBin?: string;
+  /** `TIDEGAP_CLAUDE_CODE=0` (or false/off/no): `tidegap tick` does not look for Claude Code. */
+  claudeCodeDisabled: boolean;
+  /** `TIDEGAP_CLAUDE_CODE_MAX_BUDGET_USD`, unparsed: the claude-code `--max-budget-usd` cap. */
+  claudeCodeMaxBudgetUsd?: string;
+}
+
+/**
+ * True under a test runner. A test that reaches a real side effect (an OS
+ * notification, a lookup of the developer's own `claude`) without injecting
+ * it must not run it.
+ */
+export function underTest(): boolean {
+  return process.env.VITEST !== undefined || process.env.NODE_ENV === "test";
 }
 
 /** Trim and collapse an empty string to `undefined`. */
@@ -130,6 +145,9 @@ export function readEnvCredentials(write: NoticeWriter = writeOnce): EnvCredenti
     binary: val(process.env.TIDEGAP_BINARY),
     noNotify: /^(1|true|yes|on)$/i.test(val(process.env.TIDEGAP_NO_NOTIFY) ?? ""),
     defaultModel: val(process.env.TIDEGAP_DEFAULT_MODEL),
+    claudeBin: val(process.env.TIDEGAP_CLAUDE_BIN),
+    claudeCodeDisabled: /^(0|false|off|no)$/i.test(val(process.env.TIDEGAP_CLAUDE_CODE) ?? ""),
+    claudeCodeMaxBudgetUsd: val(process.env.TIDEGAP_CLAUDE_CODE_MAX_BUDGET_USD),
   };
   reportLeftOverNames(write);
   return out;
