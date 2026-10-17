@@ -82,7 +82,7 @@ The brief and the repo disagree in these places. The plan follows the column "Pl
 |---|---|---|
 | Config dir `~/.ebb-ai` only | Also `~/.config/ebb/env` (secrets, read by `ebb tick` and systemd `EnvironmentFile`), `~/.ebb/` (tick log, laptop wake helper, pre-0.7.1 `queue.sqlite`) | Move `~/.ebb-ai` (KTD3); read the old secrets file as fallback (KTD4); new log and helper paths under `~/.tidegap`; keep the pre-0.7.1 `~/.ebb/queue.sqlite` read fallback as is |
 | Env vars `EBB_*` | `EBB_*` are also keys inside the `~/.ebb-ai/config` file (`EBB_CARBON_BUDGET_*`, `EBB_QUOTA_RESET_*`, `EBB_QUOTA_MARGIN_H_*`, `EBB_NOTIFY`) and field names of the exported type `CarbonBudgetEnv` | Fallback covers file keys too; `CarbonBudgetEnv` gains `TIDEGAP_*` fields and keeps `EBB_*` fields as deprecated (KTD5) |
-| ClawHub `@vitalini/ebb` to `@vitalini/tidegap` | Also the OpenClaw runtime plugin id `ebb` (`PLUGIN_ID`, `openclaw.plugin.json`), and ClawHub locks the runtime id at first publish (`docs/internal/hub-submission-log.md`, rows for 2026-05-19) | New id `tidegap`, set before the first ClawHub publish; users move their config block (OQ1) |
+| ClawHub `@vitalini/ebb` to `@vitalini/tidegap` | Also the OpenClaw runtime plugin id `ebb` (`PLUGIN_ID`, `openclaw.plugin.json`), and ClawHub locks the runtime id at first publish ((internal submission log, not in the repo), rows for 2026-05-19) | New id `tidegap`, set before the first ClawHub publish; users move their config block (OQ1) |
 | CLI alias only | MCP bin `ebb-mcp` (Dockerfile `ENTRYPOINT`, docs) and MCP `serverInfo.name: "ebb-mcp"` | Bin `tidegap-mcp` plus `ebb-mcp` alias for 0.18; serverInfo `tidegap` |
 | PyPI `tidegap` | Import package `ebb_ai`, and `__version__` reads the dist name `ebb-ai` | Import package `tidegap`; the `ebb_ai` alias lives only in the PyPI `ebb-ai` 0.17.1 shim (KTD8, OQ3) |
 | Plugin namespace `/tidegap:*` | Marketplace name, plugin name, skill dir `skills/ebb-ai/` and SessionStart hook calling `ebb` | All renamed; hook calls `tidegap`, falls back to `ebb` |
@@ -109,7 +109,7 @@ The brief and the repo disagree in these places. The plan follows the column "Pl
 - `docs/solutions/tooling-decisions/mcp-registry-metadata-and-package-readmes.md`: `mcpName` must equal `server.json` `name`; npm before registry.
 - `docs/solutions/tooling-decisions/rendered-repo-images-and-brand-name.md`: render on the Mac, commit PNGs with the lock, the lock hashes the render script itself.
 - `docs/solutions/best-practices/shared-sqlite-ledger-migrations.md`: the ledger is opened by several processes and two cores at once; migration logic is written twice.
-- `docs/internal/hub-submission-log.md`: ClawHub locks the runtime id at first publish.
+- (internal submission log, not in the repo): ClawHub locks the runtime id at first publish.
 - npm `libnpmexec/lib/get-bin-from-manifest.js` (local npm): `npx <pkg>` picks a bin when all bin entries point at the same file, else the bin named after the package, else fails.
 - MCP Registry aggregator guide (modelcontextprotocol.io/registry/registry-aggregators): server metadata is immutable except `status`, which can be set to `deprecated`.
 
@@ -136,7 +136,7 @@ Search: `git ls-files`, minus binary images, minus `CHANGELOG.md`, `docs/solutio
 | README, QUICKSTART, CONTRIBUTING, SECURITY, CoC, package READMEs | 11 | 364 | U5 |
 | Examples (host configs, `openclaw-skill`, `pi`) | 21 | 186 | U5 |
 | `docs/claims.md` | 1 | 9 | U5, U7 |
-| `docs/internal` (hub log, SEO, marketing, AI discoverability) | 4 | 47 | U5 |
+| internal docs (hub log, SEO, marketing, AI discoverability) | 4 | 47 | U5 |
 | Other docs (papers, spec, examples README, article notes, VERCEL-DEPLOY) | 11 | 127 | U5 |
 | Historical, kept: `docs/archive/`, `docs/release/v0.7.1/` | 7 | 85 | none |
 | `.gitignore` (`ebb-queue.db`) | 1 | 1 | U1 (add `tidegap-queue.db`, keep old line) |
@@ -312,7 +312,7 @@ U1 to U7 in order, one commit each, on one branch. U4 renders images on the Mac 
 - **Goal:** R1 for docs, R3 kept, R11 for path and command rows.
 - **Requirements:** R1, R3, R11.
 - **Dependencies:** U1 to U4.
-- **Files:** `README.md` (H1, first sentence, badges, install block, `/tidegap:*`, config paths, env table with `TIDEGAP_*`, migration section), `QUICKSTART.md`, `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, `packages/*/README.md` (6), `examples/**` (host configs to key `tidegap` and `@tidegap/mcp`, `examples/openclaw-skill/SKILL.md` and `scripts/install.sh`, rename `examples/pi/ebb-ai.md` to `examples/pi/tidegap.md`), `.github/ISSUE_TEMPLATE/*.md`, `.github/PULL_REQUEST_TEMPLATE.md`, `docs/claims.md` (rows 1, 25, 27 and the summary bullets: paths `packages/claude-code-plugin/skills/tidegap/SKILL.md` and `/tidegap:defer`; row 31: images re-rendered 2026-10-16 with the new wordmark, numbers unchanged), `docs/internal/hub-submission-log.md` (title, new rows per the runbook with status `not started`), `docs/internal/{AI-discoverability,SEO-playbook,marketing-channels}.md`, `docs/VERCEL-DEPLOY.md`, `docs/papers/carbon-aware-mcp-scheduling.md`, `docs/spec/**`, `docs/impact-proposal.md`, `docs/article-notes.md`, `docs/examples/2026-09-30-GB-tick/README.md` (prose and reproducer commands; raw `output.txt` stays as captured, with a one-line note that it was recorded under the old name).
+- **Files:** `README.md` (H1, first sentence, badges, install block, `/tidegap:*`, config paths, env table with `TIDEGAP_*`, migration section), `QUICKSTART.md`, `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, `packages/*/README.md` (6), `examples/**` (host configs to key `tidegap` and `@tidegap/mcp`, `examples/openclaw-skill/SKILL.md` and `scripts/install.sh`, rename `examples/pi/ebb-ai.md` to `examples/pi/tidegap.md`), `.github/ISSUE_TEMPLATE/*.md`, `.github/PULL_REQUEST_TEMPLATE.md`, `docs/claims.md` (rows 1, 25, 27 and the summary bullets: paths `packages/claude-code-plugin/skills/tidegap/SKILL.md` and `/tidegap:defer`; row 31: images re-rendered 2026-10-16 with the new wordmark, numbers unchanged), (internal submission log, not in the repo) (title, new rows per the runbook with status `not started`), (internal docs, not in the repo), `docs/VERCEL-DEPLOY.md`, `docs/papers/carbon-aware-mcp-scheduling.md`, `docs/spec/**`, `docs/impact-proposal.md`, `docs/article-notes.md`, `docs/examples/2026-09-30-GB-tick/README.md` (prose and reproducer commands; raw `output.txt` stays as captured, with a one-line note that it was recorded under the old name).
 - **Approach:** brand "Tidegap" in prose, `tidegap` in code spans. Every link to `github.com/Vitalini/ebb-ai` becomes `github.com/tidegap/tidegap`. README gets a short "Renamed from Ebb AI" section with the Breaking changes table below. No edit to R3 files.
 - **Test scenarios:** Test expectation: none -- docs only; `docs-lockstep.test.ts` already guards CLI commands on the site.
 - **Verification:** `git grep -n '@ebb-ai/' -- pnpm-lock.yaml` is empty, and `git grep -niE "ebb" -- ':!CHANGELOG.md' ':!docs/solutions' ':!docs/plans' ':!docs/archive' ':!docs/release' ':!compat' ':!pnpm-lock.yaml'` lists only KTD6 keeps, the compatibility notes, the hub-log history rows and `docs/examples/2026-09-30-GB-tick/output.txt`; every README link resolves (no file removed that a README points at).
@@ -391,7 +391,7 @@ Not code. Vitalii runs it after the PR is green and reviewed, except step 0. Eac
     - Glama: re-check the server page after the transfer; claim `tidegap/tidegap` if Glama created a new entry; the README badge moves to the new path in U5.
     - ComposioHQ/awesome-claude-skills PR #877: push the renamed entry, keep the alphabetical position rule (now between entries around "T").
     - ClawHub and the MCP Registry are steps 7 and 8.
-14. **Hub log.** Update `docs/internal/hub-submission-log.md` rows added in U5 from `not started` to their results, in a follow-up docs commit.
+14. **Hub log.** Update (internal submission log, not in the repo) rows added in U5 from `not started` to their results, in a follow-up docs commit.
 
 ---
 

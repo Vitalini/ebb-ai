@@ -13,7 +13,7 @@ execution: code
 
 - **Objective:** A visitor who lands on the GitHub README, the npm pages of `@ebb-ai/cli` and `@ebb-ai/mcp`, the PyPI page of `ebb-ai`, the Claude Code plugin listing or the site hero understands in ten seconds what ebb-ai does, can install it from a published package, and reads no number that `docs/claims.md` does not back with a label.
 - **Means:** Eight commits on one branch `chore/growth-readme-0.16.1`, in brief order (KTD1), ending with a release-prep commit for 0.16.1 that publishes nothing (KTD8).
-- **Authority:** Vitalii's brief for this PR, then this plan, then `docs/claims.md` (allowed claims and labels), then the session scratchpad inputs `growth-readme.md`, `growth-drafts.md`, `parity-diagnosis.md`. Where the drafts and `docs/claims.md` disagree, `docs/claims.md` wins. Where this plan and the repo disagree, stop and report.
+- **Authority:** Vitalii's brief for this PR, then this plan, then `docs/claims.md` (allowed claims and labels), then the <session notes, not in the repo>. Where the drafts and `docs/claims.md` disagree, `docs/claims.md` wins. Where this plan and the repo disagree, stop and report.
 - **Stop conditions:** a copy change would need a number with no row in `docs/claims.md`; the parity fixture shows TS and Python pick different entries for the same input (that is a real bug, out of scope: stop and report); `pnpm test` or `pytest` fails the same way twice; any step would publish to npm, PyPI, ClawHub or the MCP Registry, tag, push to `main`, or merge.
 - **Execution profile:** one worktree at `.worktrees/chore-growth-readme-0.16.1`, sequential commits U1-U8. No fan-out: U1 and U8 both touch `README.md` and U8 touches every manifest.
 - **Who finishes:** the pipeline stops at an open PR with green gates and one `ce-code-review` pass. Vitalii decides the npm/PyPI/ClawHub publish, the MCP Registry publish, the tag and the merge. A merge to `main` is a Vercel production deploy of `apps/web`.
@@ -28,14 +28,14 @@ Rewrite the first screen of the README, the npm heads of `@ebb-ai/cli` and `@ebb
 
 ### Problem Frame
 
-The audit in `growth-readme.md` fails six of eight public surfaces on the ten-second test. The README opens with "Workload scheduling for the agentic-AI economy" and has no install line on the first screen. The `@ebb-ai/cli` and `@ebb-ai/mcp` READMEs open with monorepo `pnpm --filter` builds and `node packages/.../dist/...` paths. The PyPI page says "pre-PyPI, install from source" and links to `../core-ts/` and `../../ROADMAP.md`, which 404 on pypi.org (and `ROADMAP.md` does not exist in the repo). `plugin.json`, `marketplace.json` and the plugin `SKILL.md` say "50% cheaper" with no label, which `docs/claims.md` row 4 requires. The site h1 says "faster", which has no row in `docs/claims.md`. The README says "queue viewer" (`README.md:347`) but `/queue` is a static explainer and the real queue view is `ebb queue list`.
+The audit in the <session notes, not in the repo> fails six of eight public surfaces on the ten-second test. The README opens with "Workload scheduling for the agentic-AI economy" and has no install line on the first screen. The `@ebb-ai/cli` and `@ebb-ai/mcp` READMEs open with monorepo `pnpm --filter` builds and `node packages/.../dist/...` paths. The PyPI page says "pre-PyPI, install from source" and links to `../core-ts/` and `../../ROADMAP.md`, which 404 on pypi.org (and `ROADMAP.md` does not exist in the repo). `plugin.json`, `marketplace.json` and the plugin `SKILL.md` say "50% cheaper" with no label, which `docs/claims.md` row 4 requires. The site h1 says "faster", which has no row in `docs/claims.md`. The README says "queue viewer" (`README.md:347`) but `/queue` is a static explainer and the real queue view is `ebb queue list`.
 
 `parity-diagnosis.md` shows that TS and Python pick the same hour for the same `rng`, but each call draws its own random number inside the cleanest-tolerance band. Snippets that pass no `rng` therefore show different hours on each run, which looks like a bug. No fixture pins the two languages to one selection today.
 
 ### Requirements
 
 **README (U1)**
-- R1. The README first screen has: a hero line, one value-proposition paragraph, three labelled bullets, badges, install lines, one TS snippet, one Python snippet, a labelled proof line, and agent-install links (growth-drafts.md section 1a).
+- R1. The README first screen has: a hero line, one value-proposition paragraph, three labelled bullets, badges, install lines, one TS snippet, one Python snippet, a labelled proof line, and agent-install links (<session notes, not in the repo>.md section 1a).
 - R2. The TS snippet passes `rng: () => 0` and the Python snippet passes `rng=lambda: 0`. One sentence states that without `rng` the pick is random inside the cleanest band of near-equal hours, and that `rng` returning 0 gives the strict minimum. Both snippets use the drafts' 24-hour deadline.
 - R3. The README no longer says "queue viewer"; it names `/queue` as an explainer and `ebb queue list` as the way to see the queue.
 - R4. The rest of the README body stays, moved below the new head. The status line `> **Status:** v0.16.0 ...` stays in a form `scripts/check-versions.mjs` still matches.
@@ -52,12 +52,12 @@ The audit in `growth-readme.md` fails six of eight public surfaces on the ten-se
 **Registry, parity, log, release (U4, U5, U7, U8)**
 - R10. `packages/mcp-server/package.json` has `"mcpName": "io.github.Vitalini/ebb-ai"` and `packages/mcp-server/server.json` validates against the 2025-12-11 MCP Registry schema. Nothing is published.
 - R11. One JSON vector file drives a window-selection test in both the TS and the Python suite with a pinned `rng`. Scheduler behaviour does not change.
-- R12. `docs/internal/hub-submission-log.md` records the state found on 2026-10-15.
+- R12. (internal submission log, not in the repo) records the state found on 2026-10-15.
 - R13. Every lockstep manifest, the README status line and a dated `## [0.16.1] — 2026-10-15` CHANGELOG heading say 0.16.1, and `node scripts/check-versions.mjs` passes.
 
 ### Scope Boundaries
 
-- GitHub repo description, topics and social preview: Vitalii runs `gh repo edit` and the web upload (growth-drafts.md 1b-1d). Not in this PR. The current GitHub description still carries "40–70 % lower CO2" until he does.
+- GitHub repo description, topics and social preview: Vitalii runs `gh repo edit` and the web upload (<session notes, not in the repo>, 1b-1d). Not in this PR. The current GitHub description still carries "40–70 % lower CO2" until he does.
 - `packages/core-ts/README.md` head and npm/PyPI `description` fields beyond the ones named in U2: not in the brief. U2 changes the `description` of `cli`, `mcp-server` and `pyproject.toml` only because drafts section 2 pairs them with the README heads (see KTD4).
 - "Faster" outside the hero: `apps/web/src/components/how-it-works-viz.tsx:45` ("Faster" card), `apps/web/src/app/about/page.tsx:31,70`, `README.md:33` ("Faster at off-peak") and `README.md:45` ("fastest hour"). They are qualitative with a cited policy link, not numeric claims. Left as is; listed for Vitalii.
 - `packages/core-ts/src/tool-surface.ts:277` ("up to 50% cheaper" in a tool description that MCP hosts show) is unlabelled, but it lives under `packages/core-ts/src`, which this PR does not change. Listed for Vitalii as a follow-up.
@@ -67,7 +67,7 @@ The audit in `growth-readme.md` fails six of eight public surfaces on the ten-se
 
 ### Sources
 
-- Session scratchpad `growth-readme.md` (audit), `growth-drafts.md` (paste-ready copy), `parity-diagnosis.md` and `parity/` (frozen GB feed, repro outputs). The brief's labels "A1", "A6", "A7" map to drafts sections 1a, 2 (2a/2b/2c) and 3.
+- <session notes, not in the repo>. The brief's labels "A1", "A6", "A7" map to drafts sections 1a, 2 (2a/2b/2c) and 3.
 - `docs/claims.md` rows 4, 6, 10, 11, 16, 31 and the "Dropped" section.
 - `docs/solutions/tooling-decisions/version-lockstep-check.md`, `docs/solutions/developer-experience/worktree-environment-setup.md`.
 - Release-prep precedent: commit `5b195f8` ("chore(release): prepare 0.16.0").
@@ -86,13 +86,13 @@ The audit in `growth-readme.md` fails six of eight public surfaces on the ten-se
 - KTD6. **`server.json` lives in `packages/mcp-server/`, carries the current lockstep version, and joins `check-versions.mjs`.** U4 writes `"version": "0.16.0"` in both version fields and adds `server.json` (top-level `version` and `packages[0].version`) to the `found` map in `scripts/check-versions.mjs`, per the learning in `version-lockstep-check.md` ("a new manifest that quotes the version needs to be added"). U8 bumps it with everything else. The registry entry needs 0.16.1 on npm first (0.16.0 has no `mcpName`); that ordering is Vitalii's publish step. `server.json` is not added to the npm `files` list.
 - KTD7. **Parity fixture tests `selectWindow` / `select_window` directly, not the feed path.** The selection function is pure, so the vector holds entries, `now`, `deadline`, `rng` value and the expected result. Feed parsing parity is already covered by `grid-feeds-fixtures.test.ts` / `test_grid_feeds_fixtures.py`. File: `packages/core-ts/test/fixtures/select-window-vectors.json`, shape `{ "_comment": ..., "vectors": [...] }` as in `sampling-allowlist-vectors.json`. Python reads it via `Path(__file__).resolve().parents[2] / "core-ts" / "test" / "fixtures" / ...` as `test_sampling_parity.py:18-23` does. No `rng` value of 1.0 or above: Python clamps the index (`scheduler.py` guard), TS does not, and `Math.random` never returns 1.
 - KTD8. **Release prep without publish.** Bump the nine files `check-versions.mjs` reads plus `server.json`. Lockfile: workspace packages are linked as `workspace:*`, so `pnpm-lock.yaml` holds no workspace version; the 0.16.0 prep commit `5b195f8` did not touch it. Run `pnpm install --lockfile-only` and commit the lockfile only if it changes. Runtime version readers need no edit: `apps/web/src/lib/version.ts`, `packages/mcp-server/src/server.ts:75` (`SERVER_VERSION`), `packages/cli/src/index.ts:39` and Python `__version__` all read package metadata.
-- KTD9. **Hero h1 wording.** Use the h1 from `growth-readme.md` section 7: "Run your agent's non-urgent LLM tasks at the cleanest grid hour." Keep the `text-accent` span on "cleanest grid hour". In the same Hero component, drop the clause "faster during providers&apos; expanded off-peak capacity," from the paragraph at `apps/web/src/app/page.tsx:81-82`, so the hero carries no "faster". Leave the rest of the hero (DOE paragraph, CTA layout) unchanged; the larger hero redesign in section 7 is not in the brief.
+- KTD9. **Hero h1 wording.** Use the h1 from the <session notes, not in the repo> section 7: "Run your agent's non-urgent LLM tasks at the cleanest grid hour." Keep the `text-accent` span on "cleanest grid hour". In the same Hero component, drop the clause "faster during providers&apos; expanded off-peak capacity," from the paragraph at `apps/web/src/app/page.tsx:81-82`, so the hero carries no "faster". Leave the rest of the hero (DOE paragraph, CTA layout) unchanged; the larger hero redesign in section 7 is not in the brief.
 
 ### Assumptions
 
 - The brief's "use the deadline the drafts use" means the 24-hour deadline in drafts section 1a (`Date.now() + 24 * 3600 * 1000` / `timedelta(hours=24)`).
 - `Vitalini` is the casing `mcp-publisher login github` reports. If it reports another casing, `mcpName` and `server.json` `name` change together before publish (Vitalii's step).
-- The hub-log refresh records the facts in `growth-readme.md` section (c) and `growth-drafts.md` sections 6a/6d as of 2026-10-15; no new checks are run in this PR.
+- The hub-log refresh records the facts in the <session notes, not in the repo> section (c) and the <session notes, not in the repo> sections 6a/6d as of 2026-10-15; no new checks are run in this PR.
 
 ### Sequencing
 
@@ -172,7 +172,7 @@ U1 → U2 → U3 → U4 → U5 → U6 → U7 → U8, one commit each. U8 is last
 ### U7. docs(internal): hub submission log
 
 - **Goal:** R12.
-- **Files:** `docs/internal/hub-submission-log.md`.
+- **Files:** (internal submission log, not in the repo).
 - **Approach:** the log rule is "don't remove rows; update status". Update status cells and add dated rows:
   - punkpeye/awesome-mcp-servers #6348 → "closed, not merged, 2026-07-24 — bot closed for inactivity after nudges asking for a Glama badge and score".
   - New row 2026-10-09: awesome-mcp-servers PR #16076, OPEN, labels `valid-name`, `has-emoji`, `has-glama`; Glama badge in the entry.
