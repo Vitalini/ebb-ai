@@ -8,8 +8,7 @@
   "type": "module",
   "main": "./dist/server.js",
   "bin": {
-    "tidegap-mcp": "./dist/server.js",
-    "ebb-mcp": "./dist/server.js"
+    "tidegap-mcp": "./dist/server.js"
   },
   "files": [
     "dist",

@@ -15,7 +15,6 @@
  */
 
 import { createRequire } from "node:module";
-import { basename } from "node:path";
 import { stripControlChars } from "@tidegap/core";
 import { Command } from "commander";
 import { runClientsAdd, runClientsList, runClientsRevoke } from "./commands/clients.js";
@@ -392,23 +391,7 @@ const isDirect = (() => {
   }
 })();
 
-/**
- * The deprecation line for the 0.18 `ebb` bin alias, or `undefined` when the
- * program was started under any other name. npm links both bins to this file,
- * so the name the user typed is the basename of `argv[1]`. The alias goes
- * away in 0.19.
- */
-export function binAliasDeprecation(argv1: string | undefined): string | undefined {
-  if (!argv1) return undefined;
-  const name = basename(argv1).replace(/\.(c|m)?js$/, "");
-  if (name !== "ebb") return undefined;
-  return "tidegap: the `ebb` command is now `tidegap`; the `ebb` alias is removed in 0.19.";
-}
-
 if (isDirect) {
-  const deprecation = binAliasDeprecation(process.argv[1]);
-  // eslint-disable-next-line no-console
-  if (deprecation) console.error(deprecation);
   buildProgram().parseAsync(process.argv).catch((err) => {
     // eslint-disable-next-line no-console
     console.error(err);

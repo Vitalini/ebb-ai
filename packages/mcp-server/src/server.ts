@@ -25,7 +25,7 @@
 import { mkdirSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -1264,21 +1264,7 @@ function isDirectRun(): boolean {
   }
 }
 
-/**
- * The deprecation line for the 0.18 `ebb-mcp` bin alias, or `undefined` under
- * any other name. Both bins link to this file; the alias goes away in 0.19.
- */
-export function binAliasDeprecation(argv1: string | undefined): string | undefined {
-  if (!argv1) return undefined;
-  if (basename(argv1).replace(/\.(c|m)?js$/, "") !== "ebb-mcp") return undefined;
-  return "tidegap-mcp: the `ebb-mcp` command is now `tidegap-mcp`; the `ebb-mcp` alias is removed in 0.19.";
-}
-
 if (isDirectRun()) {
-  const deprecation = binAliasDeprecation(process.argv[1]);
-  // stderr only — stdout belongs to the MCP stdio protocol.
-  // eslint-disable-next-line no-console
-  if (deprecation) console.error(deprecation);
   main().catch((err: unknown) => {
     // eslint-disable-next-line no-console
     console.error("[tidegap-mcp] fatal:", err);
