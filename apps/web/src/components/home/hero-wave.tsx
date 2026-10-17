@@ -1,7 +1,9 @@
 import type { CSSProperties } from "react";
 import { BRAND_HEADER, BRAND_PALETTE } from "@/lib/brand.generated";
 
-const { wave, wavePeriod, stroke } = BRAND_HEADER;
+const { wave, wavePeriod } = BRAND_HEADER;
+// Lighter than the header stroke: at hero size the brand weight would read as a band.
+const stroke = BRAND_HEADER.stroke * 0.4;
 
 // The brand wave path spans three periods and ends at the height it started,
 // so a copy shifted right by three periods continues it seamlessly.
@@ -16,19 +18,20 @@ const tide = { "--tide-p": `${wavePeriod}px` } as CSSProperties;
 
 /**
  * The large brand wave behind the hero (M3, M4). Built from the header
- * geometry in brand.generated.ts, scaled up: a faint white crest and teal
- * troughs, split at the same line as the logo. The path drifts one period
+ * geometry in brand.generated.ts, scaled up along the bottom of the first
+ * screen: a faint white crest and teal troughs, split at the same line as the
+ * logo. The path drifts one period
  * per `--dur-tide`; reduced motion keeps it still. Decorative only.
  */
 export function HeroWave() {
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none absolute inset-x-[-30%] bottom-0 -z-10 [mask-image:linear-gradient(to_right,transparent,black_20%,black_80%,transparent)]"
+      className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 [mask-image:linear-gradient(to_right,transparent,black_15%,black_85%,transparent)]"
     >
       <svg
         viewBox={`0 ${TOP} ${SPAN} ${BOTTOM - TOP}`}
-        className="block h-auto w-full"
+        className="-ml-[35%] block h-auto w-[170%] max-w-none sm:-ml-[10%] sm:w-[120%]"
         focusable="false"
       >
         <defs>
@@ -43,7 +46,7 @@ export function HeroWave() {
           <WavePath color={BRAND_PALETTE.white} opacity={0.06} />
         </g>
         <g clipPath="url(#hero-wave-trough)">
-          <g className="glow-in" opacity={0.6}>
+          <g className="glow-in" opacity={0.45}>
             <WavePath color={BRAND_PALETTE.teal} opacity={1} />
           </g>
         </g>

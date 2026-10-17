@@ -73,7 +73,7 @@ export default function HomePage() {
 // Fills the viewport below the sticky nav (61px, 65px from sm) and main's 40px top padding.
 function FirstScreen() {
   return (
-    <section className="relative isolate flex min-h-[calc(100svh-101px)] flex-col items-center justify-center gap-6 overflow-hidden text-center sm:min-h-[calc(100svh-105px)]">
+    <section className="relative isolate flex min-h-[calc(100svh-101px)] flex-col items-center justify-center gap-6 overflow-hidden pb-24 text-center sm:pb-36 sm:min-h-[calc(100svh-105px)]">
       <HeroWave />
       <ul className="flex flex-wrap justify-center gap-2" aria-label="Project facts">
         <li>
