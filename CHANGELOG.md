@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **ClawHub release from GitHub Actions.** ClawHub mints a trusted-publishing token only for a `workflow_dispatch` OIDC token, so the 0.19.0 tag push failed with "Not logged in. Run: clawhub login". A tag push now publishes npm, PyPI and the MCP Registry; ClawHub publishes from `gh workflow run release.yml --ref vX.Y.Z -f dry_run=false -f clawhub_only=true`, and the tag-push run prints that command.
+
 ## [0.19.0] — 2026-10-17
 
 ### Added
