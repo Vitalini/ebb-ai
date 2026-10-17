@@ -381,6 +381,43 @@ describe("tidegap ui token scopes and origins (native clients KTD3)", () => {
     expect(res.status).toBe(200);
     await res.body!.cancel();
   });
+
+  it("a client token gets 403 on /api/clients spelled with empty segments", async () => {
+    const json = { "content-type": "application/json" };
+    for (const o of [undefined, EXT[0]]) {
+      for (const path of ["/api//clients", "/api/clients//", "/api//clients/", "/api///clients"]) {
+        expect([path, o, await status(path, clientToken, o)]).toEqual([path, o, 403]);
+        expect([path, o, await status(path, clientToken, o, "POST", json, '{"name":"evil"}')]).toEqual([path, o, 403]);
+      }
+      for (const path of [`/api//clients/${clientId}/revoke`, `/api/clients//${clientId}/revoke`, `/api/clients/${clientId}//revoke`]) {
+        expect([path, o, await status(path, clientToken, o, "POST")]).toEqual([path, o, 403]);
+      }
+    }
+    expect(new ClientRegistry(dir).list().map((c) => c.id)).toEqual([clientId]);
+    expect(await status("/api//clients", TOKEN)).toBe(200);
+  });
+
+  it("a revoked client token's open event stream ends", async () => {
+    const res = await fetch(`${ui.url}api/events`, { headers: { authorization: `Bearer ${clientToken}` } });
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    while (!buf.includes("event: hello")) buf += decoder.decode((await reader.read()).value);
+    ui.events.emit(["before"]);
+    while (!buf.includes('"before"')) buf += decoder.decode((await reader.read()).value);
+    new ClientRegistry(dir).revoke(clientId);
+    ui.events.emit(["after"]);
+    let done = false;
+    const until = Date.now() + 3_000;
+    while (!done && Date.now() < until) {
+      const next = await reader.read();
+      done = next.done;
+      if (next.value) buf += decoder.decode(next.value);
+    }
+    expect(done).toBe(true);
+    expect(buf).not.toContain('"after"');
+    expect(await status("/api/events", clientToken)).toBe(401);
+  });
 });
 
 describe("tidegap ui assets", () => {

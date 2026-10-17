@@ -153,9 +153,14 @@ export function classifyOrigin(origin: string | undefined, port: number): Origin
   return EXTENSION_ORIGIN.test(origin) ? "extension" : "foreign";
 }
 
-/** `/api/clients` and everything under it: page token only. */
+/**
+ * `/api/clients` and everything under it: page token only. Splits the path
+ * the way the router does (empty segments dropped), so `/api//clients`
+ * cannot route to the clients handlers past this check.
+ */
 function isClientsRoute(pathname: string): boolean {
-  return pathname === "/api/clients" || pathname.startsWith("/api/clients/");
+  const segs = pathname.split("/").filter(Boolean);
+  return segs[0] === "api" && segs[1] === "clients";
 }
 
 function send(res: ServerResponse, status: number, body?: unknown, type = "application/json; charset=utf-8"): void {
@@ -232,29 +237,40 @@ export async function startUiServer(opts: UiServerOptions): Promise<UiServer> {
   let port = 0;
 
   /** The bearer's scope: the per-run page token, a registry client token, or none. */
-  const scope = (req: IncomingMessage): "page" | "client" | undefined => {
-    const m = /^Bearer (.+)$/.exec(req.headers.authorization ?? "");
-    if (!m) return undefined;
-    if (timingSafeEqual(digest(m[1]!), tokenDigest)) return "page";
-    return clients.verify(m[1]!) ? "client" : undefined;
+  const scope = (bearer: string | undefined): "page" | "client" | undefined => {
+    if (bearer === undefined) return undefined;
+    if (timingSafeEqual(digest(bearer), tokenDigest)) return "page";
+    return clients.verify(bearer) ? "client" : undefined;
   };
 
-  const openStream = (req: IncomingMessage, res: ServerResponse): void => {
+  /**
+   * The change stream. For a client token (`clientBearer`), the bearer is
+   * checked again before each event and on each keep-alive: once it is
+   * revoked the stream ends, and a reconnect gets 401.
+   */
+  const openStream = (req: IncomingMessage, res: ServerResponse, clientBearer?: string): void => {
     res.writeHead(200, {
       ...SECURITY_HEADERS,
       "content-type": "text/event-stream; charset=utf-8",
       connection: "keep-alive",
     });
     res.write(`event: hello\ndata: {}\n\n`);
-    const unsubscribe = events.subscribe((ids) => {
-      res.write(`event: tasks\ndata: ${JSON.stringify({ ids })}\n\n`);
-    });
-    const keepAlive = setInterval(() => res.write(`: keep-alive\n\n`), 15_000);
-    keepAlive.unref();
-    req.on("close", () => {
+    const valid = () => clientBearer === undefined || clients.verify(clientBearer) !== undefined;
+    let open = true;
+    const end = () => {
+      if (!open) return;
+      open = false;
       clearInterval(keepAlive);
       unsubscribe();
+      res.end();
+    };
+    const unsubscribe = events.subscribe((ids) => {
+      if (!valid()) return end();
+      res.write(`event: tasks\ndata: ${JSON.stringify({ ids })}\n\n`);
     });
+    const keepAlive = setInterval(() => (valid() ? res.write(`: keep-alive\n\n`) : end()), 15_000);
+    keepAlive.unref();
+    req.on("close", end);
   };
 
   const server = createServer((req, res) => {
@@ -265,13 +281,16 @@ export async function startUiServer(opts: UiServerOptions): Promise<UiServer> {
       const url = new URL(req.url ?? "/", `http://${LOOPBACK}`);
       const method = req.method ?? "GET";
       if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
-        const who = scope(req);
+        const bearer = /^Bearer (.+)$/.exec(req.headers.authorization ?? "")?.[1];
+        const who = scope(bearer);
         if (!who) return send(res, 401, { error: "unauthorized" });
         // An extension uses a client token; the page token stays in the page.
         if (origin === "extension" && who === "page") return send(res, 403, { error: "forbidden origin" });
         if (who === "client" && isClientsRoute(url.pathname)) return send(res, 403, { error: "forbidden" });
         if (url.pathname === "/api/events") {
-          return method === "GET" ? openStream(req, res) : send(res, 405, { error: "method not allowed" });
+          return method === "GET"
+            ? openStream(req, res, who === "client" ? bearer : undefined)
+            : send(res, 405, { error: "method not allowed" });
         }
         let body: Record<string, unknown> = {};
         const kind = method === "POST" ? postBodyKind(url.pathname) : undefined;

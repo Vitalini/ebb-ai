@@ -192,16 +192,42 @@ describe("GET /api/summary", () => {
     expect(third.cursor).toBe(second.cursor);
   });
 
-  it("more than 20 finished since the cursor: the 20 newest, cursor the newest", async () => {
-    for (let i = 0; i < 25; i++) {
-      store.upsert(row(`t${i}`, { status: "completed", completedAt: new Date(at(9).getTime() + i * 60_000).toISOString() }));
-    }
-    const { body } = await get(`since=${at(8).toISOString()}`);
-    const finished = body.finished as Array<{ task_id: string }>;
-    expect(finished).toHaveLength(20);
-    expect(finished[0]!.task_id).toBe("t24");
-    expect(finished[19]!.task_id).toBe("t5");
-    expect(body.cursor).toBe(new Date(at(9).getTime() + 24 * 60_000).toISOString());
+  it("more than 20 finished since the cursor: the 20 oldest newest first, then the rest; none is skipped", async () => {
+    const stamp = (i: number) => new Date(at(9).getTime() + i * 60_000).toISOString();
+    for (let i = 0; i < 25; i++) store.upsert(row(`t${i}`, { status: "completed", completedAt: stamp(i) }));
+    const ids = (b: Record<string, unknown>) => (b.finished as Array<{ task_id: string }>).map((t) => t.task_id);
+    const first = (await get(`since=${at(8).toISOString()}`)).body;
+    expect(ids(first)).toEqual(Array.from({ length: 20 }, (_, i) => `t${19 - i}`));
+    expect(first.cursor).toBe(stamp(19));
+    const second = (await get(`since=${first.cursor as string}`)).body;
+    expect(ids(second)).toEqual(["t24", "t23", "t22", "t21", "t20"]);
+    expect(second.cursor).toBe(stamp(24));
+    const third = (await get(`since=${second.cursor as string}`)).body;
+    expect(ids(third)).toEqual([]);
+    expect(third.cursor).toBe(stamp(24));
+  });
+
+  it("over the cap, tasks that share the boundary completed_at are not split across polls", async () => {
+    const stamp = (i: number) => new Date(at(9).getTime() + i * 60_000).toISOString();
+    // t0..t18 distinct, then t19..t21 share one instant, then t22.
+    for (let i = 0; i < 19; i++) store.upsert(row(`t${i}`, { status: "completed", completedAt: stamp(i) }));
+    for (const id of ["t19", "t20", "t21"]) store.upsert(row(id, { status: "completed", completedAt: stamp(19) }));
+    store.upsert(row("t22", { status: "completed", completedAt: stamp(22) }));
+    const ids = (b: Record<string, unknown>) => (b.finished as Array<{ task_id: string }>).map((t) => t.task_id).sort();
+    const first = (await get(`since=${at(8).toISOString()}`)).body;
+    expect((first.finished as unknown[]).length).toBe(19);
+    expect(first.cursor).toBe(stamp(18));
+    const second = (await get(`since=${first.cursor as string}`)).body;
+    expect(ids(second)).toEqual(["t19", "t20", "t21", "t22"]);
+    expect(second.cursor).toBe(stamp(22));
+  });
+
+  it("more than the cap sharing the first instant are listed together", async () => {
+    const t = at(9).toISOString();
+    for (let i = 0; i < 22; i++) store.upsert(row(`s${i}`, { status: "completed", completedAt: t }));
+    const first = (await get(`since=${at(8).toISOString()}`)).body;
+    expect((first.finished as unknown[]).length).toBe(22);
+    expect(first.cursor).toBe(t);
   });
 
   it("since=yesterday is 400", async () => {
