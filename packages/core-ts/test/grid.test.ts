@@ -379,4 +379,21 @@ describe("mockGridFeed (unchanged baseline)", () => {
       b.entries[0]?.carbonIntensityGCo2PerKwh,
     );
   });
+
+  it("starts on the current UTC hour whatever the local time zone", async () => {
+    // 01:30 UTC on 2026-10-25 is inside Kyiv's repeated DST hour (03:xx
+    // local twice); a local-time floor resolved it to 00:00 UTC. In a
+    // half-hour zone a local floor lands on :30 UTC.
+    const prevTz = process.env.TZ;
+    try {
+      for (const tz of ["Europe/Kyiv", "Asia/Kolkata", "America/Los_Angeles", "UTC"]) {
+        process.env.TZ = tz;
+        const f = await mockGridFeed(() => new Date("2026-10-25T01:30:00.000Z")).fetchForecast("DE", 2);
+        expect(f.entries[0]?.datetime, tz).toBe("2026-10-25T01:00:00.000Z");
+      }
+    } finally {
+      if (prevTz === undefined) delete process.env.TZ;
+      else process.env.TZ = prevTz;
+    }
+  });
 });
