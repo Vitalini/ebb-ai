@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Run tasks through your Claude Code subscription.** New provider `claude-code`: `tidegap tick` runs the local `claude` CLI headless (`claude -p`, prompt on stdin, no tools, `--safe-mode`, a temporary directory, a `--max-budget-usd` cap and a 10-minute timeout), so a task uses your Claude Code subscription quota and needs no API key. The tick finds `claude` through `TIDEGAP_CLAUDE_BIN`, `PATH`, the usual install locations and, on macOS, the login shell; `TIDEGAP_CLAUDE_CODE=0` turns this off and `TIDEGAP_CLAUDE_CODE_MAX_BUDGET_USD` sets the cap. Without `ANTHROPIC_API_KEY`, `anthropic` tasks also run through Claude Code. MCP `schedule_task` and `tidegap ui` quick add accept the provider; OpenClaw does not. A "not logged in" or usage-limit result fails the task once with the reason; requeueing until the limit resets is a follow-up, and MCP `retry_task` / `expedite_task` do not run `claude-code` tasks yet. See "Run through your Claude Code subscription" in the README.
 
+### Changed
+
+- Docs: internal submission log and marketing notes moved out of the public repo; local paths and token names removed from plan documents.
+
 ## [0.19.0] — 2026-10-17
 
 ### Added

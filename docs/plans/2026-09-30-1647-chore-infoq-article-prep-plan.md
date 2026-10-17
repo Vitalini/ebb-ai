@@ -13,7 +13,7 @@ execution: code
 
 - **Objective:** An InfoQ editor who clicks through from the article to the site, the README and npm finds one version number that is actually installable, one reproducible example run, and no number without a stated source.
 - **Means:** Six commits on `chore/infoq-article-prep`, one per brief item in brief order (KTD1), streams sequenced where they share files (KTD6), ending at one open PR against `main`.
-- **Authority:** Vitalii's brief (session scratchpad `brief-infoq.md`), then this plan, then the two scout reports (`run-tick.md`, `claims-inventory.md` in the session scratchpad), then the `claude-api` skill for any Claude model id, price or Batch discount. Where the plan and repo evidence disagree, stop and report.
+- **Authority:** Vitalii's brief (<session notes, not in the repo>), then this plan, then the two scout reports (<session notes, not in the repo>), then the `claude-api` skill for any Claude model id, price or Batch discount. Where the plan and repo evidence disagree, stop and report.
 - **Stop conditions:** a number would have to be invented to fill a section; a real `ebb tick` run and the fixture fallback both fail; `pnpm preflight` or the web build fails the same way twice; any step would tag, publish to npm or PyPI, deploy, or merge.
 - **Execution profile:** one worktree for the sequential chain (U1-U4, U6), one side worktree for U5; commits integrated in brief order; `ce-code-review` once on the final PR.
 - **Who finishes:** the pipeline stops at an open, reviewed PR with green CI. Vitalii decides publish, tag and merge; a merge to `main` is a Vercel production deploy.
