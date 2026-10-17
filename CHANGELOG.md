@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Run tasks through your Claude Code subscription.** New provider `claude-code`: `tidegap tick` runs the local `claude` CLI headless (`claude -p`, prompt on stdin, no tools, `--safe-mode`, a temporary directory, a `--max-budget-usd` cap and a 10-minute timeout), so a task uses your Claude Code subscription quota and needs no API key. The tick finds `claude` through `TIDEGAP_CLAUDE_BIN`, `PATH`, the usual install locations and, on macOS, the login shell; `TIDEGAP_CLAUDE_CODE=0` turns this off and `TIDEGAP_CLAUDE_CODE_MAX_BUDGET_USD` sets the cap. Without `ANTHROPIC_API_KEY`, `anthropic` tasks also run through Claude Code. MCP `schedule_task` and `tidegap ui` quick add accept the provider; OpenClaw does not. A "not logged in" or usage-limit result fails the task once with the reason; requeueing until the limit resets is a follow-up, and MCP `retry_task` / `expedite_task` do not run `claude-code` tasks yet. See "Run through your Claude Code subscription" in the README.
+
+### Changed
+
+- **Homepage shows the install prompt.** The first screen shows the short prompt for your agent, with a "Copy prompt" button under it. How it works moved up, and the "what it is" block moved to `/about`. The header wave and the tagline underline animate, and stay still under reduced motion. `install.md` covers Codex, the libraries and connecting the Mac app and the browser extension.
+- **Site metadata for search and agents.** One site description for the meta, Open Graph and Twitter tags, with no test count. `/architecture` gets a description and a canonical link; the sitemap lists `/architecture`, `/install.md` and `/llms.txt`; `robots.txt` drops the invalid `Host:` line; `llms.txt` links `install.md` first, counts 10 MCP tools and names 0.19.0, Codex, the Mac app and the extensions; the JSON-LD adds `alternateName`, `sameAs` and `downloadUrl`.
+- Docs: internal submission log and marketing notes moved out of the public repo; local paths and token names removed from plan documents.
+
+### Fixed
+
+- **ClawHub release from GitHub Actions.** ClawHub mints a trusted-publishing token only for a `workflow_dispatch` OIDC token, so the 0.19.0 tag push failed with "Not logged in. Run: clawhub login". A tag push now publishes npm, PyPI and the MCP Registry; ClawHub publishes from `gh workflow run release.yml --ref vX.Y.Z -f dry_run=false -f clawhub_only=true`, and the tag-push run prints that command. The command needs a tag from 0.19.1 on; ClawHub 0.19.0 was not published.
+
 ## [0.19.0] — 2026-10-17
 
 ### Added

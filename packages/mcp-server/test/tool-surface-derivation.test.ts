@@ -51,13 +51,13 @@ describe("MCP tool list is derived from the shared surface (§2.2)", () => {
     }
   });
 
-  it("advertises the four-value provider enum on schedule_task", () => {
+  it("advertises the five-value provider enum on schedule_task", () => {
     const schedule = buildToolList().find((t) => t.name === "schedule_task")!;
     const provider = (
       schedule.inputSchema as {
         properties?: { provider?: { enum?: string[] } };
       }
     ).properties?.provider;
-    expect(provider?.enum).toEqual(["anthropic", "openai", "gemini", "ollama"]);
+    expect(provider?.enum).toEqual(["anthropic", "openai", "gemini", "ollama", "claude-code"]);
   });
 });

@@ -43,7 +43,7 @@ the `mock feed` badge).
 
 ## Adding the keys to Vercel
 
-1. Open the Vercel project: <https://vercel.com/vitalini/tidegap/settings/environment-variables>
+1. Open the Vercel project: <https://vercel.com/<team>/tidegap/settings/environment-variables>
 2. For each of the three variables:
    - **Key:** the name from the table above (e.g. `TIDEGAP_EIA_API_KEY`).
    - **Value:** the secret from the step above.
@@ -53,7 +53,7 @@ the `mock feed` badge).
    - **Sensitive:** check **Yes**.
 3. Click **Save** for each.
 4. Trigger a redeploy: either push a no-op commit, or open
-   <https://vercel.com/vitalini/tidegap/deployments> and click the
+   <https://vercel.com/<team>/tidegap/deployments> and click the
    three-dot menu on the latest deployment → **Redeploy**.
 
 After the redeploy completes, every region card on `www.tidegap.com`

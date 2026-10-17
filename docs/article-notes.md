@@ -160,21 +160,21 @@ source — see `docs/claims.md` for the full audit):
   and a dev.to article as "not started" or "Hold," each conditioned on a
   milestone (a real metric, the v0.9 leaderboard, the first directory
   inclusion) that the log gives no later evidence of being reached
-  `[docs/internal/marketing-channels.md]`.
+  `[(internal submission log, not in the repo)]`.
 - The submission-tracking log has no entries after 2026-05-19, one week
   into the project, despite the repository's git history continuing through
   2026-09-29 — 4+ months of further releases were not logged as submitted
-  anywhere `[docs/internal/hub-submission-log.md; git log shows commits
+  anywhere `[(internal submission log, not in the repo); git log shows commits
   through c48a7d0, 2026-09-29]`.
 - Three awesome-list PRs were opened the same week (punkpeye/awesome-mcp-servers
   #6348, Green-Software-Foundation/awesome-green-software #215,
   ComposioHQ/awesome-claude-skills #877); the log's last recorded status for
   each is "OPEN" / "awaiting review" — it contains no later entry recording
-  a merge `[docs/internal/hub-submission-log.md]`.
+  a merge `[(internal submission log, not in the repo)]`.
 - Publishing the OpenClaw plugin took three attempts: `@vitalini/tidegap-ai`
   and `@vitalini/tidegap-ai-mcp` were both published and then withdrawn
   (wrong runtime id, then a rejected slug) before `@vitalini/tidegap` stuck
-  `[docs/internal/hub-submission-log.md; 9860387, c52ce50, b8b64ee]`.
+  `[(internal submission log, not in the repo); 9860387, c52ce50, b8b64ee]`.
 - Live adoption numbers, fetched 2026-09-30:
   - npm, last 30 days: `@tidegap/core` 69 downloads, `@tidegap/cli` 77
     downloads, `@tidegap/mcp` 78 downloads (window 2026-08-30 to
@@ -216,7 +216,7 @@ source — see `docs/claims.md` for the full audit):
 - Distribution tracking stopped the same week it started: every entry in
   the submission log is dated 2026-05-19, and no later release added a
   new row, even though releases kept shipping for four more months
-  `[docs/internal/hub-submission-log.md]`. Treating the log as part of
+  `[(internal submission log, not in the repo)]`. Treating the log as part of
   each release's checklist, rather than a one-time launch artifact, would
   have kept it a source of truth instead of a snapshot.
 
@@ -224,7 +224,7 @@ source — see `docs/claims.md` for the full audit):
 
 - Whether the three awesome-list PRs (#6348, #215, #877) were ever merged,
   and the outcome of the glama.ai and Bing Webmaster submissions —
-  `docs/internal/hub-submission-log.md` was not updated after 2026-05-19.
+  (internal submission log, not in the repo) was not updated after 2026-05-19.
 - Any GitHub traffic/referrer data (Insights → Traffic), since the GitHub
   API does not expose it and it is not recorded anywhere in this repo.
 - User count, install count, or any real-world carbon-avoided total — no

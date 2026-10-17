@@ -498,7 +498,7 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
           carbon_budget_g?: number;
           dry_run?: boolean;
           dispatch?: boolean;
-          provider?: "anthropic" | "openai" | "gemini" | "ollama";
+          provider?: ProviderName;
           output_path?: string;
           redact_in_receipt?: string[];
           candidates?: string[];

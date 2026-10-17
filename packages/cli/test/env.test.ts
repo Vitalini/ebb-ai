@@ -27,6 +27,9 @@ const VARS = [
   "WATTTIME_PASSWORD",
   "TIDEGAP_CARBON_BUDGET_G",
   "TIDEGAP_CARBON_BUDGET_WINDOW",
+  "TIDEGAP_CLAUDE_BIN",
+  "TIDEGAP_CLAUDE_CODE",
+  "TIDEGAP_CLAUDE_CODE_MAX_BUDGET_USD",
 ] as const;
 
 describe("tidegap CLI env boundary", () => {
@@ -59,6 +62,9 @@ describe("tidegap CLI env boundary", () => {
     process.env.WATTTIME_PASSWORD = "wt-pass";
     process.env.TIDEGAP_CARBON_BUDGET_G = "1000";
     process.env.TIDEGAP_CARBON_BUDGET_WINDOW = "weekly";
+    process.env.TIDEGAP_CLAUDE_BIN = "/opt/claude";
+    process.env.TIDEGAP_CLAUDE_CODE = "off";
+    process.env.TIDEGAP_CLAUDE_CODE_MAX_BUDGET_USD = "0.5";
 
     expect(readEnvCredentials()).toEqual({
       anthropicApiKey: "a",
@@ -77,6 +83,9 @@ describe("tidegap CLI env boundary", () => {
         TIDEGAP_CARBON_BUDGET_WINDOW: "weekly",
       },
       noNotify: false,
+      claudeBin: "/opt/claude",
+      claudeCodeDisabled: true,
+      claudeCodeMaxBudgetUsd: "0.5",
     });
   });
 

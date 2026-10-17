@@ -1,0 +1,30 @@
+#!/bin/sh
+# Fake `claude` for tests. Records what the adapter sent into
+# $FAKE_CLAUDE_LOG (argv one per line, cwd, pid, env, stdin, the system prompt file),
+# then plays the canned reply named by $FAKE_CLAUDE_MODE.
+here=$(cd "$(dirname "$0")" && pwd)
+log=${FAKE_CLAUDE_LOG:-/dev/null}
+if [ "$log" != /dev/null ]; then
+  mkdir -p "$log"
+  printf '%s\n' "$@" > "$log/argv"
+  pwd > "$log/cwd"
+  echo $$ > "$log/pid"
+  env > "$log/env"
+  prev=
+  for a in "$@"; do
+    if [ "$prev" = "--system-prompt-file" ]; then cat "$a" > "$log/system"; fi
+    prev=$a
+  done
+  cat > "$log/stdin"
+fi
+case "${FAKE_CLAUDE_MODE:-success}" in
+  success) cat "$here/success.json" ;;
+  empty-usage) cat "$here/empty-usage.json" ;;
+  refusal) cat "$here/refusal.json" ;;
+  logged-out) cat "$here/logged-out.json"; exit 1 ;;
+  limit) cat "$here/limit.json"; exit 1 ;;
+  budget) cat "$here/budget.json"; exit 1 ;;
+  garbage) echo "not json"; echo "boom" >&2; exit 2 ;;
+  sleep) exec sleep 30 ;;
+  group) sleep 30 & echo $! > "$log/grandchild"; wait ;;
+esac

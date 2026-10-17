@@ -77,14 +77,17 @@ describe("tool surface — shape and invariants", () => {
     expect(() => getToolDefOrThrow("nope")).toThrow(/unknown Tidegap tool/);
   });
 
-  it("the schedule_task provider enum offers all four providers", () => {
-    const provider = getToolDefOrThrow("schedule_task").params.find(
-      (p) => p.name === "provider",
-    )!;
-    expect(provider.kind).toBe("enum");
+  it("the schedule_task provider enum adds claude-code on MCP only", () => {
+    const def = getToolDefOrThrow("schedule_task");
+    const on = (host: "mcp" | "openclaw") => paramsForHost(def, host).find((p) => p.name === "provider")!;
+    for (const host of ["mcp", "openclaw"] as const) {
+      expect(on(host).kind).toBe("enum");
+      expect(on(host).optional).toBe(true);
+    }
     // Backward-compatible: anthropic/openai retained, gemini/ollama ADDED.
-    expect(provider.values).toEqual(["anthropic", "openai", "gemini", "ollama"]);
-    expect(provider.optional).toBe(true);
+    expect(on("openclaw").values).toEqual(["anthropic", "openai", "gemini", "ollama"]);
+    // claude-code runs only in `tidegap tick`, so OpenClaw does not offer it.
+    expect(on("mcp").values).toEqual(["anthropic", "openai", "gemini", "ollama", "claude-code"]);
   });
 
   it("models the intentional per-host divergences explicitly", () => {

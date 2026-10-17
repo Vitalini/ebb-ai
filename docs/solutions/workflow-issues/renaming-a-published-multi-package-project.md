@@ -71,7 +71,7 @@ Review fixes go before the release commit. If one lands after it, move the relea
 - **Log one migration warning**, once, on the first `full` registration: install the new plugin and move the config block to `plugins.entries.tidegap`. The user config key is `plugins.entries.<id>` (not `plugins.<id>`).
 - **Keep the old `uiHints`**, so the sensitive fields stay hidden in the host UI. Dropping them would show secrets as plain text. A fix commit added them back.
 - **The shim is plain ESM with no dependencies**, tested without a build (`compat/test/clawhub-shim.test.mjs`, in `pnpm preflight`). Validate with `clawhub package validate`, rehearse with `publish --dry-run --json`.
-- The release is "ready, not published" until the publish command runs after merge; track it as a hub-submission-log row. The 0.17.1 pointer was published on 2026-10-17 from `main` `ee615aa`.
+- The release is "ready, not published" until the publish command runs after merge; track it as a (internal submission log, not in the repo) row. The 0.17.1 pointer was published on 2026-10-17 from `main` `ee615aa`.
 
 ## Why This Matters
 

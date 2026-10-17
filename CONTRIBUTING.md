@@ -95,9 +95,9 @@ and 22; PRs need it green before merge.
 
 Tidegap follows [Semantic Versioning](https://semver.org). Releases
 publish from GitHub Actions (`.github/workflows/release.yml`) by OIDC
-trusted publishing: npm (with provenance), then PyPI, then the MCP
-Registry and ClawHub. No registry token lives on a laptop or in
-GitHub secrets.
+trusted publishing: npm (with provenance), then PyPI and the MCP
+Registry on the tag push, then ClawHub from a dispatch on the tag. No
+registry token lives on a laptop or in GitHub secrets.
 
 1. Release-prep PR: bump every file `pnpm check:versions` lists, date
    the CHANGELOG heading (`## [X.Y.Z] — YYYY-MM-DD`), update the README
@@ -107,13 +107,23 @@ GitHub secrets.
    `git pull && git tag -a vX.Y.Z -m vX.Y.Z <merge sha> && git push origin vX.Y.Z`.
    A tag pushed before CI passes fails `verify`; re-run the failed
    jobs when CI is green.
-3. Approve the `release` deployment three times in the Actions run:
-   GitHub asks once per job that names the environment, so npm, then
-   PyPI, then ClawHub. The MCP Registry job needs no approval.
-4. The workflow checks the tag against the lockstep version, checks
+3. Approve the `release` deployment twice in the Actions run: GitHub
+   asks once per job that names the environment, so npm, then PyPI.
+   The MCP Registry job needs no approval.
+4. Publish ClawHub, and approve it once:
+   `gh workflow run release.yml --ref vX.Y.Z -f dry_run=false -f clawhub_only=true`.
+   ClawHub mints its trusted-publishing token only for a
+   `workflow_dispatch` OIDC token, so the tag push skips the ClawHub job.
+   Dispatch after the tag-push run finishes: both runs share one
+   concurrency group, and a second pending run cancels the first.
+   Keep `clawhub_only=true`: without it the MCP Registry step runs
+   again and fails on the published version. The dispatch reads
+   `release.yml` from the tag, so tags before v0.19.1 have no
+   `clawhub_only` input; ClawHub 0.19.0 was not published.
+5. The workflow checks the tag against the lockstep version, checks
    that the commit is on `main` and that CI passed on it, then
    publishes. Check the run summary.
-5. Optional: write the GitHub Release notes from the CHANGELOG section.
+6. Optional: write the GitHub Release notes from the CHANGELOG section.
 
 Rehearsal (build and dry run only, nothing is published):
 `gh workflow run release.yml --ref main`. Retry the MCP Registry step

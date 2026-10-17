@@ -131,7 +131,7 @@ exports[`tool surface — divergence canary > per-host neutral schema snapshot (
           "required": false,
         },
         {
-          "description": "Which provider to dispatch this task through: 'anthropic', 'openai', 'gemini', or 'ollama' (local). Defaults to 'anthropic'. 'anthropic' and 'openai' can auto-route through a 50%-cheaper Batch API when the deadline allows; 'gemini' and 'ollama' always dispatch synchronously.",
+          "description": "Which provider to dispatch this task through: 'anthropic', 'openai', 'gemini', 'ollama' (local), or 'claude-code' (runs through the local Claude Code login on the next \`tidegap tick\`, no API key, no tools). Defaults to 'anthropic'. 'anthropic' and 'openai' can auto-route through a 50%-cheaper Batch API when the deadline allows; 'gemini', 'ollama' and 'claude-code' always dispatch synchronously.",
           "kind": "enum",
           "name": "provider",
           "required": false,
@@ -140,6 +140,7 @@ exports[`tool surface — divergence canary > per-host neutral schema snapshot (
             "openai",
             "gemini",
             "ollama",
+            "claude-code",
           ],
         },
         {
