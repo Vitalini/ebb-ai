@@ -645,6 +645,26 @@ export interface EntsoeTimeSeries {
 }
 
 /**
+ * Yields the inner text of each `<tag>…</tag>` in order, pairing every
+ * open with the nearest close after it — what `/<tag>([\s\S]*?)<\/tag>/g`
+ * matches, in linear time. When one open has no close, no later open has
+ * one either, so the scan stops.
+ */
+function* blocks(xml: string, tag: string): Generator<string> {
+  const open = `<${tag}>`;
+  const close = `</${tag}>`;
+  let from = 0;
+  for (;;) {
+    const start = xml.indexOf(open, from);
+    if (start === -1) return;
+    const end = xml.indexOf(close, start + open.length);
+    if (end === -1) return;
+    yield xml.slice(start + open.length, end);
+    from = end + close.length;
+  }
+}
+
+/**
  * Minimal ENTSO-E XML extractor. Returns, for each *generation*
  * TimeSeries block, the psrType plus every `<Period>` (each with its own
  * start/resolution) and each Point's `<position>` and `<quantity>`.
@@ -664,19 +684,18 @@ export interface EntsoeTimeSeries {
  * Why regex rather than a real parser: ENTSO-E's response shape is
  * stable, the fields we read are well-namespaced, and adding a 30KB
  * XML dep to `@tidegap/core` for one adapter is bad cost-benefit.
+ * Blocks are cut by `blocks()`, not by a lazy regex, so unclosed tags in
+ * hostile feed text cost linear time.
  * Exported for parse-level fixture tests.
  */
 export function parseEntsoeXml(xml: string): EntsoeTimeSeries[] {
   if (/<Acknowledgement_MarketDocument[\s>]/.test(xml)) {
     const reason =
-      xml.match(/<text>([\s\S]*?)<\/text>/)?.[1]?.trim() ??
-      "no reason text in document";
+      blocks(xml, "text").next().value?.trim() ?? "no reason text in document";
     throw new Error(`ENTSO-E returned an Acknowledgement document: ${reason}`);
   }
   const out: EntsoeTimeSeries[] = [];
-  const tsRe = /<TimeSeries>([\s\S]*?)<\/TimeSeries>/g;
-  for (const m of xml.matchAll(tsRe)) {
-    const block = m[1] ?? "";
+  for (const block of blocks(xml, "TimeSeries")) {
     // outBiddingZone_Domain.mRID marks a consumption series (energy
     // taken OFF the grid, e.g. pumped-storage pumping). Counting it as
     // generation would systematically drag intensity down.
@@ -684,8 +703,7 @@ export function parseEntsoeXml(xml: string): EntsoeTimeSeries[] {
     const psr = block.match(/<psrType>([A-Z0-9]+)<\/psrType>/)?.[1];
     if (!psr) continue;
     const periods: EntsoePeriod[] = [];
-    for (const pm of block.matchAll(/<Period>([\s\S]*?)<\/Period>/g)) {
-      const pBlock = pm[1] ?? "";
+    for (const pBlock of blocks(block, "Period")) {
       const start = pBlock.match(/<start>([0-9TZ:+-]+)<\/start>/)?.[1];
       const res = pBlock.match(/<resolution>PT(\d+)M<\/resolution>/)?.[1];
       if (!start || !res) continue;

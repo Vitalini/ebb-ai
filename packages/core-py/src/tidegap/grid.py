@@ -31,6 +31,7 @@ import math
 import os
 import re
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Final
@@ -729,14 +730,11 @@ _ENTSOE_PSR_FACTORS: Final[dict[str, int]] = {
 
 _ENTSOE_FETCH_TIMEOUT_S: Final[float] = 10.0
 
-# Regexes scoped to the stable ENTSO-E response shape. ``re.DOTALL`` lets
-# ``.`` span the newlines the XML is pretty-printed with.
+# Regexes scoped to the stable ENTSO-E response shape. Blocks
+# (``<text>``, ``<TimeSeries>``, ``<Period>``) are cut by ``_blocks`` instead.
 _ENTSOE_ACK_RE = re.compile(r"<Acknowledgement_MarketDocument[\s>]")
-_ENTSOE_TEXT_RE = re.compile(r"<text>(.*?)</text>", re.DOTALL)
-_ENTSOE_TS_RE = re.compile(r"<TimeSeries>(.*?)</TimeSeries>", re.DOTALL)
 _ENTSOE_OUT_ZONE_RE = re.compile(r"<outBiddingZone_Domain\.mRID[\s>]")
 _ENTSOE_PSR_RE = re.compile(r"<psrType>([A-Z0-9]+)</psrType>")
-_ENTSOE_PERIOD_RE = re.compile(r"<Period>(.*?)</Period>", re.DOTALL)
 _ENTSOE_START_RE = re.compile(r"<start>([0-9TZ:+-]+)</start>")
 _ENTSOE_RES_RE = re.compile(r"<resolution>PT(\d+)M</resolution>")
 _ENTSOE_POINT_RE = re.compile(
@@ -764,6 +762,27 @@ class EntsoeTimeSeries:
     periods: list[EntsoePeriod] = field(default_factory=list)
 
 
+def _blocks(xml: str, tag: str) -> Iterator[str]:
+    """Yield the inner text of each ``<tag>...</tag>`` in order.
+
+    Pairs every open with the nearest close after it -- what
+    ``<tag>(.*?)</tag>`` with ``re.DOTALL`` matches, in linear time. When
+    one open has no close, no later open has one either, so the scan stops.
+    """
+    open_tag = f"<{tag}>"
+    close_tag = f"</{tag}>"
+    pos = 0
+    while True:
+        start = xml.find(open_tag, pos)
+        if start == -1:
+            return
+        end = xml.find(close_tag, start + len(open_tag))
+        if end == -1:
+            return
+        yield xml[start + len(open_tag) : end]
+        pos = end + len(close_tag)
+
+
 def parse_entsoe_xml(xml: str) -> list[EntsoeTimeSeries]:
     """Minimal ENTSO-E XML extractor — port of the TS ``parseEntsoeXml``.
 
@@ -785,14 +804,13 @@ def parse_entsoe_xml(xml: str) -> list[EntsoeTimeSeries]:
         ``periodStart + (position - 1) * resolution``.
     """
     if _ENTSOE_ACK_RE.search(xml):
-        m = _ENTSOE_TEXT_RE.search(xml)
-        reason = m.group(1).strip() if m else "no reason text in document"
+        text = next(_blocks(xml, "text"), None)
+        reason = text.strip() if text is not None else "no reason text in document"
         raise RuntimeError(
             f"ENTSO-E returned an Acknowledgement document: {reason}"
         )
     out: list[EntsoeTimeSeries] = []
-    for ts_m in _ENTSOE_TS_RE.finditer(xml):
-        block = ts_m.group(1)
+    for block in _blocks(xml, "TimeSeries"):
         # outBiddingZone_Domain.mRID marks a consumption series (energy
         # taken OFF the grid, e.g. pumped-storage pumping). Counting it as
         # generation would systematically drag intensity down.
@@ -802,8 +820,7 @@ def parse_entsoe_xml(xml: str) -> list[EntsoeTimeSeries]:
         if not psr_m:
             continue
         periods: list[EntsoePeriod] = []
-        for p_m in _ENTSOE_PERIOD_RE.finditer(block):
-            p_block = p_m.group(1)
+        for p_block in _blocks(block, "Period"):
             start_m = _ENTSOE_START_RE.search(p_block)
             res_m = _ENTSOE_RES_RE.search(p_block)
             if not start_m or not res_m:

@@ -175,7 +175,7 @@ describe("@tidegap/core is environment-pure", () => {
       }
       expect(urls.some((u) => u.includes("injected-eia"))).toBe(true);
       expect(urls.some((u) => u.includes("injected-entsoe"))).toBe(true);
-      expect(urls.some((u) => u.includes("api.electricitymap.org"))).toBe(true);
+      expect(urls.some((u) => new URL(u).hostname === "api.electricitymap.org")).toBe(true);
       // …and none of the leaked environment values reached a request.
       expect(urls.some((u) => u.includes("leaked-"))).toBe(false);
     });
