@@ -56,6 +56,8 @@ public final class ConnectionController {
     private var busy = false
     /// A refresh asked for while another ran; it runs once afterwards.
     private var refreshPending = false
+    /// A connect or Reconnect asked for while a poll ran; it runs afterwards.
+    private var connectPending = false
 
     public init(
         store: TokenStore,
@@ -81,7 +83,17 @@ public final class ConnectionController {
     /// The token, the server, then the first summary. Mints only when no token
     /// is stored and no revoke is recorded.
     public func connect() async {
-        guard !busy else { return }
+        guard !busy else {
+            connectPending = true
+            return
+        }
+        repeat {
+            connectPending = false
+            await connectOnce()
+        } while connectPending
+    }
+
+    private func connectOnce() async {
         busy = true
         defer { busy = false }
         set(.connecting)
@@ -115,6 +127,7 @@ public final class ConnectionController {
             refreshPending = false
             await refreshOnce()
         }
+        if connectPending { await connect() }
     }
 
     private func refreshOnce() async {
@@ -189,7 +202,10 @@ public final class ConnectionController {
     /// True on success. Sets `.offline`, `.revoked` or `.failed` otherwise.
     private func fetch(port: Int, token: String) async -> Bool {
         let client = makeClient(port, token)
-        switch await client.summary(since: cursor()) {
+        let result = await client.summary(since: cursor())
+        // Reconnect or Forget token ran meanwhile: this answer is stale.
+        guard self.token == token else { return false }
+        switch result {
         case .ok(let summary):
             failedPolls = 0
             self.summary = summary

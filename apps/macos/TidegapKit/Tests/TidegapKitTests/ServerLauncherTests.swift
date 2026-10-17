@@ -75,6 +75,31 @@ import Testing
         #expect(external.terminated == 0)
     }
 
+    @Test func changedPortRespawnsTheChild() async throws {
+        let home = tempDir()
+        let runner = FakeRunner(home: home)
+        let l = launcher(runner: runner, home: home, executables: ["/opt/homebrew/bin/tidegap"], live: runner.live)
+        l.port = 47931
+        _ = try await l.start()
+        _ = try await l.start()
+        #expect(runner.spawns.count == 1)
+        l.port = 47932
+        runner.spawnPort = 47932
+        let server = try await l.start()
+        #expect(runner.spawns.count == 2)
+        #expect(runner.children[0].terminated == 1)
+        #expect(server.port == 47932)
+    }
+
+    @Test func loginShellOutputIsReadFromMarkers() {
+        let out = "Welcome to zsh\n__TG_PATH__/Users/me/.nvm/versions/node/v22/bin:/usr/bin\n__TG_BIN__/Users/me/.nvm/versions/node/v22/bin/tidegap\n"
+        let info = ServerLauncher.parseLoginShell(out)
+        #expect(info.path == "/Users/me/.nvm/versions/node/v22/bin:/usr/bin")
+        #expect(info.tidegap == "/Users/me/.nvm/versions/node/v22/bin/tidegap")
+        let missing = ServerLauncher.parseLoginShell("__TG_PATH__/usr/bin\n__TG_BIN__\n")
+        #expect(missing.tidegap == nil)
+    }
+
     @Test func startTimesOutWhenNoDiscoveryAppears() async {
         let runner = FakeRunner(home: nil)
         let l = launcher(runner: runner, executables: ["/opt/homebrew/bin/tidegap"], live: runner.live)

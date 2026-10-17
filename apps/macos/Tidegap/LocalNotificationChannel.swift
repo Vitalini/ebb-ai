@@ -33,11 +33,13 @@ final class LocalNotificationChannel: NSObject, NotificationChannel, UNUserNotif
         case .taskFinished(let task):
             add(id: "task-\(task.taskId)", event: event, trigger: nil)
         case .cleanWindow(let window):
-            // One pending request: a new window replaces the old one.
-            removePendingCleanWindows()
+            // One pending request: a new window replaces the old one. The
+            // removal runs later, so it must spare the request added here.
+            let id = Self.cleanPrefix + Wire.formatDate(window.start)
+            removePendingCleanWindows(except: id)
             let parts = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: window.start)
             let trigger = UNCalendarNotificationTrigger(dateMatching: parts, repeats: false)
-            add(id: Self.cleanPrefix + Wire.formatDate(window.start), event: event, trigger: trigger)
+            add(id: id, event: event, trigger: trigger)
         case .cleanWindowCleared:
             removePendingCleanWindows()
         }
@@ -54,9 +56,9 @@ final class LocalNotificationChannel: NSObject, NotificationChannel, UNUserNotif
         }
     }
 
-    private func removePendingCleanWindows() {
+    private func removePendingCleanWindows(except keep: String? = nil) {
         center.getPendingNotificationRequests { [center] requests in
-            let ids = requests.map(\.identifier).filter { $0.hasPrefix(Self.cleanPrefix) }
+            let ids = requests.map(\.identifier).filter { $0.hasPrefix(Self.cleanPrefix) && $0 != keep }
             center.removePendingNotificationRequests(withIdentifiers: ids)
         }
     }

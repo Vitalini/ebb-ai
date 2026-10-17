@@ -59,6 +59,8 @@ public final class ServerLauncher {
 
     private var shell: (path: String?, tidegap: String?)?
     public private(set) var child: RunningProcess?
+    /// The argv `child` was started with; a Settings change makes it stale.
+    private var childArgv: [String]?
 
     public init(
         runner: ProcessRunner,
@@ -145,15 +147,16 @@ public final class ServerLauncher {
     }
 
     /// Spawns `tidegap ui --no-open` and waits for a `ui.json` naming the
-    /// child's pid. A running child is reused.
+    /// child's pid. A running child is reused while the command and port
+    /// it was started with still apply.
     public func start() async throws -> DiscoveredServer {
-        if let child, child.isRunning, let found = discovery.find(), found.pid == child.pid {
-            return found
-        }
-        stop()
         guard let command = await resolveCommand() else { throw LaunchError.tidegapNotFound }
         var argv = command + ["ui", "--no-open"]
         if let port { argv += ["--port", String(port)] }
+        if let child, child.isRunning, childArgv == argv, let found = discovery.find(), found.pid == child.pid {
+            return found
+        }
+        stop()
         let process: RunningProcess
         do {
             process = try runner.spawn(argv, environment: await environment(for: command))
@@ -161,6 +164,7 @@ public final class ServerLauncher {
             throw LaunchError.spawnFailed(String(describing: error))
         }
         child = process
+        childArgv = argv
         let deadline = Date().addingTimeInterval(startTimeout)
         while Date() < deadline {
             if let found = discovery.find(), found.pid == process.pid { return found }
@@ -175,17 +179,27 @@ public final class ServerLauncher {
     public func stop() {
         if let child, child.isRunning { child.terminate() }
         child = nil
+        childArgv = nil
     }
 
-    /// `/bin/zsh -lc` once: the login `PATH` and `command -v tidegap`.
+    /// An interactive login zsh once (`-ilc`, so `.zshrc`, where nvm and fnm
+    /// set `PATH`, is read): the `PATH` and `command -v tidegap`. Marked
+    /// lines keep anything the startup files print out of the result.
     public static let queryLoginShell: () async -> (path: String?, tidegap: String?) = {
-        let runner = SystemProcessRunner()
-        let script = "printf '%s\\n' \"$PATH\"; command -v tidegap || true"
-        guard let out = try? await runner.run(["/bin/zsh", "-lc", script], environment: ProcessInfo.processInfo.environment),
-              out.status == 0
+        let runner = SystemProcessRunner(timeout: 10)
+        let script = "printf '__TG_PATH__%s\\n' \"$PATH\"; printf '__TG_BIN__%s\\n' \"$(command -v tidegap)\""
+        guard let out = try? await runner.run(["/bin/zsh", "-ilc", script], environment: ProcessInfo.processInfo.environment)
         else { return (nil, nil) }
-        let lines = out.stdout.split(separator: "\n").map(String.init)
-        return (lines.first, lines.count > 1 ? lines[1] : nil)
+        return parseLoginShell(out.stdout)
+    }
+
+    static func parseLoginShell(_ stdout: String) -> (path: String?, tidegap: String?) {
+        func value(_ marker: String) -> String? {
+            stdout.split(separator: "\n").last { $0.hasPrefix(marker) }
+                .map { String($0.dropFirst(marker.count)) }
+                .flatMap { $0.isEmpty ? nil : $0 }
+        }
+        return (value("__TG_PATH__"), value("__TG_BIN__"))
     }
 }
 
@@ -227,9 +241,12 @@ public enum CommandLineSplitter {
 /// Foundation `Process` runner. The child's output goes to `logURL` when given.
 public final class SystemProcessRunner: ProcessRunner {
     private let logURL: URL?
+    private let timeout: TimeInterval
 
-    public init(logURL: URL? = nil) {
+    /// `run` terminates a child that is still running after `timeout` seconds.
+    public init(logURL: URL? = nil, timeout: TimeInterval = 30) {
         self.logURL = logURL
+        self.timeout = timeout
     }
 
     private func makeProcess(_ argv: [String], environment: [String: String]) -> Process {
@@ -253,6 +270,9 @@ public final class SystemProcessRunner: ProcessRunner {
             } catch {
                 continuation.resume(throwing: error)
                 return
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
+                if process.isRunning { process.terminate() }
             }
             DispatchQueue.global().async {
                 // Drain both pipes at once, so a full stderr pipe cannot block the child.
