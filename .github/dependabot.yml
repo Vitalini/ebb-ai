@@ -32,6 +32,24 @@ updates:
       all-npm:
         patterns: ["*"]
 
+  # ClawHub CLI for release.yml (lockfile under .github/release-tools). The
+  # cooldown delays clawhub itself, not the transitive versions a regenerated
+  # lock pulls in: read the lockfile diff before merge (CONTRIBUTING).
+  - package-ecosystem: npm
+    directory: "/.github/release-tools/clawhub"
+    schedule:
+      interval: weekly
+      day: tuesday
+    open-pull-requests-limit: 1
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      clawhub:
+        patterns: ["*"]
+
   # Python — for tidegap
   - package-ecosystem: pip
     directory: "/packages/core-py"

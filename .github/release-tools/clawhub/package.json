@@ -1,0 +1,8 @@
+{
+  "name": "tidegap-release-tools-clawhub",
+  "private": true,
+  "description": "Pinned ClawHub CLI for release.yml. Installed with npm ci --ignore-scripts.",
+  "dependencies": {
+    "clawhub": "0.23.1"
+  }
+}
