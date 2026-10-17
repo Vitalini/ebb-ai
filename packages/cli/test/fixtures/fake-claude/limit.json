@@ -1,0 +1,1 @@
+{"type":"result","subtype":"success","is_error":true,"result":"Claude usage limit reached. Your limit will reset at 7pm (Europe/Kyiv).","api_error_status":429,"stop_reason":null,"session_id":"s-limit","total_cost_usd":0,"usage":{"input_tokens":0,"output_tokens":0},"modelUsage":{}}

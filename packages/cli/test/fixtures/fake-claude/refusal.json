@@ -1,0 +1,1 @@
+{"type":"result","subtype":"success","is_error":false,"result":"","stop_reason":"refusal","session_id":"s-refusal","total_cost_usd":0.0001,"usage":{"input_tokens":3,"output_tokens":0},"modelUsage":{"claude-haiku-5-5":{"outputTokens":0}}}

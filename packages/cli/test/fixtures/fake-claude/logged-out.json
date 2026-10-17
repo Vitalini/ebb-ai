@@ -1,0 +1,1 @@
+{"type":"result","subtype":"success","is_error":true,"duration_ms":40,"num_turns":0,"result":"Not logged in · Please run /login","stop_reason":null,"session_id":"s-logged-out","total_cost_usd":0,"usage":{"input_tokens":0,"output_tokens":0},"modelUsage":{}}

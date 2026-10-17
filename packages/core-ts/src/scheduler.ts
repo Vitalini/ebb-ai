@@ -106,6 +106,7 @@ const SUPPORTED_PROVIDERS: ReadonlySet<ProviderName> = new Set([
   "openai",
   "gemini",
   "ollama",
+  "claude-code",
 ]);
 
 /** Thrown when no candidate window meets the user-supplied carbon budget. */

@@ -1,0 +1,1 @@
+{"type":"result","subtype":"error_max_budget_usd","is_error":true,"result":null,"stop_reason":"end_turn","terminal_reason":"budget_exhausted","session_id":"s-budget","total_cost_usd":0.0003,"usage":{"input_tokens":3,"output_tokens":5},"modelUsage":{"claude-haiku-5-5":{"outputTokens":5}}}

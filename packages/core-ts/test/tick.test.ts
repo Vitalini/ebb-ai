@@ -185,6 +185,42 @@ describe("Scheduler.tick", () => {
     s.shutdown();
   });
 
+  it("accepts a claude-code task and receipts it under provider claude-code", async () => {
+    const s = new Scheduler({ feed: mockGridFeed() });
+    // Sync-only stub, the shape of the CLI host's adapter: no dispatchBatch.
+    const calls: string[] = [];
+    const stub: ProviderAdapter = {
+      provider: "claude-code",
+      ready: true,
+      async dispatch(model, prompt) {
+        calls.push(`${model}:${prompt}`);
+        return {
+          text: "OK",
+          model: "claude-haiku-5-5",
+          provider: "claude-code",
+          usage: { inputTokens: 120, outputTokens: 4, totalTokens: 124 },
+          raw: { session_id: "s-1", total_cost_usd: 0.0003 },
+        };
+      },
+    };
+    const rec = await s.enqueueProviderCall(
+      { type: "provider_call", provider: "claude-code", model: "default", prompt: "hi" },
+      { deadline: new Date(Date.now() + 1500), region: "US-CAL-CISO" },
+    );
+    const stored = s.getTask(rec.taskId);
+    if (stored) stored.scheduledFor = new Date().toISOString();
+
+    const result = await s.tick({ "claude-code": stub });
+    expect(result.dispatched).toBe(1);
+    expect(calls).toEqual(["default:hi"]);
+    const finished = s.getTask(rec.taskId);
+    expect(finished?.status).toBe("completed");
+    expect(finished?.receipt?.provider).toBe("claude-code");
+    expect(finished?.receipt?.model).toBe("claude-haiku-5-5");
+    expect(finished?.receipt?.totalTokens).toBe(124);
+    s.shutdown();
+  });
+
   it("does not touch closure-based tasks", async () => {
     const s = new Scheduler({ feed: mockGridFeed() });
     const fake = makeFakeAdapter("anthropic");
