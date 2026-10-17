@@ -57,12 +57,28 @@ apps/macos/scripts/install.sh -- -home /tmp/tidegap-test -port 47931 \
 
 The app asks for permission on its first connect. If you said no, turn it on in System Settings > Notifications > Tidegap. The menu bar works without it. Two toggles in Settings choose the events. A clean window is scheduled as one pending notification at its start; a "cleanest hour" fallback window never notifies.
 
+## Safari extension
+
+`Tidegap.app` embeds "Tidegap Safari Extension", the `safari` build of `apps/extension` (badge, popup, quick add). Safari has no notifications API for extensions, so the app's notifications cover Safari.
+
+The build is ad-hoc signed, so Safari shows it only while unsigned extensions are allowed:
+
+1. Install and open the app once (`apps/macos/scripts/install.sh`).
+2. In Safari, turn on Settings > Advanced > "Show features for web developers".
+3. Develop > Developer Settings… > "Allow unsigned extensions" (asks for your password).
+4. Settings > Extensions: turn on Tidegap.
+5. Open the Tidegap extension options from that pane, paste a client token (`tidegap clients add --name safari --kind extension`), and click Save. Allow access to 127.0.0.1 when Safari asks.
+
+Safari turns "Allow unsigned extensions" off each time it quits, so repeat step 3 after every Safari launch. A persistent install needs a Developer ID build.
+
 ## Develop
 
 ```sh
 swift test --package-path apps/macos/TidegapKit
 xcodebuild -project apps/macos/Tidegap.xcodeproj -scheme Tidegap -configuration Release build
 ```
+
+`scripts/build.sh` first runs `scripts/sync-safari-extension.sh`, which builds `apps/extension/dist/safari` with Node and copies it to `SafariExtension/Resources/` (gitignored). Run that script once before building in Xcode.
 
 All logic lives in `TidegapKit` (discovery, launcher, token, API client, event stream, event derivation, formatting). The app target in `Tidegap/` is thin SwiftUI. The project uses a synchronized folder: a new file in `Tidegap/` joins the target without editing `project.pbxproj`. `Info.plist` and `Tidegap.entitlements` are membership exceptions, so they are not copied as resources.
 
