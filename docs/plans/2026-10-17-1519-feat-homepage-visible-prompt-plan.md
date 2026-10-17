@@ -181,6 +181,20 @@ These belong to the separate redesign plan another agent is writing; this PR doe
 - **Files:** `CHANGELOG.md`.
 - **Approach:** Bold lead sentence: "**Homepage shows the install prompt.**" then one sentence each: the first screen shows the short prompt with a "Copy prompt" button; How it works moved up and the "what it is" block moved to `/about`; the header wave and the tagline underline animate (still under reduced motion); install.md covers Codex, the libraries and connecting the Mac app and the extension. No version bump, no date on the heading.
 
+### U-seo. SEO fixes (added 2026-10-17 by the orchestrator)
+
+- **Goal:** Consistent, verifiable metadata and a complete crawl surface.
+- **Dependencies:** U4 (same files).
+- **Files:** new `apps/web/src/lib/site-meta.ts` (one `SITE_DESCRIPTION`, and `MARKDOWN_ALTERNATE` from KTD6 in place of `agent-links.ts`), `apps/web/src/app/layout.tsx`, `apps/web/src/app/page.tsx`, `apps/web/public/architecture.html`, `apps/web/src/app/sitemap.ts`, `apps/web/src/app/robots.ts`, `apps/web/public/llms.txt`.
+- **Approach:**
+  1. (a) One description for meta description, `og:description` and `twitter:description`; no unverifiable number (drop "1,423 tests").
+  2. (b) `/architecture`: add a meta description and a canonical; add `/architecture` and `/install.md` to the sitemap.
+  3. (c) robots: remove the invalid `Host:` line (`host` key in `robots.ts`). This overrides R17 for robots.
+  4. (d) llms.txt: tool count 10; drop "faster first-token times" and "doubled off-peak limits"; name 0.19.0, the Mac app, the extensions and Codex.
+  5. (e) JSON-LD: `alternateName: "ebb-ai"`, `sameAs` (GitHub, npm), `downloadUrl` (npm).
+- **Not built (follow-ups, need new pages):** `/apps`, `/privacy`, `/llms-full.txt`.
+- **Verification:** build passes; agent-path checks 5 and 6 (sitemap, robots) pass.
+
 ---
 
 ## Verification Contract

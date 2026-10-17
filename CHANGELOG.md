@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Homepage shows the install prompt.** The first screen shows the short prompt for your agent, with a "Copy prompt" button under it. How it works moved up, and the "what it is" block moved to `/about`. The header wave and the tagline underline animate, and stay still under reduced motion. `install.md` covers Codex, the libraries and connecting the Mac app and the browser extension.
+- **Site metadata for search and agents.** One site description for the meta, Open Graph and Twitter tags, with no test count. `/architecture` gets a description and a canonical link; the sitemap lists `/architecture`, `/install.md` and `/llms.txt`; `robots.txt` drops the invalid `Host:` line; `llms.txt` links `install.md` first, counts 10 MCP tools and names 0.19.0, Codex, the Mac app and the extensions; the JSON-LD adds `alternateName`, `sameAs` and `downloadUrl`.
 - Docs: internal submission log and marketing notes moved out of the public repo; local paths and token names removed from plan documents.
 
 ## [0.19.0] — 2026-10-17
