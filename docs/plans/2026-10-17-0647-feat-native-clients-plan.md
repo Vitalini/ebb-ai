@@ -11,9 +11,9 @@ execution: code
 
 ## Goal Capsule
 
-- **Objective:** Vitalii sees his Tidegap queue and the next clean grid window without opening a terminal. He can queue a task in one step and gets a notification when a task finishes or a clean window starts. This works from Chrome (and Edge and Firefox from the same build), from the macOS menu bar, and from Safari. He builds and installs both clients on his own Mac today.
+- **Objective:** Vitalii sees his Tidegap queue and the next clean grid window without opening a terminal while the Mac app runs (the app starts the server; without it, the extension asks him to run `tidegap ui`). He can queue a task in one step and gets a notification when a task finishes or a clean window starts. This works from Chrome (and Edge and Firefox from the same build), from the macOS menu bar, and from Safari (Stream C; it moves to a follow-up if its stop condition fires). He builds and installs both clients on his own Mac today.
 - **Means:** two clients of the local `tidegap ui` API, with no second data path (KTD1). Long-lived client tokens let them in (KTD2).
-- **Authority:** this plan's Product Contract wins on behavior. KTDs win on mechanism. `docs/solutions/best-practices/loopback-web-ui-hardening.md` is a hard constraint: no stage weakens its Host, Origin, CSRF or bearer rules (R4).
+- **Authority:** this plan's Product Contract wins on behavior. KTDs win on mechanism. `docs/solutions/best-practices/loopback-web-ui-hardening.md` is a hard constraint: no stage weakens its Host, Origin, CSRF or bearer rules (R4), except the extension-origin rule in KTD3.
 - **Execution profile:** four PRs. Stage 0 "foundation" (U1-U7) lands first. Stream A "extension" (U8-U12) and stream B "mac app" (U13-U18) run in parallel on top of main after Stage 0 merges. Stream C "safari" (U19-U20) starts after B merges. A and B share only `CHANGELOG.md`.
 - **Stop conditions:**
   - A stage needs a relaxed Host, Origin, content-type or bearer check beyond KTD3: stop and report.
@@ -74,6 +74,13 @@ Stage 0 adds a client-token registry, a summary endpoint, a quick-add endpoint, 
 - AE4. **Covers R7.** Queue has 3 active tasks: badge "3". Queue is empty and a clean window runs now: badge "now". Queue is empty and the window starts in 5 h: badge "5h". Server unreachable: badge "off". No token: badge "?".
 - AE5. **Covers R13.** Given `ui.json` names a live pid and the token answers 200, the app connects and starts nothing. Given no `ui.json`, the app starts `tidegap ui --no-open`, connects, and on quit stops only that child.
 
+### Open Questions
+
+Neither blocks Stage 0, A or B. Both are Vitalii's call; the plan proceeds on the recommendation unless he says otherwise.
+
+- **Port squatting (affects U1, U2, U9, U14).** Recommendation: accept the risk for a single-user Mac and document it in `docs/spec/ui-client-api.md`. The alternative is signed requests: the client sends a timestamped HMAC keyed by the token's SHA-256, which the server already stores, so no reusable secret goes on the wire. It costs a replay window and changes four units.
+- **Page "Connected apps" panel (U5).** Recommendation: keep it. It lets Vitalii pair the extension from the page without a terminal command. Dropping it removes three routes and the `/api/clients*` gate rule, and pairing then uses `tidegap clients add` only.
+
 ### Scope Boundaries
 
 - No store publishing: Chrome Web Store, AMO, Edge Add-ons, Mac App Store, notarization (R16).
@@ -83,7 +90,7 @@ Stage 0 adds a client-token registry, a summary endpoint, a quick-add endpoint, 
 
 Considered and not built:
 
-- **One-time link codes so the extension never puts its token in a URL.** The extension opens the page with `#token=<client token>`, which can land in browser history and sync. The token works only against 127.0.0.1 on this Mac and from a loopback or extension origin. Any process that can reach it can already read `queue.db` directly. Revisit if a remote surface ever accepts client tokens.
+- **One-time link codes so the extension never puts its token in a URL.** The extension opens the page with `#token=<client token>`, which can land in browser history and sync. The token works only against 127.0.0.1 on this Mac and from a loopback or extension origin. A same-user, unsandboxed process can already read `queue.db` directly. Other macOS accounts and sandboxed apps cannot, and the port-squatting risk (Risks) covers them. Revisit if a remote surface ever accepts client tokens.
 - **Per-client `last_used_at` tracking.** It writes the registry file on every request, and nobody asked for it. Revisit if the "Connected apps" panel needs a stale-client hint.
 - **An approve-in-page pairing handshake (code shown in popup, approved in page).** It adds an unauthenticated route and pending state to save one paste (KTD2).
 
@@ -91,7 +98,7 @@ Considered and not built:
 
 - Register the extension and the Mac app as channels in the Integrations registry (TODO item 2), replacing the local seam (KTD8).
 - Store jobs in `release.yml` (`chrome-web-store`, `firefox-amo`, `edge-addons`) once accounts exist.
-- Notarized Developer ID build of the Mac app; "Open at login" toggle.
+- Notarized Developer ID build of the Mac app (it also keeps the Safari extension enabled across Safari launches); "Open at login" toggle.
 - Notification click opening a specific task (needs a `#task=` fragment in the page).
 
 ---
@@ -105,7 +112,7 @@ Considered and not built:
   - `tidegap clients add --name <n> --kind extension|macos [--json]` or the page's "Connect an app" button (run-token scope only) mints a token `tgc_<32 random bytes, base64url>` and shows it once.
   - The server stores only the SHA-256 of each token, in `<tidegap home>/ui-clients.json` (mode 0600, atomic write, entries `{id, name, kind, token_sha256, created_at}`). It re-reads the file when its mtime changes, so add and revoke apply without a restart (AE2).
   - Verification hashes the bearer and compares with each stored hash through `timingSafeEqual`, the same pattern as the run token.
-  - The extension gets its token by one paste into its options page. The Mac app mints its own token through the CLI on first launch and keeps it in the Keychain. Launching the app is the user's approval, and the page lists the client so it can be revoked.
+  - The extension gets its token by one paste into its options page. The Mac app mints its own token through the CLI on first launch and keeps it in `~/Library/Application Support/Tidegap/client-token` (mode 0600, atomic write). The Keychain is not used: with ad-hoc signing every rebuild changes the cdhash, so each reinstall would show a Keychain access prompt that an agent-run install cannot answer. Launching the app is the user's approval. The page lists the client so it can be revoked, and a revoke sticks: after a 401 the app mints again only when the user clicks Reconnect (U14).
   - **Why this over an origin allowlist keyed to the extension ID:** Firefox (`moz-extension://<uuid>`) and Safari (`safari-web-extension://<uuid>`) use a random per-install UUID, and unpacked Chrome IDs change with the folder path. An allowlist would need per-install configuration anyway. Also, `Origin` is a browser-enforced header, not authentication: any local process can send `Origin: chrome-extension://x`. The token stays the authentication; the origin rule only blocks web pages.
   - **Why this over a code-approval handshake:** that needs an unauthenticated `/api/pair` route plus pending state and an SSE event. A paste needs no unauthenticated route at all.
 - KTD3. **Origin and scope matrix.** Two token scopes: `page` (the per-run token) and `client` (a registry token).
@@ -119,8 +126,8 @@ Considered and not built:
 
   Static files with an extension origin get 403. Host checks, content-type rules, body caps and POST-only writes do not change. The server still sends no CORS headers. MV3 extensions with `host_permissions` for `http://127.0.0.1/*` fetch without CORS in Chrome and Firefox.
 - KTD4. **Fixed default port 47821 and a discovery file.** `tidegap ui` without `--port` tries 47821. On `EADDRINUSE` it falls back to a free port and prints a warning that clients configured for 47821 will not find it. While it runs, it writes `<tidegap home>/ui.json` (mode 0600): `{version: 1, pid, port, url, started_at, cli_version}`, with no token. On close it removes the file only if the pid matches. The server function keeps port 0 as its own default, so tests stay unchanged. The extension cannot read files, so it uses the fixed port with an options override. The Mac app reads `ui.json`.
-- KTD5. **`GET /api/summary[?since=<iso>]` is computed on the server.** Both clients render the same numbers, and the clean-window rule lives once, in Node, tested with fake time. Shape: `{generated_at, region, counts: {queued, scheduled, running, submitted}, active, unread, next_run: {task_id, title, scheduled_for} | null, clean_window: {start, end, band, g, now} | null, forecast_ok, finished: [{task_id, title, status, completed_at}], cursor}`.
-  - `clean_window` comes from the cached forecast (`forecastCache` in `packages/cli/src/ui/api.ts`, 24 h, default region). It is the first run of consecutive hours with band `very_clean` or `clean` that ends after now. If no hour qualifies, it is the single cleanest hour, flagged `fallback: true`. A forecast failure gives `clean_window: null` and `forecast_ok: false`, never a 5xx.
+- KTD5. **`GET /api/summary[?since=<iso>]` is computed on the server.** Both clients render the same numbers, and the clean-window rule lives once, in Node, tested with fake time. Shape: `{generated_at, region, counts: {queued, scheduled, running, submitted}, active, unread, next_run: {task_id, title, scheduled_for} | null, clean_window: {start, end, band, g, now, fallback} | null, forecast_ok, finished?: [{task_id, title, status, completed_at}], cursor}`. `finished` is present only when `since` is given.
+  - `clean_window` comes from the cached forecast (`forecastCache` in `packages/cli/src/ui/api.ts`, 24 h, default region). It is the first run of consecutive hours with band `very_clean` or `clean` that ends after now. If no hour qualifies, it is the single cleanest hour, flagged `fallback: true`. A fallback window feeds the badge and the menu header but never a "clean window" notification. A forecast failure gives `clean_window: null` and `forecast_ok: false`, never a 5xx.
   - `finished` lists tasks with `completed_at > since` (completed or failed), newest first, at most 20. It is present only when `since` is given. `cursor` is the newest `completed_at` returned, else `generated_at`. Clients store the server cursor, which avoids client clock skew (AE3).
 - KTD6. **One badge rule for both clients.** Priority order: no token "?"; server unreachable "off"; `active > 0` the count (cap "99+"); `clean_window.now` "now"; window later: time to start ("45m", "5h"); no forecast: empty. The Mac menu bar label follows the same order but shows the start clock time ("14:00") instead of hours left. The tooltip or menu header carries the full line, for example "3 queued · clean 14:00-17:00 FR".
 - KTD7. **Quick add: `POST /api/tasks`.** It takes a JSON body with the strict keys `prompt` (1-32 000 chars, same cap as reply), `deadline` (ISO, future; default now + 24 h), `title` (optional, at most 200 chars), `provider` and `model` (optional). The defaults are `anthropic` and `TIDEGAP_DEFAULT_MODEL` or `DEFAULT_MODEL_BY_PROVIDER`, the same resolution as `packages/mcp-server/src/server.ts`. It runs through the existing adapter-less `actionScheduler` (`enqueueProviderCall`). The answer is 201 with the list summary of the new task, and the change is pushed to the SSE stream. It never dispatches.
@@ -137,7 +144,7 @@ Considered and not built:
   - All logic that can be tested lives in `apps/macos/TidegapKit` (SwiftPM, Swift Testing, `swift test`): discovery, launcher, Keychain token, API client, SSE, event derivation. The app target is thin SwiftUI: `MenuBarExtra` (window style), a `Window` with `WKWebView`, Settings.
   - macOS 14 minimum (for `@Observable`). Not sandboxed, because it spawns `tidegap` and reads `~/.tidegap`. `LSUIElement` is set. ATS `NSAllowsLocalNetworking` allows http to 127.0.0.1. Ad-hoc signing (`CODE_SIGN_IDENTITY = -`).
   - XcodeGen and Tuist are not installed. A generator would add a tool to every checkout and CI run.
-- KTD12. **Mac app launcher.** It resolves the `tidegap` command from a Settings override first, then from the login shell (`/bin/zsh -lc 'command -v tidegap'`), then from known paths. It runs `tidegap` with the login shell's `PATH` in the child environment, because `tidegap` is a `#!/usr/bin/env node` script and GUI apps get `PATH=/usr/bin:/bin:/usr/sbin:/sbin`. The Settings override takes an argv array, so it can point at a repo build (`node <repo>/packages/cli/dist/index.js`). That is required for testing before 0.19.0 is published, because the published 0.18.0 CLI has no `clients` command or `/api/summary`. A 404 on `/api/summary` shows "Update tidegap to 0.19 or later". The app spawns with `Process` and argv only, never a shell string with user input.
+- KTD12. **Mac app launcher.** It resolves the `tidegap` command from a Settings override first, then from the login shell (`/bin/zsh -lc 'command -v tidegap'`), then from known paths. It runs `tidegap` with the login shell's `PATH` in the child environment, because `tidegap` is a `#!/usr/bin/env node` script and GUI apps get `PATH=/usr/bin:/bin:/usr/sbin:/sbin`. The Settings override takes an argv array, so it can point at a repo build (`node <repo>/packages/cli/dist/index.js`). That is required for testing before 0.19.0 is published, because the published 0.18.0 CLI has no `clients` command or `/api/summary`. Before minting, the launcher runs `<tidegap command> --version`. Below 0.19.0, or when `clients add` fails with an unknown-command error, the app shows "Update tidegap to 0.19 or later" and mints nothing. A 404 cannot signal this: the server checks the bearer before routing, so a 0.18 server answers 401 to any client token. The app spawns with `Process` and argv only, never a shell string with user input.
 - KTD13. **Icons come from the brand source once, in Stage 0.** `scripts/render-app-icons.mjs` renders `assets/brand/tidegap-icon.svg` and `assets/brand/tidegap-mark.svg` with `playwright-core` (`channel: "chrome"`, the same approach as `scripts/render-images.mjs`). It writes into both client folders. The PNGs are committed, and CI does not render them. A and B then share no icon work.
 - KTD14. **CI: two path-filtered workflows; Mac on a free runner.** The repo is public, so GitHub-hosted macOS runners cost nothing.
   - `.github/workflows/extension.yml` (ubuntu): build, test and lint the extension, upload the zips as artifacts. Triggers: `apps/extension/**`, `packages/cli/src/ui/**`, `workflow_dispatch`.
@@ -170,7 +177,7 @@ flowchart LR
   APP -- reads --> DISC
   APP -- "spawns if absent" --> SRV
   APP -- "mints via" --> CLI
-  APP -- "Bearer tgc_… (Keychain)" --> SRV
+  APP -- "Bearer tgc_… (0600 file)" --> SRV
 ```
 
 Mac app connect sequence (R13, AE5):
@@ -178,7 +185,7 @@ Mac app connect sequence (R13, AE5):
 ```mermaid
 sequenceDiagram
   participant A as Tidegap.app
-  participant K as Keychain
+  participant K as Token file
   participant F as ui.json
   participant C as tidegap CLI
   participant S as tidegap ui
@@ -199,10 +206,11 @@ sequenceDiagram
   alt 200
     A->>S: GET /api/events (SSE, refetch summary on "tasks")
   else 401
-    A->>K: drop token, mint again once
-  else 404
-    A-->>A: show "update tidegap"
+    A->>K: drop token
+    A-->>A: show "Access revoked - Reconnect" (mint only on click)
   end
+  Note over A,S: --version below 0.19 before minting: show "update tidegap", mint nothing
+  Note over A,S: attached server unreachable for two polls: run discovery, then spawn, again
 ```
 
 Request gate order in the server (KTD3), shown as directional pseudo-code:
@@ -239,7 +247,7 @@ flowchart LR
   B --> C
 ```
 
-Inside Stage 0, U1 comes before U2. U3, U4, U6 and U7 are independent of each other. U5 needs U1 and U2. Inside each stream, the units run in order.
+Inside Stage 0, U1 comes before U2. U5 needs U1 and U2. U6 comes after U1-U4. U3, U4 and U7 are independent of each other. Inside each stream, the units run in order.
 
 ### File ownership and disjointness proof
 
@@ -251,10 +259,10 @@ Inside Stage 0, U1 comes before U2. U3, U4, U6 and U7 are independent of each ot
 | `scripts/render-app-icons.mjs` | owns | - | - | - |
 | `apps/extension/icons/*.png` | creates | reads | - | - |
 | `apps/macos/Tidegap/Assets.xcassets/AppIcon.appiconset/*`, `.../MenuBarIcon.imageset/*` | creates | - | reads | - |
-| `apps/extension/**` (rest) | - | owns | - | edits `scripts/build.mjs`, `src/manifest.base.json`, tests |
+| `apps/extension/**` (rest) | - | owns | - | edits `scripts/build.mjs`, `src/manifest.base.json`, `src/lib/notify.js`, tests |
 | `.github/workflows/extension.yml` | - | owns | - | - |
 | `pnpm-lock.yaml` | - | owns | - | - |
-| `apps/macos/**` (rest) | - | - | owns | edits project, adds `SafariExtension/` |
+| `apps/macos/**` (rest) | - | - | owns | edits project, `scripts/build.sh`, `README.md`; adds `SafariExtension/`, `scripts/sync-safari-extension.sh` |
 | `.github/workflows/macos.yml` | - | - | owns | edits |
 | `scripts/check-versions.mjs`, `scripts/check-versions.test.mjs` | - | - | owns | - |
 | `.gitignore` | - | - | owns | edits |
@@ -275,7 +283,7 @@ apps/extension/
   src/lib/{browser,api,settings,summary,notify,dom}.js
   src/popup/{popup.html,popup.js,popup.css}
   src/options/{options.html,options.js,options.css}
-  test/{summary,notify,api,build}.test.js
+  test/{summary,notify,api,build,popup}.test.js
 apps/macos/
   README.md
   Config/Base.xcconfig
@@ -509,13 +517,13 @@ apps/macos/
   - create `apps/extension/src/options/options.html`, `options.js`, `options.css`
   - test `apps/extension/test/api.test.js`
 - **Approach:**
-  1. `api.js` wraps `fetch` to `http://127.0.0.1:<port>`. It maps results to `ok | offline | unpaired (401) | outdated (404 on /api/summary) | error`.
+  1. `api.js` wraps `fetch` to `http://127.0.0.1:<port>`. It maps results to `ok | offline | unpaired (401) | error`. The 401 message reads "Token not accepted (revoked, or tidegap is older than 0.19)", because a 0.18 server answers 401, not 404.
   2. Settings live in `storage.local`: `port` (default 47821), `token`, `notify.finished`, `notify.cleanWindow`, `cursor`.
   3. The options page has the port, a token field (password type), Save, and "Test connection", which shows the status in words.
   4. On Firefox, Save calls `permissions.request` for the host permission before testing.
 - **Patterns to follow:** `packages/cli/ui/api.js` (error mapping, bearer header). `dependency-free-task-ui-patterns.md` (text nodes only).
 - **Test scenarios:**
-  - 200 gives `ok` with the parsed body. A refused connection (fetch rejects) gives `offline`. 401 gives `unpaired`. A 404 on the summary gives `outdated`. 500 gives `error`, with no body text shown.
+  - 200 gives `ok` with the parsed body. A refused connection (fetch rejects) gives `offline`. 401 gives `unpaired` with the "revoked, or older than 0.19" message. 500 gives `error`, with no body text shown.
   - Every request carries `Authorization: Bearer <token>` and goes to the configured port.
   - No token configured: no request is made, and the result is `unpaired`.
   - A JSON POST sets `content-type: application/json`.
@@ -533,7 +541,7 @@ apps/macos/
   - test `apps/extension/test/summary.test.js`, `apps/extension/test/notify.test.js`
 - **Approach:**
   1. On install and startup, create a one-minute alarm. Each tick fetches `/api/summary?since=<cursor>`, sets the badge and title, derives events, sends them to the channels, and stores the new cursor.
-  2. For the clean window, an alarm `clean-<start>` is set for the window start. When it fires, one notification goes out, deduplicated by start time in storage.
+  2. For the clean window, an alarm `clean-<start>` is set for the window start. When it fires, one notification goes out, deduplicated by start time in storage. A `fallback` window sets no alarm (KTD5).
   3. The first run after pairing stores the cursor without notifying.
   4. Notification titles and bodies are plain text, at most 100 and 200 chars.
 - **Test scenarios:**
@@ -542,6 +550,7 @@ apps/macos/
   - `finished` with 2 tasks gives 2 `task_finished` events. The same tasks in a repeated call (same ids) give none.
   - The first summary without a cursor gives no events.
   - A window start in 3 h schedules one alarm. A new window replaces the old alarm. A fired alarm for an already-notified start sends nothing.
+  - A `fallback: true` window schedules no alarm.
   - `notify.finished = false` drops `task_finished` events but keeps the badge.
   - The channel list with zero channels does not throw. This is the seam for KTD8.
   - A task title holding `<b>x</b>` is passed through as literal text.
@@ -560,13 +569,13 @@ apps/macos/
   2. The header line shows the clean window. Each row shows title, status and the run time.
   3. The quick-add form has a prompt textarea, a deadline preset (6 h / 24 h / 3 days), and Add. Add disables while the request runs, then shows the new row or the server's one-line error.
   4. "Open tidegap ui" opens `http://127.0.0.1:<port>/#token=<token>` in a tab.
-  5. Status states: not paired (link to options), not running (says "run `tidegap ui`"), outdated (says "update tidegap").
+  5. Status states: not paired or token not accepted (link to options; the message names revocation or a tidegap older than 0.19), not running (says "run `tidegap ui`").
 - **Patterns to follow:** `packages/cli/ui/row.js` (row fields), `dependency-free-task-ui-patterns.md`.
 - **Test scenarios:**
   - The view model maps a list response to rows in `scheduled_for` order, with titles as text.
   - Preset "24 h" at a fixed now gives a deadline exactly 24 h later in ISO form.
   - An empty prompt gives no request. A 400 shows the server's message.
-  - Each status (`unpaired`, `offline`, `outdated`) maps to its message.
+  - Each status (`unpaired`, `offline`) maps to its message.
 - **Verification:** the scenarios pass. U12 smoke step 7 adds a task.
 
 ### U12. Extension CI, README, Chrome smoke script
@@ -639,22 +648,24 @@ apps/macos/
 - **Requirements:** R1, R5, R13.
 - **Dependencies:** U13.
 - **Files:**
-  - create `apps/macos/TidegapKit/Sources/TidegapKit/Discovery.swift`, `ServerLauncher.swift`, `ClientToken.swift`, `APIClient.swift`, `EventStream.swift`
+  - create `apps/macos/TidegapKit/Sources/TidegapKit/Discovery.swift`, `ServerLauncher.swift`, `ClientToken.swift` (0600 file store), `APIClient.swift`, `EventStream.swift`
   - test `apps/macos/TidegapKit/Tests/TidegapKitTests/DiscoveryTests.swift`, `ServerLauncherTests.swift`, `APIClientTests.swift`, `EventStreamTests.swift`
 - **Approach:**
   1. Discovery reads `~/.tidegap/ui.json` (the home is injectable) and checks the pid with `kill(pid, 0)`.
   2. The launcher resolves the command as KTD12 says, captures the login-shell `PATH` once, and spawns `ui --no-open`. It waits up to 10 s for a `ui.json` with its child's pid. It terminates only its own child.
-  3. The token store uses the Keychain, generic password, service `com.tidegap.mac`. It mints through `clients add --name "Tidegap for Mac" --kind macos --json`. On 401 it drops the token and mints again once; a second 401 is an error state.
-  4. The API client uses `URLSession` with the bearer and maps responses like U9.
-  5. `EventStream` reads SSE over `URLSession.bytes`, refetches the summary on `hello` after a reconnect and on `tasks`, backs off on drops, and polls every 60 s as a fallback.
+  3. The token store is the 0600 file from KTD2. Before minting, it checks `--version` (KTD12). It mints through `clients add --name "Tidegap for Mac" --kind macos --json` on first launch, or when the user clicks Reconnect. On 401 it drops the token, shows "Access revoked - Reconnect", and mints nothing until that click.
+  4. The API client uses `URLSession` with the bearer and maps responses like U9 (`ok`, `offline`, `unpaired`, `error`).
+  5. `EventStream` reads SSE over `URLSession.bytes`, refetches the summary on `hello` after a reconnect and on `tasks`, backs off on drops, and polls every 60 s as a fallback. When an attached server is unreachable for two polls in a row, or a live-pid `ui.json` refuses the connection, the app runs discovery and then the spawn branch again.
 - **Patterns to follow:** the SSE reconnect rules in `dependency-free-task-ui-patterns.md` (re-render on `hello` after a reconnect).
 - **Test scenarios:**
   - Discovery: a valid file with a live pid (the test's own pid) gives a server. A dead pid gives none. A missing or corrupt file gives none and no crash.
   - Launcher command resolution: the override wins. Otherwise the login-shell lookup (injected) is used. Otherwise known paths are tried. If nothing is found, the result is "tidegap not found".
   - The launcher passes the captured `PATH` in the child environment and argv without a shell.
   - Covers AE5. The launcher with an injected process runner terminates only a child it started.
-  - API: 200, connection refused, 401, 404 and 500 map to `ok`, `offline`, `unpaired`, `outdated` and `error` (URLProtocol stub).
-  - The 401 path mints once, retries once, and stops on a second 401.
+  - API: 200, connection refused, 401 and 500 map to `ok`, `offline`, `unpaired` and `error` (URLProtocol stub).
+  - A 401 drops the token, makes no mint call, and shows the revoked state. Reconnect mints exactly once.
+  - A stubbed `--version` of 0.18.0 gives the "update tidegap" state, and no mint runs.
+  - An attached external server stops: after two failed polls, the launcher spawns its own child once and reconnects.
   - SSE parser: `event: tasks` with a data line gives the ids. Comment keep-alives are ignored. A split chunk across reads parses correctly.
 - **Verification:** `swift test` passes.
 
@@ -674,6 +685,7 @@ apps/macos/
   3. The label is the mark template image plus the KTD6 text.
 - **Test scenarios:**
   - The label text follows KTD6 order: "?", "off", "3", "99+", "now", "14:00" (fixed locale and time zone in the test).
+  - Header for a `fallback` window: "Cleanest 14:00 · FR" (not "Clean").
   - The header string: "Clean 14:00-17:00 · FR", "Clean now until 17:00 · FR", "Forecast unavailable".
   - Preset deadlines at a fixed now give +6 h, +24 h and +3 days.
   - Covers R3. The quick-add request body has only `prompt` and `deadline`.
@@ -691,10 +703,10 @@ apps/macos/
 - **Approach:**
   1. Ask for authorization on first connect.
   2. A `task_finished` event fires now.
-  3. A clean window becomes one pending request with a calendar trigger at its start, id `clean-<start>`. A new window replaces the pending request.
+  3. A clean window becomes one pending request with a calendar trigger at its start, id `clean-<start>`. A new window replaces the pending request. A `fallback` window schedules nothing (KTD5).
   4. The cursor persists in `UserDefaults`.
   5. Clicking a notification opens the main window.
-- **Test scenarios:** the same cases as U10's notify tests, run against the Swift derivation: first call silent, two finished give two events, repeats give none, window replacement, toggles, plain-text titles truncated at 100 characters.
+- **Test scenarios:** the same cases as U10's notify tests, run against the Swift derivation: first call silent, two finished give two events, repeats give none, window replacement, no request for a `fallback` window, toggles, plain-text titles truncated at 100 characters.
 - **Verification:** `swift test` passes. On Vitalii's Mac, completing a task in a test ledger shows a banner (manual line in U18).
 
 ### U17. Web page window and Settings
@@ -708,7 +720,7 @@ apps/macos/
   - modify `apps/macos/Tidegap/TidegapApp.swift` (`Window` scene and `Settings` scene)
 - **Approach:**
   1. Load `http://127.0.0.1:<port>/#token=<client token>`. Use a non-persistent `WKWebsiteDataStore`. Open external links in the default browser.
-  2. Settings holds the `tidegap` command override (argv as text, split on spaces with quotes respected), a port override, the connection status, "Reconnect", and "Forget token".
+  2. Settings holds the `tidegap` command override (argv as text, split on spaces with quotes respected), a port override, the connection status, "Reconnect" (the only path that mints after a 401), and "Forget token".
 - **Test expectation:** none in the Kit. These are view wrappers with no logic beyond what U14 tests. Proof is the U18 screenshot of the window.
 - **Verification:** the window shows the timeline. The "Connected apps" panel is hidden because the token has client scope (U5).
 
@@ -774,7 +786,7 @@ apps/macos/
   - `xcodebuild` exit 0.
   - `Tidegap.app/Contents/PlugIns/Tidegap Safari Extension.appex` exists.
   - After launching the app, `pluginkit -m -i com.tidegap.mac.safari-extension` lists it.
-  - Manual line for Vitalii: Safari, Develop, "Allow Unsigned Extensions", then Settings, Extensions, enable Tidegap. The badge shows the queue count.
+  - Manual line for Vitalii: Safari, Develop, "Allow Unsigned Extensions", then Settings, Extensions, enable Tidegap. The badge shows the queue count. Safari turns "Allow Unsigned Extensions" off each time it quits, so the extension needs this step after every Safari launch until a Developer ID build exists. `apps/macos/README.md` says so.
 
 ---
 
@@ -815,7 +827,7 @@ Read logs with `grep -nE "✘|Error|expected|FAIL" <log> | head -40`, not whole.
 
 | Risk | Effect | Mitigation |
 |---|---|---|
-| The published CLI is 0.18.0, which has no `clients` command or `/api/summary` | Both clients fail against the global `tidegap` | The Mac Settings override and the extension smoke use the repo build. A 404 shows "update tidegap". Daily use needs the 0.19.0 release, which is Vitalii's call. |
+| The published CLI is 0.18.0, which has no `clients` command or `/api/summary` | Both clients fail against the global `tidegap` | The Mac Settings override and the extension smoke use the repo build. The Mac app checks `--version` and shows "update tidegap"; the extension shows "token not accepted (revoked, or older than 0.19)". Daily use needs the 0.19.0 release, which is Vitalii's call. |
 | Firefox's `Origin` value for extension fetches is not verified (Firefox is not installed) | Firefox could send `null` and get 403 | The KTD3 matrix accepts `moz-extension://`. Firefox is lint-only here. A live run is a follow-up check. |
 | Safari enforces CORS for extension fetches, or blocks http to loopback | Stream C cannot reach the server without a server change | The U20 stop condition fires and C moves to a follow-up. A and B are unaffected. |
 | Chrome Local Network Access prompts for loopback requests | The badge stays "off" until the user allows access | Extensions with host permissions are expected to be exempt. The smoke run shows it. If a prompt appears, document it in the README. |
@@ -824,7 +836,8 @@ Read logs with `grep -nE "✘|Error|expected|FAIL" <log> | head -40`, not whole.
 | An ad-hoc signed app does not get notification permission | No banners | Install to `~/Applications` and launch with `open`. If authorization is denied, report the system log line; the menu bar keeps working. |
 | The GitHub `macos-latest` image ships an older Xcode | objectVersion 77 is not readable | Pin a runner image whose Xcode is 16 or newer. `macos.yml` prints `xcodebuild -version`. |
 | `addons-linter` adds many transitive packages and audit alerts | A noisy lockfile change and Dependabot load | Pin an exact version. Follow `docs/solutions/tooling-decisions/pnpm-dependency-refresh-workflow.md` for overrides when an audit hits. |
-| The fixed port 47821 makes the server easy to find for local web pages | None new | The Host, Origin and token checks are the defense. The random port was never listed as a control in the hardening doc. |
+| Port squatting on the fixed port 47821 | While `tidegap ui` is down, any process that binds 47821 first receives the extension's bearer token every minute. That includes another macOS account or a sandboxed app, neither of which can read `queue.db`. The token stays valid until revoked. | Open decision for Vitalii (Open Questions). Web pages stay blocked by the Host, Origin and token checks. |
+| Safari resets "Allow Unsigned Extensions" on every quit | The ad-hoc signed Safari extension vanishes after each Safari restart | Documented in U20 and the README. A persistent install waits for the Developer ID build (Deferred). |
 
 ---
 
