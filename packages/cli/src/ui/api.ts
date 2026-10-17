@@ -42,6 +42,7 @@ import {
 } from "../commands/queue.js";
 import type { DaemonStatus } from "../platform/index.js";
 import { ClientRegistryError, type ClientRegistry } from "./clients.js";
+import { buildSummary, type ForecastPoint } from "./summary.js";
 import type { DispatcherControl } from "./dispatcher.js";
 
 export interface ApiContext {
@@ -416,36 +417,74 @@ function setRead(ctx: ApiContext, taskId: string, read: boolean): ApiResponse {
   return { status: 204, changedIds: [taskId] };
 }
 
-async function forecast(ctx: ApiContext, params: URLSearchParams): Promise<ApiResponse> {
-  const region = params.get("region") || ctx.defaultRegion;
-  if (!REGION_RE.test(region)) return error(400, "invalid region");
-  const rawHours = Number(params.get("hours") ?? 24);
-  const hours = Math.min(MAX_FORECAST_HOURS, Math.max(1, Number.isFinite(rawHours) ? Math.ceil(rawHours) : 24));
+interface ForecastBody {
+  region: string;
+  source: string;
+  generated_at: string;
+  points: ForecastPoint[];
+}
+
+/**
+ * One forecast per region and hour count, reused for FORECAST_CACHE_MS by
+ * `/api/forecast` and `/api/summary` alike. Throws when the feed fails.
+ */
+async function cachedForecast(ctx: ApiContext, region: string, hours: number): Promise<ForecastBody> {
   const now = (ctx.now?.() ?? new Date()).getTime();
   let cache = forecastCache.get(ctx);
   if (!cache) forecastCache.set(ctx, (cache = new Map()));
   const key = `${region}|${hours}`;
   const hit = cache.get(key);
-  if (hit && now - hit.at < FORECAST_CACHE_MS) return { status: 200, body: hit.body };
+  if (hit && now - hit.at < FORECAST_CACHE_MS) return hit.body as ForecastBody;
+  const f = await ctx.feed.fetchForecast(region, hours);
+  for (const [k, v] of cache) if (now - v.at >= FORECAST_CACHE_MS) cache.delete(k);
+  const body: ForecastBody = {
+    region: f.region,
+    source: f.source,
+    generated_at: f.generatedAt,
+    points: f.entries.slice(0, hours).map((e) => ({
+      t: e.datetime,
+      g: e.carbonIntensityGCo2PerKwh,
+      band: e.band,
+    })),
+  };
+  cache.set(key, { at: now, body });
+  return body;
+}
+
+async function forecast(ctx: ApiContext, params: URLSearchParams): Promise<ApiResponse> {
+  const region = params.get("region") || ctx.defaultRegion;
+  if (!REGION_RE.test(region)) return error(400, "invalid region");
+  const rawHours = Number(params.get("hours") ?? 24);
+  const hours = Math.min(MAX_FORECAST_HOURS, Math.max(1, Number.isFinite(rawHours) ? Math.ceil(rawHours) : 24));
   try {
-    const f = await ctx.feed.fetchForecast(region, hours);
-    for (const [k, v] of cache) if (now - v.at >= FORECAST_CACHE_MS) cache.delete(k);
-    const body = {
-      region: f.region,
-      source: f.source,
-      generated_at: f.generatedAt,
-      points: f.entries.slice(0, hours).map((e) => ({
-        t: e.datetime,
-        g: e.carbonIntensityGCo2PerKwh,
-        band: e.band,
-      })),
-    };
-    cache.set(key, { at: now, body });
-    return { status: 200, body };
+    return { status: 200, body: await cachedForecast(ctx, region, hours) };
   } catch {
     // The provider error can name a URL or key; the page needs only the fact.
     return error(502, "forecast unavailable");
   }
+}
+
+/** `GET /api/summary[?since=<iso>]` (native clients KTD5). */
+async function summary(ctx: ApiContext, params: URLSearchParams): Promise<ApiResponse> {
+  let since: Date | undefined;
+  const rawSince = params.get("since");
+  if (rawSince !== null) {
+    const d = instant(rawSince, "since");
+    if (typeof d === "string") return error(400, d);
+    since = d;
+  }
+  let points: ForecastPoint[] | null;
+  try {
+    points = (await cachedForecast(ctx, ctx.defaultRegion, 24)).points;
+  } catch {
+    // A feed failure is a field in the answer, never a 5xx.
+    points = null;
+  }
+  const now = ctx.now?.() ?? new Date();
+  return {
+    status: 200,
+    body: buildSummary({ store: ctx.store, region: ctx.defaultRegion, now, points, ...(since ? { since } : {}) }),
+  };
 }
 
 function status(ctx: ApiContext): ApiResponse {
@@ -520,6 +559,7 @@ export async function handleApi(
   if (route.length === 1 && route[0] === "tasks") return get ? listTasks(ctx, params) : error(405, "method not allowed");
   if (route.length === 1 && route[0] === "forecast") return get ? forecast(ctx, params) : error(405, "method not allowed");
   if (route.length === 1 && route[0] === "status") return get ? status(ctx) : error(405, "method not allowed");
+  if (route.length === 1 && route[0] === "summary") return get ? summary(ctx, params) : error(405, "method not allowed");
   if (route.length === 2 && route[0] === "dispatcher" && route[1] === "start") {
     return method === "POST" ? startDispatcher(ctx) : error(405, "method not allowed");
   }
