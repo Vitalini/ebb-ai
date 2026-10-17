@@ -1,22 +1,46 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { DocsEmbed } from "@/components/docs/docs-embeds";
 import { DocsNav } from "@/components/docs/docs-nav";
 import { DocsProse } from "@/components/docs/docs-prose";
-import { DOCS_SECTIONS } from "@/lib/docs.generated";
+import { DOCS_FAQ, DOCS_SECTIONS } from "@/lib/docs.generated";
 import { MARKDOWN_ALTERNATE } from "@/lib/site-meta";
 
 export const metadata: Metadata = {
   title: "Docs · install, hosts, CLI, MCP tools",
   description:
     "Install Tidegap in any MCP host, then use the CLI, the MCP tools, the local UI and the signed carbon receipts. One page, one section per topic.",
-  alternates: { canonical: "https://www.tidegap.com/docs", types: MARKDOWN_ALTERNATE },
+  alternates: {
+    canonical: "https://www.tidegap.com/docs",
+    // PR A's install.md alternate, plus the full docs as markdown.
+    types: {
+      "text/markdown": [{ url: MARKDOWN_ALTERNATE["text/markdown"] }, { url: "/llms-full.txt" }],
+    },
+  },
 };
 
 const NAV_ITEMS = DOCS_SECTIONS.map(({ id, label }) => ({ id, label }));
 
-export default function DocsPage() {
+const FAQ_JSON_LD = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: DOCS_FAQ.map((pair) => ({
+    "@type": "Question",
+    name: pair.question,
+    acceptedAnswer: { "@type": "Answer", text: pair.answer },
+  })),
+};
+
+export default async function DocsPage() {
+  // The JSON-LD tag needs the proxy's per-request nonce, as in layout.tsx.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <div className="lg:grid lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-12">
+      <script
+        type="application/ld+json"
+        nonce={nonce}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(FAQ_JSON_LD).replace(/</g, "\\u003c") }}
+      />
       <DocsNav items={NAV_ITEMS} />
 
       <article className="min-w-0 max-w-3xl text-fg">
