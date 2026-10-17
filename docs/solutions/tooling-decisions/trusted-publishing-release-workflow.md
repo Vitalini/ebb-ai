@@ -26,7 +26,12 @@ PR #60, plan `docs/plans/2026-10-16-1509-chore-trusted-publishing-plan.md`. Rele
 - **Create the GitHub environment (`release`) before the first tag.** A job that names a missing environment creates it with no protection. Set the required reviewer and the `v*` tag-only deployment rule first.
 - **ClawHub supports GitHub OIDC** (`clawhub package trusted-publisher set`). Once set, a manual publish needs `--manual-override-reason`.
 - **The MCP Registry needs no setup:** OIDC grants `io.github.tidegap/*` (see `mcp-registry-metadata-and-package-readmes.md`).
-- **Keep `verify` free of OIDC and environment.** Pull requests run it as a rehearsal; only a `v*` tag reaches the publish jobs.
+- **Keep `verify` free of OIDC and environment.** Pull requests run it as a rehearsal; only a `v*` tag ref (a tag push, or a dispatch with `dry_run=false` on the tag) reaches the publish jobs.
+- **A release needs three approvals, not one.** GitHub asks for approval once per job that names the environment. `npm`, `pypi` and `clawhub` run in sequence, so each waits for its own approval. One approval would need one publish job.
+- **`npm publish npm/x.tgz` is not a file path.** npm reads `npm/x.tgz` as the GitHub repo shorthand `github:npm/x.tgz`. Use `./npm/x.tgz`. The dry run used an absolute path, so it did not catch this.
+- **The default `run:` shell has no `pipefail`.** `cmd | tee file` passes when `cmd` fails. Put `set -o pipefail` first.
+- **The MCP Registry trusts any OIDC token from the repo** (namespace only, no workflow or environment claim). `mcp-registry.yml` therefore fails unless it runs on the tag `v<version>`. Retry: `gh workflow run mcp-registry.yml --ref vX.Y.Z -f version=X.Y.Z`.
+- **The first OIDC release must be a new version.** 0.18.0 is already on every registry from the laptop, and tag `v0.18.0` exists. npm shows "Pending validation" until the first OIDC publish.
 
 ## Secrets hygiene: browser-agent downloads
 

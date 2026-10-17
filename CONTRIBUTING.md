@@ -102,9 +102,14 @@ GitHub secrets.
 1. Release-prep PR: bump every file `pnpm check:versions` lists, date
    the CHANGELOG heading (`## [X.Y.Z] — YYYY-MM-DD`), update the README
    status line. Review it, wait for CI to pass, merge.
-2. Tag the merge commit on `main` and push the tag:
+2. Wait for the CI run on the merge commit on `main` to pass, then
+   tag that commit and push the tag:
    `git pull && git tag -a vX.Y.Z -m vX.Y.Z <merge sha> && git push origin vX.Y.Z`.
-3. Approve the `release` deployment in the Actions run.
+   A tag pushed before CI passes fails `verify`; re-run the failed
+   jobs when CI is green.
+3. Approve the `release` deployment three times in the Actions run:
+   GitHub asks once per job that names the environment, so npm, then
+   PyPI, then ClawHub. The MCP Registry job needs no approval.
 4. The workflow checks the tag against the lockstep version, checks
    that the commit is on `main` and that CI passed on it, then
    publishes. Check the run summary.
@@ -112,8 +117,11 @@ GitHub secrets.
 
 Rehearsal (build and dry run only, nothing is published):
 `gh workflow run release.yml --ref main`. Retry the MCP Registry step
-alone: `gh workflow run mcp-registry.yml -f version=X.Y.Z`. A failed
-run can be re-run: versions already published are skipped.
+alone, on the release tag ref:
+`gh workflow run mcp-registry.yml --ref vX.Y.Z -f version=X.Y.Z`.
+Use "Re-run failed jobs" on a failed run: npm, PyPI and ClawHub skip
+versions already published. The MCP Registry step does not skip, so
+do not re-run it after it passed.
 
 ## Security
 

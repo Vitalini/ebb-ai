@@ -27,6 +27,7 @@ on:
       - packages/mcp-server/server.json
       - packages/openclaw-plugin/openclaw.plugin.json
       - scripts/check-versions.mjs
+      - scripts/check-versions.test.mjs
       - pnpm-lock.yaml
 
 permissions: {}
@@ -38,6 +39,7 @@ concurrency:
 env:
   NPM_VERSION: 11.19.1 # trusted publishing needs npm >= 11.5.1
   CLAWHUB_VERSION: 0.23.1
+  TWINE_VERSION: 7.0.0
 
 jobs:
   verify:
@@ -148,38 +150,33 @@ jobs:
             npm publish --dry-run --force --access public "$tgz"
           done
 
+      # Each artifact is uploaded right after it is built, before a tool
+      # fetched at run time (twine via uvx, clawhub via npx) runs here.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: npm-tarballs
+          path: ${{ runner.temp }}/npm/*.tgz
+          if-no-files-found: error
+
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
-      - name: Build and check Python dists
+      - name: Build Python dists
         working-directory: packages/core-py
         env:
           VERSION: ${{ steps.mode.outputs.version }}
         run: |
           uv build --out-dir dist
           ls dist/tidegap-"$VERSION".tar.gz dist/tidegap-"$VERSION"-*.whl
-          uvx twine check --strict dist/*
-          { echo "### Python dists"; for d in dist/*; do echo "- ${d#dist/}"; done; } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: ClawHub dry run
-        env:
-          VERSION: ${{ steps.mode.outputs.version }}
-        run: |
-          npx --yes "clawhub@${CLAWHUB_VERSION}" package publish packages/openclaw-plugin \
-            --family code-plugin --name @vitalini/tidegap --version "$VERSION" \
-            --source-repo tidegap/tidegap --source-commit "$GITHUB_SHA" \
-            --source-ref "$GITHUB_REF_NAME" --source-path packages/openclaw-plugin \
-            --no-input --dry-run | tee "$RUNNER_TEMP/clawhub-dry-run.txt"
-          { echo "### ClawHub dry run"; echo '```'; cat "$RUNNER_TEMP/clawhub-dry-run.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: npm-tarballs
-          path: ${{ runner.temp }}/npm/*.tgz
-          if-no-files-found: error
       - uses: actions/upload-artifact@v7
         with:
           name: python-dist
           path: packages/core-py/dist/
           if-no-files-found: error
+      - name: Check Python dists
+        working-directory: packages/core-py
+        run: |
+          uvx --from "twine==${TWINE_VERSION}" twine check --strict dist/*
+          { echo "### Python dists"; for d in dist/*; do echo "- ${d#dist/}"; done; } >> "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/upload-artifact@v7
         with:
           name: openclaw-plugin
@@ -190,6 +187,18 @@ jobs:
             packages/openclaw-plugin/README.md
             packages/openclaw-plugin/LICENSE
           if-no-files-found: error
+
+      - name: ClawHub dry run
+        env:
+          VERSION: ${{ steps.mode.outputs.version }}
+        run: |
+          set -o pipefail
+          npx --yes "clawhub@${CLAWHUB_VERSION}" package publish packages/openclaw-plugin \
+            --family code-plugin --name @vitalini/tidegap --version "$VERSION" \
+            --source-repo tidegap/tidegap --source-commit "$GITHUB_SHA" \
+            --source-ref "$GITHUB_REF_NAME" --source-path packages/openclaw-plugin \
+            --no-input --dry-run | tee "$RUNNER_TEMP/clawhub-dry-run.txt"
+          { echo "### ClawHub dry run"; echo '```'; cat "$RUNNER_TEMP/clawhub-dry-run.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
   npm:
     needs: verify
@@ -216,9 +225,11 @@ jobs:
           for pkg in core cli mcp; do
             if [ "$(npm view "@tidegap/${pkg}@${VERSION}" version 2>/dev/null)" = "$VERSION" ]; then
               echo "::notice::@tidegap/${pkg}@${VERSION} is already on npm; skipped"
+              echo "$pkg" >> "$RUNNER_TEMP/npm-skipped"
               continue
             fi
-            npm publish "npm/tidegap-${pkg}-${VERSION}.tgz" --provenance --access public
+            # "./" is required: npm reads "npm/x.tgz" as a GitHub repo shorthand.
+            npm publish "./npm/tidegap-${pkg}-${VERSION}.tgz" --provenance --access public
           done
       - name: Read back provenance
         env:
@@ -227,10 +238,19 @@ jobs:
           echo "### npm" >> "$GITHUB_STEP_SUMMARY"
           for pkg in core cli mcp; do
             ATT=""
+            SKIPPED=false
+            grep -qx "$pkg" "$RUNNER_TEMP/npm-skipped" 2>/dev/null && SKIPPED=true
             for _ in 1 2 3 4 5 6 7 8; do
               ATT=$(npm view "@tidegap/${pkg}@${VERSION}" dist.attestations.url 2>/dev/null) && [ -n "$ATT" ] && break
+              [ "$SKIPPED" = true ] && break
               sleep 15
             done
+            if [ -z "$ATT" ] && [ "$SKIPPED" = true ]; then
+              # Published before this run (for example from a laptop): no attestation to require.
+              echo "::warning::@tidegap/${pkg}@${VERSION} was not published by this run and has no provenance attestation"
+              echo "- @tidegap/${pkg}@${VERSION}: skipped, no attestation" >> "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
             [ -n "$ATT" ] || { echo "::error::@tidegap/${pkg}@${VERSION} has no provenance attestation"; exit 1; }
             echo "- @tidegap/${pkg}@${VERSION}: ${ATT}" >> "$GITHUB_STEP_SUMMARY"
           done

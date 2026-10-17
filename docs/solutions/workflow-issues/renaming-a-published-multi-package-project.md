@@ -71,11 +71,11 @@ Review fixes go before the release commit. If one lands after it, move the relea
 - **Log one migration warning**, once, on the first `full` registration: install the new plugin and move the config block to `plugins.entries.tidegap`. The user config key is `plugins.entries.<id>` (not `plugins.<id>`).
 - **Keep the old `uiHints`**, so the sensitive fields stay hidden in the host UI. Dropping them would show secrets as plain text. A fix commit added them back.
 - **The shim is plain ESM with no dependencies**, tested without a build (`compat/test/clawhub-shim.test.mjs`, in `pnpm preflight`). Validate with `clawhub package validate`, rehearse with `publish --dry-run --json`.
-- The release is "ready, not published" until the publish command runs after merge; track it as a hub-submission-log row.
+- The release is "ready, not published" until the publish command runs after merge; track it as a hub-submission-log row. The 0.17.1 pointer was published on 2026-10-17 from `main` `ee615aa`.
 
 ## Why This Matters
 
-A rename that skips these steps fails on users, not in CI: a hidden ledger, a daemon that ticks into a missing path, an `npx` config that 404s. The user table (what happens, what the user does) belongs in the PR and the CHANGELOG upgrade note. Pair this with the release order from `docs/solutions/tooling-decisions/version-lockstep-check.md` and reserve external names first (see the clearance doc).
+A rename that skips these steps fails on users, not in CI: a hidden ledger, a daemon that ticks into a missing path, an `npx` config that 404s. The user table (what happens, what the user does) belongs in the PR and the CHANGELOG upgrade note. Pair this with the release order in `docs/solutions/tooling-decisions/trusted-publishing-release-workflow.md` (the publish-before-merge order in `version-lockstep-check.md` is superseded) and reserve external names first (see the clearance doc).
 
 ## When to Apply
 
@@ -87,4 +87,4 @@ A rename that skips these steps fails on users, not in CI: a hidden ledger, a da
 - `docs/solutions/best-practices/shared-sqlite-ledger-migrations.md`
 - `docs/solutions/logic-errors/compare-and-set-task-transitions.md`
 - `docs/solutions/tooling-decisions/rendered-repo-images-and-brand-name.md`
-- `docs/solutions/tooling-decisions/trusted-publishing-release-workflow.md` (how the pointer and other releases ship)
+- `docs/solutions/tooling-decisions/trusted-publishing-release-workflow.md` (how releases ship; the compat pointer stays a manual publish)
