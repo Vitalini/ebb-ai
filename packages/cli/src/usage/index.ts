@@ -26,3 +26,5 @@ export { resetTarget, resolveResetTarget, unavailableReason } from "./target.js"
 export type { ResetTarget, TargetResult } from "./target.js";
 export { buildUsageDocument, clockLabel, formatLine, windowLabel } from "./document.js";
 export type { UsageDocument } from "./document.js";
+export { hostResetTarget, readHostLimits } from "./host.js";
+export type { HostLimitsOptions } from "./host.js";
