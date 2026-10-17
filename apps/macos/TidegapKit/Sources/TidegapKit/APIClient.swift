@@ -13,6 +13,15 @@ public enum APIResult<Value> {
         if case .ok(let v) = self { return v }
         return nil
     }
+
+    public func map<U>(_ transform: (Value) -> U) -> APIResult<U> {
+        switch self {
+        case .ok(let v): return .ok(transform(v))
+        case .offline: return .offline
+        case .unpaired: return .unpaired
+        case .error(let m): return .error(m)
+        }
+    }
 }
 
 extension APIResult: Equatable where Value: Equatable {}
@@ -45,12 +54,7 @@ public struct APIClient: Sendable {
             URLQueryItem(name: "status", value: TaskStatus.active.map(\.rawValue).joined(separator: ",")),
             URLQueryItem(name: "limit", value: String(limit)),
         ]
-        switch await send(request(components.url!), as: TaskList.self) {
-        case .ok(let list): return .ok(list.tasks)
-        case .offline: return .offline
-        case .unpaired: return .unpaired
-        case .error(let m): return .error(m)
-        }
+        return await send(request(components.url!), as: TaskList.self).map(\.tasks)
     }
 
     /// `POST /api/tasks` with only `prompt` and `deadline`.

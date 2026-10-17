@@ -28,10 +28,14 @@ public enum Format {
 
     /// "14:00" in 24-hour time.
     public static func clock(_ date: Date, timeZone: TimeZone = .current) -> String {
+        format(date, "HH:mm", timeZone: timeZone)
+    }
+
+    private static func format(_ date: Date, _ pattern: String, timeZone: TimeZone) -> String {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.timeZone = timeZone
-        f.dateFormat = "HH:mm"
+        f.dateFormat = pattern
         return f.string(from: date)
     }
 
@@ -42,11 +46,7 @@ public enum Format {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
         if calendar.isDate(date, inSameDayAs: now) { return "\(prefix) \(clock(date, timeZone: timeZone))" }
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = timeZone
-        f.dateFormat = "MMM d HH:mm"
-        return "\(prefix) \(f.string(from: date))"
+        return "\(prefix) \(format(date, "MMM d HH:mm", timeZone: timeZone))"
     }
 }
 

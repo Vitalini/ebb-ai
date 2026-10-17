@@ -6,7 +6,7 @@ import UserNotifications
 /// macOS notifications for Kit events (R11, KTD8). Text goes only into
 /// plain-text fields, truncated by `NotificationText`.
 final class LocalNotificationChannel: NSObject, NotificationChannel, UNUserNotificationCenterDelegate {
-    static let cleanPrefix = "clean-"
+    private static let cleanPrefix = "clean-"
     private let center = UNUserNotificationCenter.current()
     private let log = Logger(subsystem: "com.tidegap.mac", category: "notifications")
     /// Called when the user clicks a notification.
@@ -35,9 +35,7 @@ final class LocalNotificationChannel: NSObject, NotificationChannel, UNUserNotif
         case .cleanWindow(let window):
             // One pending request: a new window replaces the old one.
             removePendingCleanWindows()
-            var calendar = Calendar.current
-            calendar.timeZone = .current
-            let parts = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: window.start)
+            let parts = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: window.start)
             let trigger = UNCalendarNotificationTrigger(dateMatching: parts, repeats: false)
             add(id: Self.cleanPrefix + Wire.formatDate(window.start), event: event, trigger: trigger)
         case .cleanWindowCleared:

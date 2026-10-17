@@ -19,9 +19,13 @@ public struct TokenStore: Sendable {
         return token.isEmpty ? nil : token
     }
 
+    private func ensureDirectory() throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+    }
+
     public func write(_ token: String) throws {
         let fm = FileManager.default
-        try fm.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        try ensureDirectory()
         let tmp = directory.appendingPathComponent("client-token.\(UUID().uuidString).tmp")
         guard fm.createFile(atPath: tmp.path, contents: Data(token.utf8), attributes: [.posixPermissions: 0o600]) else {
             throw CocoaError(.fileWriteUnknown)
@@ -39,7 +43,7 @@ public struct TokenStore: Sendable {
     public var isRevoked: Bool { FileManager.default.fileExists(atPath: revokedURL.path) }
 
     public func markRevoked() {
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        try? ensureDirectory()
         FileManager.default.createFile(atPath: revokedURL.path, contents: nil, attributes: [.posixPermissions: 0o600])
     }
 

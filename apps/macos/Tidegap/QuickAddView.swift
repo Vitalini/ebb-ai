@@ -9,7 +9,7 @@ struct QuickAddView: View {
 
     private var canAdd: Bool {
         !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !model.adding
-            && { if case .connected = model.state { return true } else { return false } }()
+            && model.state.isConnected
     }
 
     var body: some View {

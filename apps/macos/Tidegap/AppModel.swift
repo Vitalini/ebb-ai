@@ -13,6 +13,8 @@ final class AppModel {
     private(set) var tasks: [TaskItem] = []
     var quickAddError: String?
     private(set) var adding = false
+    /// Bumped to ask the label view to open the main window.
+    private(set) var windowRequests = 0
 
     @ObservationIgnored let paths: AppPaths
     @ObservationIgnored let controller: ConnectionController
@@ -95,9 +97,6 @@ final class AppModel {
         Task { await controller.connect() }
     }
 
-    /// Bumped to ask the label view to open the main window.
-    private(set) var windowRequests = 0
-
     func showWindow() {
         windowRequests += 1
     }
@@ -119,10 +118,10 @@ final class AppModel {
     }
 
     func quickAdd(prompt: String, preset: DeadlinePreset) async -> Bool {
-        guard let port = controller.port, let token = controller.token else { return false }
+        guard let client = controller.client() else { return false }
         adding = true
         defer { adding = false }
-        let result = await APIClient(port: port, token: token).quickAdd(
+        let result = await client.quickAdd(
             prompt: prompt.trimmingCharacters(in: .whitespacesAndNewlines),
             deadline: preset.deadline(from: Date())
         )
@@ -147,9 +146,10 @@ final class AppModel {
     }
 
     private func sync() {
-        state = controller.state
-        summary = controller.summary
-        tasks = controller.tasks
+        // Assign only changes: @Observable re-renders the label on every set.
+        if state != controller.state { state = controller.state }
+        if summary != controller.summary { summary = controller.summary }
+        if tasks != controller.tasks { tasks = controller.tasks }
         updateStream()
     }
 

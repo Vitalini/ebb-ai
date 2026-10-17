@@ -4,9 +4,8 @@
  *
  * `packages/core-ts/package.json` is the source of truth. Every published
  * manifest, the Mac app's MARKETING_VERSION, the README status line and the
- * newest dated CHANGELOG heading
- * must carry the same version; the script names each file that differs
- * and exits 1. Dependency-free (Node built-ins only).
+ * newest dated CHANGELOG heading must carry the same version; the script
+ * names each file that differs and exits 1. Dependency-free (Node built-ins only).
  *
  * `--tag <tag>` (or `--tag=<tag>`) also fails unless the tag is
  * `v<version>` (release.yml runs it on tag refs). Tests:

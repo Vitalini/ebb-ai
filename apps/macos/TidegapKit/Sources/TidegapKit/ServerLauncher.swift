@@ -232,12 +232,17 @@ public final class SystemProcessRunner: ProcessRunner {
         self.logURL = logURL
     }
 
-    public func run(_ argv: [String], environment: [String: String]) async throws -> CommandOutput {
+    private func makeProcess(_ argv: [String], environment: [String: String]) -> Process {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: argv[0])
         process.arguments = Array(argv.dropFirst())
         process.environment = environment
         process.standardInput = FileHandle.nullDevice
+        return process
+    }
+
+    public func run(_ argv: [String], environment: [String: String]) async throws -> CommandOutput {
+        let process = makeProcess(argv, environment: environment)
         let out = Pipe()
         let err = Pipe()
         process.standardOutput = out
@@ -250,8 +255,14 @@ public final class SystemProcessRunner: ProcessRunner {
                 return
             }
             DispatchQueue.global().async {
+                // Drain both pipes at once, so a full stderr pipe cannot block the child.
+                var stderr = Data()
+                let group = DispatchGroup()
+                DispatchQueue.global().async(group: group) {
+                    stderr = err.fileHandleForReading.readDataToEndOfFile()
+                }
                 let stdout = out.fileHandleForReading.readDataToEndOfFile()
-                let stderr = err.fileHandleForReading.readDataToEndOfFile()
+                group.wait()
                 process.waitUntilExit()
                 continuation.resume(returning: CommandOutput(
                     status: process.terminationStatus,
@@ -263,19 +274,16 @@ public final class SystemProcessRunner: ProcessRunner {
     }
 
     public func spawn(_ argv: [String], environment: [String: String]) throws -> RunningProcess {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: argv[0])
-        process.arguments = Array(argv.dropFirst())
-        process.environment = environment
-        process.standardInput = FileHandle.nullDevice
-        var output: Any = FileHandle.nullDevice
+        let process = makeProcess(argv, environment: environment)
+        var log: FileHandle?
         if let logURL {
             try? FileManager.default.createDirectory(at: logURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             FileManager.default.createFile(atPath: logURL.path, contents: nil, attributes: [.posixPermissions: 0o600])
-            if let handle = try? FileHandle(forWritingTo: logURL) { output = handle }
+            log = try? FileHandle(forWritingTo: logURL)
         }
-        process.standardOutput = output
-        process.standardError = output
+        defer { try? log?.close() }
+        process.standardOutput = log ?? FileHandle.nullDevice
+        process.standardError = log ?? FileHandle.nullDevice
         try process.run()
         return SystemProcess(process)
     }

@@ -15,6 +15,11 @@ public enum ConnectionState: Equatable, Sendable {
     case tidegapNotFound
     case failed(String)
 
+    public var isConnected: Bool {
+        if case .connected = self { return true }
+        return false
+    }
+
     /// True when the app holds no usable token (badge "?", KTD6).
     public var lacksToken: Bool {
         switch self {
@@ -49,6 +54,8 @@ public final class ConnectionController {
     private var attached: (port: Int, owns: Bool)?
     private var failedPolls = 0
     private var busy = false
+    /// A refresh asked for while another ran; it runs once afterwards.
+    private var refreshPending = false
 
     public init(
         store: TokenStore,
@@ -60,6 +67,12 @@ public final class ConnectionController {
         self.discovery = discovery
         self.launcher = launcher
         self.makeClient = makeClient
+    }
+
+    /// A client for the attached server, through the same factory as polling.
+    public func client() -> APIClient? {
+        guard let attached, let token else { return nil }
+        return makeClient(attached.port, token)
     }
 
     /// The server port while one is attached, reachable or not.
@@ -93,7 +106,18 @@ public final class ConnectionController {
     /// One poll: summary and active tasks. Two failed polls in a row run
     /// discovery and the spawn branch again.
     public func refresh() async {
-        guard !busy else { return }
+        guard !busy else {
+            refreshPending = true
+            return
+        }
+        await refreshOnce()
+        while refreshPending {
+            refreshPending = false
+            await refreshOnce()
+        }
+    }
+
+    private func refreshOnce() async {
         guard let token else {
             if !state.lacksToken { await connect() }
             return

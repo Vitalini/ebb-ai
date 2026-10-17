@@ -10,7 +10,7 @@ struct MenuBarView: View {
         VStack(alignment: .leading, spacing: 10) {
             header
             Divider()
-            if case .connected = model.state {
+            if model.state.isConnected {
                 taskList
                 Divider()
                 QuickAddView()
