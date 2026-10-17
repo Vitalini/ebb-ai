@@ -34,6 +34,16 @@ import {
 } from "./data/tables.generated.js";
 import type { GridFeed, GridForecast, GridForecastEntry } from "./types.js";
 
+/**
+ * Floor a date to the top of its UTC hour. A local-time floor lands an hour
+ * early in a DST fall-back hour and on :30 in a half-hour zone.
+ */
+function floorToUtcHour(d: Date): Date {
+  const out = new Date(d.getTime());
+  out.setUTCMinutes(0, 0, 0);
+  return out;
+}
+
 function classify(g: number): GridForecastEntry["band"] {
   for (const t of BAND_THRESHOLDS) {
     if (g < t.maxExclusive) return t.band;
@@ -82,10 +92,7 @@ export function mockGridFeed(clock?: () => Date): GridFeed {
     source: "mock",
     async fetchForecast(region: string, hours: number): Promise<GridForecast> {
       const baseNow = clock ? clock() : new Date();
-      const now = new Date(baseNow.getTime());
-      // UTC floor: a local one lands an hour early in a DST fall-back hour
-      // and on :30 in a half-hour zone.
-      now.setUTCMinutes(0, 0, 0);
+      const now = floorToUtcHour(baseNow);
       const entries: GridForecastEntry[] = [];
       for (let i = 0; i < hours; i++) {
         const t = new Date(now.getTime() + i * 60 * 60 * 1000);
@@ -224,9 +231,7 @@ export function ukCarbonIntensityFeed(): GridFeed {
         return mock.fetchForecast(region, hours);
       }
       try {
-        const now = new Date();
-        now.setUTCMinutes(0, 0, 0);
-        now.setSeconds(0, 0);
+        const now = floorToUtcHour(new Date());
 
         interface UkSettlementPeriod {
           from: string;
@@ -465,9 +470,7 @@ export function eiaFeed(apiKey?: string): GridFeed {
         // Pull the last 30 hours so we have a buffer of completed hours.
         // EIA timestamps are UTC, no offset; the "period" field is "YYYY-MM-DDTHH".
         const now = new Date();
-        const endHour = new Date(now);
-        endHour.setUTCMinutes(0, 0, 0);
-        endHour.setSeconds(0, 0);
+        const endHour = floorToUtcHour(now);
         const startHour = new Date(endHour.getTime() - 30 * 60 * 60 * 1000);
         const fmt = (d: Date) => d.toISOString().slice(0, 13); // "YYYY-MM-DDTHH"
 
@@ -545,9 +548,7 @@ export function eiaFeed(apiKey?: string): GridFeed {
         // realized observation whose UTC hour-of-day matches H. This is
         // phase-correct regardless of EIA's publication lag.
         const forecast: GridForecastEntry[] = [];
-        const startTs = new Date(now);
-        startTs.setUTCMinutes(0, 0, 0);
-        startTs.setSeconds(0, 0);
+        const startTs = floorToUtcHour(now);
         for (let i = 0; i < hours; i++) {
           const t = new Date(startTs.getTime() + i * 60 * 60 * 1000);
           const g = byHourOfDay.get(t.getUTCHours())!;
@@ -751,9 +752,7 @@ export function entsoeFeed(securityToken?: string): GridFeed {
         // Realised generation per type (A75) — most recent hour with data.
         // ENTSO-E expects period in YYYYMMDDhhmm UTC.
         const now = new Date();
-        const endHour = new Date(now);
-        endHour.setUTCMinutes(0, 0, 0);
-        endHour.setSeconds(0, 0);
+        const endHour = floorToUtcHour(now);
         const startHour = new Date(endHour.getTime() - 24 * 60 * 60 * 1000);
         const fmt = (d: Date) =>
           d.toISOString().replace(/[-:T]/g, "").slice(0, 12);
@@ -834,9 +833,7 @@ export function entsoeFeed(securityToken?: string): GridFeed {
         // Persistence forecast: future hour H gets the most recent
         // realized observation whose UTC hour-of-day matches H —
         // phase-correct regardless of publication lag.
-        const startTs = new Date(now);
-        startTs.setUTCMinutes(0, 0, 0);
-        startTs.setSeconds(0, 0);
+        const startTs = floorToUtcHour(now);
         const forecast: GridForecastEntry[] = [];
         for (let i = 0; i < hours; i++) {
           const t = new Date(startTs.getTime() + i * 60 * 60 * 1000);
