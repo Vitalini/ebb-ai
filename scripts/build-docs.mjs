@@ -192,7 +192,9 @@ export function parseBlocks(src, ctx) {
     }
     if (COMMENT_START.test(line)) {
       // Source notes for editors; never rendered.
+      const start = i;
       while (i < lines.length && !lines[i].includes("-->")) i++;
+      if (i >= lines.length) fail(`${ctx.file}:${lineNo(start)}: unclosed HTML comment`);
       i++;
       continue;
     }
@@ -445,6 +447,7 @@ export function readCategoryFiles(dir = CONTENT_DIR) {
 export function buildDocs({ files, installMd, tools, energyRows }, opts = {}) {
   const requiredIds = opts.requiredIds ?? REQUIRED_IDS;
   const ids = new Map();
+  const explicitIds = new Set();
   const sections = [];
   const llms = [];
   let faq = [];
@@ -476,6 +479,7 @@ export function buildDocs({ files, installMd, tools, energyRows }, opts = {}) {
       else fail(`${file}:${b.line}: unknown embed "${b.name}"`);
     }
 
+    for (const h of ctx.headings) if (h.explicit) explicitIds.add(h.id);
     if (data.id === "faq") faq = extractFaq(body, file);
 
     sections.push({
@@ -488,9 +492,7 @@ export function buildDocs({ files, installMd, tools, energyRows }, opts = {}) {
   }
 
   for (const id of requiredIds) {
-    const heading = sections.flatMap((s) => s.headings).find((h) => h.id === id);
-    const explicit = [...ids.keys()].includes(id);
-    if (!heading || !explicit) fail(`required id "${id}" is missing: add \`{#${id}}\` to its heading`);
+    if (!explicitIds.has(id)) fail(`required id "${id}" is missing: add \`{#${id}}\` to its heading`);
   }
 
   const module = renderModule({ sections, faq });

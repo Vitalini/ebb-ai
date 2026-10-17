@@ -214,3 +214,15 @@ test("emphasis markers inside an href are left alone", () => {
     '<p>see <a href="https://example.com/a/_b_/c" target="_blank" rel="noreferrer">the <em>x</em> doc</a> and <em>this</em></p>',
   );
 });
+
+test("a required id that exists only as a slug fails the build", () => {
+  const files = [...fixtureFiles(), cat("config", "Config", "### Env\n\nVariables.")];
+  assert.throws(
+    () => buildDocs({ files, installMd: INSTALL, tools: TOOLS, energyRows: ENERGY }, { requiredIds: ["commands", "env"] }),
+    /required id "env" is missing/,
+  );
+});
+
+test("an unclosed HTML comment fails the build", () => {
+  assert.throws(() => renderMarkdown("Intro.\n\n<!-- note\nstill a note", ctx()), /fixture\.md:3: unclosed HTML comment/);
+});
