@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tidegap options</title>
+  <link rel="stylesheet" href="options.css">
+  <script type="module" src="options.js"></script>
+</head>
+<body>
+  <main>
+    <h1>Tidegap</h1>
+    <p class="lead">Connect the extension to <code>tidegap ui</code> on this computer.</p>
+    <form id="form" autocomplete="off">
+      <label for="port">Port</label>
+      <input id="port" name="port" type="number" min="1" max="65535" required>
+      <p class="hint">47821 unless you start <code>tidegap ui --port &lt;n&gt;</code>.</p>
+
+      <label for="token">Client token</label>
+      <input id="token" name="token" type="password" spellcheck="false" placeholder="tgc_…">
+      <p class="hint">Run <code>tidegap clients add --name browser --kind extension</code>, or use "Connect an app" in the tidegap ui page. Paste the token here.</p>
+
+      <fieldset>
+        <legend>Notifications</legend>
+        <label class="check"><input id="notify-finished" type="checkbox"> A task finishes</label>
+        <label class="check"><input id="notify-window" type="checkbox"> A clean grid window starts</label>
+      </fieldset>
+
+      <div class="actions">
+        <button id="save" type="submit">Save</button>
+        <button id="test" type="button">Test connection</button>
+      </div>
+      <p id="status" role="status" aria-live="polite"></p>
+    </form>
+  </main>
+</body>
+</html>
