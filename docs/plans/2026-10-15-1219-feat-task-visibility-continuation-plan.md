@@ -14,7 +14,7 @@ execution: code
 
 - **Objective:** A user who deferred a task through any ebb-ai host (CLI, Claude Code or Cursor via MCP, OpenClaw) can see when and which task will run, read the result and its receipt when it ran, learn that it finished without polling, and continue the work from that result without leaving the machine's privacy boundary.
 - **Means:** One local HTTP API and web UI served by the CLI (`ebb ui`) over the existing `~/.ebb-ai/queue.db`, a `ebb queue show` command, a parent-child task relation that stores message history so a completed task can be replied to, a completion signal per host, and a `quota_reset` deadline kind.
-- **Authority:** Vitalii's brief (session scratchpad `brief-ui.md`, 2026-10-15), then this plan, then the scout report (`ui-current-state.md`) for current-state facts. Where this plan and repo evidence disagree, the planner stops and reports.
+- **Authority:** Vitalii's brief (<session notes, not in the repo>), then this plan, then the scout report (<session notes, not in the repo>) for current-state facts. Where this plan and repo evidence disagree, the planner stops and reports.
 - **Open blockers:** four questions under Outstanding Questions / Resolve Before Planning: the quota source, acceptance of text-only continuation for the first release, the UI packaging, and whether the InfoQ article names `ebb ui`.
 - **Who finishes:** the pipeline stops at open, reviewed PRs. Vitalii merges and decides whether `ebb ui` is named in the InfoQ article.
 
@@ -223,7 +223,7 @@ flowchart TB
 
 ### Sources / Research
 
-- Session scratchpad `brief-ui.md` (constraints) and `ui-current-state.md` (facts with file and line).
+- <session notes, not in the repo>.
 - Ledger schema and task record: `packages/core-ts/src/storage/sqlite.ts:58-130`, `packages/core-ts/src/types.ts:194-303`.
 - Single-turn dispatch and redaction: `packages/core-ts/src/providers/anthropic.ts:283-293`, `packages/core-ts/src/scheduler.ts:1499-1508`, `2121-2133`.
 - Window selection against a deadline: `packages/core-ts/src/scheduler.ts:1071-1117`, `packages/core-ts/src/recommend.ts`.

@@ -13,7 +13,7 @@ execution: code
 
 - **Objective:** A user of ebb-ai in September 2026 gets correct carbon and cost numbers for the models they actually run, defaults that dispatch to models that still exist, and a website that carries no critical advisory.
 - **Means:** Refresh the JSON data tables and model-resolution rules first, then the consumers (provider adapters, MCP server, OpenClaw plugin, website copy, docs), then dependencies and CI, as ordered streams in git worktrees (KTD1, KTD8).
-- **Authority:** This plan, then the two audits it is built from (`audit-models.md`, `audit-health.md` in the session scratchpad), then the `claude-api` skill for Claude facts. Where the plan and repo evidence disagree, stop and report.
+- **Authority:** This plan, then the two audits it is built from (<session notes, not in the repo>), then the `claude-api` skill for Claude facts. Where the plan and repo evidence disagree, stop and report.
 - **Stop conditions:** a settled decision below turns out to be infeasible; a verified price cannot be found for a row the plan says to add; `pnpm preflight` fails the same way twice; a change would require a version bump, CHANGELOG date or tag.
 - **Execution profile:** one integration PR plus one small web-security PR (KTD9), each from a worktree under `.worktrees/`, each ending at an open PR with green CI and a `ce-code-review` pass. Nobody merges.
 - **Who finishes:** Vitalii reviews and merges; the pipeline stops at the open PRs.
@@ -191,7 +191,7 @@ Group-1 branches merge back into the integration branch one at a time (U2, U3, U
 - OpenAI: `https://developers.openai.com/api/docs/models` (gpt-6 ids and prices), `https://developers.openai.com/api/docs/deprecations` (shutdown dates).
 - Gemini: `https://ai.google.dev/gemini-api/docs/deprecations`.
 - Repo: `scripts/gen-data.mjs` (validation: every price key must have a coefficient; every family representative must be a coefficient key), `packages/core-ts/src/energy.ts` (`normalizeModelName`, `resolveModelEnergy`), `packages/core-ts/src/routing.ts` (`priceForModel`, `MissingPriceError`), `packages/core-ts/test/fixtures/model-energy-vectors.json` (shared TS/PY parity vectors; several existing vectors change tier, see U1), `packages/openclaw-plugin/src/index.ts` (`DEFAULT_MODEL_BY_PROVIDER`), `packages/mcp-server/src/server.ts` (`defaultModel`), `packages/core-ts/src/providers/openai.ts` (`isGpt5FamilyModel`).
-- Health audit logs (session scratchpad `logs/audit.log`): patched ranges `fast-uri>=3.1.6`, `hono>=4.13.5`, `qs>=6.16.0`, `sharp>=0.35.4`, `nanoid>=3.3.18`, `next>=16.3.3`; `npm view next version` on 2026-09-27 = 16.3.6.
+- Health audit logs (<session notes, not in the repo>): patched ranges `fast-uri>=3.1.6`, `hono>=4.13.5`, `qs>=6.16.0`, `sharp>=0.35.4`, `nanoid>=3.3.18`, `next>=16.3.3`; `npm view next version` on 2026-09-27 = 16.3.6.
 
 ---
 
@@ -370,7 +370,7 @@ Logs are read with `grep -nE "✘|Error|expected|FAIL" <log> | head -40`, never 
 - R1-R21 each traceable to a landed unit; Appendix A applied exactly, with no price row lacking a named source.
 - `pnpm preflight` green on the integration branch; the stale-id sweep returns nothing.
 - `CHANGELOG.md` `## [Unreleased]` describes the change; no version, date, tag or lockfile-version change anywhere.
-- No experimental or abandoned code in either diff; the scratchpad smoke script exists in the repo only as `packages/mcp-server/scripts/smoke-stdio.mjs`.
+- No experimental or abandoned code in either diff; a local smoke script exists in the repo only as `packages/mcp-server/scripts/smoke-stdio.mjs`.
 - Open Questions reported to Vitalii with the recommendation stated; PR #30 and #33 untouched.
 - Worktrees listed in the final report so they can be removed after merge (`git worktree remove`, `git branch -d`).
 
