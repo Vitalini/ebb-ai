@@ -212,6 +212,7 @@ export {
   DEFAULT_MODEL_BY_PROVIDER,
   ProviderRefusalError,
 } from "./providers/index.js";
+export { ProviderDeferError } from "./providers/defer.js";
 export type {
   BatchHandle,
   DispatchOptions,

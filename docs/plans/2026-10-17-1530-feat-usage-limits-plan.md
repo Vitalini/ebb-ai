@@ -69,6 +69,15 @@ Tidegap runs queued tasks through the user's Claude Code subscription (PR #71). 
 - **Account switching is analysis only.** The section "Account switching (not planned for implementation)" records it. No unit builds it.
 - **One line, one format, on every compact surface.** The server formats the line once (KTD10), so the menu bar and the popup cannot disagree. Governs R10, R11.
 
+### Decision log
+
+Orchestrator decisions of 2026-10-17, written before implementation. They amend the KTDs and units below where they disagree.
+
+- D1. **Limit source #1 is the Claude Code statusline input.** Claude Code passes `rate_limits.five_hour` / `seven_day` with `used_percentage` (0-100) and `resets_at` (Unix epoch seconds) to the statusline command, for Pro/Max logins, after the first API response; a window is dropped once its `resets_at` passes (confirmed in https://code.claude.com/docs/en/statusline on 2026-10-17). `tidegap usage hook` is a statusLine command: it reads that JSON from stdin, writes the windows to `~/.tidegap/usage.json` (0600, no token), and prints nothing or the output of a wrapped statusline command (`tidegap usage hook -- <command>`). `tidegap install` offers to register it in `~/.claude/settings.json` only after the user's yes; the README documents the manual snippet. This replaces the "Statusline source" follow-up in Deferred.
+- D2. **The OAuth usage endpoint is opt-in.** `TIDEGAP_USAGE_OAUTH=1` (env or `~/.tidegap/config`) turns on KTD2-KTD4; it is off by default. This replaces R16's `TIDEGAP_USAGE_CLAUDE_OAUTH=off` and closes the Open Question on the default. The README states the ToS risk. The client stays small and cached; the token is never stored. `TIDEGAP_USAGE=off` turns off every limit read (status `disabled`).
+- D3. **Spend from JSONL only on request** (`--spend`), as planned.
+- D4. **Two PRs.** PR 1: U1, U2 (statusline reader, opt-in OAuth client, cache, KTD5 target rule, off switch), U4, U7, U8, and U9 for what PR 1 ships. PR 2: U3 (spend, Codex), U5, U6, and the rest of U9. PR 1 carries the minimal `usage/v1` builder and `line` formatter from U3 because U4 and U7 need them; spend (`--spend`, `include_spend`) and the `codex` block land with U3 in PR 2.
+
 ### Scope Boundaries
 
 - No account switching, no profiles, no per-task `account` field.

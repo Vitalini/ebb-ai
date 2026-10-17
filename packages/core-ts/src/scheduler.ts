@@ -28,6 +28,7 @@ import {
 import { gramsForIntensity, resolveModelEnergy } from "./energy.js";
 import { mockGridFeed } from "./grid.js";
 import type { ProviderAdapter } from "./providers/base.js";
+import { deferRetryAt } from "./providers/defer.js";
 import {
   candidateId,
   parseCandidates,
@@ -69,7 +70,12 @@ export type RescheduleTarget =
   /** An exact time; no picker. The deadline rises to it if needed. */
   | { at: string | Date }
   /** A local day as two instants; the picker chooses an hour inside it. */
-  | { dayStart: string | Date; dayEnd: string | Date };
+  | { dayStart: string | Date; dayEnd: string | Date }
+  /**
+   * An earliest start (a usage-limit reset); the picker chooses an hour at
+   * or after it. The deadline rises to at least `notBefore + 2 h`.
+   */
+  | { notBefore: string | Date; deadline?: string | Date };
 
 /** Options of {@link Scheduler.replyToTask} (ui v2). */
 export interface ReplyOptions {
@@ -528,7 +534,9 @@ export class Scheduler {
     if (typeof spec.prompt !== "string" || spec.prompt.length === 0) {
       throw new Error("enqueueProviderCall: spec.prompt must be a non-empty string");
     }
-    const deadline = normalizeDeadline(opts.deadline);
+    let deadline = normalizeDeadline(opts.deadline);
+    const notBefore = earliestStart(opts.notBefore);
+    if (notBefore) deadline = new Date(Math.max(deadline.getTime(), notBefore.getTime() + NOT_BEFORE_SPAN_MS));
     if (opts.taskId !== undefined) {
       if (typeof opts.taskId !== "string" || opts.taskId.length === 0) {
         throw new Error(`Invalid taskId: must be a non-empty string`);
@@ -561,6 +569,12 @@ export class Scheduler {
       deadline: deadline.toISOString(),
       ...identityFields(taskId, opts, title),
     };
+    if (notBefore) {
+      // One minute past the start: `scheduledFor === notBefore` reads as an
+      // exact-time pin, which `replanSweep` and the batch sweep skip.
+      record.notBefore = notBefore.toISOString();
+      record.scheduledFor = new Date(notBefore.getTime() + MINUTE_MS).toISOString();
+    }
     this.tasks.set(taskId, record);
     this.store?.upsert(record);
     // Schedule a carbon window but DO NOT register an in-process timer that
@@ -589,7 +603,16 @@ export class Scheduler {
     const results: TickResultEntry[] = [];
     let dispatched = 0;
     let failed = 0;
+    let deferred = 0;
     let inspected = 0;
+    // Provider → retryAt after its first defer this tick: later due tasks on
+    // that provider defer to the same time without a dispatch (KTD7.4).
+    const deferrals = new Map<string, Date>();
+    const count = (entry: TickResultEntry) => {
+      if (entry.status === "completed") dispatched++;
+      else if (entry.status === "deferred") deferred++;
+      else failed++;
+    };
 
     // ---- (1) Batch-submit sweep, BEFORE the due sweep ----
     // A batch-eligible task's deferral mechanism IS the Batch API: the
@@ -630,10 +653,9 @@ export class Scheduler {
             continue;
           }
           inspected++;
-          const entry = await this.dispatchProviderCall(record, adapters);
+          const entry = await this.dispatchProviderCall(record, adapters, deferrals);
           results.push(entry);
-          if (entry.status === "completed") dispatched++;
-          else failed++;
+          count(entry);
           continue;
         }
       } else {
@@ -699,10 +721,9 @@ export class Scheduler {
         }
       }
       inspected++;
-      const entry = await this.dispatchProviderCall(record, adapters);
+      const entry = await this.dispatchProviderCall(record, adapters, deferrals);
       results.push(entry);
-      if (entry.status === "completed") dispatched++;
-      else failed++;
+      count(entry);
     }
 
     // ---- (3) Batch-poll sweep, AFTER the due sweep ----
@@ -752,6 +773,7 @@ export class Scheduler {
       results,
       batchSubmitted,
       batchPolled,
+      deferred,
     };
   }
 
@@ -1161,7 +1183,20 @@ export class Scheduler {
       return record;
     }
     let deadline: Date;
-    if (shape.kind === "deadline") {
+    if (shape.kind === "notBefore") {
+      const start = parseInstant(shape.notBefore, "notBefore");
+      const startMs = Math.max(start.getTime(), Date.now());
+      const given = shape.deadline !== undefined ? normalizeDeadline(shape.deadline).getTime() : 0;
+      const current = record.deadline ? Date.parse(record.deadline) : 0;
+      deadline = new Date(Math.max(given || current, startMs + NOT_BEFORE_SPAN_MS));
+      // One minute past the start, so the row never reads as an exact pin.
+      Object.assign(record, absolute, {
+        notBefore: new Date(startMs).toISOString(),
+        deadline: deadline.toISOString(),
+        scheduledFor: new Date(startMs + MINUTE_MS).toISOString(),
+        estimatedCarbonGCo2: undefined,
+      });
+    } else if (shape.kind === "deadline") {
       deadline = normalizeDeadline(shape.deadline);
       Object.assign(record, absolute, { notBefore: undefined, deadline: deadline.toISOString() });
     } else {
@@ -1881,7 +1916,9 @@ export class Scheduler {
         return this.persist(record, before);
       }
     }
-    const earliest = pinned ? notBeforeMs : Date.now();
+    // One minute past a pinned start: a picked hour that contains it would
+    // otherwise give `scheduledFor === notBefore`, which reads as an exact pin.
+    const earliest = pinned ? notBeforeMs + MINUTE_MS : Date.now();
     const budgetG = record.carbonBudgetG;
     const survivors =
       budgetG !== undefined
@@ -1993,6 +2030,7 @@ export class Scheduler {
   private async dispatchProviderCall(
     record: TaskRecord<unknown>,
     adapters: TickAdapters,
+    deferrals?: Map<string, Date>,
   ): Promise<TickResultEntry> {
     let spec: ProviderCallSpec;
     try {
@@ -2049,6 +2087,14 @@ export class Scheduler {
       this.failTask(record.taskId, new Error(msg));
       return { taskId: record.taskId, status: "failed", error: msg };
     }
+    const earlier = deferrals?.get(spec.provider);
+    if (earlier) {
+      return this.deferTask(
+        record,
+        earlier,
+        `${spec.provider}: deferred with an earlier task this tick until ${earlier.toISOString()}`,
+      );
+    }
 
     let stillOurs = true;
     try {
@@ -2088,6 +2134,11 @@ export class Scheduler {
       }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      const retryAt = deferRetryAt(err);
+      if (retryAt) {
+        deferrals?.set(spec.provider, retryAt);
+        return this.deferTask(record, retryAt, msg);
+      }
       this.rollSeries(record);
       this.writeIf(
         record,
@@ -2244,6 +2295,47 @@ export class Scheduler {
       await writeOutputFile(spec.outputPath, record.taskId, result, receipt);
     }
     return { taskId: record.taskId, status: "completed" };
+  }
+
+  /**
+   * Put a running task back in the queue until `retryAt` (KTD7): `scheduled`,
+   * `notBefore = retryAt`, one minute later as the fallback time, the
+   * deadline raised to at least `retryAt + 2 h`, the estimate cleared so
+   * `replanSweep` moves it to the cleanest hour once the forecast covers it.
+   * Compare-and-set on `running`: a cancel during the run wins. Past the
+   * 8-day cap from `enqueuedAt` the task fails with `message` instead.
+   */
+  private deferTask(record: TaskRecord<unknown>, retryAt: Date, message: string): TickResultEntry {
+    const retryMs = retryAt.getTime();
+    const capMs = Date.parse(record.enqueuedAt) + DEFER_CAP_MS;
+    if (retryMs + NOT_BEFORE_SPAN_MS > capMs) {
+      const error = `${message}; limit did not reset before the 8-day cap`;
+      this.rollSeries(record);
+      this.writeIf(
+        record,
+        { ...record, status: "failed", completedAt: new Date().toISOString(), error },
+        ["running"],
+      );
+      return { taskId: record.taskId, status: "failed", error };
+    }
+    const deadlineMs = Math.max(record.deadline ? Date.parse(record.deadline) : 0, retryMs + NOT_BEFORE_SPAN_MS);
+    const next: TaskRecord<unknown> = {
+      ...record,
+      status: "scheduled",
+      notBefore: retryAt.toISOString(),
+      scheduledFor: new Date(retryMs + MINUTE_MS).toISOString(),
+      deadline: new Date(deadlineMs).toISOString(),
+      estimatedCarbonGCo2: undefined,
+      intensitySource: undefined,
+    };
+    if (!this.writeIf(record, next, ["running"])) {
+      return {
+        taskId: record.taskId,
+        status: "failed",
+        error: `task was ${record.status} while running; deferral dropped`,
+      };
+    }
+    return { taskId: record.taskId, status: "deferred", retryAt: retryAt.toISOString(), error: message };
   }
 
   /**
@@ -2643,6 +2735,20 @@ function identityFields(
 const MINUTE_MS = 60_000;
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
+/** Minimum span between an earliest start and the deadline. */
+const NOT_BEFORE_SPAN_MS = 2 * HOUR_MS;
+/** A deferred task never moves past `enqueuedAt` plus this. */
+const DEFER_CAP_MS = 8 * DAY_MS;
+
+/** A future earliest start, or undefined (absent or past). */
+function earliestStart(v: DeferOptions["notBefore"]): Date | undefined {
+  if (v === undefined || v === null) return undefined;
+  const d = v instanceof Date ? v : new Date(v);
+  if (Number.isNaN(d.getTime())) {
+    throw new Error(`notBefore is not an ISO-8601 instant: ${JSON.stringify(v)}`);
+  }
+  return d.getTime() > Date.now() ? d : undefined;
+}
 
 /**
  * The next deadline of a period series: `prevMs` plus whole periods until
@@ -2680,6 +2786,7 @@ function refusal(action: string, record: TaskRecord<unknown>, allowed: string): 
 }
 
 type RescheduleShape =
+  | { kind: "notBefore"; notBefore: string | Date; deadline?: string | Date }
   | { kind: "deadline"; deadline: string | Date }
   | { kind: "at"; at: string | Date }
   | { kind: "day"; dayStart: string | Date; dayEnd: string | Date };
@@ -2688,9 +2795,21 @@ type RescheduleShape =
 function rescheduleShape(target: RescheduleTarget): RescheduleShape {
   const t = (target ?? {}) as Record<string, unknown>;
   const has = (k: string) => t[k] !== undefined && t[k] !== null;
+  if (has("notBefore")) {
+    if (has("at") || has("dayStart") || has("dayEnd")) {
+      throw new TaskActionError("reschedule: {notBefore} takes only an optional deadline");
+    }
+    return {
+      kind: "notBefore",
+      notBefore: t.notBefore as string | Date,
+      deadline: has("deadline") ? (t.deadline as string | Date) : undefined,
+    };
+  }
   const shapes = [has("deadline"), has("at"), has("dayStart") || has("dayEnd")].filter(Boolean);
   if (shapes.length !== 1) {
-    throw new TaskActionError("reschedule: pass exactly one of {deadline}, {at} or {dayStart, dayEnd}");
+    throw new TaskActionError(
+      "reschedule: pass exactly one of {deadline}, {at}, {dayStart, dayEnd} or {notBefore}",
+    );
   }
   if (has("deadline")) return { kind: "deadline", deadline: t.deadline as string | Date };
   if (has("at")) return { kind: "at", at: t.at as string | Date };
