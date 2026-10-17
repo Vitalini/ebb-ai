@@ -70,3 +70,10 @@ packages/core-py/uv.lock
 .playwright-mcp/
 packages/openclaw-plugin/reports/
 compat/clawhub/ebb/reports/
+
+# Xcode / SwiftPM (apps/macos)
+DerivedData/
+.swiftpm/
+.build/
+xcuserdata/
+*.xcuserstate

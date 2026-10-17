@@ -1,0 +1,240 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		7D1A00000000000000000101 /* TidegapKit in Frameworks */ = {isa = PBXBuildFile; productRef = 7D1A00000000000000000102 /* TidegapKit */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		7D1A00000000000000000201 /* Tidegap.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Tidegap.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7D1A00000000000000000202 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		7D1A00000000000000000302 /* Exceptions for "Tidegap" folder in "Tidegap" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+				Tidegap.entitlements,
+			);
+			target = 7D1A00000000000000000601 /* Tidegap */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		7D1A00000000000000000301 /* Tidegap */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				7D1A00000000000000000302 /* Exceptions for "Tidegap" folder in "Tidegap" target */,
+			);
+			path = Tidegap;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		7D1A00000000000000000402 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7D1A00000000000000000101 /* TidegapKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		7D1A00000000000000000501 = {
+			isa = PBXGroup;
+			children = (
+				7D1A00000000000000000503 /* Config */,
+				7D1A00000000000000000301 /* Tidegap */,
+				7D1A00000000000000000502 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		7D1A00000000000000000502 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				7D1A00000000000000000201 /* Tidegap.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		7D1A00000000000000000503 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				7D1A00000000000000000202 /* Base.xcconfig */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		7D1A00000000000000000601 /* Tidegap */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7D1A00000000000000000802 /* Build configuration list for PBXNativeTarget "Tidegap" */;
+			buildPhases = (
+				7D1A00000000000000000401 /* Sources */,
+				7D1A00000000000000000402 /* Frameworks */,
+				7D1A00000000000000000403 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				7D1A00000000000000000301 /* Tidegap */,
+			);
+			name = Tidegap;
+			packageProductDependencies = (
+				7D1A00000000000000000102 /* TidegapKit */,
+			);
+			productName = Tidegap;
+			productReference = 7D1A00000000000000000201 /* Tidegap.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		7D1A00000000000000000701 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					7D1A00000000000000000601 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+				};
+			};
+			buildConfigurationList = 7D1A00000000000000000801 /* Build configuration list for PBXProject "Tidegap" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 7D1A00000000000000000501;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				7D1A00000000000000000901 /* XCLocalSwiftPackageReference "TidegapKit" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 7D1A00000000000000000502 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				7D1A00000000000000000601 /* Tidegap */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		7D1A00000000000000000403 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		7D1A00000000000000000401 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		7D1A00000000000000000811 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		7D1A00000000000000000812 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		7D1A00000000000000000821 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 7D1A00000000000000000202 /* Base.xcconfig */;
+			buildSettings = {
+			};
+			name = Debug;
+		};
+		7D1A00000000000000000822 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 7D1A00000000000000000202 /* Base.xcconfig */;
+			buildSettings = {
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		7D1A00000000000000000801 /* Build configuration list for PBXProject "Tidegap" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7D1A00000000000000000811 /* Debug */,
+				7D1A00000000000000000812 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7D1A00000000000000000802 /* Build configuration list for PBXNativeTarget "Tidegap" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7D1A00000000000000000821 /* Debug */,
+				7D1A00000000000000000822 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		7D1A00000000000000000901 /* XCLocalSwiftPackageReference "TidegapKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = TidegapKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		7D1A00000000000000000102 /* TidegapKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TidegapKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 7D1A00000000000000000701 /* Project object */;
+}

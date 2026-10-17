@@ -1,0 +1,54 @@
+import SwiftUI
+import TidegapKit
+
+/// The `tidegap` command override, the port, notifications and the
+/// connection (KTD12, U17).
+struct SettingsView: View {
+    @Environment(AppModel.self) private var model
+    @AppStorage(SettingsKey.command) private var command = ""
+    @AppStorage(SettingsKey.port) private var port = 0
+    @AppStorage(SettingsKey.notifyFinished) private var notifyFinished = true
+    @AppStorage(SettingsKey.notifyCleanWindow) private var notifyCleanWindow = true
+
+    var body: some View {
+        Form {
+            Section("tidegap") {
+                TextField("Command", text: $command, prompt: Text("tidegap (found automatically)"))
+                Text("Arguments split on spaces; quote paths with spaces. For a repo build: node /path/to/tidegap/packages/cli/dist/index.js")
+                    .font(.caption).foregroundStyle(.secondary)
+                TextField("Port", value: $port, format: .number.grouping(.never), prompt: Text("47821"))
+                Text("Port for a server this app starts. 0 or empty: the default. A running server is found through ~/.tidegap/ui.json.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Notifications") {
+                Toggle("A task finishes", isOn: $notifyFinished)
+                Toggle("A clean window starts", isOn: $notifyCleanWindow)
+            }
+            Section("Connection") {
+                Text(status).textSelection(.enabled)
+                HStack {
+                    Button("Apply and retry") { model.retry() }
+                    Button("Reconnect") { model.reconnect() }
+                        .help("Creates a new client token. The only way back after a revoke.")
+                    Button("Forget token", role: .destructive) { model.forgetToken() }
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .frame(width: 520)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var status: String {
+        switch model.state {
+        case .connecting: return "Connecting…"
+        case .connected(let port, let owns):
+            return "Connected to 127.0.0.1:\(port)" + (owns ? ", a server this app started" : "")
+        case .offline(let message): return message
+        case .revoked: return "No token. Reconnect creates a new one."
+        case .needsUpdate(let version): return "tidegap \(version) is too old. Update to 0.19 or later, or set the command above."
+        case .tidegapNotFound: return "tidegap not found. Set the command above."
+        case .failed(let message): return message
+        }
+    }
+}

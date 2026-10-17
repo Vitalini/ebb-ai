@@ -1,0 +1,45 @@
+name: macOS app
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/macos/**"
+      - "apps/extension/**"
+      - ".github/workflows/macos.yml"
+  pull_request:
+    paths:
+      - "apps/macos/**"
+      - "apps/extension/**"
+      - ".github/workflows/macos.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: swift test + xcodebuild
+    # Pinned image: the project file is objectVersion 77 (Xcode 16 or newer).
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: apps/macos
+    steps:
+      - uses: actions/checkout@v7
+      - run: xcodebuild -version && swift --version
+      - name: TidegapKit tests
+        run: swift test --package-path TidegapKit
+      - name: Release build (ad-hoc signed)
+        run: scripts/build.sh
+      - name: Zip Tidegap.app
+        run: ditto -c -k --sequesterRsrc --keepParent build/Tidegap.app build/Tidegap-macos.zip
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Tidegap-macos
+          path: apps/macos/build/Tidegap-macos.zip
+          if-no-files-found: error
