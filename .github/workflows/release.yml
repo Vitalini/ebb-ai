@@ -1,0 +1,301 @@
+name: Release
+
+# One release path for npm, PyPI, the MCP Registry and ClawHub, by GitHub
+# Actions OIDC trusted publishing. No registry token secret is read.
+#
+# - Push a v* tag on main: verify, then (after the `release` environment
+#   approval) publish npm -> PyPI -> MCP Registry + ClawHub.
+# - Pull requests that touch release inputs, and manual dispatch (dry_run
+#   defaults to true): verify only, nothing is published.
+# Release order: CONTRIBUTING.md, "Releases".
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build and check only. false publishes, and only on a v* tag ref.
+        type: boolean
+        default: true
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - .github/workflows/mcp-registry.yml
+      - packages/*/package.json
+      - packages/core-py/pyproject.toml
+      - packages/mcp-server/server.json
+      - packages/openclaw-plugin/openclaw.plugin.json
+      - scripts/check-versions.mjs
+      - pnpm-lock.yaml
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NPM_VERSION: 11.19.1 # trusted publishing needs npm >= 11.5.1
+  CLAWHUB_VERSION: 0.23.1
+
+jobs:
+  verify:
+    name: verify (build + dry run)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read # CI conclusion for the tagged commit
+    outputs:
+      publish: ${{ steps.mode.outputs.publish }}
+      version: ${{ steps.mode.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Decide dry run or publish
+        id: mode
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          PUBLISH=false
+          if [ "$EVENT_NAME" = "push" ]; then
+            PUBLISH=true
+          elif [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$DRY_RUN" = "false" ]; then
+            if [ "$REF_TYPE" != "tag" ] || [ "${REF_NAME#v}" = "$REF_NAME" ]; then
+              echo "::error::dry_run=false publishes only from a v* tag ref; ${REF_TYPE} ${REF_NAME} is not one"
+              exit 1
+            fi
+            PUBLISH=true
+          fi
+          echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
+          echo "version=$(jq -r .version packages/core-ts/package.json)" >> "$GITHUB_OUTPUT"
+          echo "publish=$PUBLISH"
+
+      - uses: pnpm/action-setup@v6
+        # pnpm version comes from package.json packageManager.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "pnpm"
+      - run: npm install -g "npm@${NPM_VERSION}"
+      - run: pnpm install --frozen-lockfile
+
+      - name: Lockstep versions
+        if: steps.mode.outputs.publish != 'true'
+        run: pnpm check:versions
+      - name: Lockstep versions and tag
+        if: steps.mode.outputs.publish == 'true'
+        run: pnpm check:versions --tag "$GITHUB_REF_NAME"
+
+      - name: Tagged commit is on main
+        if: steps.mode.outputs.publish == 'true'
+        run: |
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+            echo "::error::$GITHUB_SHA is not on main; tag a merged commit"
+            exit 1
+          }
+
+      - name: CI passed on the tagged commit
+        if: steps.mode.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          OK=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${GITHUB_SHA}" \
+            --jq '[.workflow_runs[] | select(.conclusion == "success")] | length')
+          [ "$OK" -gt 0 ] || { echo "::error::no successful ci.yml run for $GITHUB_SHA"; exit 1; }
+
+      - name: Build
+        run: |
+          pnpm --filter @tidegap/core build
+          pnpm --filter @tidegap/cli --filter @tidegap/mcp build
+          pnpm --filter @vitalini/tidegap build
+
+      - name: Pack npm tarballs
+        run: |
+          mkdir -p "$RUNNER_TEMP/npm"
+          for dir in core-ts cli mcp-server; do
+            (cd "packages/$dir" && pnpm pack --pack-destination "$RUNNER_TEMP/npm")
+          done
+          ls -1 "$RUNNER_TEMP/npm"
+
+      - name: Check npm tarballs
+        env:
+          VERSION: ${{ steps.mode.outputs.version }}
+        run: |
+          {
+            echo "### npm tarballs"
+            echo '| tarball | @tidegap/core dependency | repository.url |'
+            echo '|---|---|---|'
+          } >> "$GITHUB_STEP_SUMMARY"
+          for tgz in "$RUNNER_TEMP"/npm/*.tgz; do
+            MANIFEST=$(tar -xOzf "$tgz" package/package.json)
+            if grep -q 'workspace:' <<<"$MANIFEST"; then
+              echo "::error::$(basename "$tgz") still has a workspace: range"; exit 1
+            fi
+            REPO=$(jq -r .repository.url <<<"$MANIFEST")
+            [ "$REPO" = "https://github.com/tidegap/tidegap.git" ] || { echo "::error::$(basename "$tgz") repository.url is $REPO"; exit 1; }
+            CORE=$(jq -r '.dependencies["@tidegap/core"] // "-"' <<<"$MANIFEST")
+            [ "$CORE" = "-" ] || [ "$CORE" = "$VERSION" ] || { echo "::error::$(basename "$tgz") pins @tidegap/core $CORE, expected $VERSION"; exit 1; }
+            echo "| $(basename "$tgz") | $CORE | $REPO |" >> "$GITHUB_STEP_SUMMARY"
+            # --force skips only the "version already published" check, so a
+            # dry run works on a PR whose version is already live. Dry run only.
+            npm publish --dry-run --force --access public "$tgz"
+          done
+
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: Build and check Python dists
+        working-directory: packages/core-py
+        env:
+          VERSION: ${{ steps.mode.outputs.version }}
+        run: |
+          uv build --out-dir dist
+          ls dist/tidegap-"$VERSION".tar.gz dist/tidegap-"$VERSION"-*.whl
+          uvx twine check --strict dist/*
+          { echo "### Python dists"; for d in dist/*; do echo "- ${d#dist/}"; done; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: ClawHub dry run
+        env:
+          VERSION: ${{ steps.mode.outputs.version }}
+        run: |
+          npx --yes "clawhub@${CLAWHUB_VERSION}" package publish packages/openclaw-plugin \
+            --family code-plugin --name @vitalini/tidegap --version "$VERSION" \
+            --source-repo tidegap/tidegap --source-commit "$GITHUB_SHA" \
+            --source-ref "$GITHUB_REF_NAME" --source-path packages/openclaw-plugin \
+            --no-input --dry-run | tee "$RUNNER_TEMP/clawhub-dry-run.txt"
+          { echo "### ClawHub dry run"; echo '```'; cat "$RUNNER_TEMP/clawhub-dry-run.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: npm-tarballs
+          path: ${{ runner.temp }}/npm/*.tgz
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: python-dist
+          path: packages/core-py/dist/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: openclaw-plugin
+          path: |
+            packages/openclaw-plugin/dist/
+            packages/openclaw-plugin/package.json
+            packages/openclaw-plugin/openclaw.plugin.json
+            packages/openclaw-plugin/README.md
+            packages/openclaw-plugin/LICENSE
+          if-no-files-found: error
+
+  npm:
+    needs: verify
+    if: needs.verify.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      # No registry-url here: its .npmrc token placeholder can shadow OIDC.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+      - run: npm install -g "npm@${NPM_VERSION}"
+      - uses: actions/download-artifact@v8
+        with:
+          name: npm-tarballs
+          path: npm
+      - name: Publish core, then cli and mcp
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          for pkg in core cli mcp; do
+            if [ "$(npm view "@tidegap/${pkg}@${VERSION}" version 2>/dev/null)" = "$VERSION" ]; then
+              echo "::notice::@tidegap/${pkg}@${VERSION} is already on npm; skipped"
+              continue
+            fi
+            npm publish "npm/tidegap-${pkg}-${VERSION}.tgz" --provenance --access public
+          done
+      - name: Read back provenance
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          echo "### npm" >> "$GITHUB_STEP_SUMMARY"
+          for pkg in core cli mcp; do
+            ATT=""
+            for _ in 1 2 3 4 5 6 7 8; do
+              ATT=$(npm view "@tidegap/${pkg}@${VERSION}" dist.attestations.url 2>/dev/null) && [ -n "$ATT" ] && break
+              sleep 15
+            done
+            [ -n "$ATT" ] || { echo "::error::@tidegap/${pkg}@${VERSION} has no provenance attestation"; exit 1; }
+            echo "- @tidegap/${pkg}@${VERSION}: ${ATT}" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+  pypi:
+    needs: [verify, npm]
+    if: needs.verify.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: python-dist
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          skip-existing: true
+
+  mcp-registry:
+    needs: [verify, pypi]
+    if: needs.verify.outputs.publish == 'true'
+    permissions:
+      id-token: write # GitHub OIDC grants the io.github.tidegap/* namespace
+      contents: read
+    uses: ./.github/workflows/mcp-registry.yml
+    with:
+      version: ${{ needs.verify.outputs.version }}
+
+  clawhub:
+    needs: [verify, pypi]
+    if: needs.verify.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write # clawhub exchanges a GitHub OIDC token (audience clawhub)
+      contents: read
+    steps:
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+      - uses: actions/download-artifact@v8
+        with:
+          name: openclaw-plugin
+          path: openclaw-plugin
+      - name: Publish @vitalini/tidegap
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          if npx --yes "clawhub@${CLAWHUB_VERSION}" package inspect @vitalini/tidegap --version "$VERSION" --json >/dev/null 2>&1; then
+            echo "::notice::@vitalini/tidegap@${VERSION} is already on ClawHub; skipped"
+            exit 0
+          fi
+          npx --yes "clawhub@${CLAWHUB_VERSION}" package publish ./openclaw-plugin \
+            --family code-plugin --name @vitalini/tidegap --version "$VERSION" \
+            --source-repo tidegap/tidegap --source-commit "$GITHUB_SHA" \
+            --source-ref "$GITHUB_REF_NAME" --source-path packages/openclaw-plugin \
+            --no-input
+
+  # Room for browser-extension store jobs (not implemented):
+  #   chrome-web-store, firefox-amo, edge-addons
+  # Each one: `needs: verify`, `if: needs.verify.outputs.publish == 'true'`,
+  # `environment: release`, and store API credentials from `release`
+  # environment secrets (these stores have no OIDC trusted publishing), e.g.
+  # ${{ secrets.CHROME_WEB_STORE_CLIENT_SECRET }}. No job depends on a
+  # terminal job, so these append without reshaping the graph.
