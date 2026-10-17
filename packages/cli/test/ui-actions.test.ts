@@ -324,6 +324,19 @@ describe("tidegap ui write API", () => {
       expect(JSON.parse(row(body.task_id)!.bodyJson!)).toMatchObject({ provider: "claude-code", model: "default" });
     });
 
+    it("stores a tools list from the allowlist and refuses anything else with 400", async () => {
+      const ok = await add({ prompt: "p", provider: "claude-code", tools: ["WebSearch", "Read"] });
+      expect(ok.status).toBe(201);
+      expect(JSON.parse(row(ok.body.task_id)!.bodyJson!)).toMatchObject({ tools: ["WebSearch", "Read"] });
+      const none = await add({ prompt: "p", provider: "claude-code", tools: [] });
+      expect(JSON.parse(row(none.body.task_id)!.bodyJson!)).toMatchObject({ tools: [] });
+      for (const tools of [["Bash"], ["Write"], "WebSearch", [1]]) {
+        const { status, body } = await add({ prompt: "p", provider: "claude-code", tools });
+        expect(status).toBe(400);
+        expect(body.error).toContain("WebSearch, WebFetch, Read, Grep, Glob");
+      }
+    });
+
     it("an unknown provider is refused with the list that includes claude-code", async () => {
       const { status, body } = await add({ prompt: "p", provider: "bogus" });
       expect(status).toBe(400);

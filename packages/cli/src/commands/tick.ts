@@ -32,7 +32,7 @@ import { spawn, type SpawnOptions } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir, platform as osPlatform } from "node:os";
 import { join } from "node:path";
-import { claudeChildEnv, claudeMaxBudget, findClaudeBinary, type ClaudeLookup } from "../claude-code.js";
+import { claudeChildEnv, claudeMaxBudget, claudeTools, findClaudeBinary, type ClaudeLookup } from "../claude-code.js";
 import { readEnvCredentials, underTest, type ProviderCredentials } from "../env.js";
 import { ClaudeCodeAdapter } from "../providers/claude-code.js";
 import { loadEnvFileIntoProcess } from "./env-file.js";
@@ -279,8 +279,14 @@ export async function runTickOnce(
     opts.claudeLookup,
   );
   const budget = claudeMaxBudget(env.claudeCodeMaxBudgetUsd);
+  const toolSet = claudeTools(env.claudeTools);
   const claudeCode = claudeBin
-    ? new ClaudeCodeAdapter({ binaryPath: claudeBin, env: claudeChildEnv(), maxBudgetUsd: budget.usd })
+    ? new ClaudeCodeAdapter({
+        binaryPath: claudeBin,
+        env: claudeChildEnv(),
+        maxBudgetUsd: budget.usd,
+        defaultTools: toolSet.tools,
+      })
     : null;
   const adapters = buildAdapters(env, claudeCode);
   if (Object.keys(adapters).length === 0) {
@@ -343,6 +349,7 @@ export async function runTickOnce(
     let msg = `tick: ${result.inspected} inspected, ${result.dispatched} dispatched, ${result.failed} failed`;
     for (const line of preTick) msg += `\n${line}`;
     if (claudeCode && budget.warning) msg += `\n${budget.warning}`;
+    if (claudeCode && toolSet.warning) msg += `\n${toolSet.warning}`;
     for (const a of firedAlerts) {
       msg +=
         `\n!! CARBON BUDGET ALERT: ${a.windowKind} carbon budget crossed — ` +

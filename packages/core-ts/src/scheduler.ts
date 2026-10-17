@@ -26,6 +26,7 @@ import {
   type CarbonBudgetConfig,
 } from "./budget.js";
 import { gramsForIntensity, resolveModelEnergy } from "./energy.js";
+import { claudeCodeToolsError } from "./claude-tools.js";
 import { mockGridFeed } from "./grid.js";
 import type { ProviderAdapter } from "./providers/base.js";
 import {
@@ -527,6 +528,10 @@ export class Scheduler {
     }
     if (typeof spec.prompt !== "string" || spec.prompt.length === 0) {
       throw new Error("enqueueProviderCall: spec.prompt must be a non-empty string");
+    }
+    if (spec.tools !== undefined) {
+      const toolsError = claudeCodeToolsError(spec.tools);
+      if (toolsError) throw new Error(`enqueueProviderCall: ${toolsError}`);
     }
     const deadline = normalizeDeadline(opts.deadline);
     if (opts.taskId !== undefined) {
@@ -1233,6 +1238,7 @@ export class Scheduler {
       ...(spec.maxTokens !== undefined ? { maxTokens: spec.maxTokens } : {}),
       ...(spec.temperature !== undefined ? { temperature: spec.temperature } : {}),
       ...(spec.redactInReceipt !== undefined ? { redactInReceipt: spec.redactInReceipt } : {}),
+      ...(spec.tools !== undefined ? { tools: spec.tools } : {}),
     };
     return this.enqueueProviderCall(child, {
       deadline: opts.deadline ?? new Date(Date.now() + HOUR_MS),
@@ -2085,6 +2091,7 @@ export class Scheduler {
         maxTokens: spec.maxTokens,
         system: spec.systemPrompt,
         messages: spec.messages,
+        ...(spec.tools !== undefined ? { tools: spec.tools } : {}),
       }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -2199,6 +2206,7 @@ export class Scheduler {
         // candidate list, weights, chosen id (+ any dispatch fallbackFrom).
         // Inside the signed payload; omitted when routing was not used.
         routing: record.routingDecision,
+        tools: (result as { tools?: string[] }).tools,
       });
     } catch (err) {
       // eslint-disable-next-line no-console

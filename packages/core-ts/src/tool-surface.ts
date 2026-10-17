@@ -137,7 +137,7 @@ const providerParams: ToolParam[] = [
     values: ["anthropic", "openai", "gemini", "ollama", "claude-code"],
     optional: true,
     description:
-      "Which provider to dispatch this task through: 'anthropic', 'openai', 'gemini', 'ollama' (local), or 'claude-code' (runs through the local Claude Code login on the next `tidegap tick`, no API key, no tools). Defaults to 'anthropic'. 'anthropic' and 'openai' can auto-route through a 50%-cheaper Batch API when the deadline allows; 'gemini', 'ollama' and 'claude-code' always dispatch synchronously.",
+      "Which provider to dispatch this task through: 'anthropic', 'openai', 'gemini', 'ollama' (local), or 'claude-code' (runs through the local Claude Code login on the next `tidegap tick`, no API key, read-only web tools by default; see 'tools'). Defaults to 'anthropic'. 'anthropic' and 'openai' can auto-route through a 50%-cheaper Batch API when the deadline allows; 'gemini', 'ollama' and 'claude-code' always dispatch synchronously.",
   },
   {
     name: "provider",
@@ -329,6 +329,15 @@ export const TOOL_SURFACE: readonly CanonicalToolDef[] = [
       candidatesParam,
       routeWeightsParam,
       // ── MCP-only parameters ──
+      {
+        name: "tools",
+        kind: "array",
+        itemKind: "string",
+        optional: true,
+        hosts: ["mcp"],
+        description:
+          "Claude Code tools for a 'claude-code' run. Allowed names: 'WebSearch', 'WebFetch', 'Read', 'Grep', 'Glob'; [] means no tools. Omit for the default, WebSearch and WebFetch (TIDEGAP_CLAUDE_TOOLS overrides it). Any other name (Bash, Write, Edit, ...) is rejected. Web content is untrusted, so tools that run commands or write files are never offered.",
+      },
       {
         name: "dry_run",
         kind: "boolean",

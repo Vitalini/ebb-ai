@@ -232,6 +232,11 @@ export interface CarbonReceipt {
    * the winner was picked. Omitted (undefined) when routing was not used.
    */
   routing?: RoutingDecision;
+  /**
+   * Claude Code tools the run could use (`[]` = none), as the adapter
+   * reported them. Inside the signed payload. Absent for other providers.
+   */
+  tools?: string[];
 }
 
 export interface TaskRecord<T = unknown> {
@@ -380,6 +385,13 @@ export interface ProviderCallSpec {
    * Redacted with `prompt` at terminal transitions.
    */
   messages?: TaskMessage[];
+  /**
+   * Claude Code tools for a `claude-code` run: names from
+   * `CLAUDE_CODE_TOOL_ALLOWLIST`, `[]` = none. Absent means the host's
+   * default (`TIDEGAP_CLAUDE_TOOLS`, else WebSearch and WebFetch).
+   * Rejected at enqueue when a name is not on the allowlist.
+   */
+  tools?: string[];
 }
 
 /** Per-task outcome returned by `Scheduler.tick`. */
