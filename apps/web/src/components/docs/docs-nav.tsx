@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from "react";
 
 export type DocsNavItem = { id: string; label: string };
 
-/** Height of the sticky site header plus the mobile bar, used as the observer's top margin. */
-const TOP_MARGIN_PX = 120;
+/** A section counts as reached a little before its top meets its scroll margin. */
+const SLACK_PX = 8;
 
 const LINK_CLASS =
   "block rounded-md border-l-2 border-transparent px-3 py-2 text-sm text-fg-muted transition-colors hover:text-fg aria-[current=location]:border-accent aria-[current=location]:bg-accent/5 aria-[current=location]:text-fg";
@@ -25,32 +25,35 @@ export function DocsNav({ items }: { items: readonly DocsNavItem[] }) {
     const sections = items
       .map((item) => document.getElementById(item.id))
       .filter((el): el is HTMLElement => el !== null);
-    const visible = new Set<string>();
     const lastId = items[items.length - 1]?.id ?? "";
+    let frame = 0;
 
-    const update = () => {
+    // The current section is the last one whose top has reached the line under
+    // the sticky bars. That line is the section's own scroll-margin-top, so an
+    // anchor jump always marks the section it landed on, at every breakpoint.
+    const measure = () => {
+      frame = 0;
       if (lockTimer.current !== undefined) return;
       const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
       if (atBottom) return setCurrent(lastId);
-      const first = items.find((item) => visible.has(item.id));
-      if (first) setCurrent(first.id);
+      let reached = sections[0]?.id;
+      for (const section of sections) {
+        const line = parseFloat(getComputedStyle(section).scrollMarginTop) + SLACK_PX;
+        if (section.getBoundingClientRect().top <= line) reached = section.id;
+      }
+      if (reached) setCurrent(reached);
+    };
+    const update = () => {
+      if (!frame) frame = window.requestAnimationFrame(measure);
     };
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) visible.add(entry.target.id);
-          else visible.delete(entry.target.id);
-        }
-        update();
-      },
-      { rootMargin: `-${TOP_MARGIN_PX}px 0px -60% 0px` },
-    );
-    for (const section of sections) observer.observe(section);
+    update();
     window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update, { passive: true });
     return () => {
-      observer.disconnect();
       window.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+      window.cancelAnimationFrame(frame);
       window.clearTimeout(lockTimer.current);
     };
   }, [items]);

@@ -56,7 +56,7 @@ export default async function DocsPage() {
             key={section.id}
             id={section.id}
             aria-labelledby={`${section.id}-title`}
-            className="scroll-mt-[120px] border-t border-rule pt-10 pb-6 first-of-type:border-t-0 lg:scroll-mt-24"
+            className="scroll-mt-[90px] border-t border-rule pt-10 pb-6 first-of-type:border-t-0 lg:scroll-mt-12"
           >
             <h2 id={`${section.id}-title`} className="text-2xl font-semibold tracking-tight">
               {section.label}
