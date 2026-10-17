@@ -317,6 +317,19 @@ describe("tidegap ui write API", () => {
       expect(body).toMatchObject({ provider: "openai", model: "gpt-x" });
     });
 
+    it("provider claude-code with no model stores the claude-code default", async () => {
+      const { status, body } = await add({ prompt: "p", provider: "claude-code" });
+      expect(status).toBe(201);
+      expect(body).toMatchObject({ provider: "claude-code", model: "default" });
+      expect(JSON.parse(row(body.task_id)!.bodyJson!)).toMatchObject({ provider: "claude-code", model: "default" });
+    });
+
+    it("an unknown provider is refused with the list that includes claude-code", async () => {
+      const { status, body } = await add({ prompt: "p", provider: "bogus" });
+      expect(status).toBe(400);
+      expect(body.error).toContain("claude-code");
+    });
+
     it("refuses bad input with 400 and a one-line error", async () => {
       for (const bad of [
         {},

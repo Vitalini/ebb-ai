@@ -242,8 +242,12 @@ describe("DEFAULT_MODEL_BY_PROVIDER", () => {
       openai: "gpt-6-sol",
       gemini: "gemini-3.8-flash",
       ollama: "llama3.1",
+      "claude-code": "default",
     });
-    for (const model of Object.values(DEFAULT_MODEL_BY_PROVIDER)) {
+    // "default" means "Claude Code picks"; it resolves to the fallback
+    // coefficients at schedule time, and the receipt uses the real model.
+    const { "claude-code": _claudeCode, ...vendorDefaults } = DEFAULT_MODEL_BY_PROVIDER;
+    for (const model of Object.values(vendorDefaults)) {
       expect(resolveModelEnergy(model).coeffs.status, model).toBeUndefined();
     }
     expect(resolveModelEnergy(DEFAULT_MODEL_BY_PROVIDER.gemini).tier).toBe("normalized");
