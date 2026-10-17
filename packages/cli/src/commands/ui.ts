@@ -63,8 +63,8 @@ export function newToken(): string {
 }
 
 /**
- * Start the server on `port`, or on `fallbackPort` when that port is taken.
- * Returns the warning to print when it fell back.
+ * Start the server on `port`. When `fallback` is true and that port is
+ * taken, serve on a free port and return the warning to print.
  */
 async function listenWithFallback(
   opts: UiServerOptions,

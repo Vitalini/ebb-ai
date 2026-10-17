@@ -44,7 +44,7 @@ import {
   withoutRaw,
 } from "../commands/queue.js";
 import type { DaemonStatus } from "../platform/index.js";
-import { ClientRegistryError, type ClientRegistry } from "./clients.js";
+import { CLIENT_KINDS, ClientRegistryError, cleanClientName, isClientKind, type ClientRegistry } from "./clients.js";
 import { buildSummary, type ForecastPoint } from "./summary.js";
 import type { DispatcherControl } from "./dispatcher.js";
 
@@ -571,9 +571,9 @@ function clientsList(ctx: ApiContext): ApiResponse {
   if (!ctx.clients) return error(404, "not found");
   try {
     return { status: 200, body: { clients: ctx.clients.list() } };
-  } catch (err) {
-    // The message names the registry path, which is the user's own file.
-    return error(500, err instanceof ClientRegistryError ? oneLine(err) : "client registry unavailable");
+  } catch {
+    // Fixed body: a registry error names the file path. The CLI shows it.
+    return error(500, "client registry unavailable");
   }
 }
 
@@ -581,11 +581,15 @@ function clientsAdd(ctx: ApiContext, body: Body): ApiResponse {
   if (!ctx.clients) return error(404, "not found");
   const bad = onlyKeys(body, ["name", "kind"]);
   if (bad) return error(400, bad);
+  // Input errors are 400 with their rule; a registry failure is a fixed 500.
+  const name = cleanClientName(body.name);
+  if (name instanceof ClientRegistryError) return error(400, name.message);
+  const kind = body.kind ?? "extension";
+  if (!isClientKind(kind)) return error(400, `kind must be one of ${CLIENT_KINDS.join(", ")}`);
   try {
-    const { client, token } = ctx.clients.add({ name: body.name, kind: body.kind ?? "extension" }, ctx.now?.());
+    const { client, token } = ctx.clients.add({ name, kind }, ctx.now?.());
     return { status: 201, body: { client, token } };
-  } catch (err) {
-    if (err instanceof ClientRegistryError) return error(400, oneLine(err));
+  } catch {
     return error(500, "could not add the client");
   }
 }
@@ -594,8 +598,8 @@ function clientsRevoke(ctx: ApiContext, id: string): ApiResponse {
   if (!ctx.clients) return error(404, "not found");
   try {
     return ctx.clients.revoke(id) ? { status: 200, body: { revoked: id } } : error(404, "client not found");
-  } catch (err) {
-    return error(500, err instanceof ClientRegistryError ? oneLine(err) : "could not revoke the client");
+  } catch {
+    return error(500, "could not revoke the client");
   }
 }
 

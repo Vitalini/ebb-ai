@@ -92,6 +92,23 @@ function brief(r: TaskRecord<unknown>): { task_id: string; title: string } {
   return { task_id: r.taskId, title: String(taskSummary(r).display_title) };
 }
 
+/**
+ * How many of `times` (ascending) one summary lists: at most
+ * SUMMARY_FINISHED_MAX, cut so that tasks sharing a `completed_at` are never
+ * split across two polls (the next `since` is that instant, and `>` would
+ * skip the rest). Only when more than the cap share the first instant does
+ * the cut grow past the cap to take all of them.
+ */
+function capCut(times: readonly number[]): number {
+  if (times.length <= SUMMARY_FINISHED_MAX) return times.length;
+  let cut = SUMMARY_FINISHED_MAX;
+  while (cut > 0 && times[cut] === times[cut - 1]) cut--;
+  if (cut > 0) return cut;
+  cut = SUMMARY_FINISHED_MAX;
+  while (cut < times.length && times[cut] === times[cut - 1]) cut++;
+  return cut;
+}
+
 /** Assemble the summary body (KTD5). */
 export function buildSummary(input: SummaryInput): Record<string, unknown> {
   const { store, now } = input;
@@ -117,10 +134,12 @@ export function buildSummary(input: SummaryInput): Record<string, unknown> {
   };
   if (input.since === undefined) return { ...body, cursor: generatedAt };
   const since = input.since.getTime();
-  const finished = [...store.list({ status: "completed" }), ...store.list({ status: "failed" })]
+  // Over the cap, take the oldest after `since`: the cursor stops at the
+  // newest of those, so the next poll lists the rest and none is skipped.
+  const after = [...store.list({ status: "completed" }), ...store.list({ status: "failed" })]
     .filter((r) => r.completedAt && Date.parse(r.completedAt) > since)
-    .sort((a, b) => Date.parse(b.completedAt!) - Date.parse(a.completedAt!))
-    .slice(0, SUMMARY_FINISHED_MAX);
+    .sort((a, b) => Date.parse(a.completedAt!) - Date.parse(b.completedAt!));
+  const finished = after.slice(0, capCut(after.map((r) => Date.parse(r.completedAt!)))).reverse();
   return {
     ...body,
     finished: finished.map((r) => ({ ...brief(r), status: r.status, completed_at: r.completedAt })),
