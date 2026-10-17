@@ -78,6 +78,7 @@ describe("tidegap ui write API", () => {
       token: TOKEN,
       dbPath,
       assetDir,
+      stateDir: dir,
       feed,
       defaultRegion: "FR",
       quota: () => ({}),
@@ -365,6 +366,49 @@ describe("tidegap ui write API", () => {
       const { body } = await add({ prompt: "listed" });
       const list = (await (await get("/api/tasks")).json()) as { tasks: Array<{ task_id: string }> };
       expect(list.tasks.map((t) => t.task_id)).toContain(body.task_id);
+    });
+  });
+
+  describe("connected apps: /api/clients (page token only)", () => {
+    const asClient = (path: string, token: string, init: RequestInit = {}) =>
+      fetch(`${ui.url.replace(/\/$/, "")}${path}`, { ...init, headers: { authorization: `Bearer ${token}`, ...(init.headers ?? {}) } });
+
+    it("POST mints a token (201); GET lists the client without hash or token", async () => {
+      const res = await post("/api/clients", { name: "Chrome", kind: "extension" });
+      expect(res.status).toBe(201);
+      const out = (await res.json()) as { client: { id: string; name: string; kind: string }; token: string };
+      expect(out.token).toMatch(/^tgc_/);
+      expect(out.client).toMatchObject({ name: "Chrome", kind: "extension" });
+      const text = await (await get("/api/clients")).text();
+      expect(text).toContain(out.client.id);
+      expect(text).not.toContain(out.token);
+      expect(text).not.toContain("token_sha256");
+      expect((await asClient("/api/tasks", out.token)).status).toBe(200);
+    });
+
+    it("the page's form sends only a name: kind defaults to extension; bad input is 400", async () => {
+      const res = await post("/api/clients", { name: "Firefox" });
+      expect(res.status).toBe(201);
+      expect(((await res.json()) as { client: { kind: string } }).client.kind).toBe("extension");
+      expect((await post("/api/clients", { name: "" })).status).toBe(400);
+      expect((await post("/api/clients", { name: "x", kind: "phone" })).status).toBe(400);
+      expect((await post("/api/clients", { name: "x", token: "mine" })).status).toBe(400);
+    });
+
+    it("the same routes with a client token are 403", async () => {
+      const { token, client } = (await (await post("/api/clients", { name: "c" })).json()) as { token: string; client: { id: string } };
+      expect((await asClient("/api/clients", token)).status).toBe(403);
+      const json = { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "x" }) };
+      expect((await asClient("/api/clients", token, json)).status).toBe(403);
+      expect((await asClient(`/api/clients/${client.id}/revoke`, token, { method: "POST" })).status).toBe(403);
+    });
+
+    it("revoke: unknown id 404; known id 200, and that client's next request is 401", async () => {
+      expect((await post("/api/clients/nope/revoke")).status).toBe(404);
+      const { token, client } = (await (await post("/api/clients", { name: "c" })).json()) as { token: string; client: { id: string } };
+      expect((await post(`/api/clients/${client.id}/revoke`)).status).toBe(200);
+      expect((await asClient("/api/tasks", token)).status).toBe(401);
+      expect((await post(`/api/clients/${client.id}/revoke`, { x: 1 })).status).toBe(400);
     });
   });
 

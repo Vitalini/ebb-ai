@@ -30,6 +30,11 @@ export function dialogOpen() {
   return dlg().open;
 }
 
+/** Open the shared dialog with `content` (used by other panels). */
+export function openDialog(content, opts) {
+  open(content, opts);
+}
+
 function open(content, { label, wide = false, close } = {}) {
   const d = dlg();
   if (d.open) d.close();
