@@ -37,7 +37,7 @@ The UI server still never dispatches; it writes to the ledger and the dispatcher
 
 ### Problem Frame
 
-Vitalii opened `ebb ui` (PR #45) on his real ledger and rejected it. The ledger copy has 59 tasks, all finished (31 cancelled, 22 completed, 6 failed), none with a title or origin, so v1 shows a list of task ids and an empty timeline. The page cannot act on a task: `packages/cli/src/ui/api.ts` routes only GET reads plus the read marker. Repeating work ("check my weekly limit list") has to be re-entered by hand. A finished task has no way back to the conversation that produced it.
+`ebb ui` (PR #45) was rejected after a trial on a reference ledger (not in the repo). The ledger has ~60 tasks, all finished (31 cancelled, 22 completed, 6 failed), none with a title or origin, so v1 shows a list of task ids and an empty timeline. The page cannot act on a task: `packages/cli/src/ui/api.ts` routes only GET reads plus the read marker. Repeating work ("check my weekly limit list") has to be re-entered by hand. A finished task has no way back to the conversation that produced it.
 
 ### Key Decisions
 
@@ -108,7 +108,7 @@ All carried from the brief (session-settled 2026-10-15 by the orchestrator; `use
 
 ### Success Criteria
 
-- On a copy of the real ledger, Agenda shows no pending tasks (the empty state, or only Needs attention rows for unread failed tasks) with the next action, Journal lists 59 tasks with readable titles, and every detail opens.
+- On a reference ledger with ~60 tasks (not in the repo), Agenda shows no pending tasks (the empty state, or only Needs attention rows for unread failed tasks) with the next action, Journal lists all tasks with readable titles, and every detail opens.
 - On the seeded ledger, every action in the PR B smoke list passes and screenshots exist in the session scratchpad.
 - Two dispatchers running against one ledger never produce two successors for one occurrence (test).
 
@@ -118,7 +118,7 @@ Deferred to implementation unless marked otherwise; see Planning Contract / Open
 
 ### Sources
 
-- Brief: session scratchpad `brief-ui-v2.md` (2026-10-15).
+- Brief: <session notes, not in the repo>.
 - `docs/plans/2026-10-15-1219-feat-task-visibility-continuation-plan.md` (reply design R16 to R18, AE3, AE4).
 - `docs/plans/2026-10-15-1437-feat-task-visibility-pr1-plan.md` (PR 1a/1b structure and gates).
 - `docs/solutions/best-practices/loopback-web-ui-hardening.md`, `docs/solutions/logic-errors/quota-reset-deadlines.md`, `docs/solutions/tooling-decisions/tool-surface-shared-descriptions.md`.
@@ -642,12 +642,12 @@ PR A extra checks:
 
 - Read the regenerated `packages/core-ts/test/__snapshots__/tool-surface.test.ts.snap` diff: only `reply_task`, `cancel_task.series`, `schedule_task.repeat`, `schedule_task.origin_session_id`.
 - Manual: in Claude Code, `/ebb-ai:defer say hi --by 2h`, then `ebb queue show <id>` prints the resume line with the current session id.
-- Manual: `ebb ui` on a copy of the real ledger (scratchpad `queue-ref.db`) serves the v1 page without errors.
+- Manual: `ebb ui` on a reference ledger with ~60 tasks (not in the repo) serves the v1 page without errors.
 
 PR B extra checks:
 
 - `node scripts/ui-seed.mjs` prints a working link; the smoke list passes; screenshots are in the session scratchpad, not the repo.
-- A copy of the real ledger renders Agenda with no pending tasks (empty state or only unread failed rows) and Journal with 59 readable titles.
+- A reference ledger with ~60 tasks (not in the repo) renders Agenda with no pending tasks (empty state or only unread failed rows) and Journal with ~60 readable titles.
 
 Browser smoke never runs inside a parallel stream; it runs once at the end of PR B.
 

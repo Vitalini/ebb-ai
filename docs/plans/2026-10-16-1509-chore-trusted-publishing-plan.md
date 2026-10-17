@@ -28,7 +28,7 @@ Releases move from a laptop token (npm) and per-release browser tokens (PyPI) to
 
 ### Problem Frame
 
-npm `@tidegap/{core,cli,mcp}` publish from Vitalii's laptop with a granular bypass-2FA token (`tidegap-publish-2026-10b`, expires 2027-01-14). PyPI `tidegap` needs a token made by hand in the browser for each release. ClawHub `@vitalini/tidegap` publishes from a CLI login. Only the MCP Registry already uses OIDC (`.github/workflows/mcp-registry.yml`). Each manual step is a chance to publish an unreviewed tree, to skip a registry, or to leak a token; the npm token also expires in three months. Version drift across registries has happened before (`docs/solutions/tooling-decisions/version-lockstep-check.md`).
+npm `@tidegap/{core,cli,mcp}` publish from Vitalii's laptop with a granular bypass-2FA token (`<granular token>`). PyPI `tidegap` needs a token made by hand in the browser for each release. ClawHub `@vitalini/tidegap` publishes from a CLI login. Only the MCP Registry already uses OIDC (`.github/workflows/mcp-registry.yml`). Each manual step is a chance to publish an unreviewed tree, to skip a registry, or to leak a token; the npm token also expires in three months. Version drift across registries has happened before (`docs/solutions/tooling-decisions/version-lockstep-check.md`).
 
 ### Requirements
 
@@ -77,8 +77,8 @@ npm `@tidegap/{core,cli,mcp}` publish from Vitalii's laptop with a granular bypa
 - npm trusted publishing: https://docs.npmjs.com/trusted-publishers (npm CLI ≥ 11.5.1, Node ≥ 22.14.0, `id-token: write`, GitHub-hosted runners only, `repository.url` must match the repo, automatic provenance for public repo + public package, "Require two-factor authentication and disallow tokens" keeps trusted publishers working).
 - pnpm publish: https://pnpm.io/cli/publish ("Since v11, `pnpm publish` is implemented natively and no longer delegates to the `npm` CLI"; workaround `pnpm pack && npm publish *.tgz`). pnpm workspaces: https://pnpm.io/workspaces (`pnpm pack` and `pnpm publish` replace `workspace:` ranges).
 - PyPI: https://docs.pypi.org/trusted-publishers/adding-a-publisher/ and https://docs.pypi.org/trusted-publishers/using-a-publisher/ (owner, repository, workflow filename, environment; `id-token: write` at job level; use `pypa/gh-action-pypi-publish`). The action README says trusted publishing does not work from a reusable workflow, so the PyPI job lives in `release.yml`.
-- ClawHub CLI 0.23.1 source (`/opt/homebrew/lib/node_modules/clawhub/dist/cli/commands/packages.js`): `resolvePackagePublishToken` requests a GitHub OIDC token with audience `clawhub` when `ACTIONS_ID_TOKEN_REQUEST_URL` is set, and mints a short-lived publish token; config is `clawhub package trusted-publisher set <name> --repository --workflow-filename [--environment]`. On a 400/403/404 it falls back to a stored login, which fails in CI. With a trusted publisher configured, a manual publish needs `--manual-override-reason`. `--dry-run` returns before any token use.
-- Repo: `package.json` (`release:npm`, `packageManager: pnpm@9.15.0`), `scripts/check-versions.mjs`, `.github/workflows/{ci,mcp-registry}.yml`, `packages/{core-ts,cli,mcp-server,openclaw-plugin}/package.json`, `packages/core-py/pyproject.toml`, `docs/internal/hub-submission-log.md`, `docs/solutions/tooling-decisions/{version-lockstep-check,mcp-registry-metadata-and-package-readmes}.md`, `docs/solutions/workflow-issues/renaming-a-published-multi-package-project.md`.
+- ClawHub CLI 0.23.1 source (`<global clawhub install>/dist/cli/commands/packages.js`): `resolvePackagePublishToken` requests a GitHub OIDC token with audience `clawhub` when `ACTIONS_ID_TOKEN_REQUEST_URL` is set, and mints a short-lived publish token; config is `clawhub package trusted-publisher set <name> --repository --workflow-filename [--environment]`. On a 400/403/404 it falls back to a stored login, which fails in CI. With a trusted publisher configured, a manual publish needs `--manual-override-reason`. `--dry-run` returns before any token use.
+- Repo: `package.json` (`release:npm`, `packageManager: pnpm@9.15.0`), `scripts/check-versions.mjs`, `.github/workflows/{ci,mcp-registry}.yml`, `packages/{core-ts,cli,mcp-server,openclaw-plugin}/package.json`, `packages/core-py/pyproject.toml`, (internal submission log, not in the repo), `docs/solutions/tooling-decisions/{version-lockstep-check,mcp-registry-metadata-and-package-readmes}.md`, `docs/solutions/workflow-issues/renaming-a-published-multi-package-project.md`.
 
 ---
 
@@ -137,7 +137,7 @@ npm "Allowed actions" stays empty. GitHub environment `release` (Q1, Q3), create
 After the first release where all four jobs pass:
 
 1. npm, each of the three packages: Settings → Publishing access → "Require two-factor authentication and disallow tokens".
-2. npm: revoke granular token `tidegap-publish-2026-10b`; delete its line from `~/.npmrc`.
+2. npm: revoke granular token `<granular token>`; delete its line from `~/.npmrc`.
 3. PyPI: delete every API token scoped to `tidegap` (pypi.org/manage/account/token/).
 4. ClawHub: from now on a manual publish needs `--manual-override-reason`.
 5. Hub log: set the rows added in U4 to `done`; the orchestrator updates its npm-token memory note.
@@ -205,10 +205,10 @@ Rehearsal: `gh workflow run release.yml --ref main` (dry run is the default). MC
 
 - **Goal:** the docs describe the new release path (R10) and the stale pin is fixed (R11).
 - **Requirements:** R10, R11.
-- **Files:** `CONTRIBUTING.md` (Releases section), `docs/internal/hub-submission-log.md`, `CHANGELOG.md`, `docs/solutions/tooling-decisions/version-lockstep-check.md`, `docs/solutions/tooling-decisions/mcp-registry-metadata-and-package-readmes.md`, `docs/solutions/tooling-decisions/rendered-repo-images-and-brand-name.md`.
+- **Files:** `CONTRIBUTING.md` (Releases section), (internal submission log, not in the repo), `CHANGELOG.md`, `docs/solutions/tooling-decisions/version-lockstep-check.md`, `docs/solutions/tooling-decisions/mcp-registry-metadata-and-package-readmes.md`, `docs/solutions/tooling-decisions/rendered-repo-images-and-brand-name.md`.
 - **Approach:**
   - CONTRIBUTING: replace the "local-only" paragraph with the Release Order above, the dry-run and retry commands, and a one-line pointer to `release.yml`.
-  - Hub log: a new section "Release automation (trusted publishing)" with rows dated `-`, status `not started`: npm trusted publisher ×3, PyPI trusted publisher, ClawHub trusted publisher, GitHub environment `release`, and the post-release rows (npm 2FA-only, revoke `tidegap-publish-2026-10b`, delete PyPI tokens). Existing rows unchanged.
+  - Hub log: a new section "Release automation (trusted publishing)" with rows dated `-`, status `not started`: npm trusted publisher ×3, PyPI trusted publisher, ClawHub trusted publisher, GitHub environment `release`, and the post-release rows (npm 2FA-only, revoke `<granular token>`, delete PyPI tokens). Existing rows unchanged.
   - CHANGELOG `[Unreleased]` → `### Changed`: one line, "Releases publish from GitHub Actions (`release.yml`) by OIDC trusted publishing, with npm provenance; no long-lived registry tokens."
   - `version-lockstep-check.md`: mark the "publish from the reviewed PR head before merge" guidance as superseded by merge → tag → workflow, with the date and a link to this plan; keep the history.
   - `mcp-registry-metadata-and-package-readmes.md`: one line that `release.yml` calls `mcp-registry.yml` after npm.
@@ -220,7 +220,7 @@ Rehearsal: `gh workflow run release.yml --ref main` (dry run is the default). MC
 
 - **Goal:** the private planning docs match the Tidegap state (R11).
 - **Requirements:** R11; see Q4.
-- **Files:** `development/ROADMAP.md`, `development/STATUS.md`, `development/VISION.md` in the main checkout `Documents/projects/tidegap` (gitignored; absent from the worktree).
+- **Files:** `development/ROADMAP.md`, `development/STATUS.md`, `development/VISION.md` (local only, not in the repo).
 - **Approach:**
   - ROADMAP and STATUS: name Tidegap; current version 0.18.0; what shipped in 0.16.0, 0.16.1, 0.17.0 and 0.18.0, from `CHANGELOG.md`; open items from the hub log. Backlog order: 1 trusted publishing (this PR); 2 Integrations settings page in `tidegap ui` (channel registry: OS toast, Telegram, webhook, app push; config in the ledger; a Test button per channel); 3 morning digest; 4 agent-session task kind; 5 Mac app on the `tidegap ui` API; 6 browser extensions (one Manifest V3 WebExtension for Chrome, Edge and Firefox; the Safari build ships inside the Mac app's Xcode project; a client of the local `tidegap ui` API; badge, popup with queue and quick add, notifications as a channel in the Integrations registry); 7 homepage cleanup. Keep the v1.0 gaps section, marked "later".
   - STATUS operator notes: `@ebb-ai/*` → `@tidegap/*`; "Releasing (lockstep)" points at the CONTRIBUTING Release Order.
