@@ -1,0 +1,174 @@
+import AppKit
+import Foundation
+import Observation
+import TidegapKit
+
+/// App state for the menu, the window and Settings. It drives the Kit's
+/// connect sequence, the event stream and the 60 s fallback poll.
+@MainActor
+@Observable
+final class AppModel {
+    private(set) var state: ConnectionState = .connecting
+    private(set) var summary: Summary?
+    private(set) var tasks: [TaskItem] = []
+    var quickAddError: String?
+    private(set) var adding = false
+
+    @ObservationIgnored let paths: AppPaths
+    @ObservationIgnored let controller: ConnectionController
+    @ObservationIgnored private var stream: EventStream?
+    @ObservationIgnored private var streamKey: String?
+    @ObservationIgnored private var pollTask: Task<Void, Never>?
+
+    init(paths: AppPaths = .current) {
+        self.paths = paths
+        let discovery = Discovery(tidegapHome: paths.tidegapHome)
+        let launcher = ServerLauncher(
+            runner: SystemProcessRunner(logURL: paths.serverLog),
+            discovery: discovery,
+            homeOverride: paths.homeOverride
+        )
+        controller = ConnectionController(
+            store: TokenStore(directory: paths.support),
+            discovery: discovery,
+            launcher: launcher
+        )
+        applySettings()
+        controller.onChange = { [weak self] in self?.sync() }
+    }
+
+    /// Settings: the command override (argv text) and the port.
+    func applySettings() {
+        let defaults = UserDefaults.standard
+        let command = defaults.string(forKey: SettingsKey.command) ?? ""
+        let argv = CommandLineSplitter.split(command)
+        controller.launcher.commandOverride = argv.isEmpty ? nil : argv
+        let port = defaults.integer(forKey: SettingsKey.port)
+        controller.launcher.port = (1...65535).contains(port) ? port : nil
+    }
+
+    func start() {
+        guard pollTask == nil else { return }
+        pollTask = Task { [weak self] in
+            await self?.controller.connect()
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 60_000_000_000)
+                await self?.controller.refresh()
+            }
+        }
+    }
+
+    func refresh() {
+        Task { await controller.refresh() }
+    }
+
+    func reconnect() {
+        applySettings()
+        Task { await controller.reconnect() }
+    }
+
+    func forgetToken() {
+        controller.forgetToken()
+    }
+
+    /// Stops polling, the stream, and the child this app started (AE5).
+    func shutdown() {
+        pollTask?.cancel()
+        stream?.stop()
+        controller.shutdown()
+    }
+
+    func quickAdd(prompt: String, preset: DeadlinePreset) async -> Bool {
+        guard let port = controller.port, let token = controller.token else { return false }
+        adding = true
+        defer { adding = false }
+        let result = await APIClient(port: port, token: token).quickAdd(
+            prompt: prompt.trimmingCharacters(in: .whitespacesAndNewlines),
+            deadline: preset.deadline(from: Date())
+        )
+        switch result {
+        case .ok:
+            quickAddError = nil
+            await controller.refresh()
+            return true
+        case .offline: quickAddError = "tidegap ui is not reachable"
+        case .unpaired: await controller.refresh()
+        case .error(let message): quickAddError = message
+        }
+        return false
+    }
+
+    var label: String { Format.label(state: state, summary: summary) }
+
+    /// The page URL with the client token in the fragment (U17).
+    var pageURL: URL? {
+        guard case .connected(let port, _) = state, let token = controller.token else { return nil }
+        return URL(string: "http://127.0.0.1:\(port)/#token=\(token)")
+    }
+
+    private func sync() {
+        state = controller.state
+        summary = controller.summary
+        tasks = controller.tasks
+        updateStream()
+    }
+
+    /// One stream per (port, token); refetch on `tasks` and on `hello` after a drop.
+    private func updateStream() {
+        guard case .connected(let port, _) = state, let token = controller.token else {
+            stream?.stop()
+            stream = nil
+            streamKey = nil
+            return
+        }
+        let key = "\(port)|\(token)"
+        guard key != streamKey else { return }
+        stream?.stop()
+        streamKey = key
+        let stream = EventStream(port: port, token: token) { [weak self] signal in
+            switch signal {
+            case .hello(let reconnected):
+                if reconnected { await self?.controller.refresh() }
+            case .tasks, .unauthorized:
+                await self?.controller.refresh()
+            }
+        }
+        self.stream = stream
+        stream.start()
+    }
+}
+
+enum SettingsKey {
+    static let command = "tidegapCommand"
+    static let port = "port"
+}
+
+/// Where the app reads and writes. `-home <dir>` (a launch argument) moves
+/// all of it under `<dir>`, so a test run never touches the real ~/.tidegap.
+struct AppPaths {
+    var homeOverride: URL?
+    var tidegapHome: URL
+    var support: URL
+    var serverLog: URL
+
+    static var current: AppPaths {
+        let fm = FileManager.default
+        if let dir = UserDefaults.standard.string(forKey: "home"), !dir.isEmpty {
+            let home = URL(fileURLWithPath: (dir as NSString).expandingTildeInPath, isDirectory: true)
+            return AppPaths(
+                homeOverride: home,
+                tidegapHome: home.appendingPathComponent(".tidegap"),
+                support: home.appendingPathComponent("Library/Application Support/Tidegap"),
+                serverLog: home.appendingPathComponent("Library/Logs/Tidegap/tidegap-ui.log")
+            )
+        }
+        let home = fm.homeDirectoryForCurrentUser
+        let library = fm.urls(for: .libraryDirectory, in: .userDomainMask).first ?? home.appendingPathComponent("Library")
+        return AppPaths(
+            homeOverride: nil,
+            tidegapHome: home.appendingPathComponent(".tidegap"),
+            support: library.appendingPathComponent("Application Support/Tidegap"),
+            serverLog: library.appendingPathComponent("Logs/Tidegap/tidegap-ui.log")
+        )
+    }
+}
