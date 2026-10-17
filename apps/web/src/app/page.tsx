@@ -6,7 +6,7 @@ import { BarChart3, BookOpen, CalendarClock, Globe } from "lucide-react";
 import { HowItWorksViz } from "@/components/how-it-works-viz";
 import { GridGreeting, GridGreetingSkeleton } from "@/components/grid-greeting";
 import { InstallPicker } from "@/components/install-picker";
-import { AgentPrompt } from "@/components/agent-prompt";
+import { AgentPrompt, CopyPromptButton } from "@/components/agent-prompt";
 import { VERSION } from "@/lib/version";
 
 export const metadata: Metadata = {
@@ -52,11 +52,13 @@ const TILES: Array<{
 export default function HomePage() {
   return (
     <div className="space-y-14">
-      <Hero />
+      <FirstScreen />
+      <WhatItIs />
       <Suspense fallback={<GridGreetingSkeleton />}>
         <GridGreeting />
       </Suspense>
       <InstallBlock />
+      {/* Apps and extensions slot: the browser-extension and Mac-app PRs add their section here. */}
       <HowItWorksViz />
       <TilesBlock />
       <ValueRow />
@@ -64,17 +66,33 @@ export default function HomePage() {
   );
 }
 
-function Hero() {
+// Fills the viewport below the sticky nav (61px, 65px from sm) and main's 40px top padding.
+function FirstScreen() {
   return (
-    <section className="space-y-5 pt-2">
+    <section className="flex min-h-[calc(100svh-101px)] flex-col items-center justify-center gap-6 text-center sm:min-h-[calc(100svh-105px)]">
+      <h1 className="max-w-3xl text-balance text-3xl font-extrabold leading-[1.1] tracking-tight text-fg sm:text-4xl lg:text-5xl">
+        Run your agent&apos;s non-urgent LLM tasks at the{" "}
+        <span className="text-accent">cleanest grid hour</span>.
+      </h1>
+      <CopyPromptButton />
+      <p className="max-w-xl text-sm text-fg-muted">
+        Paste it into Claude Code, Cursor, Claude Desktop or any MCP host.
+        Your agent reads tidegap.com/install.md and installs Tidegap.
+      </p>
+      <a href="#install" className="font-mono text-xs text-fg-dim transition-colors hover:text-accent">
+        Other ways to install<span aria-hidden="true"> ↓</span>
+      </a>
+    </section>
+  );
+}
+
+function WhatItIs() {
+  return (
+    <section id="what" className="space-y-5">
       <div className="inline-flex items-center gap-2 rounded-md border border-accent/40 bg-accent/5 px-3 py-1 font-mono text-xs uppercase tracking-wider text-accent">
         <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
         v{VERSION} · operator preview
       </div>
-      <h1 className="text-balance text-3xl font-extrabold leading-[1.1] tracking-tight text-fg sm:text-4xl">
-        Run your agent&apos;s non-urgent LLM tasks at the{" "}
-        <span className="text-accent">cleanest grid hour</span>.
-      </h1>
       <p className="max-w-2xl text-base leading-relaxed text-fg-muted sm:text-lg">
         US data centers are projected to reach 6.7–12 % of national grid
         load by 2028 (DOE 2024), driven primarily by AI compute. Tidegap is
@@ -120,7 +138,7 @@ function InstallBlock() {
   return (
     <section
       id="install"
-      className="rounded-xl border border-accent/30 bg-accent/[0.03] p-5 sm:p-7"
+      className="scroll-mt-20 rounded-xl border border-accent/30 bg-accent/[0.03] p-5 sm:p-7"
     >
       <header className="space-y-1">
         <p className="font-mono text-[11px] uppercase tracking-wider text-accent">
