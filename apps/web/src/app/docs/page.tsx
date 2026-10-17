@@ -12,7 +12,6 @@ export const metadata: Metadata = {
     "Install Tidegap in any MCP host, then use the CLI, the MCP tools, the local UI and the signed carbon receipts. One page, one section per topic.",
   alternates: {
     canonical: "https://www.tidegap.com/docs",
-    // PR A's install.md alternate, plus the full docs as markdown.
     types: {
       "text/markdown": [{ url: MARKDOWN_ALTERNATE["text/markdown"] }, { url: "/llms-full.txt" }],
     },

@@ -190,3 +190,27 @@ test("tables, lists, quotes and code render to the expected tags", () => {
 test("snake_case words outside code are not italicised", () => {
   assert.equal(renderMarkdown("call schedule_task now", ctx()), "<p>call schedule_task now</p>");
 });
+
+test("raw HTML in markdown is escaped, not rendered", () => {
+  const html = renderMarkdown('<script>alert(1)</script> <img src=x onerror="a()">', ctx());
+  assert.equal(html, "<p>&lt;script&gt;alert(1)&lt;/script&gt; &lt;img src=x onerror=&quot;a()&quot;&gt;</p>");
+});
+
+test("a javascript: or data: link fails the build", () => {
+  for (const href of ["javascript:alert(1)", "JavaScript:alert(1)", "data:text/html,x", "vbscript:x"]) {
+    assert.throws(() => renderMarkdown(`[x](${href})`, ctx()), /unsafe link href/);
+  }
+});
+
+test("site paths, anchors and mailto links render", () => {
+  const html = renderMarkdown("[a](/docs#apps) [b](#env) [c](mailto:x@y.z) [d](install.md)", ctx());
+  assert.equal(html, '<p><a href="/docs#apps">a</a> <a href="#env">b</a> <a href="mailto:x@y.z">c</a> <a href="install.md">d</a></p>');
+});
+
+test("emphasis markers inside an href are left alone", () => {
+  const html = renderMarkdown("see [the _x_ doc](https://example.com/a/_b_/c) and _this_", ctx());
+  assert.equal(
+    html,
+    '<p>see <a href="https://example.com/a/_b_/c" target="_blank" rel="noreferrer">the <em>x</em> doc</a> and <em>this</em></p>',
+  );
+});

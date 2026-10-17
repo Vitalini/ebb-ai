@@ -100,18 +100,29 @@ function renderInline(text) {
       if (part.length > 1 && part.startsWith("`") && part.endsWith("`")) {
         return `<code>${escapeHtml(part.slice(1, -1))}</code>`;
       }
+      // Finished links are parked behind placeholders, so emphasis never rewrites an href.
+      const links = [];
+      const park = (html) => `\u0000${links.push(html) - 1}\u0000`;
       let s = escapeHtml(part.replace(/\\([|*_`\\[\]])/g, "$1"));
-      s = s.replace(/&lt;(https?:\/\/[^\s&]+)&gt;/g, (_, url) => link(url, url));
-      s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, label, url) => link(url, label));
-      s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-      s = s.replace(/(^|[^\w*])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>");
-      s = s.replace(/(^|[^\w])_([^_\s][^_]*)_(?!\w)/g, "$1<em>$2</em>");
-      return s;
+      s = s.replace(/&lt;(https?:\/\/[^\s&]+)&gt;/g, (_, url) => park(link(url, url)));
+      s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, label, url) => park(link(url, emphasis(label))));
+      return emphasis(s).replace(/\u0000(\d+)\u0000/g, (_, n) => links[Number(n)]);
     })
     .join("");
 }
 
+function emphasis(s) {
+  return s
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[^\w*])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>")
+    .replace(/(^|[^\w])_([^_\s][^_]*)_(?!\w)/g, "$1<em>$2</em>");
+}
+
+/** http(s), mailto, or a scheme-less site path; anything else (javascript:, data:) fails the build. */
+const SAFE_HREF = /^(?:https?:\/\/|mailto:|[/#.?]|[^:/?#]*(?:[/?#]|$))/i;
+
 function link(url, label) {
+  if (!SAFE_HREF.test(url) || /[\u0000-\u001f\u007f]/.test(url)) fail(`unsafe link href "${url}"`);
   const external = /^https?:\/\//.test(url) && !url.startsWith(SITE);
   const attrs = external ? ' target="_blank" rel="noreferrer"' : "";
   return `<a href="${url}"${attrs}>${label}</a>`;
