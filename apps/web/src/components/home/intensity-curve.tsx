@@ -74,10 +74,10 @@ export function IntensityCurve({ data }: { data: VisitorForecast }) {
   const value = (v: number) => (live ? ` · ${Math.round(v)} g` : "");
   const sameHour = cleanIdx === nowIdx;
 
-  // The cleanest label goes below its point when it would collide with the now label.
-  const close =
-    Math.abs(x(cleanIdx) - x(nowIdx)) < W * 0.3 &&
-    Math.abs(y(cleanest.carbonIntensityGCo2PerKwh) - y(now.carbonIntensityGCo2PerKwh)) < H * 0.25;
+  // The now label sits above its point and the cleanest label below its own,
+  // so the two never meet; a cleanest point too low for a label under it
+  // (it would cover the hour ticks) keeps its label above.
+  const cleanBelow = y(cleanest.carbonIntensityGCo2PerKwh) < H * 0.7;
 
   const title = live
     ? `${data.region.name} grid carbon intensity, next 24 hours. Now ${Math.round(now.carbonIntensityGCo2PerKwh)} gCO₂/kWh at ${hourOf(now.datetime)} ${zone}; cleanest ${Math.round(cleanest.carbonIntensityGCo2PerKwh)} gCO₂/kWh at ${hourOf(cleanest.datetime)}. Source: ${FEED_NAME[data.source]}.`
@@ -142,7 +142,7 @@ export function IntensityCurve({ data }: { data: VisitorForecast }) {
               y={y(cleanest.carbonIntensityGCo2PerKwh)}
               color={live ? bandColor(cleanest.band) : "var(--color-fg-muted)"}
               label={`Cleanest${value(cleanest.carbonIntensityGCo2PerKwh)} · ${hourOf(cleanest.datetime)}`}
-              below={close}
+              below={cleanBelow}
             />
           )}
         </div>

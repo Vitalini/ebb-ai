@@ -21,7 +21,7 @@ export function Proof() {
         <Stat value="10" label="MCP tools" tag="measured" />
         {/* docs/claims.md row 18; counted from lib/hosts.ts */}
         <Stat value={HOST_COUNT} label="agent hosts with an install path" tag="measured" />
-        <Stat value="Apache-2.0" label="open-source license" />
+        <Stat value={<span className="whitespace-nowrap text-2xl sm:text-3xl">Apache-2.0</span>} label="open-source license" />
       </div>
       <ul className="mt-10 flex flex-wrap gap-x-6 gap-y-2 border-t border-rule pt-8">
         {LISTINGS.map(([name, href]) => (
