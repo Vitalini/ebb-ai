@@ -141,9 +141,7 @@ export {
   carbonBudgetUsage,
   loadCarbonBudgetConfig,
   parseKeyValues,
-  withTidegapKeys,
   KEY_PREFIX,
-  LEGACY_KEY_PREFIX,
   receiptCarbonG,
   windowBounds,
 } from "./budget.js";
@@ -283,9 +281,8 @@ export type {
   VerifyResult,
 } from "./sign.js";
 export {
-  LEGACY_HOME_DIR,
   TIDEGAP_HOME_DIR,
   resolveTidegapHome,
   tidegapPath,
 } from "./paths.js";
-export type { HomeFs, ResolveHomeOptions } from "./paths.js";
+export type { ResolveHomeOptions } from "./paths.js";

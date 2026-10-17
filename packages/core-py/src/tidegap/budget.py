@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
-from ._env import env_value, with_tidegap_keys
+from ._env import env_value, report_ignored_keys
 from .paths import resolve_tidegap_home
 from .types import CarbonReceipt, TaskRecord
 
@@ -209,7 +209,7 @@ def _normalize_window_kind(raw: str | None) -> CarbonBudgetWindowKind | None:
 
 
 def _parse_key_values(contents: str) -> dict[str, str]:
-    """Tiny KEY=VALUE parser — the same shape as the ``~/.config/ebb/env``
+    """Tiny KEY=VALUE parser — the same shape as the ``~/.config/tidegap/env``
     secrets file. ``#`` comments, blank lines, one layer of surrounding
     quotes.
     """
@@ -252,14 +252,14 @@ def load_carbon_budget_config(
     - ``TIDEGAP_CARBON_BUDGET_G``      — threshold in grams CO2e (required to enable)
     - ``TIDEGAP_CARBON_BUDGET_WINDOW`` — daily | weekly | monthly (default: daily)
 
-    The 0.17 names ``EBB_CARBON_BUDGET_*`` are still read, in the file and in
-    the environment, when the ``TIDEGAP_*`` twin is absent (until 0.19).
+    0.19 no longer reads the 0.17 ``EBB_*`` names. A left-over ``EBB_*`` key in
+    the file or variable in the environment prints one stderr line per name.
     """
     # Read the two budget variables BY NAME rather than copying the whole
     # environment into this scope — the values here are a gram threshold and a
     # window name, and nothing else the host exports has any business being
     # visible to this function. (Mirrors the TS loader; see budget.ts.)
-    environ = with_tidegap_keys(
+    environ = (
         env
         if env is not None
         else {
@@ -276,7 +276,8 @@ def load_carbon_budget_config(
     if os.path.exists(cfg_path):
         try:
             with open(cfg_path, encoding="utf-8") as fh:
-                file_values = with_tidegap_keys(_parse_key_values(fh.read()))
+                file_values = _parse_key_values(fh.read())
+            report_ignored_keys(file_values)
         except OSError:
             file_values = {}
     raw_threshold = environ.get(_CONFIG_THRESHOLD_ENV) or file_values.get(

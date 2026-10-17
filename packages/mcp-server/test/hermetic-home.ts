@@ -1,7 +1,6 @@
 /**
  * Vitest setup: point the home directory at a fresh temp dir, so no test
- * reads, creates or migrates the developer's real ~/.tidegap or ~/.ebb-ai
- * (`resolveTidegapHome` moves a 0.17 ~/.ebb-ai on first use).
+ * reads or creates the developer's real ~/.tidegap or ~/.config/tidegap.
  */
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";

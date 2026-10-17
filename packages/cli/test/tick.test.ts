@@ -365,8 +365,11 @@ describe("tidegap tick notifications", () => {
     expect(calls).toHaveLength(0);
   });
 
-  for (const name of ["TIDEGAP_NO_NOTIFY", "EBB_NO_NOTIFY"] as const) {
-    it(`${name}=1 in the environment posts nothing`, async () => {
+  for (const [name, expectNone] of [
+    ["TIDEGAP_NO_NOTIFY", true],
+    ["EBB_NO_NOTIFY", false],
+  ] as const) {
+    it(`${name}=1 in the environment ${expectNone ? "posts nothing" : "is ignored since 0.19"}`, async () => {
       const saved = { TIDEGAP_NO_NOTIFY: process.env.TIDEGAP_NO_NOTIFY, EBB_NO_NOTIFY: process.env.EBB_NO_NOTIFY };
       delete process.env.TIDEGAP_NO_NOTIFY;
       delete process.env.EBB_NO_NOTIFY;
@@ -374,7 +377,8 @@ describe("tidegap tick notifications", () => {
       try {
         const { result, calls } = run();
         await result;
-        expect(calls).toHaveLength(0);
+        if (expectNone) expect(calls).toHaveLength(0);
+        else expect(calls.length).toBeGreaterThan(0);
       } finally {
         for (const [k, v] of Object.entries(saved)) {
           if (v === undefined) delete process.env[k];

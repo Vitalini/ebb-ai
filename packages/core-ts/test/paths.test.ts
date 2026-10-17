@@ -1,27 +1,19 @@
 /**
- * Home-dir resolution and the one-time `~/.ebb-ai` → `~/.tidegap` move
- * (plan KTD3). Real temp dirs for the normal branches; an fs seam for the
- * race and failure branches a real run cannot hit reliably.
+ * Home-dir resolution since 0.19: always `~/.tidegap`. A 0.17 `~/.ebb-ai`
+ * directory is never moved or read; it only earns one notice line.
  */
-import * as fs from "node:fs";
-import { lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { TaskStore } from "../src/index.js";
-import { resolveTidegapHome, type HomeFs } from "../src/paths.js";
+import { resolveTidegapHome } from "../src/paths.js";
 
 let home: string;
 let warnings: string[];
 const warn = (line: string) => warnings.push(line);
-const legacy = () => join(home, ".ebb-ai");
+const old = () => join(home, ".ebb-ai");
 const target = () => join(home, ".tidegap");
-
-function seedLegacy(files: Record<string, string>): void {
-  mkdirSync(legacy(), { recursive: true });
-  for (const [name, body] of Object.entries(files)) writeFileSync(join(legacy(), name), body);
-}
 
 beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), "tidegap-paths-"));
@@ -30,202 +22,44 @@ beforeEach(() => {
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
 describe("resolveTidegapHome", () => {
-  it("neither dir exists: returns ~/.tidegap and creates nothing", () => {
+  it("neither dir exists: returns ~/.tidegap, creates nothing, no line", () => {
     expect(resolveTidegapHome({ home, warn })).toBe(target());
-    expect(fs.existsSync(target())).toBe(false);
-    expect(fs.existsSync(legacy())).toBe(false);
+    expect(existsSync(target())).toBe(false);
     expect(warnings).toEqual([]);
   });
 
-  it("only ~/.ebb-ai: moves everything and leaves a back-link", () => {
-    seedLegacy({ "queue.db": "Q", "signing.key": "K", config: "C" });
+  it("a 0.17 ~/.ebb-ai dir is left in place and named in one line", () => {
+    mkdirSync(old());
+    writeFileSync(join(old(), "queue.db"), "Q");
     expect(resolveTidegapHome({ home, warn })).toBe(target());
-    expect(readFileSync(join(target(), "queue.db"), "utf8")).toBe("Q");
-    expect(readFileSync(join(target(), "signing.key"), "utf8")).toBe("K");
-    expect(readFileSync(join(target(), "config"), "utf8")).toBe("C");
-    expect(lstatSync(legacy()).isSymbolicLink()).toBe(true);
-    expect(realpathSync(legacy())).toBe(realpathSync(target()));
-    // A 0.17-style path still reads the migrated file through the link.
-    expect(readFileSync(join(legacy(), "queue.db"), "utf8")).toBe("Q");
-    expect(warnings).toEqual([]);
+    expect(existsSync(join(old(), "queue.db"))).toBe(true);
+    expect(existsSync(target())).toBe(false);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(old());
+    expect(warnings[0]).toContain("0.18");
   });
 
-  it("is idempotent: a second call changes nothing", () => {
-    seedLegacy({ "queue.db": "Q" });
-    resolveTidegapHome({ home, warn });
-    const link = readlinkSync(legacy());
-    expect(resolveTidegapHome({ home, warn })).toBe(target());
-    expect(readlinkSync(legacy())).toBe(link);
-    expect(warnings).toEqual([]);
-  });
-
-  it("~/.tidegap holds only logs/: the ledger and key move in, ~/.ebb-ai becomes a link", () => {
-    seedLegacy({ "queue.db": "Q", "signing.key": "K" });
-    mkdirSync(join(legacy(), "logs"));
-    writeFileSync(join(legacy(), "logs", "ui-tick.log"), "old log");
-    mkdirSync(join(target(), "logs"), { recursive: true });
-    writeFileSync(join(target(), "logs", "tick.log"), "new log");
-    expect(resolveTidegapHome({ home, warn })).toBe(target());
-    expect(readFileSync(join(target(), "queue.db"), "utf8")).toBe("Q");
-    expect(readFileSync(join(target(), "signing.key"), "utf8")).toBe("K");
-    expect(readFileSync(join(target(), "logs", "ui-tick.log"), "utf8")).toBe("old log");
-    expect(readFileSync(join(target(), "logs", "tick.log"), "utf8")).toBe("new log");
-    expect(lstatSync(legacy()).isSymbolicLink()).toBe(true);
-    expect(warnings).toEqual([]);
-  });
-
-  it("both hold a queue.db: nothing moves, ~/.tidegap wins, one warning names both", () => {
-    seedLegacy({ "queue.db": "OLD" });
+  it("a ~/.ebb-ai link left by 0.18 is ignored without a line", () => {
     mkdirSync(target());
-    writeFileSync(join(target(), "queue.db"), "NEW");
-    expect(resolveTidegapHome({ home, warn })).toBe(target());
-    expect(readFileSync(join(legacy(), "queue.db"), "utf8")).toBe("OLD");
-    expect(lstatSync(legacy()).isDirectory()).toBe(true);
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain(legacy());
-    expect(warnings[0]).toContain(target());
-  });
-
-  it("a file present in both dirs: nothing moves, ~/.ebb-ai is used in place", () => {
-    seedLegacy({ "queue.db": "Q", config: "OLD" });
-    mkdirSync(target());
-    writeFileSync(join(target(), "config"), "NEW");
-    expect(resolveTidegapHome({ home, warn })).toBe(legacy());
-    expect(readFileSync(join(legacy(), "queue.db"), "utf8")).toBe("Q");
-    expect(readFileSync(join(target(), "config"), "utf8")).toBe("NEW");
-    expect(warnings).toHaveLength(1);
-  });
-
-  it("rename loses a race (EEXIST, another process won): re-checks, returns ~/.tidegap, no warning", () => {
-    seedLegacy({ "queue.db": "Q" });
-    const racing: Partial<HomeFs> = {
-      renameSync: (from, to) => {
-        // The other process moves and links first.
-        fs.renameSync(from, to);
-        fs.symlinkSync(to, from);
-        const err = new Error("exists") as NodeJS.ErrnoException;
-        err.code = "EEXIST";
-        throw err;
-      },
-    };
-    expect(resolveTidegapHome({ home, warn, fs: racing })).toBe(target());
-    expect(warnings).toEqual([]);
-  });
-
-  it("rename fails with EPERM: returns ~/.ebb-ai with one warning", () => {
-    seedLegacy({ "queue.db": "Q" });
-    const denied: Partial<HomeFs> = {
-      renameSync: () => {
-        const err = new Error("denied") as NodeJS.ErrnoException;
-        err.code = "EPERM";
-        throw err;
-      },
-    };
-    expect(resolveTidegapHome({ home, warn, fs: denied })).toBe(legacy());
-    expect(readFileSync(join(legacy(), "queue.db"), "utf8")).toBe("Q");
-    expect(warnings).toHaveLength(1);
-  });
-
-  it("back-link fails after the move: data goes back to ~/.ebb-ai, one warning", () => {
-    seedLegacy({ "queue.db": "Q", "signing.key": "K" });
-    const noLinks: Partial<HomeFs> = {
-      symlinkSync: () => {
-        const err = new Error("no links") as NodeJS.ErrnoException;
-        err.code = "EPERM";
-        throw err;
-      },
-    };
-    expect(resolveTidegapHome({ home, warn, fs: noLinks })).toBe(legacy());
-    expect(lstatSync(legacy()).isDirectory()).toBe(true);
-    expect(readFileSync(join(legacy(), "queue.db"), "utf8")).toBe("Q");
-    expect(readFileSync(join(legacy(), "signing.key"), "utf8")).toBe("K");
-    expect(fs.existsSync(target())).toBe(false);
-    expect(warnings).toHaveLength(1);
-  });
-
-  it("back-link fails after an entry-by-entry move: entries go back, ~/.tidegap keeps its own", () => {
-    seedLegacy({ "queue.db": "Q" });
-    mkdirSync(join(target(), "logs"), { recursive: true });
-    const noLinks: Partial<HomeFs> = {
-      symlinkSync: () => {
-        throw Object.assign(new Error("no links"), { code: "EPERM" });
-      },
-    };
-    expect(resolveTidegapHome({ home, warn, fs: noLinks })).toBe(legacy());
-    expect(readFileSync(join(legacy(), "queue.db"), "utf8")).toBe("Q");
-    expect(fs.existsSync(join(target(), "queue.db"))).toBe(false);
-    expect(fs.existsSync(join(target(), "logs"))).toBe(true);
-    expect(warnings).toHaveLength(1);
-  });
-
-  it("~/.ebb-ai is a user's link to another dir: follows it, moves nothing, one warning", () => {
-    const elsewhere = join(home, "data-elsewhere");
-    mkdirSync(elsewhere);
-    writeFileSync(join(elsewhere, "queue.db"), "Q");
-    fs.symlinkSync(elsewhere, legacy(), "dir");
-    expect(resolveTidegapHome({ home, warn })).toBe(legacy());
-    expect(readFileSync(join(legacy(), "queue.db"), "utf8")).toBe("Q");
-    expect(readlinkSync(legacy())).toBe(elsewhere);
-    expect(fs.existsSync(target())).toBe(false);
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain(elsewhere);
-  });
-
-  it("~/.ebb-ai links elsewhere and ~/.tidegap holds data: ~/.tidegap wins, one warning", () => {
-    const elsewhere = join(home, "data-elsewhere");
-    mkdirSync(elsewhere);
-    fs.symlinkSync(elsewhere, legacy(), "dir");
-    mkdirSync(target());
-    writeFileSync(join(target(), "signing.key"), "K");
-    expect(resolveTidegapHome({ home, warn })).toBe(target());
-    expect(warnings).toHaveLength(1);
-  });
-
-  it("a dangling ~/.ebb-ai link: returns ~/.tidegap silently", () => {
-    fs.symlinkSync(join(home, "gone"), legacy(), "dir");
+    symlinkSync(target(), old(), "dir");
     expect(resolveTidegapHome({ home, warn })).toBe(target());
     expect(warnings).toEqual([]);
   });
 
-  it("rollback cannot recreate a removed dir: still returns ~/.ebb-ai with a warning, never throws", () => {
-    seedLegacy({ "queue.db": "Q" });
-    mkdirSync(join(target(), "logs"), { recursive: true });
-    const broken: Partial<HomeFs> = {
-      symlinkSync: () => {
-        throw Object.assign(new Error("no links"), { code: "EPERM" });
-      },
-      mkdirSync: () => {
-        throw Object.assign(new Error("denied"), { code: "EACCES" });
-      },
-    };
-    expect(() => resolveTidegapHome({ home, warn, fs: broken })).not.toThrow();
-    expect(warnings.length).toBeGreaterThanOrEqual(1);
-  });
-
-  it("win32: the back-link is a junction", () => {
-    seedLegacy({ "queue.db": "Q" });
-    const types: Array<string | undefined> = [];
-    const recording: Partial<HomeFs> = {
-      symlinkSync: (t, p, type) => {
-        types.push(type);
-        fs.symlinkSync(t, p, "dir");
-      },
-    };
-    expect(resolveTidegapHome({ home, warn, fs: recording, platform: "win32" })).toBe(target());
-    expect(types).toEqual(["junction"]);
-  });
-
-  it("the queue opens with its rows after the move, from both paths", () => {
-    mkdirSync(legacy());
-    const before = new TaskStore({ dbPath: join(legacy(), "queue.db") });
-    before.upsert({ taskId: "t1", status: "queued", enqueuedAt: "2026-10-16T00:00:00.000Z", region: "GB" });
-    before.close();
-    expect(resolveTidegapHome({ home, warn })).toBe(target());
-    const after = new TaskStore({ dbPath: join(target(), "queue.db") });
-    expect(after.get("t1")?.status).toBe("queued");
-    after.close();
-    const old = new TaskStore({ dbPath: join(legacy(), "queue.db") });
-    expect(old.get("t1")?.status).toBe("queued");
-    old.close();
+  it("the default writer reports once per process and home", () => {
+    mkdirSync(old());
+    const lines: string[] = [];
+    const write = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      lines.push(String(chunk));
+      return true;
+    }) as typeof process.stderr.write;
+    try {
+      resolveTidegapHome({ home });
+      resolveTidegapHome({ home });
+    } finally {
+      process.stderr.write = write;
+    }
+    expect(lines).toHaveLength(1);
   });
 });

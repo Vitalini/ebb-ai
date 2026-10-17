@@ -22,6 +22,7 @@ import {
   TaskStore,
   windowBounds,
   type CarbonAlert,
+  type CarbonBudgetEnv,
   type TaskRecord,
 } from "../src/index.js";
 import type { ProviderAdapter } from "../src/providers/base.js";
@@ -164,24 +165,22 @@ describe("loadCarbonBudgetConfig", () => {
     expect(cfg).toEqual({ windowKind: "monthly", thresholdG: 999 });
   });
 
-  it("reads a 0.17 EBB_* key when its TIDEGAP_* twin is absent", () => {
+  it("ignores a 0.17 EBB_* key in the file (removed in 0.19)", () => {
     const p = join(dir, "config");
     writeFileSync(p, "EBB_CARBON_BUDGET_G=500\nEBB_CARBON_BUDGET_WINDOW=weekly\n");
-    expect(loadCarbonBudgetConfig({ path: p, env: {} })).toEqual({ windowKind: "weekly", thresholdG: 500 });
+    expect(loadCarbonBudgetConfig({ path: p, env: {} })).toBeUndefined();
   });
 
-  it("prefers the TIDEGAP_* key when both are in the file", () => {
+  it("uses the TIDEGAP_* key next to an EBB_* key in the file", () => {
     const p = join(dir, "config");
     writeFileSync(p, "EBB_CARBON_BUDGET_G=500\nTIDEGAP_CARBON_BUDGET_G=300\n");
     expect(loadCarbonBudgetConfig({ path: p, env: {} })?.thresholdG).toBe(300);
   });
 
-  it("accepts a host override under either name; TIDEGAP_* wins", () => {
+  it("ignores an EBB_* host override", () => {
     const p = join(dir, "absent");
-    expect(loadCarbonBudgetConfig({ path: p, env: { EBB_CARBON_BUDGET_G: "40" } })?.thresholdG).toBe(40);
-    expect(
-      loadCarbonBudgetConfig({ path: p, env: { EBB_CARBON_BUDGET_G: "40", TIDEGAP_CARBON_BUDGET_G: "70" } })?.thresholdG,
-    ).toBe(70);
+    const legacyEnv = { EBB_CARBON_BUDGET_G: "40" } as unknown as CarbonBudgetEnv;
+    expect(loadCarbonBudgetConfig({ path: p, env: legacyEnv })).toBeUndefined();
   });
 
   it("disables on a non-positive or malformed threshold", () => {

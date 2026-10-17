@@ -308,32 +308,39 @@ async def test_scheduler_status_none_without_budget(tmp_path: Path) -> None:
         assert await s.get_carbon_budget_status() is None
 
 
-def test_reads_017_ebb_keys_when_tidegap_twin_absent(tmp_path):
+def test_017_ebb_keys_in_file_are_not_read_and_named_once(tmp_path, monkeypatch, capsys):
+    from tidegap import _env
+
+    monkeypatch.setattr(_env, "_reported", set())
     p = tmp_path / "config"
     p.write_text("EBB_CARBON_BUDGET_G=500\nEBB_CARBON_BUDGET_WINDOW=weekly\n")
-    cfg = load_carbon_budget_config(path=str(p), env={})
-    assert cfg is not None
-    assert (cfg.threshold_g, cfg.window_kind) == (500, "weekly")
+    assert load_carbon_budget_config(path=str(p), env={}) is None
+    assert load_carbon_budget_config(path=str(p), env={}) is None
+    err = capsys.readouterr().err.strip().splitlines()
+    assert len(err) == 2
+    assert "EBB_CARBON_BUDGET_G" in err[0] and "TIDEGAP_CARBON_BUDGET_G" in err[0]
+    assert "EBB_CARBON_BUDGET_WINDOW" in err[1]
 
 
-def test_tidegap_key_wins_over_ebb_key_in_file(tmp_path):
+def test_tidegap_key_is_used_next_to_an_ebb_key_in_file(tmp_path):
     p = tmp_path / "config"
     p.write_text("EBB_CARBON_BUDGET_G=500\nTIDEGAP_CARBON_BUDGET_G=300\n")
     cfg = load_carbon_budget_config(path=str(p), env={})
     assert cfg is not None and cfg.threshold_g == 300
 
 
-def test_ebb_env_fallback_prints_one_line(tmp_path, monkeypatch, capsys):
+def test_ebb_env_is_not_read_and_named_once(tmp_path, monkeypatch, capsys):
     from tidegap import _env
 
     monkeypatch.setattr(_env, "_reported", set())
     monkeypatch.delenv("TIDEGAP_CARBON_BUDGET_G", raising=False)
+    monkeypatch.delenv("TIDEGAP_CARBON_BUDGET_WINDOW", raising=False)
+    monkeypatch.delenv("EBB_CARBON_BUDGET_WINDOW", raising=False)
     monkeypatch.setenv("EBB_CARBON_BUDGET_G", "40")
-    cfg = load_carbon_budget_config(path=str(tmp_path / "absent"))
-    assert cfg is not None and cfg.threshold_g == 40
-    load_carbon_budget_config(path=str(tmp_path / "absent"))
+    assert load_carbon_budget_config(path=str(tmp_path / "absent")) is None
+    assert load_carbon_budget_config(path=str(tmp_path / "absent")) is None
     err = capsys.readouterr().err.strip().splitlines()
-    assert len(err) == 1 and "TIDEGAP_CARBON_BUDGET_G" in err[0]
+    assert len(err) == 1 and "EBB_CARBON_BUDGET_G" in err[0] and "no longer read" in err[0]
     monkeypatch.setenv("TIDEGAP_CARBON_BUDGET_G", "70")
     cfg = load_carbon_budget_config(path=str(tmp_path / "absent"))
     assert cfg is not None and cfg.threshold_g == 70

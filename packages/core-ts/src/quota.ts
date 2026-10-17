@@ -22,7 +22,7 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
-import { carbonBudgetConfigPath, parseKeyValues, withTidegapKeys } from "./budget.js";
+import { carbonBudgetConfigPath, parseKeyValues } from "./budget.js";
 import type { Scheduler } from "./scheduler.js";
 
 const RESET_PREFIX = "TIDEGAP_QUOTA_RESET_";
@@ -111,7 +111,6 @@ export function quotaResetConfigFromValues(
   defaultTimeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone,
 ): QuotaResetConfig {
   const out: QuotaResetConfig = {};
-  values = withTidegapKeys(values);
   for (const [key, value] of Object.entries(values)) {
     if (!key.startsWith(RESET_PREFIX)) continue;
     const suffix = key.slice(RESET_PREFIX.length);

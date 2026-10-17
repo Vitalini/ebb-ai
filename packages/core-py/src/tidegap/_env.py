@@ -1,8 +1,8 @@
-"""Read a Tidegap environment variable, falling back to its 0.17 ``EBB_*`` name.
+"""Read a Tidegap environment variable by its ``TIDEGAP_*`` name.
 
-``TIDEGAP_<NAME>`` wins when set. Otherwise ``EBB_<NAME>`` is read, and the
-first fallback for each name prints one deprecation line to stderr. The
-fallback is removed in 0.19.
+0.19 removed the 0.17 ``EBB_*`` fallback. A left-over ``EBB_<NAME>`` is never
+used: when it is set and ``TIDEGAP_<NAME>`` is not, the first read of that
+name prints one stderr line naming both.
 """
 
 from __future__ import annotations
@@ -11,33 +11,36 @@ import os
 import sys
 
 KEY_PREFIX = "TIDEGAP_"
-LEGACY_KEY_PREFIX = "EBB_"
+_OLD_PREFIX = "EBB_"
 
 _reported: set[str] = set()
 
 
+def report_ignored(old_name: str) -> None:
+    """Print the one "no longer read" line for ``old_name`` (``EBB_*``), once per name."""
+    if old_name in _reported:
+        return
+    _reported.add(old_name)
+    new_name = KEY_PREFIX + old_name[len(_OLD_PREFIX) :]
+    print(
+        f"tidegap: {old_name} is no longer read (removed in 0.19); rename it to {new_name}",
+        file=sys.stderr,
+    )
+
+
 def env_value(name: str) -> str | None:
-    """``TIDEGAP_<name>``, else ``EBB_<name>`` (with one stderr line), else ``None``."""
+    """``TIDEGAP_<name>``, else ``None``. A left-over ``EBB_<name>`` is only reported."""
     current = os.environ.get(KEY_PREFIX + name)
     if current is not None and current.strip() != "":
         return current
-    legacy = os.environ.get(LEGACY_KEY_PREFIX + name)
-    if legacy is not None and legacy.strip() != "":
-        if name not in _reported:
-            _reported.add(name)
-            print(
-                f"tidegap: rename EBB_{name} -> TIDEGAP_{name}; "
-                "the EBB_* names stop working in 0.19.",
-                file=sys.stderr,
-            )
-        return legacy
+    old = os.environ.get(_OLD_PREFIX + name)
+    if old is not None and old.strip() != "":
+        report_ignored(_OLD_PREFIX + name)
     return current
 
 
-def with_tidegap_keys(values: dict[str, str]) -> dict[str, str]:
-    """Fold ``EBB_*`` keys into ``TIDEGAP_*`` names; a ``TIDEGAP_*`` key wins."""
-    out = {k: v for k, v in values.items() if not k.startswith(LEGACY_KEY_PREFIX)}
-    for key, value in values.items():
-        if key.startswith(LEGACY_KEY_PREFIX):
-            out.setdefault(KEY_PREFIX + key[len(LEGACY_KEY_PREFIX) :], value)
-    return out
+def report_ignored_keys(values: dict[str, str]) -> None:
+    """Report every ``EBB_*`` key in a parsed config file, once per key."""
+    for key in values:
+        if key.startswith(_OLD_PREFIX):
+            report_ignored(key)

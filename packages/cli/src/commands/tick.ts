@@ -19,7 +19,6 @@ import {
   osNotifyCommand,
   parseKeyValues,
   resolveTidegapHome,
-  withTidegapKeys,
   prepareTick,
   resolveRegion,
   Scheduler,
@@ -79,11 +78,11 @@ const defaultSpawnNotify: NotifySpawner = (cmd, args, opts) => {
   child.unref();
 };
 
-/** `TIDEGAP_NOTIFY=0` (or false/off/no; 0.17: `EBB_NOTIFY`) in ~/.tidegap/config turns notifications off. */
+/** `TIDEGAP_NOTIFY=0` (or false/off/no) in ~/.tidegap/config turns notifications off. */
 export function notifyDisabledInConfig(path: string = carbonBudgetConfigPath()): boolean {
   try {
     if (!existsSync(path)) return false;
-    const v = withTidegapKeys(parseKeyValues(readFileSync(path, "utf8"))).TIDEGAP_NOTIFY;
+    const v = parseKeyValues(readFileSync(path, "utf8")).TIDEGAP_NOTIFY;
     return v !== undefined && /^(0|false|off|no)$/i.test(v.trim());
   } catch {
     return false;

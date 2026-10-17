@@ -1,10 +1,9 @@
 /**
  * Shared secrets file: `~/.config/tidegap/env`.
  *
- * 0.17 kept it at `~/.config/ebb/env`. That file is read, never moved: a
- * 0.17 systemd unit still names it in `EnvironmentFile=`. `tidegap tick`
- * reads the new file, else the old one; `tidegap install` creates the new
- * file as a copy of the old one when only the old one exists.
+ * 0.17 kept it at `~/.config/ebb/env`. 0.18 still read that file; 0.19 does
+ * not. When only the old file exists, loading prints one stderr line naming
+ * it, and `tidegap install` lists it under its warnings.
  *
  * A single standardized location for provider API keys that works
  * uniformly across launchd, systemd, and manual cron:
@@ -21,7 +20,7 @@
  * lines, `#` comments, blank lines, optional surrounding quotes.
  */
 
-import { copyFileSync, chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -30,17 +29,25 @@ export function envFilePath(home: string = homedir()): string {
   return join(home, ".config", "tidegap", "env");
 }
 
-/** The 0.17 secrets file, read when the new one is absent (until 0.19). */
-export function legacyEnvFilePath(home: string = homedir()): string {
+/** The 0.17 secrets file, never read since 0.19; only checked for the notice. */
+function oldEnvFilePath(home: string): string {
   return join(home, ".config", "ebb", "env");
 }
 
-/** The secrets file to load: the new one, else the 0.17 one if present. */
-export function resolveEnvFilePath(home: string = homedir()): string {
-  const current = envFilePath(home);
-  const legacy = legacyEnvFilePath(home);
-  return !existsSync(current) && existsSync(legacy) ? legacy : current;
+/**
+ * The notice for a 0.17 secrets file that is still there while the new one
+ * is not, else `undefined`.
+ */
+export function oldEnvFileNotice(home: string = homedir()): string | undefined {
+  const old = oldEnvFilePath(home);
+  if (existsSync(envFilePath(home)) || !existsSync(old)) return undefined;
+  return (
+    `tidegap: ${old} is no longer read (removed in 0.19); move it to ${envFilePath(home)} ` +
+    "and rename its EBB_* keys to TIDEGAP_*."
+  );
 }
+
+let oldEnvFileReported = false;
 
 /** The commented template written when the file is first created. */
 export function envFileTemplate(): string {
@@ -92,9 +99,19 @@ export function parseEnvFile(contents: string): Record<string, string> {
 
 /**
  * Load the env file into `process.env` for any key not already set.
- * Returns the keys that were applied. Missing file is a silent no-op.
+ * Returns the keys that were applied. A missing file is a no-op; when the
+ * default file is missing and the 0.17 one exists, one stderr line per
+ * process names it.
  */
-export function loadEnvFileIntoProcess(path: string = resolveEnvFilePath()): string[] {
+export function loadEnvFileIntoProcess(path?: string): string[] {
+  if (path === undefined) {
+    path = envFilePath();
+    const notice = oldEnvFileReported ? undefined : oldEnvFileNotice();
+    if (notice) {
+      oldEnvFileReported = true;
+      process.stderr.write(`${notice}\n`);
+    }
+  }
   if (!existsSync(path)) return [];
   let parsed: Record<string, string>;
   try {
@@ -115,26 +132,15 @@ export function loadEnvFileIntoProcess(path: string = resolveEnvFilePath()): str
 export interface EnsureEnvFileResult {
   path: string;
   created: boolean;
-  /** The 0.17 file the new one was copied from, when it was. */
-  copiedFrom?: string;
 }
 
 /**
- * Create the secrets file (0600) if it does not already exist: a copy of the
- * 0.17 file `legacy` when that exists, else the commented template.
- * Idempotent: never overwrites an existing file, never touches `legacy`.
+ * Create the secrets file (0600) with the commented template if it does not
+ * already exist. Idempotent: never overwrites an existing file.
  */
-export function ensureEnvFile(
-  path: string = envFilePath(),
-  legacy: string = legacyEnvFilePath(),
-): EnsureEnvFileResult {
+export function ensureEnvFile(path: string = envFilePath()): EnsureEnvFileResult {
   if (existsSync(path)) return { path, created: false };
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  if (existsSync(legacy)) {
-    copyFileSync(legacy, path);
-    chmodSync(path, 0o600);
-    return { path, created: true, copiedFrom: legacy };
-  }
   writeFileSync(path, envFileTemplate(), { encoding: "utf8", mode: 0o600 });
   return { path, created: true };
 }
