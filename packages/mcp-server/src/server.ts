@@ -36,6 +36,7 @@ import {
 import {
   AnthropicAdapter,
   buildDefaultGridFeed,
+  claudeCodeToolsError,
   deadlineKindLabel,
   DEFAULT_MODEL_BY_PROVIDER,
   GeminiAdapter,
@@ -516,8 +517,13 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
           repeat?: RepeatRule;
           origin_session_id?: string;
           after_limit_reset?: boolean;
+          tools?: string[];
         };
         try {
+          // Checked before dry_run too, so a preview never shows a tool set
+          // the real enqueue would refuse.
+          const toolsError = parsed.tools !== undefined ? claudeCodeToolsError(parsed.tools) : undefined;
+          if (toolsError) throw new Error(toolsError);
           // Resolve the deadline. A quota_reset task gets the next reset
           // minus margin from ~/.tidegap/config; `tidegap tick` re-resolves it if
           // that reset passes before the task runs.
@@ -588,6 +594,7 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
               redactInReceipt: parsed.redact_in_receipt,
               candidates: parsed.candidates,
               routeWeights: parsed.route_weights,
+              ...(parsed.tools !== undefined ? { tools: parsed.tools } : {}),
             };
             const plan = await scheduler.previewProviderCall(spec, {
               deadline,
@@ -635,6 +642,7 @@ export function createEbbServer(deps: EbbServerDeps = {}): {
               redactInReceipt: parsed.redact_in_receipt,
               candidates: parsed.candidates,
               routeWeights: parsed.route_weights,
+              ...(parsed.tools !== undefined ? { tools: parsed.tools } : {}),
             };
             const record = await scheduler.enqueueProviderCall(spec, {
               deadline,

@@ -400,19 +400,22 @@ adapter.
 **What a run can do.** The tick runs:
 
 ```bash
-claude -p --output-format json --tools "" --permission-mode dontAsk \
+claude -p --output-format json --tools "WebSearch,WebFetch" \
+  --allowedTools "WebSearch,WebFetch" --permission-mode dontAsk \
   --max-budget-usd 1 --safe-mode --strict-mcp-config --no-session-persistence \
   [--model <model>] [--system-prompt-file <file>]
 ```
 
 - The prompt goes on stdin, so it does not show in `ps`.
-- `--tools ""` removes all built-in tools. The model cannot read files, run commands or use the web.
+- `--tools` and `--allowedTools` name the same tools. `--permission-mode dontAsk` denies every other tool. By default the model can search the web and fetch pages, and nothing else.
 - `--safe-mode` and `--strict-mcp-config` turn off your CLAUDE.md, skills, plugins, hooks and MCP servers.
 - The run happens in a new temporary directory, never in your repository, and the tick deletes the directory after the run.
 - `--no-session-persistence` keeps these runs out of your Claude Code session history.
 - The child process does not get `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN`, so it uses your subscription login. It also does not get your other provider keys, the WattTime login or any `TIDEGAP_*` variable.
 - The tick runs a `claude` it finds on `PATH` or in a known location only when neither the file nor its directory is world-writable.
 - A run that takes more than 10 minutes is stopped, together with every process it started, and the task fails.
+
+**Tools.** A run gets `WebSearch` and `WebFetch` by default, so a task such as "what is the weather forecast for Kyiv tomorrow" gets a real answer. To change the set for one task, pass `tools` (an array of tool names) to `schedule_task` or `POST /api/tasks`; `[]` means no tools, and a reply keeps the tools of its parent. To change the default, set `TIDEGAP_CLAUDE_TOOLS` (a comma list; an empty value means no tools). Only `WebSearch`, `WebFetch`, `Read`, `Grep` and `Glob` are allowed. Any other name, such as `Bash`, `Write` or `Edit`, is rejected when you queue the task. Web pages are untrusted input: a page can contain text that tries to give the model instructions (prompt injection). For this reason a run never gets a tool that runs commands or writes files. `Read`, `Grep` and `Glob` can read files that your user can read, so add them only for prompts you trust. A set cannot combine a file tool with a web tool, because a fetched page could make the run send a local file out. The receipt records the tool set of the run, and `tidegap queue show <id>` prints it as `tools:`.
 
 **Model.** The tick passes the task's `model` to `--model` when it is a `claude-*` id or one of `opus`, `sonnet`, `haiku`, `fable`, `opusplan` (optionally with `[1m]`). Otherwise Claude Code uses its own default. A `claude-code` task queued without a model gets `"default"`. The receipt records the model that Claude Code reports. `maxTokens` and `temperature` have no effect, because the CLI has no flags for them.
 
@@ -423,6 +426,7 @@ claude -p --output-format json --tools "" --permission-mode dontAsk \
 | `TIDEGAP_CLAUDE_BIN` | Path of the `claude` binary. Skips the lookup. |
 | `TIDEGAP_CLAUDE_CODE=0` | Do not look for Claude Code (`false`, `off` and `no` also work). |
 | `TIDEGAP_CLAUDE_CODE_MAX_BUDGET_USD` | `--max-budget-usd` cap per run. Default `1`. An invalid value falls back to `1` with a warning. |
+| `TIDEGAP_CLAUDE_TOOLS` | Default tool set, a comma list from the allowlist. Default `WebSearch,WebFetch`; an empty value means no tools. An invalid value keeps the default with a warning. |
 
 **Cost and quota.** Tasks use the same Claude Code quota as your interactive sessions. A night of queued tasks can use up the limit you expect to have in the morning. Claude Code's list-price estimate for each run is in `tidegap queue show <id> --raw` (`total_cost_usd`, next to `session_id`). Your subscription is not billed per run. The budget cap uses this estimate.
 

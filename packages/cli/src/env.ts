@@ -56,6 +56,8 @@ export interface EnvCredentials extends ProviderCredentials {
   claudeCodeDisabled: boolean;
   /** `TIDEGAP_CLAUDE_CODE_MAX_BUDGET_USD`, unparsed: the claude-code `--max-budget-usd` cap. */
   claudeCodeMaxBudgetUsd?: string;
+  /** `TIDEGAP_CLAUDE_TOOLS`, untrimmed: the default claude-code tool set ("" = none). */
+  claudeTools?: string;
 }
 
 /**
@@ -150,6 +152,8 @@ export function readEnvCredentials(write: NoticeWriter = writeOnce): EnvCredenti
     claudeBin: val(process.env.TIDEGAP_CLAUDE_BIN),
     claudeCodeDisabled: /^(0|false|off|no)$/i.test(val(process.env.TIDEGAP_CLAUDE_CODE) ?? ""),
     claudeCodeMaxBudgetUsd: val(process.env.TIDEGAP_CLAUDE_CODE_MAX_BUDGET_USD),
+    // Not `val()`: an empty value means "no tools", not "unset".
+    claudeTools: process.env.TIDEGAP_CLAUDE_TOOLS,
   };
   reportLeftOverNames(write);
   return out;

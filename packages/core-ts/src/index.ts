@@ -136,6 +136,11 @@ export {
 } from "./notify.js";
 export type { OsNotifyCommand, OsNotifyOptions } from "./notify.js";
 export {
+  CLAUDE_CODE_TOOL_ALLOWLIST,
+  DEFAULT_CLAUDE_CODE_TOOLS,
+  claudeCodeToolsError,
+} from "./claude-tools.js";
+export {
   carbonBudgetConfigPath,
   carbonBudgetStatus,
   carbonBudgetUsage,
