@@ -326,7 +326,7 @@ export function buildProgram(): Command {
     .command("ui")
     .description("Open the local task page: timeline, inbox, task detail, actions (127.0.0.1 only; never dispatches)")
     .option("--db <path>", "SQLite queue path", undefined)
-    .option("--port <port>", "Port on 127.0.0.1 (default: a free port)", (v) => parseInt(v, 10), 0)
+    .option("--port <port>", "Port on 127.0.0.1 (default: 47821, or a free port when it is taken; 0: any free port)", (v) => parseInt(v, 10))
     .option("--region <code>", "Region for the forecast curve", undefined)
     .option("--no-open", "Print the URL without opening a browser")
     .action(async (opts: { db?: string; port?: number; region?: string; open?: boolean }) => {
@@ -336,6 +336,7 @@ export function buildProgram(): Command {
           port: opts.port,
           region: opts.region,
           open: opts.open !== false,
+          cliVersion: CLI_VERSION,
         });
         process.exit(code);
       } catch (err) {

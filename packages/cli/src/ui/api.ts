@@ -41,6 +41,7 @@ import {
   withoutRaw,
 } from "../commands/queue.js";
 import type { DaemonStatus } from "../platform/index.js";
+import { ClientRegistryError, type ClientRegistry } from "./clients.js";
 import type { DispatcherControl } from "./dispatcher.js";
 
 export interface ApiContext {
@@ -56,6 +57,10 @@ export interface ApiContext {
   scheduler?: Scheduler;
   /** Start dispatcher and dispatcher state (ui v2). */
   dispatcher?: DispatcherControl;
+  /** Anthropic model for quick add without one (`TIDEGAP_DEFAULT_MODEL`). */
+  defaultModel?: string;
+  /** Client token registry (native clients); absent = no `/api/clients` routes. */
+  clients?: ClientRegistry;
 }
 
 /** Longest reply text, in characters. */
@@ -68,6 +73,8 @@ export const REPLY_MAX_CHARS = 32_000;
 export function postBodyKind(pathname: string): "json" | "none" | undefined {
   const route = pathname.split("/").filter(Boolean).slice(1);
   if (route.length === 2 && route[0] === "dispatcher" && route[1] === "start") return "none";
+  if (route.length === 1 && route[0] === "clients") return "json";
+  if (route.length === 3 && route[0] === "clients" && route[2] === "revoke") return "none";
   if (route.length !== 3 || route[0] !== "tasks") return undefined;
   if (route[2] === "cancel" || route[2] === "reschedule" || route[2] === "reply") return "json";
   if (route[2] === "read" || route[2] === "unread" || route[2] === "run-now") return "none";
@@ -461,6 +468,40 @@ function status(ctx: ApiContext): ApiResponse {
   };
 }
 
+// ── Connected apps (native clients, page token only) ─────────────────────
+
+function clientsList(ctx: ApiContext): ApiResponse {
+  if (!ctx.clients) return error(404, "not found");
+  try {
+    return { status: 200, body: { clients: ctx.clients.list() } };
+  } catch (err) {
+    // The message names the registry path, which is the user's own file.
+    return error(500, err instanceof ClientRegistryError ? oneLine(err) : "client registry unavailable");
+  }
+}
+
+function clientsAdd(ctx: ApiContext, body: Body): ApiResponse {
+  if (!ctx.clients) return error(404, "not found");
+  const bad = onlyKeys(body, ["name", "kind"]);
+  if (bad) return error(400, bad);
+  try {
+    const { client, token } = ctx.clients.add({ name: body.name, kind: body.kind ?? "extension" }, ctx.now?.());
+    return { status: 201, body: { client, token } };
+  } catch (err) {
+    if (err instanceof ClientRegistryError) return error(400, oneLine(err));
+    return error(500, "could not add the client");
+  }
+}
+
+function clientsRevoke(ctx: ApiContext, id: string): ApiResponse {
+  if (!ctx.clients) return error(404, "not found");
+  try {
+    return ctx.clients.revoke(id) ? { status: 200, body: { revoked: id } } : error(404, "client not found");
+  } catch (err) {
+    return error(500, err instanceof ClientRegistryError ? oneLine(err) : "could not revoke the client");
+  }
+}
+
 /**
  * Route one authenticated `/api/*` request (SSE is handled by the server).
  * Returns 404 for an unknown path and 405 for a wrong method.
@@ -481,6 +522,19 @@ export async function handleApi(
   if (route.length === 1 && route[0] === "status") return get ? status(ctx) : error(405, "method not allowed");
   if (route.length === 2 && route[0] === "dispatcher" && route[1] === "start") {
     return method === "POST" ? startDispatcher(ctx) : error(405, "method not allowed");
+  }
+  if (route.length === 1 && route[0] === "clients") {
+    return get ? clientsList(ctx) : method === "POST" ? clientsAdd(ctx, body) : error(405, "method not allowed");
+  }
+  if (route.length === 3 && route[0] === "clients" && route[2] === "revoke") {
+    if (method !== "POST") return error(405, "method not allowed");
+    let id: string;
+    try {
+      id = decodeURIComponent(route[1]!);
+    } catch {
+      return error(400, "bad client id");
+    }
+    return clientsRevoke(ctx, id);
   }
   if (route.length === 2 && route[0] === "series") {
     if (!get) return error(405, "method not allowed");

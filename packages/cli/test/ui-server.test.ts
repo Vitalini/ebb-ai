@@ -8,8 +8,16 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { daemonStatus } from "../src/platform/index.js";
 import { FORECAST_CACHE_MS, handleApi, type ApiContext } from "../src/ui/api.js";
+import { ClientRegistry } from "../src/ui/clients.js";
 import { TaskEvents } from "../src/ui/events.js";
-import { isLoopbackHost, startUiServer, STATIC_FILES, UI_MODULES, type UiServer } from "../src/ui/server.js";
+import {
+  classifyOrigin,
+  isLoopbackHost,
+  startUiServer,
+  STATIC_FILES,
+  UI_MODULES,
+  type UiServer,
+} from "../src/ui/server.js";
 
 const TOKEN = "test-token-0123456789";
 
@@ -65,6 +73,7 @@ describe("tidegap ui server", () => {
       token: TOKEN,
       dbPath,
       assetDir,
+      stateDir: dir,
       feed: mockGridFeed(),
       defaultRegion: "FR",
       quota: () => ({}),
@@ -251,6 +260,127 @@ describe("tidegap ui server", () => {
   });
 });
 
+describe("tidegap ui token scopes and origins (native clients KTD3)", () => {
+  let dir: string;
+  let ui: UiServer;
+  let registry: ClientRegistry;
+  let clientToken: string;
+  let clientId: string;
+
+  beforeEach(async () => {
+    dir = mkdtempSync(join(tmpdir(), "tidegap-ui-scope-"));
+    const assetDir = join(dir, "ui");
+    mkdirSync(assetDir);
+    writeFileSync(join(assetDir, "index.html"), "<!doctype html><title>tidegap</title>");
+    writeFileSync(join(assetDir, "app.js"), "export {};");
+    seed(join(dir, "queue.db"));
+    registry = new ClientRegistry(dir);
+    ({ token: clientToken, client: { id: clientId } } = registry.add({ name: "Chrome", kind: "extension" }));
+    ui = await startUiServer({
+      token: TOKEN,
+      dbPath: join(dir, "queue.db"),
+      assetDir,
+      stateDir: dir,
+      feed: mockGridFeed(),
+      defaultRegion: "FR",
+      quota: () => ({}),
+      daemonStatus: () => "unknown",
+      pollMs: 50,
+    });
+  });
+
+  afterEach(async () => {
+    await ui.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  const call = (path: string, token: string | null, origin?: string, method = "GET", extra: Record<string, string> = {}, body = "") =>
+    new Promise<{ status: number; headers: Record<string, unknown> }>((resolve, reject) => {
+      const headers: Record<string, string> = { host: `127.0.0.1:${ui.port}`, ...extra };
+      if (token) headers.authorization = `Bearer ${token}`;
+      if (origin !== undefined) headers.origin = origin;
+      const req = request({ host: "127.0.0.1", port: ui.port, path, method, headers }, (res) => {
+        res.resume();
+        resolve({ status: res.statusCode ?? 0, headers: res.headers });
+      });
+      req.on("error", reject);
+      req.end(body);
+    });
+  const status = async (...args: Parameters<typeof call>) => (await call(...args)).status;
+
+  const EXT = ["chrome-extension://abcdefghijklmnop", "moz-extension://0f2c1e7a-3b4d-4c5e-8f9a-0b1c2d3e4f50", "safari-web-extension://E0B1C2D3-1111-2222-3333-444455556666"];
+
+  it("matrix row: no Origin. page token all routes; client token all but /api/clients; none 401", async () => {
+    expect(await status("/api/tasks", TOKEN)).toBe(200);
+    expect(await status("/api/clients", TOKEN)).toBe(200);
+    expect(await status("/api/tasks", clientToken)).toBe(200);
+    expect(await status("/api/clients", clientToken)).toBe(403);
+    expect(await status(`/api/clients/${clientId}/revoke`, clientToken, undefined, "POST")).toBe(403);
+    expect(await status("/api/tasks", null)).toBe(401);
+    expect(await status("/api/tasks", "tgc_bogus")).toBe(401);
+  });
+
+  it("matrix row: loopback Origin. same as no Origin", async () => {
+    const o = `http://127.0.0.1:${ui.port}`;
+    expect(await status("/api/tasks", TOKEN, o)).toBe(200);
+    expect(await status("/api/clients", TOKEN, o)).toBe(200);
+    expect(await status("/api/tasks", clientToken, o)).toBe(200);
+    expect(await status("/api/clients", clientToken, o)).toBe(403);
+    expect(await status("/api/tasks", null, o)).toBe(401);
+  });
+
+  it("matrix row: extension Origin. client token on /api/* (AE1); page token 403; none 401", async () => {
+    for (const o of EXT) {
+      expect([o, await status("/api/tasks", clientToken, o)]).toEqual([o, 200]);
+      expect([o, await status("/api/tasks", TOKEN, o)]).toEqual([o, 403]);
+      expect([o, await status("/api/clients", clientToken, o)]).toEqual([o, 403]);
+      expect([o, await status("/api/tasks", null, o)]).toEqual([o, 401]);
+    }
+  });
+
+  it("matrix row: foreign Origin (and null). 403 whatever the token (AE1)", async () => {
+    for (const o of ["https://evil.example", "null", "http://evil.example", `http://localhost:${ui.port + 1}`]) {
+      for (const t of [TOKEN, clientToken, null]) {
+        expect([o, t, await status("/api/tasks", t, o)]).toEqual([o, t, 403]);
+      }
+    }
+  });
+
+  it("refuses a malformed extension origin", async () => {
+    for (const o of ["chrome-extension://", "chrome-extension://abc/path", "chrome-extension://abc:1", "chrome-extensionx://abc", "file://abc"]) {
+      expect([o, await status("/api/tasks", clientToken, o)]).toEqual([o, 403]);
+    }
+  });
+
+  it("an extension Origin gets 403 on static files", async () => {
+    for (const path of ["/", "/app.js"]) {
+      expect([path, await status(path, null, EXT[0])]).toEqual([path, 403]);
+      expect([path, await status(path, clientToken, EXT[0])]).toEqual([path, 403]);
+    }
+    expect(await status("/", null)).toBe(200);
+  });
+
+  it("a client token revoked while the server runs gets 401 on the next request (AE2)", async () => {
+    expect(await status("/api/tasks", clientToken, EXT[0])).toBe(200);
+    new ClientRegistry(dir).revoke(clientId);
+    expect(await status("/api/tasks", clientToken, EXT[0])).toBe(401);
+  });
+
+  it("an extension POST keeps the content-type rule (415) and no response has CORS headers", async () => {
+    const res = await call("/api/tasks/done-1/cancel", clientToken, EXT[0], "POST", { "content-type": "text/plain" }, "{}");
+    expect(res.status).toBe(415);
+    for (const r of [res, await call("/api/tasks", clientToken, EXT[0]), await call("/api/tasks", TOKEN, EXT[0])]) {
+      expect(Object.keys(r.headers).filter((h) => h.startsWith("access-control-"))).toEqual([]);
+    }
+  });
+
+  it("the client token also opens the event stream", async () => {
+    const res = await fetch(`${ui.url}api/events`, { headers: { authorization: `Bearer ${clientToken}` } });
+    expect(res.status).toBe(200);
+    await res.body!.cancel();
+  });
+});
+
 describe("tidegap ui assets", () => {
   const dir = join(__dirname, "..", "ui");
   const read = (f: string) => readFileSync(join(dir, f), "utf8");
@@ -371,6 +501,15 @@ describe("tidegap ui assets", () => {
 });
 
 describe("tidegap ui internals", () => {
+  it("classifyOrigin sorts Origin headers into none, loopback, extension and foreign", () => {
+    expect(classifyOrigin(undefined, 4000)).toBe("none");
+    expect(classifyOrigin("http://127.0.0.1:4000", 4000)).toBe("loopback");
+    expect(classifyOrigin("http://localhost:4001", 4000)).toBe("foreign");
+    expect(classifyOrigin("chrome-extension://abc", 4000)).toBe("extension");
+    expect(classifyOrigin("https://127.0.0.1:4000", 4000)).toBe("foreign");
+    expect(classifyOrigin("null", 4000)).toBe("foreign");
+  });
+
   it("isLoopbackHost accepts loopback names with no port or the server port", () => {
     expect(isLoopbackHost("127.0.0.1:4000", 4000)).toBe(true);
     expect(isLoopbackHost("[::1]", 4000)).toBe(true);
