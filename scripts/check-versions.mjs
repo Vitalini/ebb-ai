@@ -6,6 +6,10 @@
  * manifest, the README status line and the newest dated CHANGELOG heading
  * must carry the same version; the script names each file that differs
  * and exits 1. Dependency-free (Node built-ins only).
+ *
+ * `--tag <tag>` (or `--tag=<tag>`) also fails unless the tag is
+ * `v<version>` (release.yml runs it on tag refs). Tests:
+ * `scripts/check-versions.test.mjs`.
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -38,5 +42,26 @@ if (mismatches.length > 0) {
   console.error(`check-versions: expected ${expected} (from ${SOURCE})`);
   for (const [file, version] of mismatches) console.error(`  ${file}: ${version}`);
   process.exit(1);
+}
+
+// Accept `--tag v1.2.3` and `--tag=v1.2.3`. Any other `--tag*` spelling
+// fails, so a typo can never skip the check.
+const args = process.argv.slice(2);
+const tagArgs = args.filter((arg) => arg.startsWith("--tag"));
+if (tagArgs.length > 1 || tagArgs.some((arg) => arg !== "--tag" && !arg.startsWith("--tag="))) {
+  console.error(`check-versions: unknown or repeated tag option: ${tagArgs.join(" ")}`);
+  process.exit(1);
+}
+if (tagArgs.length === 1) {
+  const tag = tagArgs[0] === "--tag" ? args[args.indexOf("--tag") + 1] : tagArgs[0].slice("--tag=".length);
+  if (!tag || tag.startsWith("--")) {
+    console.error("check-versions: --tag needs a value, e.g. --tag v" + expected);
+    process.exit(1);
+  }
+  if (tag !== `v${expected}`) {
+    console.error(`check-versions: tag ${tag} does not match v${expected} (from ${SOURCE})`);
+    process.exit(1);
+  }
+  console.log(`check-versions: tag ${tag} matches`);
 }
 console.log(`check-versions: ${expected} everywhere (${Object.keys(found).length + 1} files)`);

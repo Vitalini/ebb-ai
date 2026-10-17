@@ -93,11 +93,35 @@ and 22; PRs need it green before merge.
 
 ## Releases
 
-Tidegap follows [Semantic Versioning](https://semver.org). The
-release process (cut a tag, publish to npm, draft GitHub release
-notes from the CHANGELOG) lands when the project decides to publish
-to npm — which is post-v0.1.0 per the roadmap. For now, all releases
-are local-only.
+Tidegap follows [Semantic Versioning](https://semver.org). Releases
+publish from GitHub Actions (`.github/workflows/release.yml`) by OIDC
+trusted publishing: npm (with provenance), then PyPI, then the MCP
+Registry and ClawHub. No registry token lives on a laptop or in
+GitHub secrets.
+
+1. Release-prep PR: bump every file `pnpm check:versions` lists, date
+   the CHANGELOG heading (`## [X.Y.Z] — YYYY-MM-DD`), update the README
+   status line. Review it, wait for CI to pass, merge.
+2. Wait for the CI run on the merge commit on `main` to pass, then
+   tag that commit and push the tag:
+   `git pull && git tag -a vX.Y.Z -m vX.Y.Z <merge sha> && git push origin vX.Y.Z`.
+   A tag pushed before CI passes fails `verify`; re-run the failed
+   jobs when CI is green.
+3. Approve the `release` deployment three times in the Actions run:
+   GitHub asks once per job that names the environment, so npm, then
+   PyPI, then ClawHub. The MCP Registry job needs no approval.
+4. The workflow checks the tag against the lockstep version, checks
+   that the commit is on `main` and that CI passed on it, then
+   publishes. Check the run summary.
+5. Optional: write the GitHub Release notes from the CHANGELOG section.
+
+Rehearsal (build and dry run only, nothing is published):
+`gh workflow run release.yml --ref main`. Retry the MCP Registry step
+alone, on the release tag ref:
+`gh workflow run mcp-registry.yml --ref vX.Y.Z -f version=X.Y.Z`.
+Use "Re-run failed jobs" on a failed run: npm, PyPI and ClawHub skip
+versions already published. The MCP Registry step does not skip, so
+do not re-run it after it passed.
 
 ## Security
 

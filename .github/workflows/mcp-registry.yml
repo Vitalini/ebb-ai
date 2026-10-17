@@ -1,9 +1,21 @@
 name: Publish to MCP Registry
 
+# Called by release.yml after npm is live; dispatch by hand to retry, on
+# the release tag ref (any other ref fails the first check):
+#   gh workflow run mcp-registry.yml --ref vX.Y.Z -f version=X.Y.Z
 on:
-  release:
-    types: [published]
+  workflow_call:
+    inputs:
+      version:
+        description: Version to publish (must match server.json)
+        required: true
+        type: string
   workflow_dispatch:
+    inputs:
+      version:
+        description: Version to publish (must match server.json)
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -31,17 +43,23 @@ jobs:
       - name: Check server.json version
         id: version
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          TAG: ${{ github.event.release.tag_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
+          # Publish only from the release tag (release.yml runs on it too).
+          if [ "$REF_TYPE" != "tag" ] || [ "$REF_NAME" != "v${INPUT_VERSION}" ]; then
+            echo "::error::publish only from tag v${INPUT_VERSION}; this run is on ${REF_TYPE} ${REF_NAME}"
+            exit 1
+          fi
           VERSION=$(jq -r '.version' server.json)
           PKG_VERSION=$(jq -r '.packages[0].version' server.json)
           if [ "$VERSION" != "$PKG_VERSION" ]; then
             echo "::error::server.json version ($VERSION) differs from packages[0].version ($PKG_VERSION)"
             exit 1
           fi
-          if [ "$EVENT_NAME" = "release" ] && [ "$VERSION" != "${TAG#v}" ]; then
-            echo "::error::server.json version ($VERSION) does not match release tag ($TAG)"
+          if [ "$VERSION" != "$INPUT_VERSION" ]; then
+            echo "::error::server.json version ($VERSION) does not match input version ($INPUT_VERSION)"
             exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -50,7 +68,12 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          MCP_NAME=$(npm view "@tidegap/mcp@${VERSION}" mcpName)
+          # npm view can lag a fresh publish; retry for about 2 minutes.
+          for attempt in 1 2 3 4 5 6 7 8; do
+            MCP_NAME=$(npm view "@tidegap/mcp@${VERSION}" mcpName 2>/dev/null) && [ -n "$MCP_NAME" ] && break
+            echo "attempt ${attempt}: @tidegap/mcp@${VERSION} not visible yet"
+            sleep 15
+          done
           echo "mcpName=${MCP_NAME}"
           [ "$MCP_NAME" = "$(jq -r '.name' server.json)" ] || { echo "::error::npm mcpName does not match server.json name"; exit 1; }
 

@@ -34,3 +34,5 @@ tags: [series, repeat, rollSeries, replanSweep, forecast, reply, history]
 - A reply is a new child task (`parentTaskId`) with the parent's turns as `messages` and the reply text as `prompt`. Only completed provider-call tasks accept one.
 - **History is capped** by `capHistory` at `HISTORY_MAX_CHARS` (200 000). It drops the oldest turns, a user/assistant pair at a time. The newest pair always stays. The first kept turn is always `user`, because providers reject a conversation that starts with the assistant.
 - **Role order at the adapter:** `conversation(prompt, options)` appends the prompt as the last `user` turn. OpenAI-style adapters put `system` first. Gemini maps `assistant` to `model`. Absent or empty `messages` is the old single-turn request.
+
+See also: `time-of-day-bugs-and-fake-time-sweeps.md` (a day-start `scheduledFor` read as a pin).

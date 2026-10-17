@@ -43,10 +43,30 @@ when it runs.
 | 2026-10-16 | npm, PyPI | Old packages deprecated: `@ebb-ai/core` 0.17.1, `@ebb-ai/mcp` 0.17.1, `@ebb-ai/cli` 0.17.2; PyPI `ebb-ai` 0.17.1 set Inactive | https://www.npmjs.com/org/ebb-ai | done | |
 | 2026-10-16 | GitHub | Repo transferred to `tidegap/tidegap`; description and homepage updated | https://github.com/tidegap/tidegap | done | |
 | 2026-10-16 | GitHub | Re-upload social preview | https://github.com/tidegap/tidegap/settings | not done; Vitalii's step | `assets/social-preview.png` now says Tidegap (last changed in commit `72cd825`) |
-| 2026-10-16 | ClawHub | `@vitalini/ebb` 0.17.1 pointer release (`compat/clawhub/ebb`): runtime id `ebb`, no tools, one startup warning pointing at `@vitalini/tidegap` | https://clawhub.ai/vitalini/plugins/ebb | ready, not published | ClawHub shows the description from the published manifest and has no edit form, so only a new version can point the old listing at the new one. Publish command: `compat/README.md` |
+| 2026-10-17 | ClawHub | `@vitalini/ebb` 0.17.1 pointer release (`compat/clawhub/ebb`): runtime id `ebb`, no tools, one startup warning pointing at `@vitalini/tidegap` | https://clawhub.ai/vitalini/plugins/ebb | published | Published from `main` `ee615aa`, release id `rd72eqabn3f85ja9dct35tw6v58gevd5`. Latest is 0.17.1; summary "Renamed to @vitalini/tidegap — https://github.com/tidegap/tidegap"; package and release scans clean. ClawHub shows the description from the published manifest and has no edit form, so only a new version can point the old listing at the new one. Publish command: `compat/README.md` |
 | 2026-10-16 | mcp.so | Update listing to Tidegap | https://mcp.so/server/ebb-ai | to do | |
 | 2026-10-16 | awesome-mcp-servers, awesome-green-software (GSF), awesome-claude-skills (Composio) | Rename updates for PR #16076, the GSF list entry and PR #877 | see rows above | in flight | |
 | 2026-10-16 | Domain | `tidegap.com` registered on Spaceship; Vercel 301 from `ebb-ai.com` | https://www.tidegap.com | done | |
+
+## Release automation (trusted publishing)
+
+`.github/workflows/release.yml` publishes by GitHub Actions OIDC. Each
+publisher reads: GitHub Actions, `tidegap/tidegap`, workflow
+`release.yml`, environment `release`. Plan:
+`docs/plans/2026-10-16-1509-chore-trusted-publishing-plan.md`.
+
+| Date | Platform | Action | URL | Status | Notes |
+|---|---|---|---|---|---|
+| 2026-10-16 | npm | Trusted publisher for `@tidegap/core` | https://www.npmjs.com/package/@tidegap/core/access | done | "Pending validation" until the first OIDC publish |
+| 2026-10-16 | npm | Trusted publisher for `@tidegap/cli` | https://www.npmjs.com/package/@tidegap/cli/access | done | "Pending validation" until the first OIDC publish |
+| 2026-10-16 | npm | Trusted publisher for `@tidegap/mcp` | https://www.npmjs.com/package/@tidegap/mcp/access | done | "Pending validation" until the first OIDC publish |
+| 2026-10-16 | npm | Account 2FA moved to a security key | https://www.npmjs.com/settings/~/tfa | done | |
+| 2026-10-16 | PyPI | Trusted publisher for `tidegap` | https://pypi.org/manage/project/tidegap/settings/publishing/ | done | |
+| 2026-10-16 | ClawHub | Trusted publisher for `@vitalini/tidegap` (`clawhub package trusted-publisher set`) | https://clawhub.ai/plugins/@vitalini/tidegap | done | A manual publish now needs `--manual-override-reason` |
+| 2026-10-16 | GitHub | Environment `release`: required reviewer `Vitalini` (self-review allowed), deployments from `v*` tags only | https://github.com/tidegap/tidegap/settings/environments | done | No environment secrets |
+| - | npm | Each package: "Require two-factor authentication and disallow tokens" | https://www.npmjs.com/org/tidegap | not started | After the first release where all four jobs pass |
+| - | npm | Revoke granular token `tidegap-publish-2026-10b`; delete its line from `~/.npmrc` | https://www.npmjs.com/settings/~/tokens | not started | After the first OIDC release |
+| - | PyPI | Delete every API token scoped to `tidegap` | https://pypi.org/manage/account/token/ | not started | After the first OIDC release |
 
 ## Search engines
 
