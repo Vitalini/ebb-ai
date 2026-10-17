@@ -1,23 +1,83 @@
 /**
- * 0.17 compatibility on the CLI host (plan U2): EBB_* fallback, the
- * ~/.config/ebb/env secrets file, the daemon units and the data dir under a
- * temp home.
+ * 0.17 names on the CLI host since 0.19: a left-over EBB_* variable or
+ * ~/.tidegap/config key is never used and is named in one stderr line; the
+ * ~/.config/ebb/env secrets file and ~/.ebb-ai are no longer read; 0.17 daemon
+ * units are still detected. All under a temp home.
  */
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { runInstall } from "../src/commands/install.js";
-import { ensureEnvFile, envFilePath, legacyEnvFilePath, resolveEnvFilePath } from "../src/commands/env-file.js";
+import { ensureEnvFile, envFilePath, loadEnvFileIntoProcess, oldEnvFileNotice } from "../src/commands/env-file.js";
 import { readEnvCredentials } from "../src/env.js";
 import { daemonStatus } from "../src/platform/index.js";
 
 const LAUNCHER = ["/usr/bin/node", "/opt/tidegap/dist/index.js"];
 const NAMES = ["EIA_API_KEY", "CARBON_BUDGET_G", "BINARY"] as const;
 
-describe("EBB_* fallback (CLI)", () => {
+/** Run `fn` with stdout and stderr captured; returns what each received. */
+function captureStreams(fn: () => void): { out: string[]; err: string[] } {
+  const out: string[] = [];
+  const err: string[] = [];
+  const writeOut = process.stdout.write.bind(process.stdout);
+  const writeErr = process.stderr.write.bind(process.stderr);
+  process.stdout.write = ((c: string | Uint8Array) => (out.push(String(c)), true)) as typeof process.stdout.write;
+  process.stderr.write = ((c: string | Uint8Array) => (err.push(String(c)), true)) as typeof process.stderr.write;
+  try {
+    fn();
+  } finally {
+    process.stdout.write = writeOut;
+    process.stderr.write = writeErr;
+  }
+  return { out, err };
+}
+
+// First in the file: both notices are once per process, and later tests use
+// explicit writers or paths so they never consume the default writer.
+describe("default writers: stderr once per process, stdout untouched", () => {
+  it("left-over EBB_* variable", () => {
+    const saved = { EBB: process.env.EBB_EIA_API_KEY, NEW: process.env.TIDEGAP_EIA_API_KEY };
+    process.env.EBB_EIA_API_KEY = "old";
+    delete process.env.TIDEGAP_EIA_API_KEY;
+    try {
+      const { out, err } = captureStreams(() => {
+        readEnvCredentials();
+        readEnvCredentials();
+      });
+      expect(err).toHaveLength(1);
+      expect(err[0]).toContain("EBB_EIA_API_KEY -> TIDEGAP_EIA_API_KEY");
+      expect(out).toEqual([]);
+    } finally {
+      if (saved.EBB === undefined) delete process.env.EBB_EIA_API_KEY;
+      else process.env.EBB_EIA_API_KEY = saved.EBB;
+      if (saved.NEW !== undefined) process.env.TIDEGAP_EIA_API_KEY = saved.NEW;
+    }
+  });
+
+  it("lone ~/.config/ebb/env", () => {
+    const dir = join(homedir(), ".config", "ebb");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "env"), "ANTHROPIC_API_KEY=sk-old\n");
+    try {
+      const { out, err } = captureStreams(() => {
+        expect(loadEnvFileIntoProcess()).toEqual([]);
+        loadEnvFileIntoProcess();
+      });
+      expect(err).toHaveLength(1);
+      expect(err[0]).toContain(join(dir, "env"));
+      expect(out).toEqual([]);
+      expect(process.env.ANTHROPIC_API_KEY).not.toBe("sk-old");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("left-over EBB_* names (CLI)", () => {
   const saved = new Map<string, string | undefined>();
+  const configPath = () => join(homedir(), ".tidegap", "config");
   beforeEach(() => {
     for (const n of NAMES) {
       for (const key of [`TIDEGAP_${n}`, `EBB_${n}`]) {
@@ -32,15 +92,17 @@ describe("EBB_* fallback (CLI)", () => {
       else process.env[key] = value;
     }
     saved.clear();
+    rmSync(configPath(), { force: true });
   });
 
-  it("only EBB_EIA_API_KEY: the key, and one line naming it", () => {
+  it("only EBB_EIA_API_KEY: no key, and one line naming both names", () => {
     process.env.EBB_EIA_API_KEY = "old";
     const lines: string[] = [];
-    expect(readEnvCredentials((l) => lines.push(l)).grid.eiaApiKey).toBe("old");
+    expect(readEnvCredentials((l) => lines.push(l)).grid.eiaApiKey).toBeUndefined();
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain("EBB_EIA_API_KEY");
     expect(lines[0]).toContain("TIDEGAP_EIA_API_KEY");
+    expect(lines[0]).not.toContain("old");
   });
 
   it("both set: the TIDEGAP_ value and no line", () => {
@@ -59,42 +121,79 @@ describe("EBB_* fallback (CLI)", () => {
     expect(lines).toEqual([]);
   });
 
-  it("several fallbacks still make one line", () => {
+  it("several left-over names make one line", () => {
     process.env.EBB_EIA_API_KEY = "k";
     process.env.EBB_CARBON_BUDGET_G = "500";
     process.env.EBB_BINARY = "/usr/local/bin/tidegap";
     const lines: string[] = [];
     const env = readEnvCredentials((l) => lines.push(l));
-    expect(env.carbonBudget.TIDEGAP_CARBON_BUDGET_G).toBe("500");
-    expect(env.binary).toBe("/usr/local/bin/tidegap");
+    expect(env.carbonBudget.TIDEGAP_CARBON_BUDGET_G).toBeUndefined();
+    expect(env.binary).toBeUndefined();
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatch(/EBB_EIA_API_KEY.*EBB_CARBON_BUDGET_G.*EBB_BINARY/);
   });
+
+  it("an EBB_* key in the secrets file is loaded but never used, and is named", () => {
+    const dir = mkdtempSync(join(tmpdir(), "tidegap-envfile-"));
+    try {
+      const file = join(dir, "env");
+      writeFileSync(file, "EBB_EIA_API_KEY=k\n");
+      expect(loadEnvFileIntoProcess(file)).toEqual(["EBB_EIA_API_KEY"]);
+      const lines: string[] = [];
+      expect(readEnvCredentials((l) => lines.push(l)).grid.eiaApiKey).toBeUndefined();
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toContain("EBB_EIA_API_KEY -> TIDEGAP_EIA_API_KEY");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("an EBB_* key in ~/.tidegap/config is named; TIDEGAP_* keys alone make no line", () => {
+    mkdirSync(join(homedir(), ".tidegap"), { recursive: true });
+    writeFileSync(configPath(), "EBB_CARBON_BUDGET_G=500\n");
+    const lines: string[] = [];
+    readEnvCredentials((l) => lines.push(l));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("EBB_CARBON_BUDGET_G -> TIDEGAP_CARBON_BUDGET_G");
+
+    writeFileSync(configPath(), "TIDEGAP_CARBON_BUDGET_G=500\n");
+    const none: string[] = [];
+    readEnvCredentials((l) => none.push(l));
+    expect(none).toEqual([]);
+  });
 });
 
-describe("secrets file", () => {
+describe("0.17 secrets file", () => {
   let home: string;
   beforeEach(() => {
     home = mkdtempSync(join(tmpdir(), "tidegap-secrets-"));
   });
   afterEach(() => rmSync(home, { recursive: true, force: true }));
 
-  it("only ~/.config/ebb/env: tick reads it; ensureEnvFile copies it 0600", () => {
-    const legacy = legacyEnvFilePath(home);
+  it("only ~/.config/ebb/env: not copied, and named until the new file holds its keys", () => {
+    const old = join(home, ".config", "ebb", "env");
     mkdirSync(join(home, ".config", "ebb"), { recursive: true });
-    writeFileSync(legacy, "ANTHROPIC_API_KEY=sk-old\n", { mode: 0o644 });
-    expect(resolveEnvFilePath(home)).toBe(legacy);
+    writeFileSync(old, "ANTHROPIC_API_KEY=sk-old\nEBB_EIA_API_KEY=k\n");
+    expect(oldEnvFileNotice(home)).toContain(old);
 
-    const r = ensureEnvFile(envFilePath(home), legacy);
-    expect(r).toEqual({ path: envFilePath(home), created: true, copiedFrom: legacy });
-    expect(readFileSync(envFilePath(home), "utf8")).toBe("ANTHROPIC_API_KEY=sk-old\n");
-    expect(statSync(envFilePath(home)).mode & 0o777).toBe(0o600);
-    expect(existsSync(legacy)).toBe(true);
-    expect(resolveEnvFilePath(home)).toBe(envFilePath(home));
+    // The keyless template `tidegap install` writes does not hide the notice.
+    const r = ensureEnvFile(envFilePath(home));
+    expect(r).toEqual({ path: envFilePath(home), created: true });
+    expect(oldEnvFileNotice(home)).toContain(old);
+
+    // A moved key, under its new name, does.
+    writeFileSync(envFilePath(home), "TIDEGAP_EIA_API_KEY=k\n");
+    expect(oldEnvFileNotice(home)).toBeUndefined();
   });
 
-  it("neither file: the new path", () => {
-    expect(resolveEnvFilePath(home)).toBe(envFilePath(home));
+  it("a keyless ~/.config/ebb/env: no notice", () => {
+    mkdirSync(join(home, ".config", "ebb"), { recursive: true });
+    writeFileSync(join(home, ".config", "ebb", "env"), "# nothing\n");
+    expect(oldEnvFileNotice(home)).toBeUndefined();
+  });
+
+  it("neither file: no notice", () => {
+    expect(oldEnvFileNotice(home)).toBeUndefined();
   });
 });
 
@@ -145,16 +244,15 @@ describe("tidegap install with a 0.17 home", () => {
     expect(r.nextSteps).toContain(`rm ${join(units, "ebb-tick.service")} ${join(units, "ebb-tick.timer")}`);
   });
 
-  it("moves a 0.17 ~/.ebb-ai and copies the 0.17 secrets file", async () => {
+  it("leaves a 0.17 ~/.ebb-ai and ~/.config/ebb/env alone and warns about the secrets file", async () => {
     mkdirSync(join(home, ".ebb-ai"));
     writeFileSync(join(home, ".ebb-ai", "queue.db"), "Q");
     mkdirSync(join(home, ".config", "ebb"), { recursive: true });
     writeFileSync(join(home, ".config", "ebb", "env"), "OPENAI_API_KEY=o\n");
     const r = await runInstall({ mode: "server", platform: "linux", launcher: LAUNCHER, home });
-    expect(readFileSync(join(home, ".tidegap", "queue.db"), "utf8")).toBe("Q");
-    expect(lstatSync(join(home, ".ebb-ai")).isSymbolicLink()).toBe(true);
-    expect(readFileSync(join(home, ".config", "tidegap", "env"), "utf8")).toBe("OPENAI_API_KEY=o\n");
-    expect(r.nextSteps).toContain(`copied from ${join(home, ".config", "ebb", "env")}`);
+    expect(existsSync(join(home, ".tidegap", "queue.db"))).toBe(false);
+    expect(lstatSync(join(home, ".ebb-ai")).isSymbolicLink()).toBe(false);
+    expect(r.nextSteps).toContain(`${join(home, ".config", "ebb", "env")} is no longer read`);
   });
 });
 

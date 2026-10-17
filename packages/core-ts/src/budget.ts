@@ -82,28 +82,6 @@ export function carbonBudgetConfigPath(): string {
 
 /** Prefix of every config-file key and host variable since 0.18. */
 export const KEY_PREFIX = "TIDEGAP_";
-/** The 0.17 prefix, still read as a fallback until 0.19. */
-export const LEGACY_KEY_PREFIX = "EBB_";
-
-/**
- * Fold 0.17 `EBB_*` keys into their `TIDEGAP_*` names: an `EBB_<NAME>` key
- * is kept as `TIDEGAP_<NAME>` only when `TIDEGAP_<NAME>` is absent, so the new
- * name wins per key. Other keys pass through unchanged.
- */
-export function withTidegapKeys<T extends string | undefined>(
-  values: Record<string, T>,
-): Record<string, T> {
-  const out: Record<string, T> = {};
-  for (const [key, value] of Object.entries(values)) {
-    if (!key.startsWith(LEGACY_KEY_PREFIX)) out[key] = value;
-  }
-  for (const [key, value] of Object.entries(values)) {
-    if (!key.startsWith(LEGACY_KEY_PREFIX) || value === undefined) continue;
-    const name = KEY_PREFIX + key.slice(LEGACY_KEY_PREFIX.length);
-    if (out[name] === undefined) out[name] = value;
-  }
-  return out;
-}
 
 /**
  * The carbon a single receipt contributes to a window: the *actual* grams
@@ -267,10 +245,6 @@ export function parseKeyValues(contents: string): Record<string, string> {
 export interface CarbonBudgetEnv {
   TIDEGAP_CARBON_BUDGET_G?: string;
   TIDEGAP_CARBON_BUDGET_WINDOW?: string;
-  /** @deprecated 0.17 name, read when `TIDEGAP_CARBON_BUDGET_G` is unset; removed in 0.19. */
-  EBB_CARBON_BUDGET_G?: string;
-  /** @deprecated 0.17 name, read when `TIDEGAP_CARBON_BUDGET_WINDOW` is unset; removed in 0.19. */
-  EBB_CARBON_BUDGET_WINDOW?: string;
 }
 
 export interface LoadCarbonBudgetOptions {
@@ -304,12 +278,12 @@ export interface LoadCarbonBudgetOptions {
 export function loadCarbonBudgetConfig(
   opts: LoadCarbonBudgetOptions = {},
 ): CarbonBudgetConfig | undefined {
-  const env = withTidegapKeys<string | undefined>({ ...opts.env });
+  const env: CarbonBudgetEnv = opts.env ?? {};
   const path = opts.path ?? carbonBudgetConfigPath();
   let fileValues: Record<string, string> = {};
   if (existsSync(path)) {
     try {
-      fileValues = withTidegapKeys(parseKeyValues(readFileSync(path, "utf8")));
+      fileValues = parseKeyValues(readFileSync(path, "utf8"));
     } catch {
       fileValues = {};
     }

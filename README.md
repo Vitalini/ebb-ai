@@ -50,16 +50,16 @@ Without `rng`, Tidegap picks at random among the cleanest band of near-equal hou
 
 ## Renamed from Ebb AI
 
-Until 0.17 this project was Ebb AI (`@ebb-ai/*`, `ebb-ai` on PyPI, the `ebb` command). 0.18.0 renames it to Tidegap, because "Ebb" conflicts with an existing software trademark. Your queue, receipts, signing key and daemon keep working. The old names still work for one release (0.18) and stop in 0.19.
+Until 0.17 this project was Ebb AI (`@ebb-ai/*`, `ebb-ai` on PyPI, the `ebb` command). 0.18.0 renames it to Tidegap, because "Ebb" conflicts with an existing software trademark. Your queue, receipts, signing key and daemon keep working. The old names worked for one release (0.18) and were removed in 0.19. **Coming from 0.17? Upgrade through 0.18 once before 0.19** (or move `~/.ebb-ai` to `~/.tidegap` by hand): 0.19 no longer moves the old data directory. If 0.19 already ran, stop tidegap, move `~/.tidegap` aside, then rename `~/.ebb-ai` to `~/.tidegap`.
 
-| What you have from 0.17 | What happens on 0.18 | What you do |
+| What you have from 0.17 | What happens on 0.19 | What you do |
 |---|---|---|
-| Ledger, key and config in `~/.ebb-ai/` | The first 0.18 process moves them to `~/.tidegap/` and leaves `~/.ebb-ai` as a link | Nothing |
-| `EBB_*` variables (shell, MCP host config, Vercel) | Still read when the `TIDEGAP_*` name is unset; one deprecation line on stderr | Rename them to `TIDEGAP_*` before 0.19 |
-| `EBB_*` keys in `~/.tidegap/config` | Still read; a `TIDEGAP_*` key wins | Rename the keys before 0.19 |
-| Secrets in `~/.config/ebb/env` | Still read; `tidegap install` copies them to `~/.config/tidegap/env` | Nothing |
+| Ledger, key and config in `~/.ebb-ai/` | Not read since 0.19; one stderr line names `~/.ebb-ai`. 0.18 moved it to `~/.tidegap/` and left a link | Before 0.19: run any 0.18 command once. After: stop tidegap, move `~/.tidegap` aside, rename `~/.ebb-ai` to `~/.tidegap` |
+| `EBB_*` variables (shell, MCP host config) | Not read since 0.19; one stderr line names each one | Rename them to `TIDEGAP_*` |
+| `EBB_*` keys in `~/.tidegap/config` | Not read since 0.19; one stderr line names each one | Rename the keys to `TIDEGAP_*` |
+| Secrets in `~/.config/ebb/env` | Not read since 0.19; one stderr line names the file. 0.18 `tidegap install` copied it to `~/.config/tidegap/env` | Move it to `~/.config/tidegap/env` and rename its `EBB_*` keys to `TIDEGAP_*` |
 | Daemon `com.ebb-ai.tick` / `ebb-tick.timer` | Keeps running while `@ebb-ai/cli` is installed | `npm i -g @tidegap/cli` (uninstall `@ebb-ai/cli` first if npm reports `EEXIST`), `tidegap install`, run the unload commands it prints, then `npm uninstall -g @ebb-ai/cli` |
-| `ebb <command>` | Still works with `@tidegap/cli`; prints one deprecation line | Use `tidegap <command>` |
+| `ebb <command>`, `ebb-mcp` | Removed in 0.19 | Use `tidegap <command>`, `tidegap-mcp` |
 | `npx -y @ebb-ai/mcp` in a host config | Runs a 0.17.1 shim that starts `@tidegap/mcp` | Switch to `npx -y @tidegap/mcp` under the key `tidegap` (tools become `mcp__tidegap__*`) |
 | Claude Code plugin `ebb-ai@ebb-ai`, `/ebb-ai:*` commands | No in-place update: the marketplace and plugin names changed | `claude plugin uninstall ebb-ai`, `claude plugin marketplace remove ebb-ai`, `claude plugin marketplace add tidegap/tidegap`, `claude plugin install tidegap`; then use `/tidegap:*` |
 | OpenClaw `clawhub:@vitalini/ebb`, config `plugins.entries.ebb` | The old plugin stays on 0.17; the new plugin id is `tidegap` | `openclaw plugins install clawhub:@vitalini/tidegap`, move your config block to `plugins.entries.tidegap`, remove the old plugin |

@@ -130,17 +130,15 @@ describe("loadQuotaResetConfig", () => {
     expect(loadQuotaResetConfig({ path })).toEqual({});
   });
 
-  it("reads 0.17 EBB_QUOTA_* keys; a TIDEGAP_* key wins per key", () => {
+  it("ignores 0.17 EBB_QUOTA_* keys (removed in 0.19)", () => {
     const old = loadQuotaResetConfig({
       path: configFile("EBB_QUOTA_RESET_CLAUDE=mon 10:00 Europe/Berlin\nEBB_QUOTA_MARGIN_H_CLAUDE=4\n"),
     });
-    expect(old.claude).toEqual({ ...BERLIN_MON_10, marginH: 4 });
+    expect(old.claude).toBeUndefined();
     const both = loadQuotaResetConfig({
-      path: configFile(
-        "EBB_QUOTA_RESET_CLAUDE=tue 09:00 UTC\nTIDEGAP_QUOTA_RESET_CLAUDE=mon 10:00 Europe/Berlin\nEBB_QUOTA_MARGIN_H_CLAUDE=4\n",
-      ),
+      path: configFile("EBB_QUOTA_MARGIN_H_CLAUDE=4\nTIDEGAP_QUOTA_RESET_CLAUDE=mon 10:00 Europe/Berlin\n"),
     });
-    expect(both.claude).toEqual({ ...BERLIN_MON_10, marginH: 4 });
+    expect(both.claude).toEqual(BERLIN_MON_10);
   });
 
   it("a missing file means no labels", () => {

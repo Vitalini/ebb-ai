@@ -20,7 +20,8 @@
  * takes credentials as arguments. The dashboard is a HOST, so it reads the
  * feed env vars here (TIDEGAP_EIA_API_KEY, TIDEGAP_ENTSOE_SECURITY_TOKEN,
  * TIDEGAP_ELECTRICITY_MAPS_API_KEY, and WATTTIME_USERNAME/WATTTIME_PASSWORD for
- * the US ISOs' marginal feed; the 0.17 EBB_* names are read as a fallback)
+ * the US ISOs' marginal feed; the 0.17 EBB_* names are read as a fallback until the Vercel variables
+ * are renamed)
  * and injects them into `buildDefaultGridFeed`, which falls back to the
  * deterministic mock so the dashboard never goes dark.
  *
@@ -68,8 +69,8 @@ const feed = buildDefaultGridFeed({
 });
 
 if (fellBack.length > 0) {
-  // One line per server process; the EBB_* names stop working in 0.19.
-  console.warn(`tidegap: rename ${fellBack.join(", ")}; the EBB_* names stop working in 0.19.`);
+  // One line per server process, until the Vercel variables are renamed.
+  console.warn(`tidegap: rename ${fellBack.join(", ")}; this site still reads the EBB_* names until then.`);
 }
 
 /**

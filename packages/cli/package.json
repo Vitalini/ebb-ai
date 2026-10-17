@@ -10,8 +10,7 @@
   },
   "main": "./dist/index.js",
   "bin": {
-    "tidegap": "./dist/index.js",
-    "ebb": "./dist/index.js"
+    "tidegap": "./dist/index.js"
   },
   "files": [
     "dist",

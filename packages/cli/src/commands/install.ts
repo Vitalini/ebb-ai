@@ -8,8 +8,7 @@
  * interpreter plus the real dist entry. This is immune to launchd's bare
  * PATH and to `#!/usr/bin/env node` shebangs (the historical bug: a
  * hardcoded `/usr/local/bin/ebb` (0.17 name) that does not exist on Apple Silicon /
- * homebrew / nvm). `TIDEGAP_BINARY` remains as a documented override
- * (0.17 name `EBB_BINARY` still read).
+ * homebrew / nvm). `TIDEGAP_BINARY` remains as a documented override.
  *
  * A 0.17 unit (`com.ebb-ai.tick`, `ebb-tick.timer`) is detected, never
  * removed: the next steps print the commands that unload and remove it.
@@ -36,7 +35,7 @@ import { LAUNCHD_LABEL, LEGACY_LAUNCHD_LABEL, launchdPlist } from "../platform/m
 import { LEGACY_SYSTEMD_UNIT, SYSTEMD_UNIT, systemdService, systemdTimer } from "../platform/linux.js";
 import { schtasksTemplate } from "../platform/windows.js";
 import { defaultDbPath } from "./tick.js";
-import { ensureEnvFile, envFilePath, legacyEnvFilePath } from "./env-file.js";
+import { ensureEnvFile, envFilePath, oldEnvFileNotice } from "./env-file.js";
 
 export type InstallMode = "laptop" | "server";
 
@@ -95,7 +94,7 @@ export interface InstallArtifacts {
 /**
  * Resolve the daemon invocation. Preference order:
  *   1. explicit `override` (tests),
- *   2. `TIDEGAP_BINARY` env (0.17: `EBB_BINARY`) — a single documented override binary,
+ *   2. `TIDEGAP_BINARY` env — a single documented override binary,
  *   3. `[process.execPath, realpathSync(process.argv[1])]` — pin the
  *      exact node + the real dist entry.
  *
@@ -196,8 +195,8 @@ export async function runInstall(
   const home = opts.home ?? homedir();
   const warnings: string[] = [];
   const launcher = resolveLauncher(opts.launcher, warnings);
-  // A real install moves a 0.17 ~/.ebb-ai into ~/.tidegap first, so the unit
-  // pins the new path. A dry run touches nothing.
+  // A real install names a left-over 0.17 ~/.ebb-ai on stderr; a dry run
+  // touches nothing.
   const dataHome = opts.dryRun
     ? join(home, TIDEGAP_HOME_DIR)
     : resolveTidegapHome(opts.home !== undefined ? { home } : {});
@@ -206,20 +205,15 @@ export async function runInstall(
   const logPath = join(dataHome, "logs", "tick.log");
   const tickInterval = opts.tickIntervalSec ?? 300;
 
-  // Create the standardized secrets file (0600) if absent, as a copy of the
-  // 0.17 file when only that exists. Never on dry-run (tests).
+  // Create the standardized secrets file (0600) if absent. Never on dry-run
+  // (tests). A 0.17 secrets file left alone is named under the warnings.
   const envPath = envFilePath(home);
+  const oldEnvNotice = oldEnvFileNotice(home);
+  if (oldEnvNotice) warnings.push(oldEnvNotice);
   let envFileCreated = false;
-  let envCopiedFrom: string | undefined;
-  if (!opts.dryRun) {
-    const r = ensureEnvFile(envPath, legacyEnvFilePath(home));
-    envFileCreated = r.created;
-    envCopiedFrom = r.copiedFrom;
-  }
+  if (!opts.dryRun) envFileCreated = ensureEnvFile(envPath).created;
   const secretsNote =
-    `\nProvider keys: ${
-      envCopiedFrom ? `copied from ${envCopiedFrom} to` : envFileCreated ? "created" : "expected at"
-    } ${envPath} (0600).\n` +
+    `\nProvider keys: ${envFileCreated ? "created" : "expected at"} ${envPath} (0600).\n` +
     `   Add ANTHROPIC_API_KEY / OPENAI_API_KEY there; \`tidegap tick\` loads it on startup.`;
   const warnBlock =
     warnings.length > 0

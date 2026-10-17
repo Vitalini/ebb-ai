@@ -11,10 +11,10 @@
  * Behaviour is unchanged from before core became environment-pure: the same
  * variables, the same precedence (GEMINI_API_KEY before GOOGLE_API_KEY).
  *
- * Since 0.18 the Tidegap variables are named `TIDEGAP_*`. Each 0.17 `EBB_*`
- * twin is still read when the `TIDEGAP_*` one is unset, and the process
- * prints one deprecation line to stderr naming the variables it fell back on.
- * The fallback is removed in 0.19.
+ * The Tidegap variables are named `TIDEGAP_*`. 0.19 removed the 0.17 `EBB_*`
+ * fallback: a left-over `EBB_*` variable (or `EBB_*` key in
+ * `~/.tidegap/config`) is never used, and the process prints one stderr line
+ * naming every such name and its new name.
  *
  * See also: `packages/mcp-server/src/env.ts` (the MCP server's copy of this
  * boundary) and `packages/openclaw-plugin` — which has NO environment
@@ -22,7 +22,8 @@
  * published bundle contains zero environment reads.
  */
 
-import type { CarbonBudgetEnv, GridFeedCredentials } from "@tidegap/core";
+import { existsSync, readFileSync } from "node:fs";
+import { carbonBudgetConfigPath, parseKeyValues, type CarbonBudgetEnv, type GridFeedCredentials } from "@tidegap/core";
 
 /** Provider credentials the CLI forwards to `@tidegap/core`'s adapters. */
 export interface ProviderCredentials {
@@ -55,78 +56,81 @@ function val(raw: string | undefined): string | undefined {
   return v ? v : undefined;
 }
 
-/** Receives the one deprecation line about `EBB_*` fallbacks. */
-export type DeprecationWriter = (line: string) => void;
+/** Receives the one line about left-over `EBB_*` names. */
+export type NoticeWriter = (line: string) => void;
 
-let fallbackReported = false;
+let noticeReported = false;
 
 /** Default writer: stderr, once per process. */
-const writeOnce: DeprecationWriter = (line) => {
-  if (fallbackReported) return;
-  fallbackReported = true;
+const writeOnce: NoticeWriter = (line) => {
+  if (noticeReported) return;
+  noticeReported = true;
   process.stderr.write(`${line}\n`);
 };
 
+/** The `TIDEGAP_<NAME>` suffixes whose 0.17 `EBB_<NAME>` twin is reported when left over. */
+const RENAMED = ["ELECTRICITY_MAPS_API_KEY", "EIA_API_KEY", "ENTSOE_SECURITY_TOKEN", "CARBON_BUDGET_G", "CARBON_BUDGET_WINDOW", "BINARY", "NO_NOTIFY", "DEFAULT_MODEL"] as const;
+
 /**
- * Collects the 0.17 names a read fell back on. `pick(current, legacy, name)`
- * returns the `TIDEGAP_<name>` value, else the `EBB_<name>` value (recording
- * `EBB_<name>`), else `undefined`.
+ * The 0.17 names that are set but no longer read: an `EBB_<NAME>` variable
+ * whose `TIDEGAP_<NAME>` twin is unset, and every `EBB_*` key in
+ * `~/.tidegap/config`. Values are never read.
  */
-class Fallbacks {
-  readonly used: string[] = [];
-  pick(current: string | undefined, legacy: string | undefined, name: string): string | undefined {
-    if (current !== undefined && current.trim() !== "") return current;
-    if (legacy !== undefined && legacy.trim() !== "") {
-      this.used.push(`EBB_${name}`);
-      return legacy;
+function leftOverNames(): string[] {
+  const out: string[] = [];
+  for (const name of RENAMED) {
+    if (val(process.env[`EBB_${name}`]) !== undefined && val(process.env[`TIDEGAP_${name}`]) === undefined) {
+      out.push(`EBB_${name}`);
     }
-    return current;
   }
-  report(write: DeprecationWriter): void {
-    if (this.used.length === 0) return;
-    const renamed = this.used.map((n) => `${n} -> TIDEGAP_${n.slice(4)}`).join(", ");
-    write(`tidegap: rename ${renamed}; the EBB_* names stop working in 0.19.`);
+  try {
+    const path = carbonBudgetConfigPath();
+    if (existsSync(path)) {
+      for (const key of Object.keys(parseKeyValues(readFileSync(path, "utf8")))) {
+        if (key.startsWith("EBB_") && !out.includes(key)) out.push(key);
+      }
+    }
+  } catch {
+    // An unreadable config is the loaders' concern, not this notice's.
   }
+  return out;
+}
+
+/** One line naming every left-over `EBB_*` name and its new name. */
+function reportLeftOverNames(write: NoticeWriter): void {
+  const names = leftOverNames();
+  if (names.length === 0) return;
+  const renames = names.map((n) => `${n} -> TIDEGAP_${n.slice(4)}`).join(", ");
+  write(`tidegap: EBB_* names are no longer read (removed in 0.19); rename ${renames}.`);
 }
 
 /**
  * Snapshot every environment variable the CLI recognizes, by name.
  * Call this at an entry point and pass the result down — never re-read the
- * environment deeper in the call tree. A fallback to an `EBB_*` name goes to
- * `write` (default: one stderr line per process).
+ * environment deeper in the call tree. Left-over `EBB_*` names go to `write`
+ * (default: one stderr line per process).
  */
-export function readEnvCredentials(write: DeprecationWriter = writeOnce): EnvCredentials {
-  const f = new Fallbacks();
+export function readEnvCredentials(write: NoticeWriter = writeOnce): EnvCredentials {
   const out: EnvCredentials = {
     anthropicApiKey: val(process.env.ANTHROPIC_API_KEY),
     openaiApiKey: val(process.env.OPENAI_API_KEY),
     geminiApiKey: val(process.env.GEMINI_API_KEY) ?? val(process.env.GOOGLE_API_KEY),
     ollamaHost: val(process.env.OLLAMA_HOST),
     grid: {
-      electricityMapsApiKey: val(
-        f.pick(process.env.TIDEGAP_ELECTRICITY_MAPS_API_KEY, process.env.EBB_ELECTRICITY_MAPS_API_KEY, "ELECTRICITY_MAPS_API_KEY"),
-      ),
-      eiaApiKey: val(f.pick(process.env.TIDEGAP_EIA_API_KEY, process.env.EBB_EIA_API_KEY, "EIA_API_KEY")),
-      entsoeSecurityToken: val(
-        f.pick(process.env.TIDEGAP_ENTSOE_SECURITY_TOKEN, process.env.EBB_ENTSOE_SECURITY_TOKEN, "ENTSOE_SECURITY_TOKEN"),
-      ),
+      electricityMapsApiKey: val(process.env.TIDEGAP_ELECTRICITY_MAPS_API_KEY),
+      eiaApiKey: val(process.env.TIDEGAP_EIA_API_KEY),
+      entsoeSecurityToken: val(process.env.TIDEGAP_ENTSOE_SECURITY_TOKEN),
       wattTimeUsername: val(process.env.WATTTIME_USERNAME),
       wattTimePassword: val(process.env.WATTTIME_PASSWORD),
     },
     carbonBudget: {
-      TIDEGAP_CARBON_BUDGET_G: f.pick(process.env.TIDEGAP_CARBON_BUDGET_G, process.env.EBB_CARBON_BUDGET_G, "CARBON_BUDGET_G"),
-      TIDEGAP_CARBON_BUDGET_WINDOW: f.pick(
-        process.env.TIDEGAP_CARBON_BUDGET_WINDOW,
-        process.env.EBB_CARBON_BUDGET_WINDOW,
-        "CARBON_BUDGET_WINDOW",
-      ),
+      TIDEGAP_CARBON_BUDGET_G: process.env.TIDEGAP_CARBON_BUDGET_G,
+      TIDEGAP_CARBON_BUDGET_WINDOW: process.env.TIDEGAP_CARBON_BUDGET_WINDOW,
     },
-    binary: val(f.pick(process.env.TIDEGAP_BINARY, process.env.EBB_BINARY, "BINARY")),
-    noNotify: /^(1|true|yes|on)$/i.test(
-      val(f.pick(process.env.TIDEGAP_NO_NOTIFY, process.env.EBB_NO_NOTIFY, "NO_NOTIFY")) ?? "",
-    ),
-    defaultModel: val(f.pick(process.env.TIDEGAP_DEFAULT_MODEL, process.env.EBB_DEFAULT_MODEL, "DEFAULT_MODEL")),
+    binary: val(process.env.TIDEGAP_BINARY),
+    noNotify: /^(1|true|yes|on)$/i.test(val(process.env.TIDEGAP_NO_NOTIFY) ?? ""),
+    defaultModel: val(process.env.TIDEGAP_DEFAULT_MODEL),
   };
-  f.report(write);
+  reportLeftOverNames(write);
   return out;
 }

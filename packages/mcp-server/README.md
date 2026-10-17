@@ -2,7 +2,7 @@
 
 # @tidegap/mcp
 
-> Renamed from `@ebb-ai/mcp` in 0.18.0. Use the host config key `tidegap` and `npx -y @tidegap/mcp`; the `ebb-mcp` bin and `EBB_*` variables still work in 0.18 and stop in 0.19. See [Renamed from Ebb AI](https://github.com/tidegap/tidegap#renamed-from-ebb-ai).
+> Renamed from `@ebb-ai/mcp` in 0.18.0. Use the host config key `tidegap` and `npx -y @tidegap/mcp`; the `ebb-mcp` bin and the `EBB_*` variables were removed in 0.19. See [Renamed from Ebb AI](https://github.com/tidegap/tidegap#renamed-from-ebb-ai).
 
 **MCP server that lets your agent run non-urgent LLM tasks at the cleanest grid hour before a deadline.**
 

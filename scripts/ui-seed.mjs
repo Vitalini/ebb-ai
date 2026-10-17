@@ -45,7 +45,7 @@ const option = (name) => {
 // where a running dispatcher would send them to a provider.
 if (option("--db")) {
   const target = resolve(option("--db"));
-  // ~/.tidegap, and the 0.17 ~/.ebb-ai (a link to it after the 0.18 move).
+  // ~/.tidegap, and the 0.17 ~/.ebb-ai, which can still hold a real ledger.
   const homes = [resolve(homedir(), ".tidegap"), resolve(homedir(), ".ebb-ai")];
   const inside = homes.some((h) => {
     const rel = relative(h, target);
