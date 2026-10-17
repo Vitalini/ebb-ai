@@ -147,9 +147,11 @@ describe("tidegap ui server", () => {
     expect((await api("/api/tasks/done-1/unread")).status).toBe(405);
     const unread = (await (await api("/api/tasks?unread=1")).json()) as { tasks: unknown[] };
     expect(unread.tasks).toHaveLength(1);
-    for (const path of ["/api/tasks", "/api/status", "/api/forecast", "/api/events"]) {
+    for (const path of ["/api/status", "/api/forecast", "/api/events", "/api/summary"]) {
       expect((await api(path, { method: "POST" })).status, path).toBe(405);
     }
+    // POST /api/tasks is quick add: a body route, so a body-less POST lists nothing.
+    expect((await api("/api/tasks", { method: "POST" })).status).toBe(415);
   });
 
   it("filters by kind and unread, and the list carries no prompt", async () => {

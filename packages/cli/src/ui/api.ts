@@ -11,6 +11,8 @@
  */
 
 import {
+  CarbonBudgetExceededError,
+  DEFAULT_MODEL_BY_PROVIDER,
   deadlineKindLabel,
   InvalidDeadlineError,
   LAST_TICK_META_KEY,
@@ -24,6 +26,7 @@ import {
   taskResultText,
   type DeadlineKind,
   type GridFeed,
+  type ProviderName,
   type QuotaResetConfig,
   type RescheduleTarget,
   type Scheduler,
@@ -74,6 +77,7 @@ export const REPLY_MAX_CHARS = 32_000;
 export function postBodyKind(pathname: string): "json" | "none" | undefined {
   const route = pathname.split("/").filter(Boolean).slice(1);
   if (route.length === 2 && route[0] === "dispatcher" && route[1] === "start") return "none";
+  if (route.length === 1 && route[0] === "tasks") return "json";
   if (route.length === 1 && route[0] === "clients") return "json";
   if (route.length === 3 && route[0] === "clients" && route[2] === "revoke") return "none";
   if (route.length !== 3 || route[0] !== "tasks") return undefined;
@@ -386,6 +390,60 @@ function replyAction(ctx: ApiContext, taskId: string, body: Body): Promise<ApiRe
   );
 }
 
+/** Longest quick-add title and model id, in characters. */
+export const QUICK_ADD_TITLE_MAX = 200;
+const QUICK_ADD_PROVIDERS: readonly ProviderName[] = ["anthropic", "openai", "gemini", "ollama"];
+const DAY_DEFAULT_MS = 24 * 3_600_000;
+
+/**
+ * `POST /api/tasks` (native clients KTD7): queue a provider call from a
+ * prompt. It goes through the adapter-less scheduler, so it is scheduled,
+ * never dispatched; the tick runs it.
+ */
+async function quickAdd(ctx: ApiContext, body: Body): Promise<ApiResponse> {
+  if (!ctx.scheduler) return error(404, "not found");
+  const bad = onlyKeys(body, ["prompt", "deadline", "title", "provider", "model"]);
+  if (bad) return error(400, bad);
+  if (typeof body.prompt !== "string" || body.prompt.trim().length === 0 || body.prompt.length > REPLY_MAX_CHARS) {
+    return error(400, `prompt must be 1 to ${REPLY_MAX_CHARS} characters`);
+  }
+  const now = (ctx.now?.() ?? new Date()).getTime();
+  let deadline = new Date(now + DAY_DEFAULT_MS);
+  if (body.deadline !== undefined) {
+    const d = instant(body.deadline, "deadline");
+    if (typeof d === "string") return error(400, d);
+    if (d.getTime() <= now) return error(400, "deadline is in the past");
+    deadline = d;
+  }
+  if (body.title !== undefined && (typeof body.title !== "string" || body.title.length > QUICK_ADD_TITLE_MAX)) {
+    return error(400, `title must be a string of at most ${QUICK_ADD_TITLE_MAX} characters`);
+  }
+  const provider = body.provider ?? "anthropic";
+  if (!QUICK_ADD_PROVIDERS.includes(provider as ProviderName)) {
+    return error(400, `provider must be one of ${QUICK_ADD_PROVIDERS.join(", ")}`);
+  }
+  if (body.model !== undefined && (typeof body.model !== "string" || body.model.length === 0 || body.model.length > QUICK_ADD_TITLE_MAX)) {
+    return error(400, `model must be 1 to ${QUICK_ADD_TITLE_MAX} characters`);
+  }
+  // Same default as the MCP server: TIDEGAP_DEFAULT_MODEL is an Anthropic
+  // override only, so a task never carries another vendor's model id.
+  const model =
+    (body.model as string | undefined) ??
+    (provider === "anthropic" ? ctx.defaultModel ?? DEFAULT_MODEL_BY_PROVIDER.anthropic : DEFAULT_MODEL_BY_PROVIDER[provider as ProviderName]);
+  let rec: TaskRecord<unknown>;
+  try {
+    rec = await ctx.scheduler.enqueueProviderCall(
+      { type: "provider_call", provider: provider as ProviderName, model, prompt: body.prompt },
+      { deadline, ...(typeof body.title === "string" && body.title.trim() ? { title: body.title.trim() } : {}) },
+    );
+  } catch (err) {
+    if (err instanceof InvalidDeadlineError || err instanceof CarbonBudgetExceededError) return error(409, oneLine(err));
+    return error(500, "could not queue the task");
+  }
+  const fresh = ctx.store.get(rec.taskId) ?? rec;
+  return { status: 201, body: listSummary(fresh), changedIds: [rec.taskId] };
+}
+
 function startDispatcher(ctx: ApiContext): ApiResponse {
   if (!ctx.dispatcher) return error(404, "not found");
   try {
@@ -556,7 +614,9 @@ export async function handleApi(
   const parts = pathname.split("/").filter(Boolean); // ["api", ...]
   const route = parts.slice(1);
   const get = method === "GET";
-  if (route.length === 1 && route[0] === "tasks") return get ? listTasks(ctx, params) : error(405, "method not allowed");
+  if (route.length === 1 && route[0] === "tasks") {
+    return get ? listTasks(ctx, params) : method === "POST" ? quickAdd(ctx, body) : error(405, "method not allowed");
+  }
   if (route.length === 1 && route[0] === "forecast") return get ? forecast(ctx, params) : error(405, "method not allowed");
   if (route.length === 1 && route[0] === "status") return get ? status(ctx) : error(405, "method not allowed");
   if (route.length === 1 && route[0] === "summary") return get ? summary(ctx, params) : error(405, "method not allowed");
