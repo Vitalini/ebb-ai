@@ -246,7 +246,7 @@ describe("Scheduler.tick", () => {
 
   it("rejects a tool outside the claude-code allowlist at enqueue", async () => {
     const s = new Scheduler({ feed: mockGridFeed() });
-    for (const tools of [["Bash"], ["WebSearch", "Edit"], "WebSearch", [42]]) {
+    for (const tools of [["Bash"], ["bash"], ["webfetch"], ["WebSearch", "Edit"], ["WebSearch,Bash"], ["mcp__x__y"], "WebSearch", [42]]) {
       await expect(
         s.enqueueProviderCall(
           { type: "provider_call", provider: "claude-code", model: "default", prompt: "hi", tools: tools as string[] },
@@ -254,6 +254,12 @@ describe("Scheduler.tick", () => {
         ),
       ).rejects.toThrow(/WebSearch, WebFetch, Read, Grep, Glob/);
     }
+    await expect(
+      s.enqueueProviderCall(
+        { type: "provider_call", provider: "claude-code", model: "default", prompt: "hi", tools: ["WebFetch", "Read"] },
+        { deadline: new Date(Date.now() + 60_000), region: "US-CAL-CISO" },
+      ),
+    ).rejects.toThrow(/cannot combine a file tool/);
     s.shutdown();
   });
 

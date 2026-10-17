@@ -153,9 +153,13 @@ export class ClaudeCodeAdapter implements ProviderAdapter {
     if (!binary) throw new Error(`claude-code: no claude binary found; ${INSTALL_HINT}`);
     // Checked again here, not only at enqueue: a hand-edited ledger row
     // must never hand `claude` a tool that runs commands or writes files.
-    const tools = [...(options.tools ?? this.defaultTools)];
-    const toolsError = claudeCodeToolsError(tools);
+    // Validated before the copy: a string or other non-array must be refused
+    // as is, not spread into characters first.
+    const requested: unknown = options.tools ?? this.defaultTools;
+    const toolsError = claudeCodeToolsError(requested);
     if (toolsError) throw new Error(`claude-code: ${toolsError}`);
+    const tools = [...(requested as readonly string[])];
+    const toolList = tools.join(",");
     const input = stdinText(prompt, options);
     if (Buffer.byteLength(input) > MAX_STDIN_BYTES) {
       throw new Error("claude-code: prompt is larger than Claude Code's 10 MB stdin limit");
@@ -168,8 +172,8 @@ export class ClaudeCodeAdapter implements ProviderAdapter {
         "--output-format", "json",
         // `--tools` limits the built-in set; `--allowedTools` pre-approves
         // the same names so dontAsk runs them. "" means no tools.
-        "--tools", tools.join(","),
-        ...(tools.length > 0 ? ["--allowedTools", tools.join(",")] : []),
+        "--tools", toolList,
+        ...(tools.length > 0 ? ["--allowedTools", toolList] : []),
         "--permission-mode", "dontAsk",
         "--max-budget-usd", String(this.maxBudgetUsd),
         "--safe-mode",

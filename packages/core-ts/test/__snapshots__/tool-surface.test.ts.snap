@@ -180,7 +180,7 @@ exports[`tool surface — divergence canary > per-host neutral schema snapshot (
           "required": false,
         },
         {
-          "description": "Claude Code tools for a 'claude-code' run. Allowed names: 'WebSearch', 'WebFetch', 'Read', 'Grep', 'Glob'; [] means no tools. Omit for the default, WebSearch and WebFetch (TIDEGAP_CLAUDE_TOOLS overrides it). Any other name (Bash, Write, Edit, ...) is rejected. Web content is untrusted, so tools that run commands or write files are never offered.",
+          "description": "Claude Code tools for a 'claude-code' run. Allowed names: 'WebSearch', 'WebFetch', 'Read', 'Grep', 'Glob'; [] means no tools. Omit for the default, WebSearch and WebFetch (TIDEGAP_CLAUDE_TOOLS overrides it). Any other name (Bash, Write, Edit, ...) is rejected, and so is a set that combines a file tool (Read, Grep, Glob) with a web tool. Web content is untrusted, so tools that run commands or write files are never offered.",
           "itemKind": "string",
           "kind": "array",
           "name": "tools",

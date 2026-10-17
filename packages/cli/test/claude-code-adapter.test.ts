@@ -113,6 +113,18 @@ describe("ClaudeCodeAdapter", () => {
     expect(existsSync(join(log, "argv"))).toBe(false);
   });
 
+  it("refuses a bad default tool set or a file+web mix without running claude", async () => {
+    const bad = await failure(adapter("success", { defaultTools: ["Bash"] }).dispatch("default", "hi"));
+    expect(bad.message).toContain("Bash");
+    const mixed = await failure(adapter("success").dispatch("default", "hi", { tools: ["Read", "WebFetch"] }));
+    expect(mixed.message).toContain("cannot combine a file tool");
+    const notArray = await failure(
+      adapter("success").dispatch("default", "hi", { tools: "Bash" as unknown as string[] }),
+    );
+    expect(notArray.message).toContain("must be an array");
+    expect(existsSync(join(log, "argv"))).toBe(false);
+  });
+
   it("passes a custom budget cap", async () => {
     await adapter("success", { maxBudgetUsd: 0.25 }).dispatch("default", "hi");
     const args = argv();

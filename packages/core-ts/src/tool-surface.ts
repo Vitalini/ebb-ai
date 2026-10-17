@@ -336,7 +336,7 @@ export const TOOL_SURFACE: readonly CanonicalToolDef[] = [
         optional: true,
         hosts: ["mcp"],
         description:
-          "Claude Code tools for a 'claude-code' run. Allowed names: 'WebSearch', 'WebFetch', 'Read', 'Grep', 'Glob'; [] means no tools. Omit for the default, WebSearch and WebFetch (TIDEGAP_CLAUDE_TOOLS overrides it). Any other name (Bash, Write, Edit, ...) is rejected. Web content is untrusted, so tools that run commands or write files are never offered.",
+          "Claude Code tools for a 'claude-code' run. Allowed names: 'WebSearch', 'WebFetch', 'Read', 'Grep', 'Glob'; [] means no tools. Omit for the default, WebSearch and WebFetch (TIDEGAP_CLAUDE_TOOLS overrides it). Any other name (Bash, Write, Edit, ...) is rejected, and so is a set that combines a file tool (Read, Grep, Glob) with a web tool. Web content is untrusted, so tools that run commands or write files are never offered.",
       },
       {
         name: "dry_run",

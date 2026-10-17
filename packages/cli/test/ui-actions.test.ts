@@ -325,9 +325,9 @@ describe("tidegap ui write API", () => {
     });
 
     it("stores a tools list from the allowlist and refuses anything else with 400", async () => {
-      const ok = await add({ prompt: "p", provider: "claude-code", tools: ["WebSearch", "Read"] });
+      const ok = await add({ prompt: "p", provider: "claude-code", tools: ["WebSearch", "WebFetch"] });
       expect(ok.status).toBe(201);
-      expect(JSON.parse(row(ok.body.task_id)!.bodyJson!)).toMatchObject({ tools: ["WebSearch", "Read"] });
+      expect(JSON.parse(row(ok.body.task_id)!.bodyJson!)).toMatchObject({ tools: ["WebSearch", "WebFetch"] });
       const none = await add({ prompt: "p", provider: "claude-code", tools: [] });
       expect(JSON.parse(row(none.body.task_id)!.bodyJson!)).toMatchObject({ tools: [] });
       for (const tools of [["Bash"], ["Write"], "WebSearch", [1]]) {
@@ -335,6 +335,9 @@ describe("tidegap ui write API", () => {
         expect(status).toBe(400);
         expect(body.error).toContain("WebSearch, WebFetch, Read, Grep, Glob");
       }
+      const mixed = await add({ prompt: "p", provider: "claude-code", tools: ["WebFetch", "Read"] });
+      expect(mixed.status).toBe(400);
+      expect(mixed.body.error).toContain("cannot combine a file tool");
     });
 
     it("an unknown provider is refused with the list that includes claude-code", async () => {

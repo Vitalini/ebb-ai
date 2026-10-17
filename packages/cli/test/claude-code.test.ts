@@ -184,7 +184,10 @@ describe("claudeTools", () => {
   it("reads TIDEGAP_CLAUDE_TOOLS against the allowlist; an invalid value warns and keeps the default", () => {
     expect(claudeTools(undefined)).toEqual({ tools: ["WebSearch", "WebFetch"] });
     expect(claudeTools("")).toEqual({ tools: [] });
-    expect(claudeTools(" WebSearch , Read ")).toEqual({ tools: ["WebSearch", "Read"] });
+    expect(claudeTools(" Read , Grep ")).toEqual({ tools: ["Read", "Grep"] });
+    const mixed = claudeTools("WebFetch,Read");
+    expect(mixed.tools).toEqual(["WebSearch", "WebFetch"]);
+    expect(mixed.warning).toContain("cannot combine a file tool");
     const bad = claudeTools("WebSearch,Bash");
     expect(bad.tools).toEqual(["WebSearch", "WebFetch"]);
     expect(bad.warning).toContain("TIDEGAP_CLAUDE_TOOLS");
