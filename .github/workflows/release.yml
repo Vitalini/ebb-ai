@@ -22,6 +22,8 @@ on:
     paths:
       - .github/workflows/release.yml
       - .github/workflows/mcp-registry.yml
+      - .github/release-tools/**
+      - scripts/install-mcp-publisher.sh
       - packages/*/package.json
       - packages/core-py/pyproject.toml
       - packages/mcp-server/server.json
@@ -38,7 +40,6 @@ concurrency:
 
 env:
   NPM_VERSION: 11.19.1 # trusted publishing needs npm >= 11.5.1
-  CLAWHUB_VERSION: 0.23.1
   TWINE_VERSION: 7.0.0
 
 jobs:
@@ -151,7 +152,7 @@ jobs:
           done
 
       # Each artifact is uploaded right after it is built, before a tool
-      # fetched at run time (twine via uvx, clawhub via npx) runs here.
+      # fetched at run time (twine via uvx, clawhub, mcp-publisher) runs here.
       - uses: actions/upload-artifact@v7
         with:
           name: npm-tarballs
@@ -188,17 +189,30 @@ jobs:
             packages/openclaw-plugin/LICENSE
           if-no-files-found: error
 
+      # Same install as the clawhub job: the committed lockfile, no scripts.
+      - name: Install ClawHub CLI
+        working-directory: .github/release-tools/clawhub
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: ClawHub dry run
         env:
           VERSION: ${{ steps.mode.outputs.version }}
         run: |
           set -o pipefail
-          npx --yes "clawhub@${CLAWHUB_VERSION}" package publish packages/openclaw-plugin \
+          CLAWHUB=.github/release-tools/clawhub/node_modules/.bin/clawhub
+          "$CLAWHUB" package publish packages/openclaw-plugin \
             --family code-plugin --name @vitalini/tidegap --version "$VERSION" \
             --source-repo tidegap/tidegap --source-commit "$GITHUB_SHA" \
             --source-ref "$GITHUB_REF_NAME" --source-path packages/openclaw-plugin \
             --no-input --dry-run | tee "$RUNNER_TEMP/clawhub-dry-run.txt"
           { echo "### ClawHub dry run"; echo '```'; cat "$RUNNER_TEMP/clawhub-dry-run.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      # Same invocation as mcp-registry.yml, so a PR proves the pinned hash.
+      - name: Install mcp-publisher
+        working-directory: packages/mcp-server
+        run: |
+          ../../scripts/install-mcp-publisher.sh
+          ./mcp-publisher --version
+          { echo "### mcp-publisher"; echo '```'; ./mcp-publisher --version; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
   npm:
     needs: verify
@@ -291,6 +305,12 @@ jobs:
       id-token: write # clawhub exchanges a GitHub OIDC token (audience clawhub)
       contents: read
     steps:
+      # Only the release-tools lockfile. Runs before download-artifact:
+      # checkout empties a workspace that is not this repo.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/release-tools
       - uses: actions/setup-node@v7
         with:
           node-version: "24"
@@ -298,15 +318,19 @@ jobs:
         with:
           name: openclaw-plugin
           path: openclaw-plugin
+      - name: Install ClawHub CLI
+        working-directory: .github/release-tools/clawhub
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Publish @vitalini/tidegap
         env:
           VERSION: ${{ needs.verify.outputs.version }}
         run: |
-          if npx --yes "clawhub@${CLAWHUB_VERSION}" package inspect @vitalini/tidegap --version "$VERSION" --json >/dev/null 2>&1; then
+          CLAWHUB=.github/release-tools/clawhub/node_modules/.bin/clawhub
+          if "$CLAWHUB" package inspect @vitalini/tidegap --version "$VERSION" --json >/dev/null 2>&1; then
             echo "::notice::@vitalini/tidegap@${VERSION} is already on ClawHub; skipped"
             exit 0
           fi
-          npx --yes "clawhub@${CLAWHUB_VERSION}" package publish ./openclaw-plugin \
+          "$CLAWHUB" package publish ./openclaw-plugin \
             --family code-plugin --name @vitalini/tidegap --version "$VERSION" \
             --source-repo tidegap/tidegap --source-commit "$GITHUB_SHA" \
             --source-ref "$GITHUB_REF_NAME" --source-path packages/openclaw-plugin \
