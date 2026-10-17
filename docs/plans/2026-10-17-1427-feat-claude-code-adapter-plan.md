@@ -79,6 +79,12 @@ Every provider adapter today calls a vendor API with a key (`packages/cli/src/co
 
 - MCP `expedite_task` / `retry_task` dispatch in the MCP server process, whose `buildAdapters` (`packages/mcp-server/src/server.ts`) has no `claude-code` adapter. With an API key set, expediting a `claude-code` task fails it with "no adapter configured for provider claude-code". Without a key, the existing gate rejects the expedite and leaves the task alone. Follow-up: share the host adapter builder, or reject `claude-code` expedites with "runs on the next tick".
 - `apps/web` docs page provider list.
+- Run a task in the session that queued it (Vitalii, 2026-10-17): when the task has `originSessionId` (already stored; MCP `schedule_task` sets it from `origin_session_id`, with `originCwd`), run `claude -p --resume <id>` instead of a fresh session. Not built here, because it reverses settled parts of this plan and needs decisions first:
+  - Claude Code finds a session by its project directory, so the run must use `originCwd` as cwd. That breaks R2 / KTD2 ("never runs in the user's repository"); with `--tools ""` the model still cannot touch files.
+  - The reply must land in that session, so `--no-session-persistence` must go (KTD1).
+  - If the user still has that session open, the tick and the interactive session write the same session file at the same time. `--fork-session` avoids this, but then the reply is in a new session.
+  - A resumed run sends the whole session as input. On a long session each task costs far more quota, and the carbon receipt counts those tokens (cache-creation tokens count, KTD3).
+  - Plumbing: `DispatchOptions` gains the session id and cwd, and `dispatchProviderCall` in `scheduler.ts` passes them (core change).
 - Requeue instead of fail on a "not logged in" or usage-limit result: a scheduler-level "environment unavailable" outcome that the due sweep treats as a skip (decided 2026-10-17: this PR fails the task with the reason, KTD7).
 
 ---
