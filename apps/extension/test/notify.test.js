@@ -51,10 +51,26 @@ describe("clean window alarm", () => {
   });
 
   it("a fired alarm for an already notified start sends nothing", () => {
-    assert.equal(windowEvent(`clean-${iso(3)}`, { notifiedStart: iso(3), lastWindow: win(3), region: "FR" }), null);
-    const e = windowEvent(`clean-${iso(3)}`, { notifiedStart: null, lastWindow: win(3), region: "FR" });
+    const at = NOW + 3 * 3_600_000;
+    assert.equal(windowEvent(`clean-${iso(3)}`, { notifiedStart: iso(3), lastWindow: win(3), region: "FR" }, at), null);
+    const e = windowEvent(`clean-${iso(3)}`, { notifiedStart: null, lastWindow: win(3), region: "FR" }, at);
     assert.equal(e.kind, "clean_window");
     assert.equal(e.window.end, iso(6));
+  });
+
+  it("an alarm that fires after the window end (device asleep) sends nothing", () => {
+    const state = { notifiedStart: null, lastWindow: win(3), region: "FR" };
+    assert.equal(windowEvent(`clean-${iso(3)}`, state, NOW + 6 * 3_600_000), null);
+    assert.equal(windowEvent(`clean-${iso(3)}`, state, NOW + 11 * 3_600_000), null);
+    assert.ok(windowEvent(`clean-${iso(3)}`, state, NOW + 5 * 3_600_000));
+  });
+
+  it("with a newer lastWindow the end is unknown: notify within 15 minutes of the start only", () => {
+    const state = { notifiedStart: null, lastWindow: win(8), region: "FR" };
+    const start = NOW + 3 * 3_600_000;
+    const e = windowEvent(`clean-${iso(3)}`, state, start + 10 * 60_000);
+    assert.deepEqual(e.window, { start: iso(3), end: null });
+    assert.equal(windowEvent(`clean-${iso(3)}`, state, start + 20 * 60_000), null);
   });
 });
 
@@ -90,6 +106,9 @@ describe("notification text", () => {
     assert.equal(n.title.length, 100);
     assert.ok(n.title.startsWith("Failed: "));
     assert.ok(n.message.length <= 200);
+    const short = toNotification({ kind: "task_finished", task: task("a", "a\nb\u0000c\td\u007f") });
+    assert.equal(short.title, "Done: a b c d");
+    assert.doesNotMatch(short.title, /[\u0000-\u001f\u007f]/);
     const w = toNotification({ kind: "clean_window", window: win(0), region: "FR" });
     assert.equal(w.message, "The grid in FR is clean until 12:00. A good time for queued work.");
   });

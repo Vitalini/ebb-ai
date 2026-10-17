@@ -10,6 +10,8 @@ export const WINDOW_ALARM_PREFIX = "clean-";
 const SEEN_MAX = 100;
 const TITLE_MAX = 100;
 const MESSAGE_MAX = 200;
+// A clean-window alarm with no known end still counts as "now" this long after the start.
+const WINDOW_GRACE_MS = 15 * 60_000;
 
 /** Plain text, one line, at most `max` characters. Task titles come from prompts. */
 export function plain(text, max) {
@@ -52,11 +54,18 @@ export function planWindowAlarm(existing, cw, now, notifiedStart) {
   };
 }
 
-/** The clean_window event for a fired alarm, or null when that start was already notified. */
-export function windowEvent(alarmName, { notifiedStart, lastWindow, region }) {
+/**
+ * The clean_window event for a fired alarm, or null when that start was
+ * already notified or the alarm fired late (missed alarms fire on wake): after
+ * the window end, or WINDOW_GRACE_MS after the start when the end is unknown.
+ */
+export function windowEvent(alarmName, { notifiedStart, lastWindow, region }, now = Date.now()) {
   const start = alarmName.slice(WINDOW_ALARM_PREFIX.length);
   if (!start || start === notifiedStart) return null;
   const window = lastWindow && lastWindow.start === start ? lastWindow : { start, end: null };
+  const end = Date.parse(window.end);
+  const late = Number.isFinite(end) ? end <= now : now - Date.parse(start) > WINDOW_GRACE_MS;
+  if (late) return null;
   return { kind: "clean_window", window, region };
 }
 
@@ -99,7 +108,7 @@ export function browserNotifications(ext) {
 
 /**
  * Send the events the settings allow to every channel. A failing channel does
- * not stop the others. Returns the events that were sent.
+ * not stop the others.
  */
 export async function dispatch(events, channels, notify) {
   const allowed = events.filter((e) => (e.kind === "task_finished" ? notify.finished : notify.cleanWindow));
@@ -112,5 +121,4 @@ export async function dispatch(events, channels, notify) {
       }
     }
   }
-  return allowed;
 }
