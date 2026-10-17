@@ -4,7 +4,10 @@ name: Release
 # Actions OIDC trusted publishing. No registry token secret is read.
 #
 # - Push a v* tag on main: verify, then (after the `release` environment
-#   approval) publish npm -> PyPI -> MCP Registry + ClawHub.
+#   approval) publish npm -> PyPI -> MCP Registry.
+# - ClawHub mints its publish token only for a workflow_dispatch OIDC token,
+#   so a tag push does not publish it. Dispatch this workflow on the tag:
+#   gh workflow run release.yml --ref vX.Y.Z -f dry_run=false -f clawhub_only=true
 # - Pull requests that touch release inputs, and manual dispatch (dry_run
 #   defaults to true): verify only, nothing is published.
 # Release order: CONTRIBUTING.md, "Releases".
@@ -18,6 +21,10 @@ on:
         description: Build and check only. false publishes, and only on a v* tag ref.
         type: boolean
         default: true
+      clawhub_only:
+        description: With dry_run=false on a v* tag, publish ClawHub only (npm, PyPI and the MCP Registry are skipped).
+        type: boolean
+        default: false
   pull_request:
     paths:
       - .github/workflows/release.yml
@@ -51,6 +58,7 @@ jobs:
       actions: read # CI conclusion for the tagged commit
     outputs:
       publish: ${{ steps.mode.outputs.publish }}
+      clawhub_only: ${{ steps.mode.outputs.clawhub_only }}
       version: ${{ steps.mode.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -62,21 +70,31 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           DRY_RUN: ${{ inputs.dry_run }}
+          CLAWHUB_ONLY: ${{ inputs.clawhub_only }}
           REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
         run: |
           PUBLISH=false
+          ONLY=false
           if [ "$EVENT_NAME" = "push" ]; then
             PUBLISH=true
+            echo "::notice::ClawHub is not published by a tag push. After this run, publish it: gh workflow run release.yml --ref ${REF_NAME} -f dry_run=false -f clawhub_only=true"
           elif [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$DRY_RUN" = "false" ]; then
             if [ "$REF_TYPE" != "tag" ] || [ "${REF_NAME#v}" = "$REF_NAME" ]; then
               echo "::error::dry_run=false publishes only from a v* tag ref; ${REF_TYPE} ${REF_NAME} is not one"
               exit 1
             fi
             PUBLISH=true
+            if [ "$CLAWHUB_ONLY" = "true" ]; then ONLY=true; fi
+          elif [ "$CLAWHUB_ONLY" = "true" ]; then
+            echo "::error::clawhub_only=true needs dry_run=false"
+            exit 1
           fi
-          echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
-          echo "version=$(jq -r .version packages/core-ts/package.json)" >> "$GITHUB_OUTPUT"
+          {
+            echo "publish=$PUBLISH"
+            echo "clawhub_only=$ONLY"
+            echo "version=$(jq -r .version packages/core-ts/package.json)"
+          } >> "$GITHUB_OUTPUT"
           echo "publish=$PUBLISH"
 
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -190,6 +208,8 @@ jobs:
           if-no-files-found: error
 
       # Same command as the clawhub job: the committed lockfile, no scripts.
+      # --dry-run returns before clawhub resolves auth, so it cannot rehearse
+      # the OIDC token mint; only a workflow_dispatch publish exercises it.
       - name: Install ClawHub CLI
         working-directory: .github/release-tools/clawhub
         run: npm ci --ignore-scripts --no-audit --no-fund
@@ -216,7 +236,7 @@ jobs:
 
   npm:
     needs: verify
-    if: needs.verify.outputs.publish == 'true'
+    if: needs.verify.outputs.publish == 'true' && needs.verify.outputs.clawhub_only != 'true'
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -271,7 +291,7 @@ jobs:
 
   pypi:
     needs: [verify, npm]
-    if: needs.verify.outputs.publish == 'true'
+    if: needs.verify.outputs.publish == 'true' && needs.verify.outputs.clawhub_only != 'true'
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -288,7 +308,7 @@ jobs:
 
   mcp-registry:
     needs: [verify, pypi]
-    if: needs.verify.outputs.publish == 'true'
+    if: needs.verify.outputs.publish == 'true' && needs.verify.outputs.clawhub_only != 'true'
     permissions:
       id-token: write # GitHub OIDC grants the io.github.tidegap/* namespace
       contents: read
@@ -296,9 +316,18 @@ jobs:
     with:
       version: ${{ needs.verify.outputs.version }}
 
+  # ClawHub's token mint rejects every OIDC event except workflow_dispatch
+  # (openclaw/clawhub convex/lib/githubActionsOidc.ts, allowedEvents), and the
+  # CLI then falls back to a stored login: "Not logged in". So this job runs
+  # only on a dispatch. pypi may be skipped only on a clawhub_only dispatch:
+  # on a full dispatch a skipped pypi means npm failed.
   clawhub:
     needs: [verify, pypi]
-    if: needs.verify.outputs.publish == 'true'
+    if: >-
+      !cancelled() && github.event_name == 'workflow_dispatch'
+      && needs.verify.result == 'success' && needs.verify.outputs.publish == 'true'
+      && (needs.pypi.result == 'success'
+          || (needs.verify.outputs.clawhub_only == 'true' && needs.pypi.result == 'skipped'))
     runs-on: ubuntu-latest
     environment: release
     permissions:
