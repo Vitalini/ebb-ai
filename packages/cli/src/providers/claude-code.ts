@@ -18,7 +18,9 @@
  *
  * Failures throw a plain `Error` (no `status` / `code`), so the scheduler
  * fails the task once and never retries: Claude Code retries API errors
- * itself, and a subscription usage limit lasts hours.
+ * itself. A subscription usage-limit result is the exception (KTD13): it
+ * throws `ProviderDeferError`, and the scheduler puts the task back in the
+ * queue until the limit resets.
  */
 
 import { spawn } from "node:child_process";
@@ -26,6 +28,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  ProviderDeferError,
   ProviderRefusalError,
   type DispatchOptions,
   type DispatchResult,
@@ -43,7 +46,25 @@ export interface ClaudeCodeAdapterOptions {
   timeoutMs?: number;
   /** Parent of the per-run scratch directory. Default: the OS temp dir. */
   scratchRoot?: string;
+  /**
+   * The host's limit reset for a task model (KTD5/KTD13), read when a run
+   * hits the usage limit. Undefined, or a resolver that returns undefined,
+   * leaves the time to the result text.
+   */
+  resetTarget?: (model: string) => Promise<LimitReset | undefined>;
 }
+
+/** The limit reset the host resolved: when, and whether a window is spent. */
+export interface LimitReset {
+  at: Date;
+  exhausted: boolean;
+}
+
+/** A limit result with no usable time waits this long. */
+const LIMIT_FALLBACK_MS = 60 * 60 * 1000;
+/** A deferral never retries sooner than this. */
+const LIMIT_FLOOR_MS = 5 * 60 * 1000;
+const LIMIT_TEXT = /usage limit|limit reached|hit your limit/i;
 
 /** Default `--max-budget-usd` cap. */
 export const DEFAULT_MAX_BUDGET_USD = 1;
@@ -106,6 +127,55 @@ function reportedModel(parsed: ClaudeResult, requested: string): string {
   return requested && requested !== "default" ? requested : "claude-code";
 }
 
+/** The UTC offset (ms) of `zone` at instant `t`. Throws on an unknown zone. */
+function zoneOffset(t: number, zone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: zone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+  }).formatToParts(new Date(t));
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+  return Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second")) - t;
+}
+
+/**
+ * The reset time a limit result's text names (KTD13 step 2): an epoch after
+ * `|` (older Claude Code), or `reset(s) (at) 7pm (Europe/Kyiv)` as the next
+ * such wall-clock instant in that zone. Undefined when the text names none.
+ */
+export function resetFromText(text: string, now: Date = new Date()): Date | undefined {
+  const epoch = /\|(\d{9,11})\b/.exec(text);
+  if (epoch) return new Date(Number(epoch[1]) * 1000);
+  const m = /resets?\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*\(([^)\s]+)\)/i.exec(text);
+  if (!m) return undefined;
+  const hour12 = Number(m[1]);
+  const minute = Number(m[2] ?? 0);
+  if (hour12 < 1 || hour12 > 12 || minute > 59) return undefined;
+  const hour = (hour12 % 12) + (m[3]!.toLowerCase() === "pm" ? 12 : 0);
+  const zone = m[4]!;
+  try {
+    const local = new Date(now.getTime() + zoneOffset(now.getTime(), zone));
+    for (let day = 0; day <= 1; day++) {
+      const wall = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate() + day, hour, minute);
+      let t = wall - zoneOffset(wall, zone);
+      t = wall - zoneOffset(t, zone);
+      if (t > now.getTime()) return new Date(t);
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
+function isLimitResult(parsed: ClaudeResult): boolean {
+  return parsed.api_error_status === 429 || LIMIT_TEXT.test(parsed.result ?? "");
+}
+
 function failureMessage(parsed: ClaudeResult): string {
   const text =
     parsed.result ||
@@ -123,8 +193,10 @@ export class ClaudeCodeAdapter implements ProviderAdapter {
   private readonly maxBudgetUsd: number;
   private readonly timeoutMs: number;
   private readonly scratchRoot: string;
+  private readonly resetTarget: ClaudeCodeAdapterOptions["resetTarget"];
 
   constructor(opts: ClaudeCodeAdapterOptions = {}) {
+    this.resetTarget = opts.resetTarget;
     this.binaryPath = opts.binaryPath;
     this.env = opts.env;
     this.maxBudgetUsd = opts.maxBudgetUsd ?? DEFAULT_MAX_BUDGET_USD;
@@ -167,7 +239,7 @@ export class ClaudeCodeAdapter implements ProviderAdapter {
         args.push("--system-prompt-file", file);
       }
       const run = await this.run(binary, args, dir, input);
-      return this.toResult(run, model);
+      return await this.toResult(run, model);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -221,7 +293,29 @@ export class ClaudeCodeAdapter implements ProviderAdapter {
     });
   }
 
-  private toResult(run: RunOutcome, requested: string): DispatchResult {
+  /**
+   * KTD13: when to retry a run that hit the usage limit. First hit wins: the
+   * host's reset when a window is spent, the time the result text names, the
+   * host's reset when nothing is spent, now + 60 min. Never sooner than
+   * now + 5 min.
+   */
+  private async limitRetryAt(text: string, model: string): Promise<Date> {
+    const now = Date.now();
+    let reset: LimitReset | undefined;
+    try {
+      reset = await this.resetTarget?.(model);
+    } catch {
+      reset = undefined;
+    }
+    const at =
+      (reset?.exhausted ? reset.at : undefined) ??
+      resetFromText(text, new Date(now)) ??
+      reset?.at ??
+      new Date(now + LIMIT_FALLBACK_MS);
+    return new Date(Math.max(at.getTime(), now + LIMIT_FLOOR_MS));
+  }
+
+  private async toResult(run: RunOutcome, requested: string): Promise<DispatchResult> {
     if (run.timedOut) {
       throw new Error(`claude-code: timed out after ${this.timeoutMs / 1000}s`);
     }
@@ -239,7 +333,12 @@ export class ClaudeCodeAdapter implements ProviderAdapter {
       );
     }
     if (parsed.is_error === true || parsed.subtype?.startsWith("error")) {
-      throw new Error(failureMessage(parsed));
+      const message = failureMessage(parsed);
+      if (isLimitResult(parsed)) {
+        const retryAt = await this.limitRetryAt(parsed.result ?? "", requested);
+        throw new ProviderDeferError(`${message}; deferred until ${retryAt.toISOString()}`, retryAt);
+      }
+      throw new Error(message);
     }
     const model = reportedModel(parsed, requested);
     if (parsed.stop_reason === "refusal") {
