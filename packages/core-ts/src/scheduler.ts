@@ -1177,10 +1177,14 @@ export class Scheduler {
       const offset = Number.isFinite(current)
         ? (((current - dayStart.getTime()) % DAY_MS) + DAY_MS) % DAY_MS
         : 12 * HOUR_MS;
+      // `scheduledFor === notBefore` marks an exact-time pin, which
+      // `replanSweep` and the batch sweep skip. A fallback on the day's
+      // first instant (a task now scheduled at that time of day) would read
+      // as one and never be planned, so it moves one minute into the day.
       Object.assign(record, absolute, {
         notBefore: dayStart.toISOString(),
         deadline: deadline.toISOString(),
-        scheduledFor: new Date(dayStart.getTime() + offset).toISOString(),
+        scheduledFor: new Date(dayStart.getTime() + Math.max(offset, MINUTE_MS)).toISOString(),
       });
     }
     if (!(await this.scheduleProviderCall(taskId, deadline))) {
@@ -2635,6 +2639,7 @@ function identityFields(
   };
 }
 
+const MINUTE_MS = 60_000;
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
 

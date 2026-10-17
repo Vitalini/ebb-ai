@@ -1270,9 +1270,12 @@ describe("Tidegap OpenClaw plugin — task visibility (v0.17)", () => {
     expect(row.deadlineKind).toBe("quota_reset");
     // Rescheduled through the window picker: dispatched only if the picker
     // chose the current hour, never against the stale deadline.
+    // The ledger is shared with the schedule_task test above; the mock
+    // curve can put its task in the current hour (02:xx UTC), and this
+    // tick then runs it. Only this test's task matters here.
     if (row.status === "scheduled") {
       expect(Date.parse(row.scheduledFor!)).toBeGreaterThan(now - 3_600_000);
-      expect(dispatched).toHaveLength(0);
+      expect(dispatched).not.toContain("weekly sweep");
     }
     expect(store.getMeta("last_tick_at")).toBeDefined();
     store.close();

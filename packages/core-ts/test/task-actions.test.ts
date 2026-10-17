@@ -171,10 +171,16 @@ describe("task actions (ui v2)", () => {
       const rec = await enqueue(ticker, 72);
       const a = adapter({ batch: true });
       // Make the row non-batch on the first tick (deadline < 24 h) so the
-      // ticker caches it as scheduled, then restore the 3-day deadline.
+      // ticker caches it as scheduled, then restore the 3-day deadline. The
+      // mock curve can pick the current hour (04:xx UTC), so pin the row an
+      // hour out or the first tick would already run it.
       const store = raw();
       const row = store.get(rec.taskId)!;
-      store.upsert({ ...row, deadline: new Date(Date.now() + 12 * H).toISOString() });
+      store.upsert({
+        ...row,
+        scheduledFor: new Date(Date.now() + H).toISOString(),
+        deadline: new Date(Date.now() + 12 * H).toISOString(),
+      });
       await ticker.tick({ anthropic: a });
       store.upsert({ ...store.get(rec.taskId)!, deadline: new Date(Date.now() + 72 * H).toISOString() });
       expect(ticker.getTask(rec.taskId)?.status).toBe("scheduled");
@@ -254,7 +260,8 @@ describe("task actions (ui v2)", () => {
         dayEnd: dayEnd.toISOString(),
       });
       const offset = (((oldAt - dayStart.getTime()) % (24 * H)) + 24 * H) % (24 * H);
-      expect(out.scheduledFor).toBe(new Date(dayStart.getTime() + offset).toISOString());
+      // The day's first instant moves one minute in (it would read as an exact pin).
+      expect(out.scheduledFor).toBe(new Date(dayStart.getTime() + Math.max(offset, 60_000)).toISOString());
       expect(out.notBefore).toBe(dayStart.toISOString());
       expect(out.estimatedCarbonGCo2).toBeUndefined();
       expect(out.status).toBe("scheduled");
@@ -304,6 +311,34 @@ describe("task actions (ui v2)", () => {
       expect(t).toBeLessThanOrEqual(dayEnd.getTime());
       // The exact-time pin is never re-planned.
       expect(raw().get(at.taskId)?.estimatedCarbonGCo2).toBeUndefined();
+    });
+
+    it("a day pin whose fallback lands on the day's first instant is still planned (not read as an exact pin)", async () => {
+      // CI failed at 19:xx UTC: the 6 h window picked 00:00 UTC, the day
+      // fallback kept that time of day, scheduledFor === notBefore, and
+      // replanSweep skipped the row as an exact-time pin.
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-16T19:30:00.000Z"));
+      const rec = await enqueue(sched(), 6);
+      const store = raw();
+      store.upsert({ ...store.get(rec.taskId)!, scheduledFor: "2026-10-17T00:00:00.000Z" });
+      const dayStart = new Date("2026-10-20T00:00:00.000Z");
+      const dayEnd = new Date("2026-10-21T00:00:00.000Z");
+      const out = await sched().rescheduleTask(rec.taskId, {
+        dayStart: dayStart.toISOString(),
+        dayEnd: dayEnd.toISOString(),
+      });
+      expect(out.estimatedCarbonGCo2).toBeUndefined();
+      expect(out.notBefore).toBe(dayStart.toISOString());
+      expect(out.scheduledFor).not.toBe(out.notBefore);
+      vi.setSystemTime(new Date("2026-10-18T19:30:00.000Z"));
+      await prepareTick(sched(), { quotaConfig: {} });
+      const row = store.get(rec.taskId)!;
+      expect(row.estimatedCarbonGCo2).toBeDefined();
+      const t = Date.parse(row.scheduledFor!);
+      expect(t).toBeGreaterThanOrEqual(dayStart.getTime());
+      expect(t).toBeLessThanOrEqual(dayEnd.getTime());
+      store.close();
     });
 
     it("refuses running, submitted and terminal rows", async () => {

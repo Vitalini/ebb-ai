@@ -260,6 +260,83 @@ describe("ukCarbonIntensityFeed (two-page fw48h fixtures)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// UTC-hour floor — UK / EIA / ENTSO-E request windows and forecast start
+// must not depend on the host time zone.
+// ---------------------------------------------------------------------------
+
+describe("feed hour floor is UTC whatever the host time zone", () => {
+  // 01:30Z on 2026-10-25 is inside Kyiv's repeated DST hour (03:30 local,
+  // second pass; a local floor resolves 03:00 to the first pass = 00:00Z).
+  // Kolkata is UTC+05:30, so a local floor lands on 01:30Z.
+  const NOW = "2026-10-25T01:30:00Z";
+  const ZONES: ReadonlyArray<readonly [string, number]> = [
+    ["Asia/Kolkata", -330],
+    ["Europe/Kyiv", -120],
+  ];
+
+  /** Run `body` under each zone, restoring TZ afterwards. */
+  async function eachZone(body: (tz: string) => Promise<void>): Promise<void> {
+    const prevTz = process.env.TZ;
+    try {
+      for (const [tz, offsetMin] of ZONES) {
+        process.env.TZ = tz;
+        // Guard: the zone must actually take effect, or the test is vacuous.
+        expect(new Date(NOW).getTimezoneOffset(), tz).toBe(offsetMin);
+        await body(tz);
+      }
+    } finally {
+      if (prevTz === undefined) delete process.env.TZ;
+      else process.env.TZ = prevTz;
+    }
+  }
+
+  /** Stub fetch to serve `body` for every URL and record the URLs. */
+  function captureFetch(body: string): string[] {
+    const urls: string[] = [];
+    globalThis.fetch = (async (input: unknown) => {
+      urls.push(String(input));
+      return new Response(body, { status: 200 });
+    }) as typeof fetch;
+    return urls;
+  }
+
+  it("UK requests fw48h from the UTC hour", async () => {
+    fakeNow(NOW);
+    await eachZone(async (tz) => {
+      const urls = captureFetch(fixture("uk-fw48h-page1.json"));
+      await ukCarbonIntensityFeed().fetchForecast("GB", 24);
+      expect(urls[0], tz).toContain("/intensity/2026-10-25T01:00Z/fw48h");
+    });
+  });
+
+  it("EIA ends its window and starts the forecast on the UTC hour", async () => {
+    fakeNow(NOW);
+    await eachZone(async (tz) => {
+      const urls = captureFetch(fixture("eia-fuel-mix-lagged.json"));
+      const fc = await eiaFeed("test-key").fetchForecast("US-CAL-CISO", 24);
+      const params = new URL(urls[0]!).searchParams;
+      expect(params.get("end"), tz).toBe("2026-10-25T01");
+      expect(params.get("start"), tz).toBe("2026-10-23T19");
+      expect(fc.source, tz).toBe("eia");
+      expect(fc.entries[0]?.datetime, tz).toBe("2026-10-25T01:00:00.000Z");
+    });
+  });
+
+  it("ENTSO-E ends its period and starts the forecast on the UTC hour", async () => {
+    fakeNow(NOW);
+    await eachZone(async (tz) => {
+      const urls = captureFetch(fixture("entsoe-a75-de.xml"));
+      const fc = await entsoeFeed("test-token").fetchForecast("DE", 24);
+      const params = new URL(urls[0]!).searchParams;
+      expect(params.get("periodEnd"), tz).toBe("202610250100");
+      expect(params.get("periodStart"), tz).toBe("202610240100");
+      expect(fc.source, tz).toBe("entsoe");
+      expect(fc.entries[0]?.datetime, tz).toBe("2026-10-25T01:00:00.000Z");
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // WattTime v3 — marginal (co2_moer) forecast, unit conversion, auth refresh,
 // fallthrough + precedence-over-EIA routing (roadmap item 2).
 // ---------------------------------------------------------------------------
