@@ -19,6 +19,9 @@ final class AppModel {
     @ObservationIgnored private var stream: EventStream?
     @ObservationIgnored private var streamKey: String?
     @ObservationIgnored private var pollTask: Task<Void, Never>?
+    @ObservationIgnored let notifications = LocalNotificationChannel()
+    @ObservationIgnored private var deriver: EventDeriver
+    @ObservationIgnored private var askedForNotifications = false
 
     init(paths: AppPaths = .current) {
         self.paths = paths
@@ -33,8 +36,32 @@ final class AppModel {
             discovery: discovery,
             launcher: launcher
         )
+        let cursorKey = "cursor:" + paths.tidegapHome.path
+        deriver = EventDeriver(cursor: UserDefaults.standard.string(forKey: cursorKey)) { cursor in
+            UserDefaults.standard.set(cursor, forKey: cursorKey)
+        }
+        UserDefaults.standard.register(defaults: [SettingsKey.notifyFinished: true, SettingsKey.notifyCleanWindow: true])
         applySettings()
+        controller.cursor = { [weak self] in self?.deriver.cursor }
+        controller.onSummary = { [weak self] summary in self?.notify(summary) }
         controller.onChange = { [weak self] in self?.sync() }
+    }
+
+    /// Summary changes become notifications (U16). Asks for permission on
+    /// the first connect.
+    private func notify(_ summary: Summary) {
+        if !askedForNotifications {
+            askedForNotifications = true
+            notifications.requestAuthorization()
+        }
+        let defaults = UserDefaults.standard
+        let toggles = NotificationToggles(
+            taskFinished: defaults.bool(forKey: SettingsKey.notifyFinished),
+            cleanWindow: defaults.bool(forKey: SettingsKey.notifyCleanWindow)
+        )
+        for event in deriver.derive(summary, toggles: toggles) {
+            notifications.deliver(event)
+        }
     }
 
     /// Settings: the command override (argv text) and the port.
@@ -141,6 +168,8 @@ final class AppModel {
 enum SettingsKey {
     static let command = "tidegapCommand"
     static let port = "port"
+    static let notifyFinished = "notifyTaskFinished"
+    static let notifyCleanWindow = "notifyCleanWindow"
 }
 
 /// Where the app reads and writes. `-home <dir>` (a launch argument) moves
