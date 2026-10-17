@@ -147,10 +147,8 @@ args = ["-y", "@tidegap/mcp"]`,
     desc: "In Zed settings.json, add a context_servers entry.",
     command: `"context_servers": {
   "tidegap": {
-    "command": {
-      "path": "npx",
-      "args": ["-y", "@tidegap/mcp"]
-    }
+    "command": "npx",
+    "args": ["-y", "@tidegap/mcp"]
   }
 }`,
     lang: "json",
