@@ -6,6 +6,9 @@
  * manifest, the README status line and the newest dated CHANGELOG heading
  * must carry the same version; the script names each file that differs
  * and exits 1. Dependency-free (Node built-ins only).
+ *
+ * `--tag <tag>` also fails unless the tag is `v<version>` (release.yml
+ * runs it on tag refs).
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -38,5 +41,19 @@ if (mismatches.length > 0) {
   console.error(`check-versions: expected ${expected} (from ${SOURCE})`);
   for (const [file, version] of mismatches) console.error(`  ${file}: ${version}`);
   process.exit(1);
+}
+
+const tagIndex = process.argv.indexOf("--tag");
+if (tagIndex !== -1) {
+  const tag = process.argv[tagIndex + 1];
+  if (!tag || tag.startsWith("--")) {
+    console.error("check-versions: --tag needs a value, e.g. --tag v" + expected);
+    process.exit(1);
+  }
+  if (tag !== `v${expected}`) {
+    console.error(`check-versions: tag ${tag} does not match v${expected} (from ${SOURCE})`);
+    process.exit(1);
+  }
+  console.log(`check-versions: tag ${tag} matches`);
 }
 console.log(`check-versions: ${expected} everywhere (${Object.keys(found).length + 1} files)`);
