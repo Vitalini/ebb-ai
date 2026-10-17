@@ -101,8 +101,9 @@ Restart the OpenClaw gateway. To update later:
 from `ebb` to `tidegap`, and OpenClaw gives a plugin only its own config
 block, so the new plugin cannot read the old one. Install the new plugin,
 move your settings from `plugins.entries.ebb` to `plugins.entries.tidegap`
-in the gateway config, then remove the old plugin. The queue moves from
-`~/.ebb-ai` to `~/.tidegap` on its own.
+in the gateway config, then remove the old plugin. Since 0.19 the queue is
+no longer moved from `~/.ebb-ai`: upgrade through 0.18 once, or move
+`~/.ebb-ai` to `~/.tidegap` by hand.
 
 ## Verify the install (smoke test)
 

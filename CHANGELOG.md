@@ -16,8 +16,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Safari extension inside Tidegap for Mac.** The extension gains a `safari` build target (no notifications permission; the Mac app sends the notifications), and `Tidegap.app` embeds it as "Tidegap Safari Extension". `apps/macos/scripts/build.sh` builds and syncs it, so `macos.yml` now sets up Node. Ad-hoc signed: Safari lists it only while Develop > "Allow unsigned extensions" is on (see `apps/macos/README.md`).
 - **ClawHub pointer release `@vitalini/ebb` 0.17.1** (`compat/clawhub/ebb`). It keeps the plugin id `ebb`, registers no tools, accepts the existing `plugins.entries.ebb` block, and logs one warning per gateway start: install `clawhub:@vitalini/tidegap` and move the config block to `plugins.entries.tidegap`. Its description points the old ClawHub listing at the new plugin.
 
+### Removed
+
+- **The 0.18 compatibility names (breaking).** As the 0.18 notes announced:
+  - the `ebb` bin of `@tidegap/cli` and the `ebb-mcp` bin of `@tidegap/mcp`;
+  - every `EBB_*` environment variable in the CLI, the MCP server and the Python package, and every `EBB_*` key in `~/.tidegap/config` (TypeScript and Python cores);
+  - the `~/.ebb-ai` → `~/.tidegap` move and the `~/.ebb-ai` back-link;
+  - the `~/.config/ebb/env` secrets-file fallback, and the copy `tidegap install` made of it;
+  - from `@tidegap/core`: `withTidegapKeys`, `LEGACY_KEY_PREFIX`, `LEGACY_HOME_DIR`, the `HomeFs` type, the `EBB_*` fields of `CarbonBudgetEnv`, and the `fs` and `platform` options of `resolveTidegapHome`; from `tidegap` (Python): `LEGACY_HOME_DIR` and `with_tidegap_keys`.
+
+  tidegap.com still reads its `EBB_*` Vercel variables until they are renamed.
+
+  **Upgrading from 0.17: upgrade through 0.18 once before 0.19, or move `~/.ebb-ai` to `~/.tidegap` by hand.** 0.19 does not move the old data directory, so a 0.17 install that skips 0.18 starts with an empty ledger. Then rename every `EBB_*` name to `TIDEGAP_*` in your shell, your MCP host config, `~/.tidegap/config` and the secrets file `~/.config/tidegap/env`; move a left-over `~/.config/ebb/env` to `~/.config/tidegap/env`; run `tidegap` and `tidegap-mcp`.
+
 ### Changed
 
+- **A left-over 0.17 name prints a "no longer read" line and is never used.** The CLI and the MCP server print one stderr line per process naming every `EBB_*` variable (set while its `TIDEGAP_*` twin is not) and every `EBB_*` key in `~/.tidegap/config`, with the new name; the Python package prints one line per name. A real `~/.ebb-ai` directory and a lone `~/.config/ebb/env` each get one line too. stdout stays clean for the MCP protocol.
 - **The homepage first screen is the tagline and one "Copy the prompt for your agent" button.** The description, claims note, live grid banner and install options moved one scroll below; "Other ways to install" jumps to the full install section.
 - **Releases publish from GitHub Actions (`release.yml`) by OIDC trusted publishing, with npm provenance; no long-lived registry tokens.**
 
