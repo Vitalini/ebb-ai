@@ -1,0 +1,128 @@
+import Foundation
+@testable import TidegapKit
+
+func tempDir() -> URL {
+    let url = FileManager.default.temporaryDirectory.appendingPathComponent("tidegapkit-\(UUID().uuidString)")
+    try! FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+    return url
+}
+
+func writeDiscovery(home: URL, pid: Int32, port: Int) {
+    let json = #"{"version":1,"pid":\#(pid),"port":\#(port),"url":"http://127.0.0.1:\#(port)/","started_at":"2026-10-17T09:00:00.000Z","cli_version":"0.19.0"}"#
+    try! Data(json.utf8).write(to: home.appendingPathComponent("ui.json"))
+}
+
+final class FakeProcess: RunningProcess {
+    let pid: Int32
+    var isRunning = true
+    var terminated = 0
+
+    init(pid: Int32) { self.pid = pid }
+
+    func terminate() {
+        terminated += 1
+        isRunning = false
+    }
+}
+
+/// Records argv and environments; answers `run` from a table keyed by the
+/// arguments after the command; `spawn` writes ui.json for its child.
+final class FakeRunner: ProcessRunner, @unchecked Sendable {
+    var outputs: [String: CommandOutput] = [:]
+    var runs: [[String]] = []
+    var spawns: [[String]] = []
+    var environments: [[String: String]] = []
+    var children: [FakeProcess] = []
+    var nextPid: Int32 = 70001
+    var spawnPort = 47931
+    var commandLength = 1
+    let home: URL?
+    let live: LivePids
+
+    init(home: URL? = nil, live: LivePids = LivePids()) {
+        self.home = home
+        self.live = live
+    }
+
+    func run(_ argv: [String], environment: [String: String]) async throws -> CommandOutput {
+        runs.append(argv)
+        environments.append(environment)
+        let key = argv.dropFirst(commandLength).joined(separator: " ")
+        return outputs[key] ?? CommandOutput(status: 1, stderr: "error: unknown command '\(key)'")
+    }
+
+    func spawn(_ argv: [String], environment: [String: String]) throws -> RunningProcess {
+        spawns.append(argv)
+        environments.append(environment)
+        let child = FakeProcess(pid: nextPid)
+        nextPid += 1
+        children.append(child)
+        live.add(child.pid)
+        if let home { writeDiscovery(home: home, pid: child.pid, port: spawnPort) }
+        return child
+    }
+
+    var mintCalls: Int { runs.filter { $0.contains("add") }.count }
+}
+
+final class LivePids: @unchecked Sendable {
+    private var pids: Set<Int32> = []
+    private let lock = NSLock()
+
+    init(_ pids: [Int32] = []) { self.pids = Set(pids) }
+
+    func add(_ pid: Int32) { lock.withLock { _ = pids.insert(pid) } }
+    func remove(_ pid: Int32) { lock.withLock { _ = pids.remove(pid) } }
+    func contains(_ pid: Int32) -> Bool { lock.withLock { pids.contains(pid) } }
+}
+
+/// A transport that answers per port, so a test can stop one server.
+final class FakeServer: @unchecked Sendable {
+    private let lock = NSLock()
+    private var status: [Int: Int] = [:]
+    private(set) var requests: [URLRequest] = []
+
+    func set(port: Int, status code: Int?) {
+        lock.withLock { status[port] = code }
+    }
+
+    var transport: HTTPTransport {
+        { [self] request in
+            let code: Int? = lock.withLock {
+                requests.append(request)
+                return status[request.url?.port ?? 0]
+            }
+            guard let code else { throw URLError(.cannotConnectToHost) }
+            let path = request.url?.path ?? ""
+            let body: String
+            switch (code, path) {
+            case (200, "/api/summary"): body = summaryFixture
+            case (200, "/api/tasks"): body = #"{"tasks":[]}"#
+            case (401, _): body = #"{"error":"unauthorized"}"#
+            default: body = #"{"error":"internal error"}"#
+            }
+            let response = HTTPURLResponse(url: request.url!, statusCode: code, httpVersion: "HTTP/1.1", headerFields: nil)!
+            return (Data(body.utf8), response)
+        }
+    }
+
+    var paths: [String] { lock.withLock { requests.compactMap { $0.url?.path } } }
+}
+
+func summary(
+    active: Int = 0,
+    window: CleanWindow? = nil,
+    finished: [FinishedTask]? = nil,
+    cursor: String = "2026-10-17T10:00:00.000Z",
+    region: String? = "FR",
+    generatedAt: Date = Wire.parseDate("2026-10-17T10:00:00Z")!
+) -> Summary {
+    Summary(
+        generatedAt: generatedAt, region: region,
+        counts: Counts(queued: active, scheduled: 0, running: 0, submitted: 0),
+        active: active, unread: 0, nextRun: nil, cleanWindow: window,
+        forecastOk: window != nil, finished: finished, cursor: cursor
+    )
+}
+
+func date(_ iso: String) -> Date { Wire.parseDate(iso)! }
