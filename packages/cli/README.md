@@ -42,10 +42,19 @@ tidegap receipts list  — print carbon receipts for completed tasks
 tidegap stats          — local-only personal-impact stats from the queue ledger
 tidegap verify         — verify the Ed25519 signature on a carbon receipt
 tidegap register-wake  — schedule a macOS wake event 30s before a task
-tidegap ui             — local task page: agenda, journal, timeline, task detail and actions (127.0.0.1 only)
+tidegap ui             — local task page: agenda, journal, timeline, task detail and actions (127.0.0.1 only; port 47821 by default)
+tidegap clients add    — mint a token for the browser extension or the Mac app (--name, --kind extension|macos, --json)
+tidegap clients list   — list client ids, kinds and names (never tokens)
+tidegap clients revoke — remove a client; its token stops working on the next request
 ```
 
 Run `tidegap <command> --help` for flags.
+
+`tidegap clients add` prints a `tgc_…` token once; store it then. The registry
+`~/.tidegap/ui-clients.json` (mode 0600) keeps only the token's SHA-256.
+A client token works only against `tidegap ui` on 127.0.0.1, survives restarts
+and is never accepted on the client-management routes. The contract the
+extension and the Mac app code against is `docs/spec/ui-client-api.md`.
 
 The write commands and `tidegap ui` change the ledger only; `tidegap tick` (or the
 OpenClaw loop) runs the task, and each command prints when the last tick ran.

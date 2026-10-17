@@ -11,6 +11,8 @@
  */
 
 import {
+  CarbonBudgetExceededError,
+  DEFAULT_MODEL_BY_PROVIDER,
   deadlineKindLabel,
   InvalidDeadlineError,
   LAST_TICK_META_KEY,
@@ -24,6 +26,7 @@ import {
   taskResultText,
   type DeadlineKind,
   type GridFeed,
+  type ProviderName,
   type QuotaResetConfig,
   type RescheduleTarget,
   type Scheduler,
@@ -41,6 +44,8 @@ import {
   withoutRaw,
 } from "../commands/queue.js";
 import type { DaemonStatus } from "../platform/index.js";
+import { CLIENT_KINDS, ClientRegistryError, cleanClientName, isClientKind, type ClientRegistry } from "./clients.js";
+import { buildSummary, type ForecastPoint } from "./summary.js";
 import type { DispatcherControl } from "./dispatcher.js";
 
 export interface ApiContext {
@@ -56,6 +61,10 @@ export interface ApiContext {
   scheduler?: Scheduler;
   /** Start dispatcher and dispatcher state (ui v2). */
   dispatcher?: DispatcherControl;
+  /** Anthropic model for quick add without one (`TIDEGAP_DEFAULT_MODEL`). */
+  defaultModel?: string;
+  /** Client token registry (native clients); absent = no `/api/clients` routes. */
+  clients?: ClientRegistry;
 }
 
 /** Longest reply text, in characters. */
@@ -68,6 +77,9 @@ export const REPLY_MAX_CHARS = 32_000;
 export function postBodyKind(pathname: string): "json" | "none" | undefined {
   const route = pathname.split("/").filter(Boolean).slice(1);
   if (route.length === 2 && route[0] === "dispatcher" && route[1] === "start") return "none";
+  if (route.length === 1 && route[0] === "tasks") return "json";
+  if (route.length === 1 && route[0] === "clients") return "json";
+  if (route.length === 3 && route[0] === "clients" && route[2] === "revoke") return "none";
   if (route.length !== 3 || route[0] !== "tasks") return undefined;
   if (route[2] === "cancel" || route[2] === "reschedule" || route[2] === "reply") return "json";
   if (route[2] === "read" || route[2] === "unread" || route[2] === "run-now") return "none";
@@ -378,6 +390,60 @@ function replyAction(ctx: ApiContext, taskId: string, body: Body): Promise<ApiRe
   );
 }
 
+/** Longest quick-add title and model id, in characters. */
+export const QUICK_ADD_TITLE_MAX = 200;
+const QUICK_ADD_PROVIDERS: readonly ProviderName[] = ["anthropic", "openai", "gemini", "ollama"];
+const DAY_DEFAULT_MS = 24 * 3_600_000;
+
+/**
+ * `POST /api/tasks` (native clients KTD7): queue a provider call from a
+ * prompt. It goes through the adapter-less scheduler, so it is scheduled,
+ * never dispatched; the tick runs it.
+ */
+async function quickAdd(ctx: ApiContext, body: Body): Promise<ApiResponse> {
+  if (!ctx.scheduler) return error(404, "not found");
+  const bad = onlyKeys(body, ["prompt", "deadline", "title", "provider", "model"]);
+  if (bad) return error(400, bad);
+  if (typeof body.prompt !== "string" || body.prompt.trim().length === 0 || body.prompt.length > REPLY_MAX_CHARS) {
+    return error(400, `prompt must be 1 to ${REPLY_MAX_CHARS} characters`);
+  }
+  const now = (ctx.now?.() ?? new Date()).getTime();
+  let deadline = new Date(now + DAY_DEFAULT_MS);
+  if (body.deadline !== undefined) {
+    const d = instant(body.deadline, "deadline");
+    if (typeof d === "string") return error(400, d);
+    if (d.getTime() <= now) return error(400, "deadline is in the past");
+    deadline = d;
+  }
+  if (body.title !== undefined && (typeof body.title !== "string" || body.title.length > QUICK_ADD_TITLE_MAX)) {
+    return error(400, `title must be a string of at most ${QUICK_ADD_TITLE_MAX} characters`);
+  }
+  const provider = body.provider ?? "anthropic";
+  if (!QUICK_ADD_PROVIDERS.includes(provider as ProviderName)) {
+    return error(400, `provider must be one of ${QUICK_ADD_PROVIDERS.join(", ")}`);
+  }
+  if (body.model !== undefined && (typeof body.model !== "string" || body.model.length === 0 || body.model.length > QUICK_ADD_TITLE_MAX)) {
+    return error(400, `model must be 1 to ${QUICK_ADD_TITLE_MAX} characters`);
+  }
+  // Same default as the MCP server: TIDEGAP_DEFAULT_MODEL is an Anthropic
+  // override only, so a task never carries another vendor's model id.
+  const model =
+    (body.model as string | undefined) ??
+    (provider === "anthropic" ? ctx.defaultModel ?? DEFAULT_MODEL_BY_PROVIDER.anthropic : DEFAULT_MODEL_BY_PROVIDER[provider as ProviderName]);
+  let rec: TaskRecord<unknown>;
+  try {
+    rec = await ctx.scheduler.enqueueProviderCall(
+      { type: "provider_call", provider: provider as ProviderName, model, prompt: body.prompt },
+      { deadline, ...(typeof body.title === "string" && body.title.trim() ? { title: body.title.trim() } : {}) },
+    );
+  } catch (err) {
+    if (err instanceof InvalidDeadlineError || err instanceof CarbonBudgetExceededError) return error(409, oneLine(err));
+    return error(500, "could not queue the task");
+  }
+  const fresh = ctx.store.get(rec.taskId) ?? rec;
+  return { status: 201, body: listSummary(fresh), changedIds: [rec.taskId] };
+}
+
 function startDispatcher(ctx: ApiContext): ApiResponse {
   if (!ctx.dispatcher) return error(404, "not found");
   try {
@@ -409,36 +475,74 @@ function setRead(ctx: ApiContext, taskId: string, read: boolean): ApiResponse {
   return { status: 204, changedIds: [taskId] };
 }
 
-async function forecast(ctx: ApiContext, params: URLSearchParams): Promise<ApiResponse> {
-  const region = params.get("region") || ctx.defaultRegion;
-  if (!REGION_RE.test(region)) return error(400, "invalid region");
-  const rawHours = Number(params.get("hours") ?? 24);
-  const hours = Math.min(MAX_FORECAST_HOURS, Math.max(1, Number.isFinite(rawHours) ? Math.ceil(rawHours) : 24));
+interface ForecastBody {
+  region: string;
+  source: string;
+  generated_at: string;
+  points: ForecastPoint[];
+}
+
+/**
+ * One forecast per region and hour count, reused for FORECAST_CACHE_MS by
+ * `/api/forecast` and `/api/summary` alike. Throws when the feed fails.
+ */
+async function cachedForecast(ctx: ApiContext, region: string, hours: number): Promise<ForecastBody> {
   const now = (ctx.now?.() ?? new Date()).getTime();
   let cache = forecastCache.get(ctx);
   if (!cache) forecastCache.set(ctx, (cache = new Map()));
   const key = `${region}|${hours}`;
   const hit = cache.get(key);
-  if (hit && now - hit.at < FORECAST_CACHE_MS) return { status: 200, body: hit.body };
+  if (hit && now - hit.at < FORECAST_CACHE_MS) return hit.body as ForecastBody;
+  const f = await ctx.feed.fetchForecast(region, hours);
+  for (const [k, v] of cache) if (now - v.at >= FORECAST_CACHE_MS) cache.delete(k);
+  const body: ForecastBody = {
+    region: f.region,
+    source: f.source,
+    generated_at: f.generatedAt,
+    points: f.entries.slice(0, hours).map((e) => ({
+      t: e.datetime,
+      g: e.carbonIntensityGCo2PerKwh,
+      band: e.band,
+    })),
+  };
+  cache.set(key, { at: now, body });
+  return body;
+}
+
+async function forecast(ctx: ApiContext, params: URLSearchParams): Promise<ApiResponse> {
+  const region = params.get("region") || ctx.defaultRegion;
+  if (!REGION_RE.test(region)) return error(400, "invalid region");
+  const rawHours = Number(params.get("hours") ?? 24);
+  const hours = Math.min(MAX_FORECAST_HOURS, Math.max(1, Number.isFinite(rawHours) ? Math.ceil(rawHours) : 24));
   try {
-    const f = await ctx.feed.fetchForecast(region, hours);
-    for (const [k, v] of cache) if (now - v.at >= FORECAST_CACHE_MS) cache.delete(k);
-    const body = {
-      region: f.region,
-      source: f.source,
-      generated_at: f.generatedAt,
-      points: f.entries.slice(0, hours).map((e) => ({
-        t: e.datetime,
-        g: e.carbonIntensityGCo2PerKwh,
-        band: e.band,
-      })),
-    };
-    cache.set(key, { at: now, body });
-    return { status: 200, body };
+    return { status: 200, body: await cachedForecast(ctx, region, hours) };
   } catch {
     // The provider error can name a URL or key; the page needs only the fact.
     return error(502, "forecast unavailable");
   }
+}
+
+/** `GET /api/summary[?since=<iso>]` (native clients KTD5). */
+async function summary(ctx: ApiContext, params: URLSearchParams): Promise<ApiResponse> {
+  let since: Date | undefined;
+  const rawSince = params.get("since");
+  if (rawSince !== null) {
+    const d = instant(rawSince, "since");
+    if (typeof d === "string") return error(400, d);
+    since = d;
+  }
+  let points: ForecastPoint[] | null;
+  try {
+    points = (await cachedForecast(ctx, ctx.defaultRegion, 24)).points;
+  } catch {
+    // A feed failure is a field in the answer, never a 5xx.
+    points = null;
+  }
+  const now = ctx.now?.() ?? new Date();
+  return {
+    status: 200,
+    body: buildSummary({ store: ctx.store, region: ctx.defaultRegion, now, points, ...(since ? { since } : {}) }),
+  };
 }
 
 function status(ctx: ApiContext): ApiResponse {
@@ -461,6 +565,44 @@ function status(ctx: ApiContext): ApiResponse {
   };
 }
 
+// ── Connected apps (native clients, page token only) ─────────────────────
+
+function clientsList(ctx: ApiContext): ApiResponse {
+  if (!ctx.clients) return error(404, "not found");
+  try {
+    return { status: 200, body: { clients: ctx.clients.list() } };
+  } catch {
+    // Fixed body: a registry error names the file path. The CLI shows it.
+    return error(500, "client registry unavailable");
+  }
+}
+
+function clientsAdd(ctx: ApiContext, body: Body): ApiResponse {
+  if (!ctx.clients) return error(404, "not found");
+  const bad = onlyKeys(body, ["name", "kind"]);
+  if (bad) return error(400, bad);
+  // Input errors are 400 with their rule; a registry failure is a fixed 500.
+  const name = cleanClientName(body.name);
+  if (name instanceof ClientRegistryError) return error(400, name.message);
+  const kind = body.kind ?? "extension";
+  if (!isClientKind(kind)) return error(400, `kind must be one of ${CLIENT_KINDS.join(", ")}`);
+  try {
+    const { client, token } = ctx.clients.add({ name, kind }, ctx.now?.());
+    return { status: 201, body: { client, token } };
+  } catch {
+    return error(500, "could not add the client");
+  }
+}
+
+function clientsRevoke(ctx: ApiContext, id: string): ApiResponse {
+  if (!ctx.clients) return error(404, "not found");
+  try {
+    return ctx.clients.revoke(id) ? { status: 200, body: { revoked: id } } : error(404, "client not found");
+  } catch {
+    return error(500, "could not revoke the client");
+  }
+}
+
 /**
  * Route one authenticated `/api/*` request (SSE is handled by the server).
  * Returns 404 for an unknown path and 405 for a wrong method.
@@ -476,11 +618,27 @@ export async function handleApi(
   const parts = pathname.split("/").filter(Boolean); // ["api", ...]
   const route = parts.slice(1);
   const get = method === "GET";
-  if (route.length === 1 && route[0] === "tasks") return get ? listTasks(ctx, params) : error(405, "method not allowed");
+  if (route.length === 1 && route[0] === "tasks") {
+    return get ? listTasks(ctx, params) : method === "POST" ? quickAdd(ctx, body) : error(405, "method not allowed");
+  }
   if (route.length === 1 && route[0] === "forecast") return get ? forecast(ctx, params) : error(405, "method not allowed");
   if (route.length === 1 && route[0] === "status") return get ? status(ctx) : error(405, "method not allowed");
+  if (route.length === 1 && route[0] === "summary") return get ? summary(ctx, params) : error(405, "method not allowed");
   if (route.length === 2 && route[0] === "dispatcher" && route[1] === "start") {
     return method === "POST" ? startDispatcher(ctx) : error(405, "method not allowed");
+  }
+  if (route.length === 1 && route[0] === "clients") {
+    return get ? clientsList(ctx) : method === "POST" ? clientsAdd(ctx, body) : error(405, "method not allowed");
+  }
+  if (route.length === 3 && route[0] === "clients" && route[2] === "revoke") {
+    if (method !== "POST") return error(405, "method not allowed");
+    let id: string;
+    try {
+      id = decodeURIComponent(route[1]!);
+    } catch {
+      return error(400, "bad client id");
+    }
+    return clientsRevoke(ctx, id);
   }
   if (route.length === 2 && route[0] === "series") {
     if (!get) return error(405, "method not allowed");

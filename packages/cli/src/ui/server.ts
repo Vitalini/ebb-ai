@@ -6,19 +6,29 @@
  * Security model:
  *   - binds 127.0.0.1 only; there is no host option;
  *   - every `/api/*` request (JSON and SSE) needs `Authorization: Bearer
- *     <token>`; the token is random per run and compared in constant time;
+ *     <token>`, compared in constant time. Two scopes (native clients KTD3):
+ *     `page`, the random per-run token in the page link, and `client`, a
+ *     long-lived `tgc_` token from the registry (`ui-clients.json`, SHA-256
+ *     only; `tidegap clients`). A client token never reaches `/api/clients*`;
  *   - a `Host` header whose name is not 127.0.0.1, localhost or [::1] (with
  *     no port or this server's port) gets 403, which blocks DNS-rebinding
- *     pages; an `Origin` header, when sent, must name the same loopback
- *     host, so a page on another origin gets 403 too;
+ *     pages;
+ *   - an `Origin` header, when sent, must name the same loopback host, or be
+ *     a browser extension origin (`chrome-extension://`, `moz-extension://`,
+ *     `safari-web-extension://` plus an id). Any other origin, `null`
+ *     included, gets 403. An extension origin reaches `/api/*` only, and only
+ *     with a client token: the page token from an extension gets 403, and so
+ *     does a static file. The origin only keeps web pages out; the token is
+ *     the authentication;
  *   - no CORS headers, so other origins cannot read responses;
  *   - static files come from a fixed map; no request path touches the disk;
  *   - every write is a POST with the bearer header; routes that read a body
- *     (cancel, reschedule, reply) need `Content-Type: application/json`
- *     (415 otherwise: a cross-site form cannot send it without a preflight,
- *     which gets no CORS answer) and at most 64 KiB (413); body-less routes
- *     (read, unread, run-now, dispatcher/start) refuse a non-empty body
- *     (400); bodies are strict JSON objects. No cookie is ever set.
+ *     (create, cancel, reschedule, reply, clients) need `Content-Type:
+ *     application/json` (415 otherwise: a cross-site form cannot send it
+ *     without a preflight, which gets no CORS answer) and at most 64 KiB
+ *     (413); body-less routes (read, unread, run-now, dispatcher/start,
+ *     revoke) refuse a non-empty body (400); bodies are strict JSON objects.
+ *     No cookie is ever set.
  * The static page holds no data; it reads the token from the URL fragment,
  * which browsers never send to the server.
  */
@@ -35,6 +45,7 @@ import { TaskStore } from "@tidegap/core";
 import { resolveLauncher } from "../commands/install.js";
 import { actionScheduler } from "../commands/queue.js";
 import { handleApi, postBodyKind, type ApiContext } from "./api.js";
+import { ClientRegistry } from "./clients.js";
 import { DispatcherControl, type Spawner } from "./dispatcher.js";
 import { TaskEvents } from "./events.js";
 
@@ -70,6 +81,7 @@ export const UI_MODULES = [
   "dnd.js",
   "keys.js",
   "dialog.js",
+  "clients.js",
 ] as const;
 
 export const STATIC_FILES: Readonly<Record<string, { file: string; type: string }>> = {
@@ -95,6 +107,8 @@ export interface UiServerOptions
   logDir?: string;
   /** 0 (default) picks a free port. */
   port?: number;
+  /** Directory of the client registry (`ui-clients.json`); default: the Tidegap home. */
+  stateDir?: string;
   assetDir?: string;
   /** data_version poll interval for the change stream. */
   pollMs?: number;
@@ -124,6 +138,29 @@ export function isLoopbackHost(host: string, port: number): boolean {
   const m = /^(\[::1\]|[^:]+)(?::(\d+))?$/.exec(host.trim().toLowerCase());
   if (!m || !LOOPBACK_NAMES.has(m[1]!)) return false;
   return m[2] === undefined || Number(m[2]) === port;
+}
+
+/** A browser extension origin: scheme plus an id, nothing else (KTD3). */
+const EXTENSION_ORIGIN = /^(?:chrome-extension|moz-extension|safari-web-extension):\/\/[a-z0-9-]+$/i;
+
+export type OriginClass = "none" | "loopback" | "extension" | "foreign";
+
+/** Classify an `Origin` header for a server on `port`. */
+export function classifyOrigin(origin: string | undefined, port: number): OriginClass {
+  if (origin === undefined) return "none";
+  const m = /^http:\/\/([^/]+)$/i.exec(origin);
+  if (m && isLoopbackHost(m[1]!, port)) return "loopback";
+  return EXTENSION_ORIGIN.test(origin) ? "extension" : "foreign";
+}
+
+/**
+ * `/api/clients` and everything under it: page token only. Splits the path
+ * the way the router does (empty segments dropped), so `/api//clients`
+ * cannot route to the clients handlers past this check.
+ */
+function isClientsRoute(pathname: string): boolean {
+  const segs = pathname.split("/").filter(Boolean);
+  return segs[0] === "api" && segs[1] === "clients";
 }
 
 function send(res: ServerResponse, status: number, body?: unknown, type = "application/json; charset=utf-8"): void {
@@ -193,52 +230,67 @@ export async function startUiServer(opts: UiServerOptions): Promise<UiServer> {
     ...(opts.logDir ? { logDir: opts.logDir } : {}),
     ...(opts.now ? { now: opts.now } : {}),
   });
-  const ctx: ApiContext = { ...opts, store, scheduler, dispatcher };
+  const clients = opts.clients ?? new ClientRegistry(opts.stateDir);
+  const ctx: ApiContext = { ...opts, store, scheduler, dispatcher, clients };
   const assetDir = opts.assetDir ?? defaultAssetDir();
   const tokenDigest = digest(opts.token);
   let port = 0;
 
-  const authorized = (req: IncomingMessage): boolean => {
-    const h = req.headers.authorization ?? "";
-    const m = /^Bearer (.+)$/.exec(h);
-    return !!m && timingSafeEqual(digest(m[1]!), tokenDigest);
+  /** The bearer's scope: the per-run page token, a registry client token, or none. */
+  const scope = (bearer: string | undefined): "page" | "client" | undefined => {
+    if (bearer === undefined) return undefined;
+    if (timingSafeEqual(digest(bearer), tokenDigest)) return "page";
+    return clients.verify(bearer) ? "client" : undefined;
   };
 
-  const hostAllowed = (req: IncomingMessage): boolean => {
-    if (!isLoopbackHost(req.headers.host ?? "", port)) return false;
-    const origin = req.headers.origin;
-    if (origin === undefined) return true;
-    const m = /^http:\/\/([^/]+)$/i.exec(origin);
-    return !!m && isLoopbackHost(m[1]!, port);
-  };
-
-  const openStream = (req: IncomingMessage, res: ServerResponse): void => {
+  /**
+   * The change stream. For a client token (`clientBearer`), the bearer is
+   * checked again before each event and on each keep-alive: once it is
+   * revoked the stream ends, and a reconnect gets 401.
+   */
+  const openStream = (req: IncomingMessage, res: ServerResponse, clientBearer?: string): void => {
     res.writeHead(200, {
       ...SECURITY_HEADERS,
       "content-type": "text/event-stream; charset=utf-8",
       connection: "keep-alive",
     });
     res.write(`event: hello\ndata: {}\n\n`);
-    const unsubscribe = events.subscribe((ids) => {
-      res.write(`event: tasks\ndata: ${JSON.stringify({ ids })}\n\n`);
-    });
-    const keepAlive = setInterval(() => res.write(`: keep-alive\n\n`), 15_000);
-    keepAlive.unref();
-    req.on("close", () => {
+    const valid = () => clientBearer === undefined || clients.verify(clientBearer) !== undefined;
+    let open = true;
+    const end = () => {
+      if (!open) return;
+      open = false;
       clearInterval(keepAlive);
       unsubscribe();
+      res.end();
+    };
+    const unsubscribe = events.subscribe((ids) => {
+      if (!valid()) return end();
+      res.write(`event: tasks\ndata: ${JSON.stringify({ ids })}\n\n`);
     });
+    const keepAlive = setInterval(() => (valid() ? res.write(`: keep-alive\n\n`) : end()), 15_000);
+    keepAlive.unref();
+    req.on("close", end);
   };
 
   const server = createServer((req, res) => {
     void (async () => {
-      if (!hostAllowed(req)) return send(res, 403, { error: "forbidden host" });
+      if (!isLoopbackHost(req.headers.host ?? "", port)) return send(res, 403, { error: "forbidden host" });
+      const origin = classifyOrigin(req.headers.origin, port);
+      if (origin === "foreign") return send(res, 403, { error: "forbidden origin" });
       const url = new URL(req.url ?? "/", `http://${LOOPBACK}`);
       const method = req.method ?? "GET";
       if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
-        if (!authorized(req)) return send(res, 401, { error: "unauthorized" });
+        const bearer = /^Bearer (.+)$/.exec(req.headers.authorization ?? "")?.[1];
+        const who = scope(bearer);
+        if (!who) return send(res, 401, { error: "unauthorized" });
+        // An extension uses a client token; the page token stays in the page.
+        if (origin === "extension" && who === "page") return send(res, 403, { error: "forbidden origin" });
+        if (who === "client" && isClientsRoute(url.pathname)) return send(res, 403, { error: "forbidden" });
         if (url.pathname === "/api/events") {
-          return method === "GET" ? openStream(req, res) : send(res, 405, { error: "method not allowed" });
+          return method === "GET"
+            ? openStream(req, res, who === "client" ? bearer : undefined)
+            : send(res, 405, { error: "method not allowed" });
         }
         let body: Record<string, unknown> = {};
         const kind = method === "POST" ? postBodyKind(url.pathname) : undefined;
@@ -251,6 +303,7 @@ export async function startUiServer(opts: UiServerOptions): Promise<UiServer> {
         if (out.changedIds) events.emit(out.changedIds);
         return send(res, out.status, out.body);
       }
+      if (origin === "extension") return send(res, 403, { error: "forbidden origin" });
       const asset = Object.hasOwn(STATIC_FILES, url.pathname) ? STATIC_FILES[url.pathname] : undefined;
       if (!asset) return send(res, 404, "not found", "text/plain; charset=utf-8");
       if (method !== "GET" && method !== "HEAD") return send(res, 405, "method not allowed", "text/plain; charset=utf-8");
@@ -266,10 +319,17 @@ export async function startUiServer(opts: UiServerOptions): Promise<UiServer> {
     });
   });
 
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(opts.port ?? 0, LOOPBACK, () => resolve());
-  });
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(opts.port ?? 0, LOOPBACK, () => resolve());
+    });
+  } catch (err) {
+    // Port taken (the CLI retries on a free port): release what was opened.
+    if (ownScheduler) scheduler.shutdown();
+    store.close();
+    throw err;
+  }
   const addr = server.address() as AddressInfo;
   port = addr.port;
   events.start();

@@ -14,11 +14,13 @@ import {
   buildDefaultGridFeed,
   loadQuotaResetConfig,
   resolveRegion,
+  resolveTidegapHome,
 } from "@tidegap/core";
 
 import { readEnvCredentials } from "../env.js";
 import { daemonStatus } from "../platform/index.js";
-import { startUiServer, type UiServer } from "../ui/server.js";
+import { DEFAULT_UI_PORT, removeDiscovery, writeDiscovery } from "../ui/discovery.js";
+import { startUiServer, type UiServer, type UiServerOptions } from "../ui/server.js";
 import { loadEnvFileIntoProcess } from "./env-file.js";
 import { resolveLauncher } from "./install.js";
 import { actionScheduler } from "./queue.js";
@@ -26,7 +28,14 @@ import { defaultDbPath } from "./tick.js";
 
 export interface UiCommandOptions {
   db?: string;
+  /** Explicit port (0 = any free one). Absent: DEFAULT_UI_PORT, else a free port. */
   port?: number;
+  /** Port tried when `port` is absent; default DEFAULT_UI_PORT (tests inject one). */
+  defaultPort?: number;
+  /** Directory of `ui.json` and `ui-clients.json`; default: the Tidegap home. */
+  stateDir?: string;
+  /** CLI version written to `ui.json`. */
+  cliVersion?: string;
   /** `false` (`--no-open`) only prints the URL. */
   open?: boolean;
   region?: string;
@@ -53,38 +62,82 @@ export function newToken(): string {
   return randomBytes(32).toString("base64url");
 }
 
-export async function startUi(opts: UiCommandOptions = {}): Promise<{ server: UiServer; link: string }> {
+/**
+ * Start the server on `port`. When `fallback` is true and that port is
+ * taken, serve on a free port and return the warning to print.
+ */
+async function listenWithFallback(
+  opts: UiServerOptions,
+  port: number,
+  fallback: boolean,
+): Promise<{ server: UiServer; warning?: string }> {
+  try {
+    return { server: await startUiServer({ ...opts, port }) };
+  } catch (err) {
+    if (!fallback || (err as NodeJS.ErrnoException).code !== "EADDRINUSE") throw err;
+    const server = await startUiServer({ ...opts, port: 0 });
+    return {
+      server,
+      warning:
+        `tidegap ui: port ${port} is in use, serving on ${server.port} instead. ` +
+        `The browser extension and the Mac app look for port ${port} and will not find this server.`,
+    };
+  }
+}
+
+export async function startUi(
+  opts: UiCommandOptions = {},
+): Promise<{ server: UiServer; link: string; warning?: string }> {
   // Grid-feed credentials live in the same secrets file the tick reads.
   loadEnvFileIntoProcess();
   const env = readEnvCredentials();
   const token = newToken();
   const dbPath = opts.db ?? defaultDbPath();
+  const stateDir = opts.stateDir ?? resolveTidegapHome();
   const feed = buildDefaultGridFeed(env.grid);
   const defaultRegion = resolveRegion(undefined, opts.region).region;
   const scheduler = actionScheduler({ dbPath, feed, region: defaultRegion });
-  const server = await startUiServer({
-    token,
-    port: opts.port ?? 0,
-    dbPath,
-    feed,
-    defaultRegion,
-    quota: () => loadQuotaResetConfig(),
-    daemonStatus: () => daemonStatus(),
-    // Writes only: this scheduler has no adapters and never dispatches.
-    scheduler,
-    // Start dispatcher spawns this same binary: `<launcher> tick --daemon`.
-    launcher: resolveLauncher(undefined, []),
+  const { server, warning } = await listenWithFallback(
+    {
+      token,
+      dbPath,
+      stateDir,
+      feed,
+      defaultRegion,
+      ...(env.defaultModel ? { defaultModel: env.defaultModel } : {}),
+      quota: () => loadQuotaResetConfig(),
+      daemonStatus: () => daemonStatus(),
+      // Writes only: this scheduler has no adapters and never dispatches.
+      scheduler,
+      // Start dispatcher spawns this same binary: `<launcher> tick --daemon`.
+      launcher: resolveLauncher(undefined, []),
+    },
+    opts.port ?? opts.defaultPort ?? DEFAULT_UI_PORT,
+    opts.port === undefined,
+  ).catch((err: unknown) => {
+    scheduler.shutdown();
+    throw err;
+  });
+  writeDiscovery(stateDir, {
+    pid: process.pid,
+    port: server.port,
+    url: server.url,
+    started_at: new Date().toISOString(),
+    cli_version: opts.cliVersion ?? "0.0.0",
   });
   const close = server.close.bind(server);
   server.close = async () => {
+    removeDiscovery(stateDir, process.pid);
     await close();
     scheduler.shutdown();
   };
-  return { server, link: `${server.url}#token=${token}` };
+  return { server, link: `${server.url}#token=${token}`, ...(warning ? { warning } : {}) };
 }
 
 export async function runUi(opts: UiCommandOptions = {}): Promise<number> {
-  const { server, link } = await startUi(opts);
+  const { server, link, warning } = await startUi(opts);
+  // eslint-disable-next-line no-console
+  if (warning) console.warn(warning);
   // eslint-disable-next-line no-console
   console.log(
     `tidegap ui: ${link}\n` +
