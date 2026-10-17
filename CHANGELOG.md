@@ -21,6 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A task moved to a day beyond the forecast is planned once the forecast reaches it, also when its time of day was the day's start.** The fallback time landed exactly on the day's start, which reads as an exact-time pin, so the re-plan sweep skipped the row and it ran at the day's start with no carbon window. The fallback now moves one minute into the day. Rows already moved this way by 0.17 or 0.18 keep their day-start time, because they cannot be told apart from an exact-time pin.
 - **Grid feeds floor "now" to the UTC hour.** The mock, UK, EIA and ENTSO-E feeds floored it in local time, which starts the forecast an hour early in a DST fall-back hour and off the UTC hour (:30 or :45) in time zones with a fractional offset.
 
+### Security
+
+- **Release tools are pinned.** The ClawHub CLI installs from a committed lockfile (`.github/release-tools/clawhub`) with `npm ci --ignore-scripts`, and `mcp-publisher` runs only after its SHA-256 matches the value in `scripts/install-mcp-publisher.sh`. Every action in `release.yml` and `mcp-registry.yml` is pinned to a commit SHA. No package resolved at run time runs in a job that holds an OIDC publish token.
+- **The ENTSO-E parser runs in linear time on hostile input.** `parseEntsoeXml` (TS) and `parse_entsoe_xml` (Python) cut `<text>`, `<TimeSeries>` and `<Period>` blocks with a plain scan instead of lazy regexes, so unclosed tags in the feed text no longer cost quadratic time. Results on valid documents are unchanged.
+- **Lint and build tooling dependencies updated** by pnpm overrides: `brace-expansion` 1.1.21, `js-yaml` 4.3.2, `source-map-js` 1.2.2. None of them ships in a published package.
+
 ## [0.18.0] — 2026-10-16
 
 Ebb AI is now **Tidegap**. "Ebb" conflicts with an existing software

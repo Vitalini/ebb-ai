@@ -123,6 +123,14 @@ Use "Re-run failed jobs" on a failed run: npm, PyPI and ClawHub skip
 versions already published. The MCP Registry step does not skip, so
 do not re-run it after it passed.
 
+To bump a release tool: for ClawHub, change the version in
+`.github/release-tools/clawhub/package.json` and regenerate its lock
+(`npm install --package-lock-only --ignore-scripts` in that directory);
+for `mcp-publisher`, change `VERSION` and `SHA256` in
+`scripts/install-mcp-publisher.sh` from the release's checksums file.
+A change under `.github/release-tools/` gets a human read of the
+lockfile diff before merge.
+
 ## Security
 
 If you discover a security issue (especially around the MCP server's
