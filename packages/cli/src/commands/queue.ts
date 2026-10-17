@@ -341,6 +341,7 @@ export function renderTask(
         : receipt.gridSource,
     );
     rk("energy_source", receipt.energySource);
+    if (receipt.tools) rk("tools", receipt.tools.length > 0 ? receipt.tools.join(", ") : "none");
     rk("signed", receipt.signature ? "yes" : "no");
   }
   const routing = receipt?.routing ?? record.routingDecision;

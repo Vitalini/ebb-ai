@@ -221,6 +221,30 @@ describe("schedule_task response enrichment (§1.11)", () => {
     await close();
   });
 
+  it("stores a claude-code tools list and rejects a tool outside the allowlist", async () => {
+    const { dbPath } = tmpDb();
+    const { client, scheduler, close } = await connect({ dbPath });
+    const deadline = new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString();
+    const ok = await client.callTool({
+      name: "schedule_task",
+      arguments: { prompt: "weather in Kyiv", deadline, provider: "claude-code", tools: ["WebFetch"] },
+    });
+    expect((ok as TextResult).isError).toBeFalsy();
+    const [rec] = scheduler.listPersistedTasks();
+    expect(JSON.parse(rec!.bodyJson!).tools).toEqual(["WebFetch"]);
+    for (const dry_run of [false, true]) {
+      const bad = await client.callTool({
+        name: "schedule_task",
+        arguments: { prompt: "x", deadline, provider: "claude-code", tools: ["Bash"], dry_run },
+      });
+      expect((bad as TextResult).isError).toBe(true);
+      expect(textOf(bad)).toContain('"Bash" not allowed');
+      expect(textOf(bad)).toContain("WebSearch, WebFetch, Read, Grep, Glob");
+    }
+    expect(scheduler.listPersistedTasks()).toHaveLength(1);
+    await close();
+  });
+
   describe("per-provider default model (R12)", () => {
     const saved = process.env.TIDEGAP_DEFAULT_MODEL;
     afterEach(() => {

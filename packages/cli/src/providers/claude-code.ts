@@ -6,8 +6,10 @@
  * host, not in `@tidegap/core`: core stays free of process spawning (see
  * `notify.ts`), and `tidegap tick` is the only host that runs it.
  *
- * Isolation: the prompt goes on stdin (never argv), every built-in tool is
- * removed (`--tools ""`), the user's CLAUDE.md, skills, plugins, hooks and
+ * Isolation: the prompt goes on stdin (never argv), the built-in tools are
+ * cut to a read-only set (`--tools` and `--allowedTools` name the same
+ * allowlisted tools, default WebSearch and WebFetch; `--permission-mode
+ * dontAsk` denies the rest), the user's CLAUDE.md, skills, plugins, hooks and
  * MCP servers are off (`--safe-mode`, `--strict-mcp-config`), and the run
  * happens in a fresh temp directory that is removed afterwards. The child
  * leads its own process group, so the timeout stops anything it started.
@@ -26,6 +28,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  claudeCodeToolsError,
+  DEFAULT_CLAUDE_CODE_TOOLS,
   ProviderRefusalError,
   type DispatchOptions,
   type DispatchResult,
@@ -43,6 +47,8 @@ export interface ClaudeCodeAdapterOptions {
   timeoutMs?: number;
   /** Parent of the per-run scratch directory. Default: the OS temp dir. */
   scratchRoot?: string;
+  /** Tools for a task that names none (`[]` = none). Default: WebSearch, WebFetch. */
+  defaultTools?: readonly string[];
 }
 
 /** Default `--max-budget-usd` cap. */
@@ -123,6 +129,7 @@ export class ClaudeCodeAdapter implements ProviderAdapter {
   private readonly maxBudgetUsd: number;
   private readonly timeoutMs: number;
   private readonly scratchRoot: string;
+  private readonly defaultTools: readonly string[];
 
   constructor(opts: ClaudeCodeAdapterOptions = {}) {
     this.binaryPath = opts.binaryPath;
@@ -130,6 +137,7 @@ export class ClaudeCodeAdapter implements ProviderAdapter {
     this.maxBudgetUsd = opts.maxBudgetUsd ?? DEFAULT_MAX_BUDGET_USD;
     this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.scratchRoot = opts.scratchRoot ?? tmpdir();
+    this.defaultTools = opts.defaultTools ?? DEFAULT_CLAUDE_CODE_TOOLS;
   }
 
   get ready(): boolean {
@@ -143,6 +151,15 @@ export class ClaudeCodeAdapter implements ProviderAdapter {
   ): Promise<DispatchResult> {
     const binary = this.binaryPath;
     if (!binary) throw new Error(`claude-code: no claude binary found; ${INSTALL_HINT}`);
+    // Checked again here, not only at enqueue: a hand-edited ledger row
+    // must never hand `claude` a tool that runs commands or writes files.
+    // Validated before the copy: a string or other non-array must be refused
+    // as is, not spread into characters first.
+    const requested: unknown = options.tools ?? this.defaultTools;
+    const toolsError = claudeCodeToolsError(requested);
+    if (toolsError) throw new Error(`claude-code: ${toolsError}`);
+    const tools = [...(requested as readonly string[])];
+    const toolList = tools.join(",");
     const input = stdinText(prompt, options);
     if (Buffer.byteLength(input) > MAX_STDIN_BYTES) {
       throw new Error("claude-code: prompt is larger than Claude Code's 10 MB stdin limit");
@@ -153,7 +170,10 @@ export class ClaudeCodeAdapter implements ProviderAdapter {
       const args = [
         "-p",
         "--output-format", "json",
-        "--tools", "",
+        // `--tools` limits the built-in set; `--allowedTools` pre-approves
+        // the same names so dontAsk runs them. "" means no tools.
+        "--tools", toolList,
+        ...(tools.length > 0 ? ["--allowedTools", toolList] : []),
         "--permission-mode", "dontAsk",
         "--max-budget-usd", String(this.maxBudgetUsd),
         "--safe-mode",
@@ -167,7 +187,7 @@ export class ClaudeCodeAdapter implements ProviderAdapter {
         args.push("--system-prompt-file", file);
       }
       const run = await this.run(binary, args, dir, input);
-      return this.toResult(run, model);
+      return { ...this.toResult(run, model), tools };
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

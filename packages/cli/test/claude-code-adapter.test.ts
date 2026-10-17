@@ -63,15 +63,16 @@ describe("ClaudeCodeAdapter", () => {
     expect(raw.total_cost_usd).toBe(0.00042);
   });
 
-  it("sends the prompt on stdin with the no-tool argv", async () => {
-    await adapter("success").dispatch("default", "secret prompt text");
+  it("sends the prompt on stdin with the read-only web argv", async () => {
+    const r = await adapter("success").dispatch("default", "secret prompt text");
     expect(logged("stdin")).toBe("secret prompt text");
     const args = argv();
     expect(args.join("\n")).not.toContain("secret prompt text");
     expect(args).toEqual([
       "-p",
       "--output-format", "json",
-      "--tools", "",
+      "--tools", "WebSearch,WebFetch",
+      "--allowedTools", "WebSearch,WebFetch",
       "--permission-mode", "dontAsk",
       "--max-budget-usd", "1",
       "--safe-mode",
@@ -79,6 +80,49 @@ describe("ClaudeCodeAdapter", () => {
       "--no-session-persistence",
     ]);
     expect(args).not.toContain("--bare");
+    expect(r.tools).toEqual(["WebSearch", "WebFetch"]);
+  });
+
+  it("an empty tool set sends --tools \"\" and no --allowedTools", async () => {
+    const r = await adapter("success").dispatch("default", "hi", { tools: [] });
+    const args = argv();
+    expect(args[args.indexOf("--tools") + 1]).toBe("");
+    expect(args).not.toContain("--allowedTools");
+    expect(r.tools).toEqual([]);
+  });
+
+  it("a per-task tool set wins over the adapter default", async () => {
+    const r = await adapter("success", { defaultTools: [] }).dispatch("default", "hi", { tools: ["Read", "Grep"] });
+    const args = argv();
+    expect(args[args.indexOf("--tools") + 1]).toBe("Read,Grep");
+    expect(args[args.indexOf("--allowedTools") + 1]).toBe("Read,Grep");
+    expect(r.tools).toEqual(["Read", "Grep"]);
+  });
+
+  it("uses the adapter default when the task names no tools", async () => {
+    await adapter("success", { defaultTools: ["WebSearch"] }).dispatch("default", "hi");
+    const args = argv();
+    expect(args[args.indexOf("--tools") + 1]).toBe("WebSearch");
+    expect(args[args.indexOf("--allowedTools") + 1]).toBe("WebSearch");
+  });
+
+  it("refuses a tool outside the allowlist without running claude", async () => {
+    const err = await failure(adapter("success").dispatch("default", "hi", { tools: ["WebFetch", "Bash"] }));
+    expect(err.message).toContain("Bash");
+    expect(err.message).toContain("WebSearch, WebFetch, Read, Grep, Glob");
+    expect(existsSync(join(log, "argv"))).toBe(false);
+  });
+
+  it("refuses a bad default tool set or a file+web mix without running claude", async () => {
+    const bad = await failure(adapter("success", { defaultTools: ["Bash"] }).dispatch("default", "hi"));
+    expect(bad.message).toContain("Bash");
+    const mixed = await failure(adapter("success").dispatch("default", "hi", { tools: ["Read", "WebFetch"] }));
+    expect(mixed.message).toContain("cannot combine a file tool");
+    const notArray = await failure(
+      adapter("success").dispatch("default", "hi", { tools: "Bash" as unknown as string[] }),
+    );
+    expect(notArray.message).toContain("must be an array");
+    expect(existsSync(join(log, "argv"))).toBe(false);
   });
 
   it("passes a custom budget cap", async () => {
