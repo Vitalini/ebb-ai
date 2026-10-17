@@ -79,6 +79,25 @@ import Testing
         #expect(runner.mintCalls == 1)
     }
 
+    @Test func revokeWhileConnectedShowsReconnectWithoutMinting() async {
+        // The server ends the event stream on revoke; the app's refetch gets 401.
+        runner.live.add(4242)
+        writeDiscovery(home: home, pid: 4242, port: 47999)
+        server.set(port: 47999, status: 200)
+        let c = controller()
+        await c.connect()
+        #expect(runner.mintCalls == 1)
+        server.set(port: 47999, status: 401)
+        await c.refresh()
+        #expect(c.state == .revoked)
+        #expect(c.summary == nil)
+        #expect(TokenStore(directory: support).read() == nil)
+        await c.refresh()
+        await c.connect()
+        #expect(c.state == .revoked)
+        #expect(runner.mintCalls == 1)
+    }
+
     @Test func oldCLIGivesUpdateStateAndNoMint() async {
         runner.outputs["--version"] = CommandOutput(status: 0, stdout: "0.18.0\n")
         let c = controller()
