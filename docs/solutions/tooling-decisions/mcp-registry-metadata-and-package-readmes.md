@@ -28,3 +28,5 @@ Registry ownership of an npm package is proven by `mcpName` in `packages/mcp-ser
 - Every number in the README needs a row in `docs/claims.md`, see [claims-audit-method](../best-practices/claims-audit-method.md).
 - Org namespaces (`io.github.tidegap/*`) publish only through `.github/workflows/mcp-registry.yml` (GitHub OIDC). The interactive `mcp-publisher login github` grants just `io.github.<user>/*` and returns 403 for the org name, even with public org membership.
 - Since 2026-10-16, `.github/workflows/release.yml` calls `mcp-registry.yml` (a reusable workflow, input `version`) after npm and PyPI publish. `workflow_dispatch -f version=X.Y.Z` stays for a manual retry.
+
+See also: `trusted-publishing-release-workflow.md` (the whole OIDC release chain).

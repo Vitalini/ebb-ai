@@ -70,3 +70,7 @@ check-versions: expected 0.16.0 (from packages/core-ts/package.json)
 - `package.json` — `preflight` script, where the check runs first.
 - `docs/plans/2026-09-30-1647-chore-infoq-article-prep-plan.md`, KTD3 — the plan item that specified this check.
 - PR #37 body, "Needs Vitalii" — the open publish-order decision this doc's second guidance item records the recommendation for.
+
+## Related
+
+- `trusted-publishing-release-workflow.md` (the current release path)
