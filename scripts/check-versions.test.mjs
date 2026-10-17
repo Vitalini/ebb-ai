@@ -20,7 +20,7 @@ test("no --tag: lockstep check only", () => {
 test("--tag v<version> passes", () => {
   const r = run("--tag", `v${version}`);
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, new RegExp(`tag v${version.replace(/\./g, "\\.")} matches`));
+  assert.ok(r.stdout.includes(`tag v${version} matches`), r.stdout);
 });
 
 test("--tag=v<version> passes", () => {

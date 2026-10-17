@@ -114,7 +114,10 @@ describe("cross-process task identity (store-backed scheduler)", () => {
     // A fresh scheduler (restart) must pick the overdue task up via tick.
     const consumer = new Scheduler({ store, feed: mockGridFeed() });
     const result = await consumer.tick({ anthropic: stubAdapter("anthropic") });
-    expect(result.dispatched).toBe(1);
+    // The ledger is shared with the tests above; at some hours the mock
+    // curve places their tasks in the current hour too, so assert on this
+    // task only (docs/solutions/logic-errors/time-of-day-bugs-and-fake-time-sweeps.md).
+    expect(result.dispatched).toBeGreaterThanOrEqual(1);
     expect(store.get(rec.taskId)?.status).toBe("completed");
     store.close();
   });
