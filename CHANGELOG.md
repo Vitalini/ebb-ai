@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Docs: internal submission log and marketing notes moved out of the public repo; local paths and token names removed from plan documents.
+
 ## [0.19.0] — 2026-10-17
 
 ### Added

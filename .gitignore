@@ -79,3 +79,6 @@ xcuserdata/
 *.xcuserstate
 # Filled from apps/extension by apps/macos/scripts/sync-safari-extension.sh
 apps/macos/SafariExtension/Resources/
+
+# Local tooling state
+.claude/
