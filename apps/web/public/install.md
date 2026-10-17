@@ -50,6 +50,22 @@ openclaw plugins install clawhub:@vitalini/tidegap
 
 The plugin self-registers on startup; no config edit needed.
 
+### OpenAI Codex CLI
+
+```text
+codex mcp add tidegap -- npx -y @tidegap/mcp
+```
+
+Or add this table to `~/.codex/config.toml` by hand:
+
+```toml
+[mcp_servers.tidegap]
+command = "npx"
+args = ["-y", "@tidegap/mcp"]
+```
+
+Start a new Codex session to load the server.
+
 ### Claude Desktop · Cursor · Windsurf · Continue · Cline · Zed · Goose · or any other MCP host
 
 Add this entry to the host's MCP config file. Only the file path
@@ -80,6 +96,37 @@ Common config file paths:
 | Goose          | `~/.config/goose/profiles.yaml` (under `extensions`)                       |
 
 Restart the host after editing the config file.
+
+---
+
+## Libraries
+
+To call the scheduler from your own code instead of an agent host:
+
+```text
+npm install @tidegap/core
+pip install tidegap
+```
+
+The Python package needs Python 3.11 or later. It is a library only: it
+has no command-line entry point, so there is no `pipx` install.
+
+---
+
+## Optional: connect the Mac app or the browser extension
+
+Both talk only to `tidegap ui`, a local web page on `127.0.0.1`.
+Start it with:
+
+```text
+npx -y @tidegap/cli ui
+```
+
+- **Browser extension** (Chrome, Edge, Firefox): mint a client token
+  with `npx -y @tidegap/cli clients add --name browser --kind extension`, then
+  paste it into the extension options.
+- **Tidegap for Mac** (menu bar app, includes the Safari extension):
+  it pairs itself on first launch. No token to copy.
 
 ---
 
