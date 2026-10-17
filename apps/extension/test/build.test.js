@@ -35,7 +35,14 @@ describe("build", () => {
     assert.equal(m.browser_specific_settings.gecko.strict_min_version, "121.0");
   });
 
-  for (const target of ["chrome", "firefox"]) {
+  it("the Safari manifest has a service worker and no notifications permission", () => {
+    const m = manifest("safari");
+    assert.equal(m.background.service_worker, "background.js");
+    assert.deepEqual([...m.permissions].sort(), ["alarms", "storage"]);
+    assert.deepEqual(m.host_permissions, ["http://127.0.0.1/*"]);
+  });
+
+  for (const target of ["chrome", "firefox", "safari"]) {
     it(`${target}: version is the core version and every icon path exists`, () => {
       const m = manifest(target);
       assert.equal(m.version, version.split("-")[0]);
@@ -50,7 +57,8 @@ describe("build", () => {
       const all = [...(m.permissions ?? []), ...(m.host_permissions ?? []), ...(m.optional_permissions ?? [])];
       for (const bad of ["<all_urls>", "tabs", "cookies"]) assert.ok(!all.includes(bad), `${target} asks for ${bad}`);
       assert.deepEqual(m.host_permissions, ["http://127.0.0.1/*"]);
-      assert.deepEqual([...m.permissions].sort(), ["alarms", "notifications", "storage"]);
+      const expected = target === "safari" ? ["alarms", "storage"] : ["alarms", "notifications", "storage"];
+      assert.deepEqual([...m.permissions].sort(), expected);
     });
 
     it(`${target}: zip is named by target and version, with manifest.json at its root`, () => {

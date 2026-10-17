@@ -2,7 +2,7 @@
 // Build the extension per target (KTD9): copy src/ and icons/ into
 // dist/<target>/, write that target's manifest, and zip it.
 //
-//   node scripts/build.mjs                  chrome (also Edge) and firefox
+//   node scripts/build.mjs                  chrome (also Edge), firefox and safari
 //   node scripts/build.mjs firefox          one target
 //   --out <dir>                             output folder (default: dist)
 //
@@ -18,7 +18,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 export const EXT_ROOT = resolve(here, "..");
 const REPO_ROOT = resolve(EXT_ROOT, "../..");
 
-export const TARGETS = ["chrome", "firefox"];
+export const TARGETS = ["chrome", "firefox", "safari"];
 
 /** The lockstep version, e.g. "0.19.0". */
 export function coreVersion() {
@@ -43,6 +43,11 @@ export function manifestFor(target, version) {
         data_collection_permissions: { required: ["none"] },
       },
     };
+  } else if (target === "safari") {
+    // Packaged into Tidegap.app by apps/macos/scripts/sync-safari-extension.sh.
+    // Safari has no notifications API; the Mac app sends them instead (R15).
+    out.background = { service_worker: "background.js", type: "module" };
+    out.permissions = base.permissions.filter((p) => p !== "notifications");
   } else {
     throw new Error(`unknown target ${target}`);
   }
