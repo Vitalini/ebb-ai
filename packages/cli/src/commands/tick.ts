@@ -32,7 +32,9 @@ import { spawn, type SpawnOptions } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir, platform as osPlatform } from "node:os";
 import { join } from "node:path";
-import { readEnvCredentials, type ProviderCredentials } from "../env.js";
+import { claudeChildEnv, claudeMaxBudget, findClaudeBinary, type ClaudeLookup } from "../claude-code.js";
+import { readEnvCredentials, underTest, type ProviderCredentials } from "../env.js";
+import { ClaudeCodeAdapter } from "../providers/claude-code.js";
 import { loadEnvFileIntoProcess } from "./env-file.js";
 
 export interface TickCommandOptions {
@@ -54,6 +56,8 @@ export interface TickCommandOptions {
   spawnNotify?: NotifySpawner;
   /** Platform for the notification command (tests). Defaults to os.platform(). */
   platform?: NodeJS.Platform;
+  /** Inputs for the `claude` binary lookup (tests). Defaults to the real machine. */
+  claudeLookup?: ClaudeLookup;
 }
 
 /** Starts a notification process; the tick never waits on it. */
@@ -61,16 +65,8 @@ export type NotifySpawner = (cmd: string, args: string[], opts: SpawnOptions) =>
 
 const NOTIFY_TIMEOUT_MS = 5_000;
 
-/**
- * True under a test runner. A test that reaches the default spawner without
- * injecting `spawnNotify` must not post a real notification on the
- * developer's desktop.
- */
-function underTest(): boolean {
-  return process.env.VITEST !== undefined || process.env.NODE_ENV === "test";
-}
-
 const defaultSpawnNotify: NotifySpawner = (cmd, args, opts) => {
+  // A test that reaches the default spawner must not post a real notification.
   if (underTest()) return;
   const child = spawn(cmd, args, opts);
   // A missing binary (no notify-send) or a failed toast is not a tick error.
@@ -163,9 +159,15 @@ export function defaultDbPath(): string {
  * registration rules are unchanged: an adapter appears exactly when its
  * credential is present, Gemini prefers GEMINI_API_KEY over GOOGLE_API_KEY,
  * and Ollama is an explicit OLLAMA_HOST opt-in.
+ *
+ * `claudeCode` is the claude-code adapter when the `claude` binary was
+ * found. It registers as `claude-code`, and also serves `anthropic` tasks
+ * when ANTHROPIC_API_KEY is not set. The receipt still records
+ * `claude-code`, the provider that actually ran.
  */
 export function buildAdapters(
   creds: ProviderCredentials = readEnvCredentials(),
+  claudeCode: ClaudeCodeAdapter | null = null,
 ): TickAdapters {
   const out: TickAdapters = {};
   if (creds.anthropicApiKey) {
@@ -184,6 +186,10 @@ export function buildAdapters(
   if (creds.ollamaHost) {
     out.ollama = new OllamaAdapter({ host: creds.ollamaHost });
   }
+  if (claudeCode) {
+    out["claude-code"] = claudeCode;
+    if (!out.anthropic) out.anthropic = claudeCode;
+  }
   return out;
 }
 
@@ -199,12 +205,11 @@ const PROVIDER_KEY: Record<string, string> = {
 };
 
 /**
- * Inspect the ledger for pending provider-call tasks whose provider key
- * is missing from the environment. Returns the distinct missing keys.
- * Best-effort — never throws (a broken/absent DB just yields []).
+ * The distinct providers of pending provider-call tasks in the ledger.
+ * Best-effort — never throws (a broken/absent DB just yields none).
  */
-export function missingProviderKeysForPending(dbPath: string): string[] {
-  const missing = new Set<string>();
+function pendingProviders(dbPath: string): Set<string> {
+  const providers = new Set<string>();
   let store: TaskStore | undefined;
   try {
     store = new TaskStore({ dbPath });
@@ -222,13 +227,30 @@ export function missingProviderKeysForPending(dbPath: string): string[] {
       } catch {
         continue;
       }
-      const key = provider ? PROVIDER_KEY[provider] : undefined;
-      if (key && !process.env[key]) missing.add(key);
+      if (provider) providers.add(provider);
     }
   } catch {
     // absent / unreadable DB — nothing to warn about.
   } finally {
     store?.close();
+  }
+  return providers;
+}
+
+/**
+ * Inspect the ledger for pending provider-call tasks whose provider key
+ * is missing from the environment. Returns the distinct missing keys. A
+ * provider that already has an adapter (`anthropic` served by Claude Code)
+ * needs no key. Best-effort — never throws.
+ */
+export function missingProviderKeysForPending(
+  dbPath: string,
+  adapters: TickAdapters = {},
+): string[] {
+  const missing = new Set<string>();
+  for (const provider of pendingProviders(dbPath)) {
+    const key = PROVIDER_KEY[provider];
+    if (key && !process.env[key] && !(provider in adapters)) missing.add(key);
   }
   return [...missing];
 }
@@ -246,7 +268,19 @@ export async function runTickOnce(
   // environment-pure core library.
   const env = readEnvCredentials();
   const dbPath = opts.db ?? defaultDbPath();
-  const adapters = buildAdapters(env);
+  const claudeBin = findClaudeBinary(
+    env,
+    () => {
+      const pending = pendingProviders(dbPath);
+      return pending.has("claude-code") || (!env.anthropicApiKey && pending.has("anthropic"));
+    },
+    opts.claudeLookup,
+  );
+  const budget = claudeMaxBudget(env.claudeCodeMaxBudgetUsd);
+  const claudeCode = claudeBin
+    ? new ClaudeCodeAdapter({ binaryPath: claudeBin, env: claudeChildEnv(), maxBudgetUsd: budget.usd })
+    : null;
+  const adapters = buildAdapters(env, claudeCode);
   if (Object.keys(adapters).length === 0) {
     // Loud warning when pending provider tasks exist but no adapter is
     // configured (no ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY /
@@ -259,12 +293,13 @@ export async function runTickOnce(
     return {
       exitCode: 0,
       message:
-        `tick: no adapters configured (set ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY, or OLLAMA_HOST for local); nothing to dispatch${detail}`,
+        `tick: no adapters configured (set ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY, or OLLAMA_HOST for local, ` +
+        `or install Claude Code (\`claude\` on PATH, or TIDEGAP_CLAUDE_BIN)); nothing to dispatch${detail}`,
     };
   }
   // Even with some keys present, warn about pending tasks needing a key
   // we do not have (e.g. OpenAI tasks queued but only ANTHROPIC set).
-  const missingForPending = missingProviderKeysForPending(dbPath);
+  const missingForPending = missingProviderKeysForPending(dbPath, adapters);
   // Aggregate carbon-budget alerts (ROADMAP item 4): read the local budget
   // config (env wins over ~/.tidegap/config) and log any crossing prominently.
   // Core no longer reads the environment, so the two TIDEGAP_CARBON_BUDGET_*
@@ -305,6 +340,7 @@ export async function runTickOnce(
     }
     let msg = `tick: ${result.inspected} inspected, ${result.dispatched} dispatched, ${result.failed} failed`;
     for (const line of preTick) msg += `\n${line}`;
+    if (claudeCode && budget.warning) msg += `\n${budget.warning}`;
     for (const a of firedAlerts) {
       msg +=
         `\n!! CARBON BUDGET ALERT: ${a.windowKind} carbon budget crossed — ` +
