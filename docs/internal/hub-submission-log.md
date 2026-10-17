@@ -48,6 +48,26 @@ when it runs.
 | 2026-10-16 | awesome-mcp-servers, awesome-green-software (GSF), awesome-claude-skills (Composio) | Rename updates for PR #16076, the GSF list entry and PR #877 | see rows above | in flight | |
 | 2026-10-16 | Domain | `tidegap.com` registered on Spaceship; Vercel 301 from `ebb-ai.com` | https://www.tidegap.com | done | |
 
+## Release automation (trusted publishing)
+
+`.github/workflows/release.yml` publishes by GitHub Actions OIDC. Each
+publisher reads: GitHub Actions, `tidegap/tidegap`, workflow
+`release.yml`, environment `release`. Plan:
+`docs/plans/2026-10-16-1509-chore-trusted-publishing-plan.md`.
+
+| Date | Platform | Action | URL | Status | Notes |
+|---|---|---|---|---|---|
+| 2026-10-16 | npm | Trusted publisher for `@tidegap/core` | https://www.npmjs.com/package/@tidegap/core/access | done | "Pending validation" until the first OIDC publish |
+| 2026-10-16 | npm | Trusted publisher for `@tidegap/cli` | https://www.npmjs.com/package/@tidegap/cli/access | done | "Pending validation" until the first OIDC publish |
+| 2026-10-16 | npm | Trusted publisher for `@tidegap/mcp` | https://www.npmjs.com/package/@tidegap/mcp/access | done | "Pending validation" until the first OIDC publish |
+| 2026-10-16 | npm | Account 2FA moved to a security key | https://www.npmjs.com/settings/~/tfa | done | |
+| 2026-10-16 | PyPI | Trusted publisher for `tidegap` | https://pypi.org/manage/project/tidegap/settings/publishing/ | done | |
+| 2026-10-16 | ClawHub | Trusted publisher for `@vitalini/tidegap` (`clawhub package trusted-publisher set`) | https://clawhub.ai/plugins/@vitalini/tidegap | done | A manual publish now needs `--manual-override-reason` |
+| 2026-10-16 | GitHub | Environment `release`: required reviewer `Vitalini` (self-review allowed), deployments from `v*` tags only | https://github.com/tidegap/tidegap/settings/environments | done | No environment secrets |
+| - | npm | Each package: "Require two-factor authentication and disallow tokens" | https://www.npmjs.com/org/tidegap | not started | After the first release where all four jobs pass |
+| - | npm | Revoke granular token `tidegap-publish-2026-10b`; delete its line from `~/.npmrc` | https://www.npmjs.com/settings/~/tokens | not started | After the first OIDC release |
+| - | PyPI | Delete every API token scoped to `tidegap` | https://pypi.org/manage/account/token/ | not started | After the first OIDC release |
+
 ## Search engines
 
 | Date | Platform | Action | URL | Status | Notes |

@@ -38,6 +38,8 @@ if (mismatches.length > 0) {
 }
 ```
 
+> **Superseded 2026-10-16.** Releases now run merge → tag → approve → workflow (`.github/workflows/release.yml`, trusted publishing). The tag must point at a reviewed commit on `main`, so publishing from an unmerged PR head is no longer possible. `main` quotes the new version for the minutes between merge and publish; that window is accepted. Plan: `docs/plans/2026-10-16-1509-chore-trusted-publishing-plan.md`. The guidance below is kept as history.
+
 **Publish npm from the reviewed PR head before merging it, not after.**
 
 The recommended order this PR settled on (see PR #37, "Needs Vitalii"): publish the new version to npm from the branch that has already been reviewed, *then* merge to the default branch. Reversing the order — merge first, publish later — means the default branch, and anything that builds the public site from it, quotes a version that npm doesn't have yet. The window between merge and publish is exactly the kind of drift this check exists to catch, so closing it by ordering publish-before-merge removes the window rather than relying on the check to catch it after the fact.
@@ -50,7 +52,7 @@ Version drift across npm/PyPI/git tags/README/CHANGELOG is invisible until someo
 
 - Any time the version is bumped for a release, in any of the lockstep files `check-versions.mjs` lists.
 - Any time a new manifest or copy location that quotes the version is added — it needs to be added to `check-versions.mjs`'s `found` map or it becomes a new place drift can hide.
-- Before deciding the publish order for a release: publish npm (and PyPI, if applicable) from the reviewed PR head, merge after.
+- Before deciding the publish order for a release: merge the release-prep PR, then tag the merge commit `vX.Y.Z` (superseded 2026-10-16: the old order was publish from the PR head, merge after). `check-versions.mjs --tag vX.Y.Z` checks the tag.
 
 ## Examples
 

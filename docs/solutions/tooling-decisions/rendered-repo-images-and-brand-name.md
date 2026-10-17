@@ -23,7 +23,7 @@ PR #46 added three PNGs (social preview, README hero, OG card). All show one rea
 
 ## Guidance
 
-**Render.** `pnpm gen:images` runs `scripts/render-images.mjs`. It uses `playwright-core` (exact pin 1.63.0) with the installed Chrome (`channel: "chrome"`, fallback `TIDEGAP_CHROME_PATH`). Templates live in `assets/templates/`. They use system font stacks and no network. Two renders on one machine give identical bytes.
+**Render.** `pnpm gen:images` runs `scripts/render-images.mjs`. It uses `playwright-core` (exact pin 1.64.0) with the installed Chrome (`channel: "chrome"`, fallback `TIDEGAP_CHROME_PATH`). Templates live in `assets/templates/`. They use system font stacks and no network. Two renders on one machine give identical bytes.
 
 **Labels come from data.** The chart is computed from the forecast. Before rendering, the script asserts peak 183 (2026-10-01 17:00Z), recommended 88 (2026-10-02 09:00Z), and that the recommended hour is inside the clean band (the `select-window.ts` rule). Mark labels take their numbers from the asserted values, not from template text. A failed assertion aborts the render, so an image cannot disagree with `docs/claims.md`. Adding a label means adding an assertion and a claims entry.
 
