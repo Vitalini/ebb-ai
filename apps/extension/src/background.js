@@ -3,7 +3,7 @@
 
 import { api } from "./lib/api.js";
 import { ext } from "./lib/browser.js";
-import { WINDOW_ALARM_PREFIX, browserNotifications } from "./lib/notify.js";
+import { WINDOW_ALARM_PREFIX, notificationChannels } from "./lib/notify.js";
 import { createPoller } from "./lib/poller.js";
 
 const POLL_ALARM = "poll";
@@ -19,7 +19,7 @@ const { poll, cleanWindowStarted } = createPoller({
   storage: ext.storage.local,
   alarms: ext.alarms,
   setBadge,
-  channels: [browserNotifications(ext)],
+  channels: notificationChannels(ext),
 });
 
 function start() {
@@ -45,8 +45,10 @@ ext.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && (changes.token || changes.port)) poll();
 });
 
-// Firefox grants 127.0.0.1 after the options Save stored the token: poll again.
-ext.permissions.onAdded.addListener(() => poll());
+// Firefox and Safari grant 127.0.0.1 after the options Save stored the token:
+// poll again. Optional, so a browser without the event still registers the
+// message listener below.
+ext.permissions?.onAdded?.addListener(() => poll());
 
 // The popup asks for a poll when it opens, so the badge is fresh.
 ext.runtime.onMessage.addListener((message, sender, sendResponse) => {
