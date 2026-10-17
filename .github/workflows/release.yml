@@ -319,13 +319,15 @@ jobs:
   # ClawHub's token mint rejects every OIDC event except workflow_dispatch
   # (openclaw/clawhub convex/lib/githubActionsOidc.ts, allowedEvents), and the
   # CLI then falls back to a stored login: "Not logged in". So this job runs
-  # only on a dispatch. pypi is skipped on a clawhub_only dispatch.
+  # only on a dispatch. pypi may be skipped only on a clawhub_only dispatch:
+  # on a full dispatch a skipped pypi means npm failed.
   clawhub:
     needs: [verify, pypi]
     if: >-
       !cancelled() && github.event_name == 'workflow_dispatch'
       && needs.verify.result == 'success' && needs.verify.outputs.publish == 'true'
-      && (needs.pypi.result == 'success' || needs.pypi.result == 'skipped')
+      && (needs.pypi.result == 'success'
+          || (needs.verify.outputs.clawhub_only == 'true' && needs.pypi.result == 'skipped'))
     runs-on: ubuntu-latest
     environment: release
     permissions:

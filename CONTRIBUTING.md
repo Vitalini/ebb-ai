@@ -96,8 +96,8 @@ and 22; PRs need it green before merge.
 Tidegap follows [Semantic Versioning](https://semver.org). Releases
 publish from GitHub Actions (`.github/workflows/release.yml`) by OIDC
 trusted publishing: npm (with provenance), then PyPI and the MCP
-Registry on the tag push, then ClawHub from a dispatch on the tag. No registry token lives on a laptop or in
-GitHub secrets.
+Registry on the tag push, then ClawHub from a dispatch on the tag. No
+registry token lives on a laptop or in GitHub secrets.
 
 1. Release-prep PR: bump every file `pnpm check:versions` lists, date
    the CHANGELOG heading (`## [X.Y.Z] — YYYY-MM-DD`), update the README
@@ -114,6 +114,12 @@ GitHub secrets.
    `gh workflow run release.yml --ref vX.Y.Z -f dry_run=false -f clawhub_only=true`.
    ClawHub mints its trusted-publishing token only for a
    `workflow_dispatch` OIDC token, so the tag push skips the ClawHub job.
+   Dispatch after the tag-push run finishes: both runs share one
+   concurrency group, and a second pending run cancels the first.
+   Keep `clawhub_only=true`: without it the MCP Registry step runs
+   again and fails on the published version. The dispatch reads
+   `release.yml` from the tag, so tags before v0.19.1 have no
+   `clawhub_only` input; ClawHub 0.19.0 was not published.
 5. The workflow checks the tag against the lockstep version, checks
    that the commit is on `main` and that CI passed on it, then
    publishes. Check the run summary.
