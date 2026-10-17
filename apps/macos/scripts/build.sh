@@ -14,5 +14,7 @@ xcodebuild \
   build
 rm -rf build/Tidegap.app
 ditto build/DerivedData/Build/Products/Release/Tidegap.app build/Tidegap.app
+test -f "build/Tidegap.app/Contents/PlugIns/Tidegap Safari Extension.appex/Contents/Resources/manifest.json"
+codesign --verify --deep --strict build/Tidegap.app
 codesign -dv build/Tidegap.app 2>&1 | grep -E "^(Identifier|Signature)="
 echo "built: $(pwd)/build/Tidegap.app"

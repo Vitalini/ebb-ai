@@ -12,4 +12,14 @@ node "$ext/scripts/build.mjs" safari >/dev/null
 rm -rf "$dest"
 mkdir -p "$dest"
 ditto "$ext/dist/safari" "$dest"
+
+# The Resources group in project.pbxproj lists each folder (explicitFolders);
+# a folder missing there would ship flattened into the appex.
+for dir in "$dest"/*/; do
+  name="$(basename "$dir")"
+  if ! grep -Eq "^[[:space:]]+$name,\$" "$here/../Tidegap.xcodeproj/project.pbxproj"; then
+    echo "sync-safari-extension: add $name to explicitFolders of the Resources group in project.pbxproj" >&2
+    exit 1
+  fi
+done
 echo "synced: $dest"
