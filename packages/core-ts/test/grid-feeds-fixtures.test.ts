@@ -77,6 +77,101 @@ describe("parseEntsoeXml (A75 fixture)", () => {
       /Acknowledgement.*No matching data found/,
     );
   });
+
+  // The feed text is external input: unclosed tags must not make the
+  // block scan quadratic (CodeQL js/polynomial-redos).
+  const N = 100_000;
+  const timed = <T>(fn: () => T): { result: T; ms: number } => {
+    const t0 = performance.now();
+    const result = fn();
+    return { result, ms: performance.now() - t0 };
+  };
+
+  it("unclosed <text> in an Acknowledgement finishes in linear time", () => {
+    const xml = "<Acknowledgement_MarketDocument>" + "<text>".repeat(N);
+    const { ms } = timed(() =>
+      expect(() => parseEntsoeXml(xml)).toThrow(/no reason text in document/),
+    );
+    expect(ms).toBeLessThan(1000);
+  });
+
+  it("unclosed <TimeSeries> finishes in linear time", () => {
+    const { result, ms } = timed(() => parseEntsoeXml("<TimeSeries>".repeat(N)));
+    expect(result).toEqual([]);
+    expect(ms).toBeLessThan(1000);
+  });
+
+  it("unclosed <Period> finishes in linear time", () => {
+    const xml =
+      "<TimeSeries><psrType>B01</psrType>" + "<Period>".repeat(N) + "</TimeSeries>";
+    const { result, ms } = timed(() => parseEntsoeXml(xml));
+    expect(result).toEqual([]);
+    expect(ms).toBeLessThan(1000);
+  });
+
+  const period = (start: string, qty: number) =>
+    `<Period><timeInterval><start>${start}</start></timeInterval>` +
+    `<resolution>PT60M</resolution>` +
+    `<Point><position>1</position><quantity>${qty}</quantity></Point></Period>`;
+
+  it("a stray unclosed <Period> drops only itself", () => {
+    const xml =
+      `<TimeSeries><psrType>B14</psrType>${period("2026-05-13T10:00Z", 5)}<Period>stray</TimeSeries>` +
+      `<TimeSeries><psrType>B05</psrType>${period("2026-05-13T11:00Z", 7)}</TimeSeries>`;
+    expect(parseEntsoeXml(xml)).toEqual([
+      {
+        psrType: "B14",
+        periods: [
+          { start: "2026-05-13T10:00Z", resolutionMin: 60, points: [{ position: 1, quantity: 5 }] },
+        ],
+      },
+      {
+        psrType: "B05",
+        periods: [
+          { start: "2026-05-13T11:00Z", resolutionMin: 60, points: [{ position: 1, quantity: 7 }] },
+        ],
+      },
+    ]);
+  });
+
+  // Pins the lazy-regex semantics the scan replaced: each open pairs with
+  // the nearest close after it, and the first match wins.
+  it("an unclosed <TimeSeries> pairs with the next close; the first psrType wins", () => {
+    const xml =
+      `<TimeSeries><psrType>B01</psrType>` +
+      `<TimeSeries><psrType>B14</psrType>${period("2026-05-13T10:00Z", 5)}</TimeSeries>`;
+    expect(parseEntsoeXml(xml)).toEqual([
+      {
+        psrType: "B01",
+        periods: [
+          { start: "2026-05-13T10:00Z", resolutionMin: 60, points: [{ position: 1, quantity: 5 }] },
+        ],
+      },
+    ]);
+  });
+
+  it("an unclosed <Period> before a valid one merges into a single period", () => {
+    const xml =
+      `<TimeSeries><psrType>B14</psrType><Period>stray${period("2026-05-13T10:00Z", 5)}</TimeSeries>`;
+    expect(parseEntsoeXml(xml)).toEqual([
+      {
+        psrType: "B14",
+        periods: [
+          { start: "2026-05-13T10:00Z", resolutionMin: 60, points: [{ position: 1, quantity: 5 }] },
+        ],
+      },
+    ]);
+  });
+
+  it("an Acknowledgement reports the first <text>, empty when it is empty", () => {
+    const ack = (body: string) => `<Acknowledgement_MarketDocument><Reason>${body}</Reason>`;
+    expect(() => parseEntsoeXml(ack("<text> first </text><text>second</text>"))).toThrow(
+      /Acknowledgement document: first$/,
+    );
+    expect(() => parseEntsoeXml(ack("<text></text><text>second</text>"))).toThrow(
+      /Acknowledgement document: $/,
+    );
+  });
 });
 
 describe("entsoeFeed (A75 fixture)", () => {

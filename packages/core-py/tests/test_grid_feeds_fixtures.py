@@ -20,6 +20,7 @@ language cores parse identical payloads to identical forecasts:
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from math import floor
@@ -29,6 +30,7 @@ import httpx
 import pytest
 
 from tidegap.grid import (
+    EntsoeTimeSeries,
     GridFeed,
     eia_feed,
     entsoe_feed,
@@ -101,6 +103,99 @@ def test_parse_entsoe_position_gap_stays_hole() -> None:
 def test_parse_entsoe_acknowledgement_raises() -> None:
     with pytest.raises(RuntimeError, match=r"Acknowledgement.*No matching data found"):
         parse_entsoe_xml(_fixture("entsoe-acknowledgement.xml"))
+
+
+# The feed text is external input: unclosed tags must not make the block
+# scan quadratic. Same inputs as the TS parseEntsoeXml tests.
+_N = 100_000
+
+
+def _elapsed(fn: Callable[[], object]) -> float:
+    t0 = time.perf_counter()
+    fn()
+    return time.perf_counter() - t0
+
+
+def test_parse_entsoe_unclosed_text_is_linear() -> None:
+    xml = "<Acknowledgement_MarketDocument>" + "<text>" * _N
+
+    def run() -> None:
+        with pytest.raises(RuntimeError, match="no reason text in document"):
+            parse_entsoe_xml(xml)
+
+    assert _elapsed(run) < 1.0
+
+
+def test_parse_entsoe_unclosed_timeseries_is_linear() -> None:
+    xml = "<TimeSeries>" * _N
+    assert _elapsed(lambda: parse_entsoe_xml(xml)) < 1.0
+    assert parse_entsoe_xml(xml) == []
+
+
+def test_parse_entsoe_unclosed_period_is_linear() -> None:
+    xml = "<TimeSeries><psrType>B01</psrType>" + "<Period>" * _N + "</TimeSeries>"
+    assert _elapsed(lambda: parse_entsoe_xml(xml)) < 1.0
+    assert parse_entsoe_xml(xml) == []
+
+
+def _period(start: str, qty: int) -> str:
+    return (
+        f"<Period><timeInterval><start>{start}</start></timeInterval>"
+        "<resolution>PT60M</resolution>"
+        f"<Point><position>1</position><quantity>{qty}</quantity></Point></Period>"
+    )
+
+
+def _summary(
+    series: list[EntsoeTimeSeries],
+) -> list[tuple[str, list[tuple[str, int, list[tuple[int, float]]]]]]:
+    return [
+        (s.psr_type, [(p.start, p.resolution_min, p.points) for p in s.periods]) for s in series
+    ]
+
+
+def test_parse_entsoe_stray_unclosed_period_drops_only_itself() -> None:
+    xml = (
+        f"<TimeSeries><psrType>B14</psrType>{_period('2026-05-13T10:00Z', 5)}"
+        "<Period>stray</TimeSeries>"
+        f"<TimeSeries><psrType>B05</psrType>{_period('2026-05-13T11:00Z', 7)}</TimeSeries>"
+    )
+    assert _summary(parse_entsoe_xml(xml)) == [
+        ("B14", [("2026-05-13T10:00Z", 60, [(1, 5.0)])]),
+        ("B05", [("2026-05-13T11:00Z", 60, [(1, 7.0)])]),
+    ]
+
+
+# Pins the lazy-regex semantics the scan replaced: each open pairs with
+# the nearest close after it, and the first match wins. Same cases as TS.
+def test_parse_entsoe_unclosed_timeseries_pairs_with_next_close() -> None:
+    xml = (
+        "<TimeSeries><psrType>B01</psrType>"
+        f"<TimeSeries><psrType>B14</psrType>{_period('2026-05-13T10:00Z', 5)}</TimeSeries>"
+    )
+    assert _summary(parse_entsoe_xml(xml)) == [
+        ("B01", [("2026-05-13T10:00Z", 60, [(1, 5.0)])]),
+    ]
+
+
+def test_parse_entsoe_unclosed_period_merges_into_next() -> None:
+    xml = (
+        "<TimeSeries><psrType>B14</psrType>"
+        f"<Period>stray{_period('2026-05-13T10:00Z', 5)}</TimeSeries>"
+    )
+    assert _summary(parse_entsoe_xml(xml)) == [
+        ("B14", [("2026-05-13T10:00Z", 60, [(1, 5.0)])]),
+    ]
+
+
+def test_parse_entsoe_acknowledgement_reports_first_text() -> None:
+    def ack(body: str) -> str:
+        return f"<Acknowledgement_MarketDocument><Reason>{body}</Reason>"
+
+    with pytest.raises(RuntimeError, match=r"Acknowledgement document: first$"):
+        parse_entsoe_xml(ack("<text> first </text><text>second</text>"))
+    with pytest.raises(RuntimeError, match=r"Acknowledgement document: $"):
+        parse_entsoe_xml(ack("<text></text><text>second</text>"))
 
 
 def _entsoe_expected(hour_of_day: int) -> int:
