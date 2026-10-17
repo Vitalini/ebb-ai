@@ -13,8 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **A task moved to a day beyond the forecast is planned once the forecast reaches it, also when its time of day was the day's start.** The fallback time landed exactly on the day's start, which reads as an exact-time pin, so the re-plan sweep skipped the row and it ran at the day's start with no carbon window. The fallback now moves one minute into the day.
-- **Grid feeds floor "now" to the UTC hour.** The mock, UK, EIA and ENTSO-E feeds floored it in local time, which starts the forecast an hour early in a DST fall-back hour and on :30 in half-hour time zones.
+- **A task moved to a day beyond the forecast is planned once the forecast reaches it, also when its time of day was the day's start.** The fallback time landed exactly on the day's start, which reads as an exact-time pin, so the re-plan sweep skipped the row and it ran at the day's start with no carbon window. The fallback now moves one minute into the day. Rows already moved this way by 0.17 or 0.18 keep their day-start time, because they cannot be told apart from an exact-time pin.
+- **Grid feeds floor "now" to the UTC hour.** The mock, UK, EIA and ENTSO-E feeds floored it in local time, which starts the forecast an hour early in a DST fall-back hour and off the UTC hour (:30 or :45) in time zones with a fractional offset.
 
 ## [0.18.0] — 2026-10-16
 
