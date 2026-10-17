@@ -1,0 +1,43 @@
+name: Extension
+
+# Build, test and lint the browser extension (apps/extension) and upload the
+# Chrome/Edge and Firefox zips. Path-filtered (KTD14), so ci.yml's Node
+# matrix pays nothing for extension-only changes.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/extension/**"
+      - "packages/cli/src/ui/**"
+      - ".github/workflows/extension.yml"
+  pull_request:
+    paths:
+      - "apps/extension/**"
+      - "packages/cli/src/ui/**"
+      - ".github/workflows/extension.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  extension:
+    name: build + test + lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter "@tidegap/extension" test
+      - run: pnpm --filter "@tidegap/extension" build
+      - run: pnpm --filter "@tidegap/extension" lint
+      - uses: actions/upload-artifact@v7
+        with:
+          name: tidegap-extension
+          path: apps/extension/dist/*.zip
+          if-no-files-found: error

@@ -590,7 +590,7 @@ apps/macos/
   - modify `CHANGELOG.md`
 - **Approach:**
   1. The workflow runs on ubuntu with Node 22: install, extension `test`, `build`, `lint`, upload both zips. It uses the `paths` filter from KTD14.
-  2. The smoke script takes a temp `HOME` and an output folder. It seeds a temp ledger with `scripts/ui-seed.mjs` and starts `node packages/cli/dist/index.js ui --no-open` on the temp ledger. It mints a token with `clients add --json`.
+  2. The smoke script takes an output folder and makes its own temp `HOME`. It seeds a temp ledger with `scripts/ui-seed.mjs --db` and starts `node packages/cli/dist/index.js ui --no-open` on the temp ledger, on a free port (47821 may be the real server). It mints a token with `clients add --json`.
   3. It launches the `playwright-core` Chromium with `--load-extension=apps/extension/dist/chrome` and drives the QA steps below. It writes screenshots and prints `PASS` or the failed step names.
 - **Execution note:** smoke-first; the script is the proof. It runs once, not inside a parallel batch.
 - **Test expectation:** none for the workflow file. The smoke script is itself the test.
@@ -603,10 +603,10 @@ apps/macos/
   | 3 | `node apps/extension/scripts/smoke-chrome.mjs --out <scratchpad>/ext-smoke` | prints `PASS` |
   | 3a | (inside) The extension service worker registers | the extension id is read from the worker URL |
   | 3b | Options: set port and token, Save, Test connection | status text "Connected"; screenshot `options.png` |
-  | 3c | Run the poll once (evaluate in the worker) | `getBadgeText` = the seeded active count |
+  | 3c | Ask the background for one poll from an extension page (`chrome.runtime.sendMessage({type: "poll"})`) | `getBadgeText` = the seeded active count |
   | 3d | Open `popup/popup.html` in a tab | rows = the seeded active tasks with titles; the clean-window line is present; screenshot `popup.png` |
   | 3e | Quick add "smoke quick add", preset 24 h | the new row appears; `tidegap queue list` on the temp ledger shows it |
-  | 3f | Mark a seeded task completed in the temp ledger, poll again | `notifications.getAll()` holds one entry whose title contains that task's title |
+  | 3f | Mark a seeded task completed in the temp ledger, poll again | `notifications.getAll()` holds one entry, id `tidegap-task-<that task id>` (`getAll` returns ids only; `test/notify.test.js` covers the title text) |
   | 3g | `clients revoke <id>`, poll again | badge `?`; the popup says "not paired" |
   | 3h | Stop the server, poll again | badge `off`; the popup says tidegap ui is not running; screenshot `offline.png` |
   | 4 | The agent opens the three screenshots | each matches its expected text |
