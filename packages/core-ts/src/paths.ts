@@ -3,17 +3,19 @@
  *
  * 0.17 kept its state (queue.db, signing.key, config, delivery.db, logs) in
  * `~/.ebb-ai`. 0.18 moved it to `~/.tidegap` on first use and left a link
- * back. 0.19 removed that move: a real `~/.ebb-ai` directory is never read.
- * When one is found, the process prints one stderr line naming it, so a 0.17
- * install that skipped 0.18 does not silently start an empty ledger. A
- * `~/.ebb-ai` link left behind by 0.18 is ignored without a line.
+ * back. 0.19 removed that move: `~/.ebb-ai` is never read. When it still
+ * holds data (a real directory, or a user's own link to a directory other
+ * than `~/.tidegap`), the process prints one stderr line naming it, so a
+ * 0.17 install that skipped 0.18 does not silently start an empty ledger. A
+ * `~/.ebb-ai` link back to `~/.tidegap`, left by 0.18, is ignored without a
+ * line.
  *
  * Environment-pure: the home directory comes from `os.homedir()`, never from
  * an environment variable. The Python core mirrors this in
  * `tidegap/paths.py`.
  */
 
-import { lstatSync } from "node:fs";
+import { lstatSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -38,19 +40,34 @@ function defaultWarn(line: string): void {
   process.stderr.write(`${line}\n`);
 }
 
-function isRealDir(path: string): boolean {
+/**
+ * Where a 0.17 `~/.ebb-ai` still holds data: `old` itself when it is a real
+ * directory, the directory it links to when that is not `target`, else
+ * `undefined` (absent, a 0.18 link back to `target`, or a dangling link).
+ * Node reports a Windows junction as a symbolic link.
+ */
+function oldHomeData(old: string, target: string): string | undefined {
+  let points: string;
   try {
-    const st = lstatSync(path);
-    return st.isDirectory() && !st.isSymbolicLink();
+    const st = lstatSync(old);
+    if (!st.isSymbolicLink()) return st.isDirectory() ? old : undefined;
+    points = realpathSync(old);
+    if (!statSync(points).isDirectory()) return undefined;
   } catch {
-    return false;
+    return undefined;
   }
+  try {
+    if (realpathSync(target) === points) return undefined;
+  } catch {
+    // No ~/.tidegap yet: the link points somewhere else.
+  }
+  return points;
 }
 
 /**
  * The Tidegap data directory (`~/.tidegap`). Creates nothing. Prints one line
- * when a 0.17 `~/.ebb-ai` directory is still there (once per process and
- * home, unless `opts.warn` is given).
+ * when a 0.17 `~/.ebb-ai` still holds data (once per process and home,
+ * unless `opts.warn` is given).
  */
 export function resolveTidegapHome(opts: ResolveHomeOptions = {}): string {
   const home = opts.home ?? homedir();
@@ -60,10 +77,13 @@ export function resolveTidegapHome(opts: ResolveHomeOptions = {}): string {
     checked.add(home);
   }
   const old = join(home, OLD_HOME_DIR);
-  if (isRealDir(old)) {
+  const data = oldHomeData(old, target);
+  if (data !== undefined) {
+    const label = data === old ? old : `${old} (a link to ${data})`;
     (opts.warn ?? defaultWarn)(
-      `tidegap: ${old} is no longer read (removed in 0.19); tidegap uses ${target}. ` +
-        `Upgrade through 0.18 once, or move its contents to ${target} by hand.`,
+      `tidegap: ${label} is no longer read (removed in 0.19); tidegap uses ${target}. ` +
+        `To keep its data, stop tidegap (daemon and MCP hosts), move ${target} aside, then rename ${old} to ${target}. ` +
+        `Otherwise move ${old} out of your home directory to hide this line.`,
     );
   }
   return target;

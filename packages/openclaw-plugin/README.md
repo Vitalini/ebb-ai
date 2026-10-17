@@ -103,7 +103,8 @@ block, so the new plugin cannot read the old one. Install the new plugin,
 move your settings from `plugins.entries.ebb` to `plugins.entries.tidegap`
 in the gateway config, then remove the old plugin. Since 0.19 the queue is
 no longer moved from `~/.ebb-ai`: upgrade through 0.18 once, or move
-`~/.ebb-ai` to `~/.tidegap` by hand.
+`~/.ebb-ai` to `~/.tidegap` by hand (if 0.19 already created `~/.tidegap`,
+stop the gateway and move that one aside first).
 
 ## Verify the install (smoke test)
 

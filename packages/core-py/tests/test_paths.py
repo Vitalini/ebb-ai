@@ -34,7 +34,7 @@ def test_old_dir_is_left_in_place_and_named_once(home: Path) -> None:
     assert not (home / ".tidegap").exists()
     assert len(warnings) == 1
     assert str(old) in warnings[0]
-    assert "0.18" in warnings[0]
+    assert f"rename {old} to {home / '.tidegap'}" in warnings[0]
 
 
 @pytest.mark.skipif(os.name == "nt", reason="symlinks need privileges on Windows")
@@ -46,9 +46,31 @@ def test_link_left_by_018_is_ignored(home: Path) -> None:
     assert warnings == []
 
 
+@pytest.mark.skipif(os.name == "nt", reason="symlinks need privileges on Windows")
+def test_own_link_to_another_dir_is_named_with_its_target(home: Path) -> None:
+    elsewhere = home / "disk" / "ebb-data"
+    elsewhere.mkdir(parents=True)
+    (elsewhere / "queue.db").write_text("Q")
+    os.symlink(elsewhere, home / ".ebb-ai", target_is_directory=True)
+    warnings: list[str] = []
+    assert resolve_tidegap_home(home, warn=warnings.append) == home / ".tidegap"
+    assert (elsewhere / "queue.db").read_text() == "Q"
+    assert len(warnings) == 1
+    assert f"{home / '.ebb-ai'} (a link to {os.path.realpath(elsewhere)})" in warnings[0]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="symlinks need privileges on Windows")
+def test_dangling_link_is_ignored(home: Path) -> None:
+    os.symlink(home / "gone", home / ".ebb-ai", target_is_directory=True)
+    warnings: list[str] = []
+    assert resolve_tidegap_home(home, warn=warnings.append) == home / ".tidegap"
+    assert warnings == []
+
+
 def test_default_writer_reports_once_per_home(home: Path, capsys: pytest.CaptureFixture[str]) -> None:
     (home / ".ebb-ai").mkdir()
     resolve_tidegap_home(home)
     resolve_tidegap_home(home)
-    err = capsys.readouterr().err
+    out, err = capsys.readouterr()
     assert err.count("no longer read") == 1
+    assert out == ""

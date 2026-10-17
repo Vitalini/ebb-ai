@@ -2,7 +2,7 @@
  * Home-dir resolution since 0.19: always `~/.tidegap`. A 0.17 `~/.ebb-ai`
  * directory is never moved or read; it only earns one notice line.
  */
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -36,7 +36,24 @@ describe("resolveTidegapHome", () => {
     expect(existsSync(target())).toBe(false);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain(old());
-    expect(warnings[0]).toContain("0.18");
+    expect(warnings[0]).toContain(`rename ${old()} to ${target()}`);
+  });
+
+  it("a user's own ~/.ebb-ai link to another directory is named with its target", () => {
+    const elsewhere = join(home, "disk", "ebb-data");
+    mkdirSync(elsewhere, { recursive: true });
+    writeFileSync(join(elsewhere, "queue.db"), "Q");
+    symlinkSync(elsewhere, old(), "dir");
+    expect(resolveTidegapHome({ home, warn })).toBe(target());
+    expect(existsSync(join(elsewhere, "queue.db"))).toBe(true);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(`${old()} (a link to ${realpathSync(elsewhere)})`);
+  });
+
+  it("a dangling ~/.ebb-ai link is ignored without a line", () => {
+    symlinkSync(join(home, "gone"), old(), "dir");
+    expect(resolveTidegapHome({ home, warn })).toBe(target());
+    expect(warnings).toEqual([]);
   });
 
   it("a ~/.ebb-ai link left by 0.18 is ignored without a line", () => {

@@ -16,6 +16,23 @@ import { readEnvCredentials } from "../src/env.js";
 const SERVER = resolve(dirname(fileURLToPath(import.meta.url)), "..", "dist", "server.js");
 const NAMES = ["DB_PATH", "DEFAULT_REGION", "DEFAULT_MODEL", "ENTSOE_SECURITY_TOKEN"] as const;
 
+/** Run `fn` with stdout and stderr captured; returns what each received. */
+function captureStreams(fn: () => void): { out: string[]; err: string[] } {
+  const out: string[] = [];
+  const err: string[] = [];
+  const writeOut = process.stdout.write.bind(process.stdout);
+  const writeErr = process.stderr.write.bind(process.stderr);
+  process.stdout.write = ((c: string | Uint8Array) => (out.push(String(c)), true)) as typeof process.stdout.write;
+  process.stderr.write = ((c: string | Uint8Array) => (err.push(String(c)), true)) as typeof process.stderr.write;
+  try {
+    fn();
+  } finally {
+    process.stdout.write = writeOut;
+    process.stderr.write = writeErr;
+  }
+  return { out, err };
+}
+
 describe("left-over EBB_* names (MCP)", () => {
   const saved = new Map<string, string | undefined>();
   beforeEach(() => {
@@ -44,6 +61,17 @@ describe("left-over EBB_* names (MCP)", () => {
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain("EBB_DB_PATH -> TIDEGAP_DB_PATH");
     expect(lines[0]).toContain("EBB_DEFAULT_REGION -> TIDEGAP_DEFAULT_REGION");
+  });
+
+  it("the default writer prints one stderr line per process and nothing on stdout", () => {
+    process.env.EBB_DEFAULT_REGION = "FR";
+    const { out, err } = captureStreams(() => {
+      readEnvCredentials();
+      readEnvCredentials();
+    });
+    expect(err).toHaveLength(1);
+    expect(err[0]).toContain("EBB_DEFAULT_REGION -> TIDEGAP_DEFAULT_REGION");
+    expect(out).toEqual([]);
   });
 
   it("both set: the TIDEGAP_ value and no line", () => {

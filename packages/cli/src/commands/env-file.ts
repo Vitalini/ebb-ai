@@ -2,8 +2,9 @@
  * Shared secrets file: `~/.config/tidegap/env`.
  *
  * 0.17 kept it at `~/.config/ebb/env`. 0.18 still read that file; 0.19 does
- * not. When only the old file exists, loading prints one stderr line naming
- * it, and `tidegap install` lists it under its warnings.
+ * not. While the old file holds keys the new one lacks (none of them, by
+ * name, `EBB_*` counted as `TIDEGAP_*`), loading prints one stderr line
+ * naming it, and `tidegap install` lists it under its warnings.
  *
  * A single standardized location for provider API keys that works
  * uniformly across launchd, systemd, and manual cron:
@@ -34,15 +35,31 @@ function oldEnvFilePath(home: string): string {
   return join(home, ".config", "ebb", "env");
 }
 
+/** The keys of a secrets file, `EBB_*` named as `TIDEGAP_*`; none when missing or unreadable. */
+function envFileKeys(path: string): string[] {
+  try {
+    if (!existsSync(path)) return [];
+    return Object.keys(parseEnvFile(readFileSync(path, "utf8"))).map((k) =>
+      k.startsWith("EBB_") ? `TIDEGAP_${k.slice(4)}` : k,
+    );
+  } catch {
+    return [];
+  }
+}
+
 /**
- * The notice for a 0.17 secrets file that is still there while the new one
- * is not, else `undefined`.
+ * The notice for a 0.17 secrets file that holds keys while the new file has
+ * none of them, else `undefined`. The template `tidegap install` writes has
+ * no keys, so it does not hide the notice.
  */
 export function oldEnvFileNotice(home: string = homedir()): string | undefined {
   const old = oldEnvFilePath(home);
-  if (existsSync(envFilePath(home)) || !existsSync(old)) return undefined;
+  const oldKeys = envFileKeys(old);
+  if (oldKeys.length === 0) return undefined;
+  const current = new Set(envFileKeys(envFilePath(home)));
+  if (oldKeys.some((k) => current.has(k))) return undefined;
   return (
-    `tidegap: ${old} is no longer read (removed in 0.19); move it to ${envFilePath(home)} ` +
+    `tidegap: ${old} is no longer read (removed in 0.19); move its keys to ${envFilePath(home)} ` +
     "and rename its EBB_* keys to TIDEGAP_*."
   );
 }
@@ -99,9 +116,9 @@ export function parseEnvFile(contents: string): Record<string, string> {
 
 /**
  * Load the env file into `process.env` for any key not already set.
- * Returns the keys that were applied. A missing file is a no-op; when the
- * default file is missing and the 0.17 one exists, one stderr line per
- * process names it.
+ * Returns the keys that were applied. A missing file is a no-op. With the
+ * default path, a 0.17 secrets file whose keys the new file lacks gets one
+ * stderr line per process.
  */
 export function loadEnvFileIntoProcess(path?: string): string[] {
   if (path === undefined) {

@@ -17,6 +17,64 @@ import { daemonStatus } from "../src/platform/index.js";
 const LAUNCHER = ["/usr/bin/node", "/opt/tidegap/dist/index.js"];
 const NAMES = ["EIA_API_KEY", "CARBON_BUDGET_G", "BINARY"] as const;
 
+/** Run `fn` with stdout and stderr captured; returns what each received. */
+function captureStreams(fn: () => void): { out: string[]; err: string[] } {
+  const out: string[] = [];
+  const err: string[] = [];
+  const writeOut = process.stdout.write.bind(process.stdout);
+  const writeErr = process.stderr.write.bind(process.stderr);
+  process.stdout.write = ((c: string | Uint8Array) => (out.push(String(c)), true)) as typeof process.stdout.write;
+  process.stderr.write = ((c: string | Uint8Array) => (err.push(String(c)), true)) as typeof process.stderr.write;
+  try {
+    fn();
+  } finally {
+    process.stdout.write = writeOut;
+    process.stderr.write = writeErr;
+  }
+  return { out, err };
+}
+
+// First in the file: both notices are once per process, and later tests use
+// explicit writers or paths so they never consume the default writer.
+describe("default writers: stderr once per process, stdout untouched", () => {
+  it("left-over EBB_* variable", () => {
+    const saved = { EBB: process.env.EBB_EIA_API_KEY, NEW: process.env.TIDEGAP_EIA_API_KEY };
+    process.env.EBB_EIA_API_KEY = "old";
+    delete process.env.TIDEGAP_EIA_API_KEY;
+    try {
+      const { out, err } = captureStreams(() => {
+        readEnvCredentials();
+        readEnvCredentials();
+      });
+      expect(err).toHaveLength(1);
+      expect(err[0]).toContain("EBB_EIA_API_KEY -> TIDEGAP_EIA_API_KEY");
+      expect(out).toEqual([]);
+    } finally {
+      if (saved.EBB === undefined) delete process.env.EBB_EIA_API_KEY;
+      else process.env.EBB_EIA_API_KEY = saved.EBB;
+      if (saved.NEW !== undefined) process.env.TIDEGAP_EIA_API_KEY = saved.NEW;
+    }
+  });
+
+  it("lone ~/.config/ebb/env", () => {
+    const dir = join(homedir(), ".config", "ebb");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "env"), "ANTHROPIC_API_KEY=sk-old\n");
+    try {
+      const { out, err } = captureStreams(() => {
+        expect(loadEnvFileIntoProcess()).toEqual([]);
+        loadEnvFileIntoProcess();
+      });
+      expect(err).toHaveLength(1);
+      expect(err[0]).toContain(join(dir, "env"));
+      expect(out).toEqual([]);
+      expect(process.env.ANTHROPIC_API_KEY).not.toBe("sk-old");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("left-over EBB_* names (CLI)", () => {
   const saved = new Map<string, string | undefined>();
   const configPath = () => join(homedir(), ".tidegap", "config");
@@ -112,14 +170,25 @@ describe("0.17 secrets file", () => {
   });
   afterEach(() => rmSync(home, { recursive: true, force: true }));
 
-  it("only ~/.config/ebb/env: not copied, and named in the notice", () => {
+  it("only ~/.config/ebb/env: not copied, and named until the new file holds its keys", () => {
     const old = join(home, ".config", "ebb", "env");
     mkdirSync(join(home, ".config", "ebb"), { recursive: true });
-    writeFileSync(old, "ANTHROPIC_API_KEY=sk-old\n");
+    writeFileSync(old, "ANTHROPIC_API_KEY=sk-old\nEBB_EIA_API_KEY=k\n");
     expect(oldEnvFileNotice(home)).toContain(old);
 
+    // The keyless template `tidegap install` writes does not hide the notice.
     const r = ensureEnvFile(envFilePath(home));
     expect(r).toEqual({ path: envFilePath(home), created: true });
+    expect(oldEnvFileNotice(home)).toContain(old);
+
+    // A moved key, under its new name, does.
+    writeFileSync(envFilePath(home), "TIDEGAP_EIA_API_KEY=k\n");
+    expect(oldEnvFileNotice(home)).toBeUndefined();
+  });
+
+  it("a keyless ~/.config/ebb/env: no notice", () => {
+    mkdirSync(join(home, ".config", "ebb"), { recursive: true });
+    writeFileSync(join(home, ".config", "ebb", "env"), "# nothing\n");
     expect(oldEnvFileNotice(home)).toBeUndefined();
   });
 

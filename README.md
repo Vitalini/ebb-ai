@@ -50,11 +50,11 @@ Without `rng`, Tidegap picks at random among the cleanest band of near-equal hou
 
 ## Renamed from Ebb AI
 
-Until 0.17 this project was Ebb AI (`@ebb-ai/*`, `ebb-ai` on PyPI, the `ebb` command). 0.18.0 renames it to Tidegap, because "Ebb" conflicts with an existing software trademark. Your queue, receipts, signing key and daemon keep working. The old names worked for one release (0.18) and were removed in 0.19. **Coming from 0.17? Upgrade through 0.18 once before 0.19** (or move `~/.ebb-ai` to `~/.tidegap` by hand): 0.19 no longer moves the old data directory.
+Until 0.17 this project was Ebb AI (`@ebb-ai/*`, `ebb-ai` on PyPI, the `ebb` command). 0.18.0 renames it to Tidegap, because "Ebb" conflicts with an existing software trademark. Your queue, receipts, signing key and daemon keep working. The old names worked for one release (0.18) and were removed in 0.19. **Coming from 0.17? Upgrade through 0.18 once before 0.19** (or move `~/.ebb-ai` to `~/.tidegap` by hand): 0.19 no longer moves the old data directory. If 0.19 already ran, stop tidegap, move `~/.tidegap` aside, then rename `~/.ebb-ai` to `~/.tidegap`.
 
 | What you have from 0.17 | What happens on 0.19 | What you do |
 |---|---|---|
-| Ledger, key and config in `~/.ebb-ai/` | Not read since 0.19; one stderr line names `~/.ebb-ai`. 0.18 moved it to `~/.tidegap/` and left a link | Run any 0.18 command once before 0.19, or move `~/.ebb-ai` to `~/.tidegap` by hand |
+| Ledger, key and config in `~/.ebb-ai/` | Not read since 0.19; one stderr line names `~/.ebb-ai`. 0.18 moved it to `~/.tidegap/` and left a link | Before 0.19: run any 0.18 command once. After: stop tidegap, move `~/.tidegap` aside, rename `~/.ebb-ai` to `~/.tidegap` |
 | `EBB_*` variables (shell, MCP host config) | Not read since 0.19; one stderr line names each one | Rename them to `TIDEGAP_*` |
 | `EBB_*` keys in `~/.tidegap/config` | Not read since 0.19; one stderr line names each one | Rename the keys to `TIDEGAP_*` |
 | Secrets in `~/.config/ebb/env` | Not read since 0.19; one stderr line names the file. 0.18 `tidegap install` copied it to `~/.config/tidegap/env` | Move it to `~/.config/tidegap/env` and rename its `EBB_*` keys to `TIDEGAP_*` |

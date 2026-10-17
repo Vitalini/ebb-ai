@@ -278,7 +278,7 @@ export interface LoadCarbonBudgetOptions {
 export function loadCarbonBudgetConfig(
   opts: LoadCarbonBudgetOptions = {},
 ): CarbonBudgetConfig | undefined {
-  const env: Record<string, string | undefined> = { ...opts.env };
+  const env: CarbonBudgetEnv = opts.env ?? {};
   const path = opts.path ?? carbonBudgetConfigPath();
   let fileValues: Record<string, string> = {};
   if (existsSync(path)) {
