@@ -108,7 +108,7 @@ function InstallBlock() {
         </h2>
         <p className="mt-1 text-sm text-fg-muted">
           Paste the prompt below into your agent. It detects the host
-          (Claude Code, Cursor, Claude Desktop, Windsurf, Continue, Cline,
+          (Claude Code, Codex, Cursor, Claude Desktop, Windsurf, Continue, Cline,
           Zed, Goose, OpenClaw, or any generic MCP host) and runs the right
           install path for you.
         </p>

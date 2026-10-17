@@ -115,18 +115,22 @@ has no command-line entry point, so there is no `pipx` install.
 
 ## Optional: connect the Mac app or the browser extension
 
-Both talk only to `tidegap ui`, a local web page on `127.0.0.1`.
-Start it with:
+Both talk only to `tidegap ui`, a local web page on `127.0.0.1`
+(port 47821 by default). It is a long-running server: start it in the
+background, and pass `--no-open` so it does not open a browser:
 
 ```text
-npx -y @tidegap/cli ui
+npx -y @tidegap/cli ui --no-open
 ```
 
 - **Browser extension** (Chrome, Edge, Firefox): mint a client token
-  with `npx -y @tidegap/cli clients add --name browser --kind extension`, then
-  paste it into the extension options.
+  with `npx -y @tidegap/cli clients add --name browser --kind extension`.
+  The token is printed once: give it to the user to paste into the
+  extension options, and do not log or store it.
 - **Tidegap for Mac** (menu bar app, includes the Safari extension):
-  it pairs itself on first launch. No token to copy.
+  it runs the `tidegap` command itself, so install the CLI globally
+  first with `npm install -g @tidegap/cli`. The app then starts
+  `tidegap ui` and pairs itself on first launch. No token to copy.
 
 ---
 

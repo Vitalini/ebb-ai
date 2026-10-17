@@ -116,6 +116,9 @@ body::before {
   .tg-underline {
     animation: none;
   }
+  .tg-wave-mask {
+    mask: none;
+  }
   .tg-underline {
     background-size: 100% 2px;
   }
