@@ -69,7 +69,7 @@ One answer for a compact client.
 - `clean_window` comes from a 24-hour forecast for the server's default region, cached for 10 minutes and shared with `/api/forecast`. It is the first run of consecutive `very_clean` or `clean` hours that ends after now, including the hours of that run that already passed. `band` is `very_clean` only when every hour is very clean. `g` is the lowest intensity in the window (gCO2e/kWh). `now` is true when the window contains now.
 - With no clean hour, `clean_window` is the single cleanest hour after now, with `fallback: true`. A fallback window feeds the badge and the menu header, never a "clean window" notification.
 - A forecast failure gives `clean_window: null` and `forecast_ok: false`, with status 200.
-- `finished` is present only when `since` is given: completed or failed tasks with `completed_at` after `since`, newest first, at most 20.
+- `finished` is present only when `since` is given: completed or failed tasks with `completed_at` after `since`, newest first, at most 20. When more than 20 finished after `since`, it lists the oldest of them: at most 20, cut so that tasks with the same `completed_at` stay in one answer (more than 20 only when more than 20 share the first instant). The next poll with the new cursor lists the rest.
 - `cursor`: store it and send it back as `since` next time. It is the server's clock, so client clock skew does not matter. Without `since` it is `generated_at`. With `since` it is the newest `completed_at` listed, or `since` itself when nothing finished.
 - A `since` that is not an ISO-8601 instant gets 400.
 
@@ -91,7 +91,7 @@ Answer: 201 with the task's list summary (`task_id`, `status`, `deadline`, `sche
 
 ### `GET /api/events`
 
-Server-sent events. `hello` on connect, then `tasks` with `{"ids": [...]}` when tasks change. Refetch the summary on `tasks`, and on `hello` after a reconnect.
+Server-sent events. `hello` on connect, then `tasks` with `{"ids": [...]}` when tasks change. Refetch the summary on `tasks`, and on `hello` after a reconnect. A stream opened with a client token ends when that token is revoked (the server checks it before each event and each keep-alive); the reconnect then gets 401.
 
 ### Other routes
 

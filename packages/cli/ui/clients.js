@@ -57,6 +57,7 @@ async function openApps(minted) {
     failed = err.message;
   }
   const name = h("input", { class: "input", id: "app-name", name: "name", maxlength: "64", required: true, placeholder: "Chrome on this Mac", autofocus: !minted });
+  const submit = h("button", { type: "submit", class: "btn btn-primary" }, "Connect an app");
   const form = h("form", { class: "dialog-form" },
     h("header", { class: "dialog-head" }, h("h2", { id: "dialog-title", class: "dialog-title" }, "Connected apps"),
       h("p", { class: "dialog-sub" }, "Apps with a token can see and queue tasks on this Mac. Revoke one to lock it out at once.")),
@@ -67,14 +68,19 @@ async function openApps(minted) {
     h("label", { class: "field", for: "app-name" }, h("span", { class: "field-label" }, "New app name"), name),
     h("footer", { class: "dialog-foot" },
       h("button", { type: "button", class: "btn btn-ghost", onclick: closeDialog }, "Close"),
-      h("button", { type: "submit", class: "btn btn-primary" }, "Connect an app")));
+      submit));
+  // One press, one token: a second submit while the first is in flight is ignored.
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (submit.disabled) return;
+    submit.disabled = true;
     try {
       const out = await api.addClient({ name: name.value, kind: "extension" });
       await openApps(out);
     } catch (err) {
       errorToast(err.message);
+    } finally {
+      submit.disabled = false;
     }
   });
   openDialog([form], { label: "Connected apps", wide: true });

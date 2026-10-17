@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The homepage first screen is the tagline and one "Copy the prompt for your agent" button.** The description, claims note, live grid banner and install options moved one scroll below; "Other ways to install" jumps to the full install section.
 - **Releases publish from GitHub Actions (`release.yml`) by OIDC trusted publishing, with npm provenance; no long-lived registry tokens.**
 
 ### Fixed

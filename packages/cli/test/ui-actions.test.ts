@@ -403,6 +403,21 @@ describe("tidegap ui write API", () => {
       expect((await asClient(`/api/clients/${client.id}/revoke`, token, { method: "POST" })).status).toBe(403);
     });
 
+    it("a broken registry is a fixed 500 with no path; bad input stays 400", async () => {
+      writeFileSync(join(dir, "ui-clients.json"), "{ not json");
+      const checks: Array<[Response, string]> = [
+        [await get("/api/clients"), "client registry unavailable"],
+        [await post("/api/clients", { name: "x" }), "could not add the client"],
+        [await post("/api/clients/abc/revoke"), "could not revoke the client"],
+      ];
+      for (const [res, message] of checks) {
+        expect(res.status).toBe(500);
+        expect(await res.json()).toEqual({ error: message });
+      }
+      expect((await post("/api/clients", { name: "" })).status).toBe(400);
+      expect((await post("/api/clients", { name: "x", kind: "phone" })).status).toBe(400);
+    });
+
     it("revoke: unknown id 404; known id 200, and that client's next request is 401", async () => {
       expect((await post("/api/clients/nope/revoke")).status).toBe(404);
       const { token, client } = (await (await post("/api/clients", { name: "c" })).json()) as { token: string; client: { id: string } };
