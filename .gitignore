@@ -6,6 +6,8 @@ node_modules/
 dist/
 # The @ebb-ai/cli 0.17.1 shim is hand-written, and 0.17 daemon units pin dist/index.js.
 !compat/npm/cli/dist/
+# The @vitalini/ebb 0.17.1 ClawHub pointer is hand-written ESM.
+!compat/clawhub/ebb/dist/
 build/
 *.tsbuildinfo
 .next/
@@ -67,3 +69,4 @@ packages/core-py/uv.lock
 .worktrees/
 .playwright-mcp/
 packages/openclaw-plugin/reports/
+compat/clawhub/ebb/reports/

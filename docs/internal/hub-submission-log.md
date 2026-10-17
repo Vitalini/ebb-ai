@@ -27,7 +27,7 @@ when it runs.
 | - | npm | Publish shims `@ebb-ai/{core,cli,mcp}` 0.17.1, then `npm deprecate` | https://www.npmjs.com/org/ebb-ai | not started | `compat/npm/*` |
 | - | PyPI | Publish shim `ebb-ai` 0.17.1 | https://pypi.org/project/ebb-ai/ | not started | `compat/pypi/ebb-ai` |
 | - | MCP Registry | Final `io.github.Vitalini/ebb-ai` 0.17.1 pointing at the new id; set old versions `deprecated` | https://registry.modelcontextprotocol.io | not started | Confirm the `mcp-publisher` status command |
-| - | ClawHub | Publish `@vitalini/tidegap` 0.18.0 (runtime id `tidegap` locks on first publish); point the old `@vitalini/ebb` description at it | https://clawhub.ai/plugins/@vitalini/tidegap | not started | Do not delete `@vitalini/ebb` |
+| - | ClawHub | Publish `@vitalini/tidegap` 0.18.0 (runtime id `tidegap` locks on first publish); point the old `@vitalini/ebb` description at it | https://clawhub.ai/plugins/@vitalini/tidegap | not started | Do not delete `@vitalini/ebb`. The old description changes only with a new version: see the `@vitalini/ebb` 0.17.1 pointer row |
 | - | Vercel | Reconnect git to `tidegap/tidegap`; add `tidegap.com` and `www.tidegap.com` (www primary); add `TIDEGAP_*` env vars | https://www.tidegap.com | not started | Before merge |
 | - | Vercel | `ebb-ai.com` and `www.ebb-ai.com` 301 to `https://www.tidegap.com`, path kept | https://www.ebb-ai.com | not started | After merge; keep the domain 12 months |
 | - | Google Search Console, Bing | Resubmit sitemap; change of address for the old property | https://search.google.com/search-console | not started | |
@@ -43,6 +43,7 @@ when it runs.
 | 2026-10-16 | npm, PyPI | Old packages deprecated: `@ebb-ai/core` 0.17.1, `@ebb-ai/mcp` 0.17.1, `@ebb-ai/cli` 0.17.2; PyPI `ebb-ai` 0.17.1 set Inactive | https://www.npmjs.com/org/ebb-ai | done | |
 | 2026-10-16 | GitHub | Repo transferred to `tidegap/tidegap`; description and homepage updated | https://github.com/tidegap/tidegap | done | |
 | 2026-10-16 | GitHub | Re-upload social preview | https://github.com/tidegap/tidegap/settings | not done; Vitalii's step | `assets/social-preview.png` now says Tidegap (last changed in commit `72cd825`) |
+| 2026-10-16 | ClawHub | `@vitalini/ebb` 0.17.1 pointer release (`compat/clawhub/ebb`): runtime id `ebb`, no tools, one startup warning pointing at `@vitalini/tidegap` | https://clawhub.ai/vitalini/plugins/ebb | ready, not published | ClawHub shows the description from the published manifest and has no edit form, so only a new version can point the old listing at the new one. Publish command: `compat/README.md` |
 | 2026-10-16 | mcp.so | Update listing to Tidegap | https://mcp.so/server/ebb-ai | to do | |
 | 2026-10-16 | awesome-mcp-servers, awesome-green-software (GSF), awesome-claude-skills (Composio) | Rename updates for PR #16076, the GSF list entry and PR #877 | see rows above | in flight | |
 | 2026-10-16 | Domain | `tidegap.com` registered on Spaceship; Vercel 301 from `ebb-ai.com` | https://www.tidegap.com | done | |
