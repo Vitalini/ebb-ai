@@ -211,8 +211,8 @@ jobs:
         working-directory: packages/mcp-server
         run: |
           ../../scripts/install-mcp-publisher.sh
-          ./mcp-publisher --version
-          { echo "### mcp-publisher"; echo '```'; ./mcp-publisher --version; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          # mcp-publisher prints its version to stderr.
+          { echo "### mcp-publisher"; echo '```'; ./mcp-publisher --version 2>&1; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
   npm:
     needs: verify
