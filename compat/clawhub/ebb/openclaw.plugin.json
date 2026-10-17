@@ -10,5 +10,46 @@
     "type": "object",
     "properties": {},
     "additionalProperties": true
+  },
+  "uiHints": {
+    "dbPath": {
+      "advanced": true
+    },
+    "electricityMapsApiKey": {
+      "sensitive": true
+    },
+    "eiaApiKey": {
+      "sensitive": true
+    },
+    "entsoeSecurityToken": {
+      "sensitive": true
+    },
+    "wattTimeUsername": {
+      "sensitive": true
+    },
+    "wattTimePassword": {
+      "sensitive": true
+    },
+    "anthropicApiKey": {
+      "sensitive": true
+    },
+    "openaiApiKey": {
+      "sensitive": true
+    },
+    "geminiApiKey": {
+      "sensitive": true
+    },
+    "googleApiKey": {
+      "sensitive": true
+    },
+    "ollamaModels": {
+      "advanced": true
+    },
+    "deliveryStorePath": {
+      "advanced": true
+    },
+    "disableStartupDispatch": {
+      "advanced": true
+    }
   }
 }
