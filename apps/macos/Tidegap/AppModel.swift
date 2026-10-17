@@ -89,6 +89,19 @@ final class AppModel {
         Task { await controller.refresh() }
     }
 
+    /// Applies Settings and connects again with the stored token.
+    func retry() {
+        applySettings()
+        Task { await controller.connect() }
+    }
+
+    /// Bumped to ask the label view to open the main window.
+    private(set) var windowRequests = 0
+
+    func showWindow() {
+        windowRequests += 1
+    }
+
     func reconnect() {
         applySettings()
         Task { await controller.reconnect() }

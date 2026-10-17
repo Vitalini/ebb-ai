@@ -30,8 +30,8 @@ struct MenuBarView: View {
         switch model.state {
         case .revoked:
             Button("Reconnect") { model.reconnect() }
-        case .offline, .failed:
-            Button("Retry") { model.reconnect() }
+        case .offline, .failed, .tidegapNotFound, .needsUpdate:
+            Button("Retry") { model.retry() }
         default:
             EmptyView()
         }
@@ -84,6 +84,9 @@ struct MenuBarView: View {
 
     @ViewBuilder private var commands: some View {
         HStack {
+            Button("Open Tidegap window") { model.showWindow() }
+            SettingsLink { Text("Settings…") }
+                .simultaneousGesture(TapGesture().onEnded { NSApp.activate(ignoringOtherApps: true) })
             Spacer()
             Button("Quit Tidegap") { NSApplication.shared.terminate(nil) }
                 .keyboardShortcut("q")
