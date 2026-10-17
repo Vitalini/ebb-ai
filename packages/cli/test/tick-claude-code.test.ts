@@ -22,6 +22,7 @@ const VARS = [
   "TIDEGAP_CLAUDE_CODE_MAX_BUDGET_USD",
   "FAKE_CLAUDE_MODE",
   "FAKE_CLAUDE_LOG",
+  "CLAUDECODE",
 ] as const;
 
 let root: string;
@@ -103,6 +104,26 @@ describe("tidegap tick with Claude Code", () => {
     expect(rec?.receipt?.model).toBe("claude-haiku-5-5");
     expect(rec?.receipt?.totalTokens).toBe(2056);
     expect(argv()).not.toContain("--model");
+  });
+
+  it("hands the child no API key and no nested-session marker", async () => {
+    process.env.ANTHROPIC_API_KEY = "sk-ant-test";
+    process.env.OPENAI_API_KEY = "sk-oa-test";
+    process.env.CLAUDECODE = "1";
+    queue("t-env", "claude-code", "default");
+    const r = await runTickOnce(tickOpts());
+    expect(r.message).toContain("1 dispatched");
+    const env = readFileSync(join(log, "env"), "utf8");
+    expect(env).toContain(`FAKE_CLAUDE_LOG=${log}`);
+    expect(env).not.toMatch(/^(ANTHROPIC_API_KEY|OPENAI_API_KEY|CLAUDECODE)=/m);
+  });
+
+  it("names TIDEGAP_CLAUDE_BIN when a claude-code task is pending and claude is not found", async () => {
+    process.env.OPENAI_API_KEY = "sk-oa-test";
+    queue("t-nobin", "claude-code", "default", false);
+    const opts = tickOpts();
+    const r = await runTickOnce({ ...opts, claudeLookup: { ...opts.claudeLookup, path: join(root, "empty") } });
+    expect(r.message).toContain("TIDEGAP_CLAUDE_BIN");
   });
 
   it("runs an anthropic task through Claude Code when there is no key", async () => {

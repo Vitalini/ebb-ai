@@ -9,7 +9,8 @@
  * Isolation: the prompt goes on stdin (never argv), every built-in tool is
  * removed (`--tools ""`), the user's CLAUDE.md, skills, plugins, hooks and
  * MCP servers are off (`--safe-mode`, `--strict-mcp-config`), and the run
- * happens in a fresh temp directory that is removed afterwards.
+ * happens in a fresh temp directory that is removed afterwards. The child
+ * leads its own process group, so the timeout stops anything it started.
  *
  * Batch: UNSUPPORTED. There is no batch path, so `dispatchBatch` is omitted
  * and the scheduler keeps these tasks on the sync path. `maxTokens` and
@@ -44,11 +45,15 @@ export interface ClaudeCodeAdapterOptions {
   scratchRoot?: string;
 }
 
+/** Default `--max-budget-usd` cap. */
+export const DEFAULT_MAX_BUDGET_USD = 1;
 /** Claude Code's stdin cap. */
 const MAX_STDIN_BYTES = 10 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 const KILL_GRACE_MS = 5_000;
 const STDERR_TAIL = 500;
+/** stderr kept in memory while the child runs; only the tail is reported. */
+const STDERR_KEEP = 64 * 1024;
 const INSTALL_HINT = "install Claude Code or set TIDEGAP_CLAUDE_BIN";
 const LOGIN_HINT = "run `claude` once as this user and complete /login";
 
@@ -122,7 +127,7 @@ export class ClaudeCodeAdapter implements ProviderAdapter {
   constructor(opts: ClaudeCodeAdapterOptions = {}) {
     this.binaryPath = opts.binaryPath;
     this.env = opts.env;
-    this.maxBudgetUsd = opts.maxBudgetUsd ?? 1;
+    this.maxBudgetUsd = opts.maxBudgetUsd ?? DEFAULT_MAX_BUDGET_USD;
     this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.scratchRoot = opts.scratchRoot ?? tmpdir();
   }
@@ -174,22 +179,33 @@ export class ClaudeCodeAdapter implements ProviderAdapter {
         cwd,
         ...(this.env ? { env: this.env } : {}),
         stdio: ["pipe", "pipe", "pipe"],
+        // Own process group: the timeout signals the group, not just `claude`.
+        detached: true,
       });
+      const killGroup = (signal: NodeJS.Signals) => {
+        try {
+          if (child.pid !== undefined) process.kill(-child.pid, signal);
+        } catch {
+          child.kill(signal);
+        }
+      };
       let stdout = "";
       let stderr = "";
       let timedOut = false;
       let killTimer: NodeJS.Timeout | undefined;
       const timer = setTimeout(() => {
         timedOut = true;
-        child.kill("SIGTERM");
-        killTimer = setTimeout(() => child.kill("SIGKILL"), KILL_GRACE_MS);
+        killGroup("SIGTERM");
+        killTimer = setTimeout(() => killGroup("SIGKILL"), KILL_GRACE_MS);
       }, this.timeoutMs);
       const stop = () => {
         clearTimeout(timer);
         if (killTimer) clearTimeout(killTimer);
       };
       child.stdout.setEncoding("utf8").on("data", (d: string) => (stdout += d));
-      child.stderr.setEncoding("utf8").on("data", (d: string) => (stderr += d));
+      child.stderr.setEncoding("utf8").on("data", (d: string) => {
+        stderr = (stderr + d).slice(-STDERR_KEEP);
+      });
       child.on("error", (err: NodeJS.ErrnoException) => {
         stop();
         reject(new Error(`claude-code: cannot run ${binary} (${err.code ?? err.message}); ${INSTALL_HINT}`));
@@ -227,7 +243,7 @@ export class ClaudeCodeAdapter implements ProviderAdapter {
     }
     const model = reportedModel(parsed, requested);
     if (parsed.stop_reason === "refusal") {
-      throw new ProviderRefusalError("claude-code", model, null);
+      throw new ProviderRefusalError(this.provider, model, null);
     }
     const u = parsed.usage ?? {};
     const inputTokens =

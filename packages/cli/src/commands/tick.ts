@@ -155,10 +155,10 @@ export function defaultDbPath(): string {
  * Build the tick adapters from host-supplied credentials.
  *
  * `@tidegap/core` no longer reads the environment, so the CLI (the host)
- * reads it once via `readEnvCredentials()` and injects the values here. The
- * registration rules are unchanged: an adapter appears exactly when its
- * credential is present, Gemini prefers GEMINI_API_KEY over GOOGLE_API_KEY,
- * and Ollama is an explicit OLLAMA_HOST opt-in.
+ * reads it once via `readEnvCredentials()` and injects the values here. An
+ * API adapter appears exactly when its credential is present, Gemini
+ * prefers GEMINI_API_KEY over GOOGLE_API_KEY, and Ollama is an explicit
+ * OLLAMA_HOST opt-in.
  *
  * `claudeCode` is the claude-code adapter when the `claude` binary was
  * found. It registers as `claude-code`, and also serves `anthropic` tasks
@@ -196,12 +196,14 @@ export function buildAdapters(
 /**
  * Provider key expected in the env for a given provider name. Ollama has no
  * key (it is local + keyless), so it is intentionally absent — a pending
- * Ollama task is never reported as "missing a key".
+ * Ollama task is never reported as "missing a key". `claude-code` needs no
+ * key; when the tick did not find `claude`, TIDEGAP_CLAUDE_BIN is the fix.
  */
 const PROVIDER_KEY: Record<string, string> = {
   anthropic: "ANTHROPIC_API_KEY",
   openai: "OPENAI_API_KEY",
   gemini: "GEMINI_API_KEY",
+  "claude-code": "TIDEGAP_CLAUDE_BIN",
 };
 
 /**

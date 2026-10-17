@@ -385,7 +385,7 @@ adapter.
 
 ### Run through your Claude Code subscription
 
-`tidegap tick` can run tasks through the local `claude` CLI. It uses your Claude Code login, so you need no API key.
+`tidegap tick` can run tasks through the local `claude` CLI. It uses your Claude Code subscription quota and login, so you need no API key.
 
 **Requirements.** Install Claude Code and log in once (`claude`, then `/login`) as the user who runs the tick daemon. If a task fails with an "unknown option" message, update Claude Code.
 
@@ -410,8 +410,9 @@ claude -p --output-format json --tools "" --permission-mode dontAsk \
 - `--safe-mode` and `--strict-mcp-config` turn off your CLAUDE.md, skills, plugins, hooks and MCP servers.
 - The run happens in a new temporary directory, never in your repository, and the tick deletes the directory after the run.
 - `--no-session-persistence` keeps these runs out of your Claude Code session history.
-- The child process does not get `ANTHROPIC_API_KEY`, so it always uses your subscription login.
-- A run that takes more than 10 minutes is stopped, and the task fails.
+- The child process does not get `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN`, so it uses your subscription login. It also does not get your other provider keys, the WattTime login or any `TIDEGAP_*` variable.
+- The tick runs a `claude` it finds on `PATH` or in a known location only when neither the file nor its directory is world-writable.
+- A run that takes more than 10 minutes is stopped, together with every process it started, and the task fails.
 
 **Model.** The tick passes the task's `model` to `--model` when it is a `claude-*` id or one of `opus`, `sonnet`, `haiku`, `fable`, `opusplan` (optionally with `[1m]`). Otherwise Claude Code uses its own default. A `claude-code` task queued without a model gets `"default"`. The receipt records the model that Claude Code reports. `maxTokens` and `temperature` have no effect, because the CLI has no flags for them.
 
@@ -431,7 +432,7 @@ claude -p --output-format json --tools "" --permission-mode dontAsk \
 
 - `claude` not found or not executable: install Claude Code or set `TIDEGAP_CLAUDE_BIN`.
 - "Not logged in": run `claude` once as this user and complete `/login`.
-- Usage limit: Claude Code's message, which includes the reset time. Use `retry_task` after the reset.
+- Usage limit: Claude Code's message, which includes the reset time. Queue the task again after the reset (`schedule_task` or quick add). `retry_task` and `expedite_task` do not run `claude-code` tasks yet: they dispatch inside the MCP server, which has no Claude Code adapter.
 - Budget cap: `error_max_budget_usd`.
 - Timeout: "timed out after 600s".
 - Any other exit: the exit code and the end of stderr.

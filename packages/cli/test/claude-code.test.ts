@@ -1,10 +1,27 @@
-import { accessSync, constants, copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, statSync } from "node:fs";
+import {
+  accessSync,
+  chmodSync,
+  constants,
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AnthropicAdapter } from "@tidegap/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { claudeChildEnv, claudeMaxBudget, findClaudeBinary, type ClaudeLookup } from "../src/claude-code.js";
+import {
+  claudeChildEnv,
+  claudeMaxBudget,
+  findClaudeBinary,
+  isExecutableFile,
+  type ClaudeLookup,
+} from "../src/claude-code.js";
 import { buildAdapters, runTickOnce } from "../src/commands/tick.js";
 import { readEnvCredentials } from "../src/env.js";
 import { ClaudeCodeAdapter } from "../src/providers/claude-code.js";
@@ -106,21 +123,47 @@ describe("findClaudeBinary", () => {
     }
   });
 
+  it("rejects a binary that another user could swap", () => {
+    const fake = installFake("safe");
+    chmodSync(join(root, "safe"), 0o755);
+    expect(isExecutableFile(fake)).toBe(true);
+
+    const open = installFake("open");
+    chmodSync(join(root, "open"), 0o777);
+    expect(isExecutableFile(open)).toBe(false);
+
+    // A symlink in a safe directory to a binary in a world-writable one.
+    symlinkSync(open, join(root, "safe", "linked"));
+    expect(isExecutableFile(join(root, "safe", "linked"))).toBe(false);
+
+    chmodSync(fake, 0o777);
+    expect(isExecutableFile(fake)).toBe(false);
+  });
+
   it("finds nothing under the test runner without injected lookup inputs", () => {
     expect(findClaudeBinary({ ...on, claudeBin: "/explicit/claude" }, () => true)).toBeUndefined();
   });
 });
 
 describe("claudeChildEnv", () => {
-  it("drops the API key and the nested-session markers, keeps the rest", () => {
+  it("drops credentials, the nested-session markers and TIDEGAP_* variables, keeps the rest", () => {
     const env = claudeChildEnv({
       ANTHROPIC_API_KEY: "sk",
+      ANTHROPIC_AUTH_TOKEN: "tok",
       CLAUDECODE: "1",
       CLAUDE_CODE_ENTRYPOINT: "cli",
+      OPENAI_API_KEY: "sk-oa",
+      GEMINI_API_KEY: "g",
+      GOOGLE_API_KEY: "g2",
+      WATTTIME_USERNAME: "u",
+      WATTTIME_PASSWORD: "p",
+      TIDEGAP_ELECTRICITY_MAPS_API_KEY: "em",
+      TIDEGAP_CLAUDE_BIN: "/x/claude",
+      CLAUDE_CODE_OAUTH_TOKEN: "oauth",
       HOME: "/Users/me",
       PATH: "/usr/bin",
     });
-    expect(env).toEqual({ HOME: "/Users/me", PATH: "/usr/bin" });
+    expect(env).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: "oauth", HOME: "/Users/me", PATH: "/usr/bin" });
   });
 });
 

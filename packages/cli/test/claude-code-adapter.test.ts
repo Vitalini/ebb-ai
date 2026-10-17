@@ -179,6 +179,14 @@ describe("ClaudeCodeAdapter", () => {
     expect(scratchDirs()).toEqual([]);
   });
 
+  it("on timeout, also kills what the child started", async () => {
+    const err = await failure(adapter("group", { timeoutMs: 300 }).dispatch("default", "hi"));
+    expect(err.message).toContain("timed out");
+    const grandchild = Number(logged("grandchild").trim());
+    expect(() => process.kill(grandchild, 0)).toThrow();
+    expect(scratchDirs()).toEqual([]);
+  });
+
   it("throws ProviderRefusalError on a refusal", async () => {
     const err = await failure(adapter("refusal").dispatch("haiku", "hi"));
     expect(err).toBeInstanceOf(ProviderRefusalError);
